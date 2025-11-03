@@ -735,15 +735,28 @@ class BillingManager {
     // Paket Management
     async createPackage(packageData) {
         return new Promise((resolve, reject) => {
-            // Add router_id column if it doesn't exist (migration)
+            // Add router_id and nas_ip columns if they don't exist (migration)
             this.db.run(`ALTER TABLE packages ADD COLUMN router_id INTEGER`, (err) => {
                 // Ignore error if column already exists
             });
+            this.db.run(`ALTER TABLE packages ADD COLUMN nas_ip TEXT`, (err) => {
+                // Ignore error if column already exists
+            });
             
-            const { name, speed, price, tax_rate, description, pppoe_profile, image, router_id } = packageData;
-            const sql = `INSERT INTO packages (name, speed, price, tax_rate, description, pppoe_profile, image, router_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+            const { name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip } = packageData;
+            const sql = `INSERT INTO packages (name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
-            this.db.run(sql, [name, speed, price, tax_rate !== undefined ? tax_rate : 11.00, description, pppoe_profile || 'default', image || null, router_id || null], function(err) {
+            this.db.run(sql, [
+                name, 
+                speed, 
+                price, 
+                tax_rate !== undefined ? tax_rate : 11.00, 
+                description, 
+                pppoe_profile || 'default', 
+                image || null, 
+                router_id || null,
+                nas_ip || null
+            ], function(err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -783,15 +796,29 @@ class BillingManager {
 
     async updatePackage(id, packageData) {
         return new Promise((resolve, reject) => {
-            // Add router_id column if it doesn't exist (migration)
+            // Add router_id and nas_ip columns if they don't exist (migration)
             this.db.run(`ALTER TABLE packages ADD COLUMN router_id INTEGER`, (err) => {
                 // Ignore error if column already exists
             });
+            this.db.run(`ALTER TABLE packages ADD COLUMN nas_ip TEXT`, (err) => {
+                // Ignore error if column already exists
+            });
             
-            const { name, speed, price, tax_rate, description, pppoe_profile, image, router_id } = packageData;
-            const sql = `UPDATE packages SET name = ?, speed = ?, price = ?, tax_rate = ?, description = ?, pppoe_profile = ?, image = ?, router_id = ? WHERE id = ?`;
+            const { name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip } = packageData;
+            const sql = `UPDATE packages SET name = ?, speed = ?, price = ?, tax_rate = ?, description = ?, pppoe_profile = ?, image = ?, router_id = ?, nas_ip = ? WHERE id = ?`;
             
-            this.db.run(sql, [name, speed, price, tax_rate || 0, description, pppoe_profile || 'default', image || null, router_id || null, id], function(err) {
+            this.db.run(sql, [
+                name, 
+                speed, 
+                price, 
+                tax_rate || 0, 
+                description, 
+                pppoe_profile || 'default', 
+                image || null, 
+                router_id || null,
+                nas_ip || null,
+                id
+            ], function(err) {
                 if (err) {
                     reject(err);
                 } else {

@@ -2625,11 +2625,23 @@ router.get('/packages', getAppSettings, async (req, res) => {
             });
         });
         
+        // Get user auth mode for conditional display
+        const { getUserAuthModeAsync } = require('../config/mikrotik');
+        const { getRadiusConfigValue } = require('../config/radiusConfig');
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback to mikrotik
+        }
+        
         res.render('admin/billing/packages', {
             title: 'Kelola Paket',
             packages,
             routers,
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            userAuthMode
         });
     } catch (error) {
         logger.error('Error loading packages:', error);
@@ -2643,7 +2655,7 @@ router.get('/packages', getAppSettings, async (req, res) => {
 
 router.post('/packages', imageUpload.single('image'), async (req, res) => {
     try {
-        const { name, speed, price, tax_rate, description, pppoe_profile, router_id } = req.body;
+        const { name, speed, price, tax_rate, description, pppoe_profile, router_id, nas_ip } = req.body;
         const packageData = {
             name: name.trim(),
             speed: speed.trim(),
@@ -2651,7 +2663,8 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
             tax_rate: parseFloat(tax_rate) >= 0 ? parseFloat(tax_rate) : 0,
             description: description.trim(),
             pppoe_profile: pppoe_profile ? pppoe_profile.trim() : 'default',
-            router_id: router_id ? parseInt(router_id) : null
+            router_id: router_id ? parseInt(router_id) : null,
+            nas_ip: nas_ip ? nas_ip.trim() : null
         };
 
         // Add image filename if uploaded
@@ -2736,7 +2749,7 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
 router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, speed, price, tax_rate, description, pppoe_profile, router_id } = req.body;
+        const { name, speed, price, tax_rate, description, pppoe_profile, router_id, nas_ip } = req.body;
         const packageData = {
             name: name.trim(),
             speed: speed.trim(),
@@ -2744,7 +2757,8 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
             tax_rate: parseFloat(tax_rate) >= 0 ? parseFloat(tax_rate) : 0,
             description: description.trim(),
             pppoe_profile: pppoe_profile ? pppoe_profile.trim() : 'default',
-            router_id: router_id ? parseInt(router_id) : null
+            router_id: router_id ? parseInt(router_id) : null,
+            nas_ip: nas_ip ? nas_ip.trim() : null
         };
 
         // Add image filename if uploaded
