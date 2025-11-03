@@ -3,6 +3,7 @@ const router = express.Router();
 const { adminAuth } = require('./adminAuth');
 const { getRadiusConfig, saveRadiusConfig } = require('../config/radiusConfig');
 const logger = require('../config/logger');
+const { getRadiusConnection } = require('../config/mikrotik');
 
 // GET: Halaman Setting RADIUS
 router.get('/radius', adminAuth, async (req, res) => {
@@ -70,6 +71,73 @@ router.post('/radius', adminAuth, async (req, res) => {
       page: 'setting-radius',
       error: 'Gagal menyimpan pengaturan RADIUS: ' + e.message,
       success: null
+    });
+  }
+});
+
+// GET: Test koneksi RADIUS
+router.get('/radius/test', adminAuth, async (req, res) => {
+  try {
+    const settings = await getRadiusConfig();
+    
+    if (settings.user_auth_mode !== 'radius') {
+      return res.json({
+        success: false,
+        message: 'Mode bukan RADIUS. Test hanya untuk mode RADIUS.',
+        mode: settings.user_auth_mode
+      });
+    }
+    
+    // Test koneksi database
+    const conn = await getRadiusConnection();
+    
+    // Test query sederhana
+    const [testRows] = await conn.execute('SELECT 1 as test');
+    const testResult = testRows[0]?.test;
+    
+    // Get statistics untuk verify
+    const [userCount] = await conn.execute(`
+      SELECT COUNT(DISTINCT username) as total
+      FROM radcheck
+      WHERE attribute = 'Cleartext-Password'
+    `);
+    const totalUsers = userCount[0]?.total || 0;
+    
+    // Get active connections
+    const [activeCount] = await conn.execute(`
+      SELECT COUNT(DISTINCT username) as active
+      FROM radacct
+      WHERE acctstoptime IS NULL
+    `);
+    const activeConnections = activeCount[0]?.active || 0;
+    
+    await conn.end();
+    
+    res.json({
+      success: true,
+      message: 'Koneksi ke RADIUS database berhasil!',
+      connection: {
+        host: settings.radius_host || 'localhost',
+        database: settings.radius_database || 'radius',
+        user: settings.radius_user || 'radius',
+        status: 'connected'
+      },
+      statistics: {
+        totalUsers: totalUsers,
+        activeConnections: activeConnections,
+        offlineUsers: Math.max(totalUsers - activeConnections, 0)
+      },
+      testQuery: testResult === 1 ? 'OK' : 'FAILED'
+    });
+  } catch (error) {
+    logger.error('Error testing RADIUS connection:', error);
+    res.json({
+      success: false,
+      message: 'Gagal koneksi ke RADIUS database: ' + error.message,
+      error: error.message,
+      connection: {
+        status: 'failed'
+      }
     });
   }
 });
