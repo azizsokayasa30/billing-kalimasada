@@ -1612,106 +1612,135 @@ class BillingManager {
 
     async getInvoicesWithFilters(filters = {}, limit = null, offset = null) {
         return new Promise((resolve, reject) => {
-            let sql = `
-                SELECT i.*, c.username, c.name as customer_name, c.phone as customer_phone,
-                       c.renewal_type, c.fix_date,
-                       p.name as package_name, p.speed as package_speed
-                FROM invoices i
-                JOIN customers c ON i.customer_id = c.id
-                JOIN packages p ON i.package_id = p.id
-                WHERE 1=1
-            `;
-            
-            const params = [];
-            
-            // Filter by month if provided (format: YYYY-MM)
-            if (filters.month) {
-                sql += ` AND strftime('%Y-%m', i.created_at) = ?`;
-                params.push(filters.month);
-            }
-            
-            // Filter by customer username
-            if (filters.customer_username) {
-                sql += ` AND c.username LIKE ?`;
-                params.push(`%${filters.customer_username}%`);
-            }
-            
-            // Filter by status
-            if (filters.status) {
-                if (filters.status === 'overdue') {
-                    sql += ` AND i.status = 'unpaid' AND DATE(i.due_date) < DATE('now')`;
-                } else if (filters.status === 'unpaid') {
-                    sql += ` AND i.status = 'unpaid' AND DATE(i.due_date) >= DATE('now')`;
-                } else {
-                    sql += ` AND i.status = ?`;
-                    params.push(filters.status);
+            // Check if renewal_type and invoice_type columns exist
+            this.db.all("PRAGMA table_info(customers)", (pragmaErr, customerColumns) => {
+                if (pragmaErr) {
+                    reject(pragmaErr);
+                    return;
                 }
-            }
-            
-            // Filter by invoice type
-            if (filters.type) {
-                if (filters.type === 'monthly') {
-                    sql += ` AND c.renewal_type = 'renewal'`;
-                } else if (filters.type === 'fix_date') {
-                    sql += ` AND c.renewal_type = 'fix_date'`;
-                } else if (filters.type === 'manual') {
-                    sql += ` AND i.invoice_type = 'manual'`;
-                }
-            }
-            
-            sql += ` ORDER BY i.created_at DESC`;
-            
-            if (limit) {
-                sql += ` LIMIT ?`;
-                params.push(limit);
                 
-                if (offset) {
-                    sql += ` OFFSET ?`;
-                    params.push(offset);
-                }
-            }
+                this.db.all("PRAGMA table_info(invoices)", (invoicePragmaErr, invoiceColumns) => {
+                    if (invoicePragmaErr) {
+                        reject(invoicePragmaErr);
+                        return;
+                    }
+                    
+                    const hasRenewalType = customerColumns.some(col => col.name === 'renewal_type');
+                    const hasFixDate = customerColumns.some(col => col.name === 'fix_date');
+                    const hasInvoiceType = invoiceColumns.some(col => col.name === 'invoice_type');
+                    
+                    // Build SELECT clause based on column existence
+                    let selectClause = `SELECT i.*, c.username, c.name as customer_name, c.phone as customer_phone`;
+                    if (hasRenewalType) selectClause += `, c.renewal_type`;
+                    if (hasFixDate) selectClause += `, c.fix_date`;
+                    selectClause += `, p.name as package_name, p.speed as package_speed`;
+                    
+                    let sql = `
+                        ${selectClause}
+                        FROM invoices i
+                        JOIN customers c ON i.customer_id = c.id
+                        JOIN packages p ON i.package_id = p.id
+                        WHERE 1=1
+                    `;
+                    
+                    const params = [];
+                    
+                    // Filter by month if provided (format: YYYY-MM)
+                    if (filters.month) {
+                        sql += ` AND strftime('%Y-%m', i.created_at) = ?`;
+                        params.push(filters.month);
+                    }
+                    
+                    // Filter by customer username
+                    if (filters.customer_username) {
+                        sql += ` AND c.username LIKE ?`;
+                        params.push(`%${filters.customer_username}%`);
+                    }
+                    
+                    // Filter by status
+                    if (filters.status) {
+                        if (filters.status === 'overdue') {
+                            sql += ` AND i.status = 'unpaid' AND DATE(i.due_date) < DATE('now')`;
+                        } else if (filters.status === 'unpaid') {
+                            sql += ` AND i.status = 'unpaid' AND DATE(i.due_date) >= DATE('now')`;
+                        } else {
+                            sql += ` AND i.status = ?`;
+                            params.push(filters.status);
+                        }
+                    }
+                    
+                    // Filter by invoice type (only if columns exist)
+                    if (filters.type) {
+                        if (filters.type === 'monthly' && hasRenewalType) {
+                            sql += ` AND c.renewal_type = 'renewal'`;
+                        } else if (filters.type === 'fix_date' && hasRenewalType) {
+                            sql += ` AND c.renewal_type = 'fix_date'`;
+                        } else if (filters.type === 'manual' && hasInvoiceType) {
+                            sql += ` AND i.invoice_type = 'manual'`;
+                        }
+                    }
             
-            this.db.all(sql, params, (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    // Tambahkan informasi tipe tagihan dan next due date berdasarkan renewal_type dan status
-                    const currentDate = new Date();
-                    const currentMonth = currentDate.getMonth();
-                    const currentYear = currentDate.getFullYear();
+                    sql += ` ORDER BY i.created_at DESC`;
                     
-                    const processedRows = rows.map(row => {
-                        let invoiceType = 'Renewal';
-                        let nextDueDate = null;
+                    if (limit) {
+                        sql += ` LIMIT ?`;
+                        params.push(limit);
                         
-                        if (row.renewal_type === 'fix_date') {
-                            invoiceType = `Fix Date (${row.fix_date})`;
-                        } else if (row.renewal_type === 'renewal') {
-                            invoiceType = 'Renewal';
+                        if (offset) {
+                            sql += ` OFFSET ?`;
+                            params.push(offset);
                         }
-                        
-                        // Hitung next due date untuk invoice yang sudah lunas
-                        if (row.status === 'paid' && row.payment_date) {
-                            try {
-                                const customer = {
-                                    renewal_type: row.renewal_type,
-                                    fix_date: row.fix_date
+                    }
+                    
+                    this.db.all(sql, params, (err, rows) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            // Tambahkan informasi tipe tagihan dan next due date berdasarkan renewal_type dan status
+                            const currentDate = new Date();
+                            const currentMonth = currentDate.getMonth();
+                            const currentYear = currentDate.getFullYear();
+                            
+                            const processedRows = rows.map(row => {
+                                let invoiceType = 'Renewal';
+                                let nextDueDate = null;
+                                
+                                // Handle missing renewal_type column
+                                const renewalType = hasRenewalType ? (row.renewal_type || 'renewal') : 'renewal';
+                                const fixDate = hasFixDate ? row.fix_date : null;
+                                
+                                if (renewalType === 'fix_date') {
+                                    invoiceType = `Fix Date (${fixDate || 'N/A'})`;
+                                } else {
+                                    invoiceType = 'Renewal';
+                                }
+                                
+                                // Hitung next due date untuk invoice yang sudah lunas
+                                if (row.status === 'paid' && row.payment_date) {
+                                    try {
+                                        const customer = {
+                                            renewal_type: renewalType,
+                                            fix_date: fixDate
+                                        };
+                                        nextDueDate = this.calculateNextDueDate(customer, row.due_date, row.payment_date);
+                                    } catch (error) {
+                                        console.error('Error calculating next due date:', error);
+                                    }
+                                }
+                                
+                                return {
+                                    ...row,
+                                    renewal_type: renewalType,
+                                    fix_date: fixDate,
+                                    invoice_type: invoiceType,
+                                    next_due_date: nextDueDate
                                 };
-                                nextDueDate = this.calculateNextDueDate(customer, row.due_date, row.payment_date);
-                            } catch (error) {
-                                console.error('Error calculating next due date:', error);
-                            }
+                            });
+                            
+                            resolve(processedRows);
                         }
-                        
-                        return {
-                            ...row,
-                            invoice_type: invoiceType,
-                            next_due_date: nextDueDate
-                        };
                     });
-                    
-                    resolve(processedRows);
-                }
+                });
             });
         });
     }
