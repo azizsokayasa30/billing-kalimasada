@@ -94,7 +94,13 @@
                                                 <td><span class="badge bg-info"><%= package.pppoe_profile || 'default' %></span></td>
                                                 <td>
                                                     <% 
-                                                    if (routers && package.router_id) {
+                                                    if (package.nas_ip) {
+                                                        // Mode RADIUS: show NAS IP
+                                                    %>
+                                                        <span class="badge bg-info">RADIUS: <%= package.nas_ip %></span>
+                                                    <% 
+                                                    } else if (routers && package.router_id) {
+                                                        // Mode Mikrotik API: show router
                                                         const router = routers.find(r => r.id === package.router_id);
                                                         if (router) {
                                                     %>
