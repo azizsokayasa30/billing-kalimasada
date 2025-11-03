@@ -1921,19 +1921,22 @@ class BillingManager {
                                     nextDueDate = new Date(currentDueDate.getTime() + (30 * 24 * 60 * 60 * 1000));
                                 }
                             }
-                        } else {
-                            // Untuk invoice yang belum lunas atau terlambat, next due date mengikuti tanggal jatuh tempo
-                            nextDueDate = new Date(row.due_date);
-                        }
-                        
-                        return {
-                            ...row,
-                            invoice_type_display: invoiceType,
-                            next_due_date: nextDueDate
-                        };
-                    });
-                    resolve(processedRows);
-                }
+                            } else {
+                                // Untuk invoice yang belum lunas atau terlambat, next due date mengikuti tanggal jatuh tempo
+                                nextDueDate = new Date(row.due_date);
+                            }
+                            
+                            return {
+                                ...row,
+                                renewal_type: renewalType,
+                                fix_date: fixDate,
+                                invoice_type_display: invoiceType,
+                                next_due_date: nextDueDate
+                            };
+                        });
+                        resolve(processedRows);
+                    }
+                });
             });
         });
     }
