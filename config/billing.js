@@ -2955,73 +2955,115 @@ class BillingManager {
             const currentMonthStart = new Date(currentYear, currentMonth, 1);
             const currentMonthStartStr = currentMonthStart.toISOString().split('T')[0];
             
-            // Query yang lebih aman dan terpisah untuk menghindari duplikasi data
-            // Hanya menghitung data bulan berjalan untuk pendapatan
-            const sql = `
-                SELECT 
-                    (SELECT COUNT(*) FROM customers) as total_customers,
-                    (SELECT COUNT(*) FROM customers WHERE status = 'active') as active_customers,
-                    (SELECT COUNT(*) FROM invoices WHERE DATE(created_at) >= ?) as monthly_invoices,
-                    (SELECT COUNT(*) FROM invoices WHERE invoice_type = 'voucher') as voucher_invoices,
-                    (SELECT COUNT(*) FROM invoices WHERE DATE(created_at) >= ? AND status = 'paid') as paid_monthly_invoices,
-                    (SELECT COUNT(*) FROM invoices WHERE DATE(created_at) >= ? AND status = 'unpaid') as unpaid_monthly_invoices,
-                    (SELECT COUNT(*) FROM invoices WHERE invoice_type = 'voucher' AND status = 'paid') as paid_voucher_invoices,
-                    (SELECT COUNT(*) FROM invoices WHERE invoice_type = 'voucher' AND status = 'unpaid') as unpaid_voucher_invoices,
-                    (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE DATE(created_at) >= ? AND status = 'paid') as monthly_revenue,
-                    (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE invoice_type = 'voucher' AND status = 'paid') as voucher_revenue,
-                    (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE DATE(created_at) >= ? AND status = 'unpaid') as monthly_unpaid,
-                    (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE invoice_type = 'voucher' AND status = 'unpaid') as voucher_unpaid
-            `;
-            
-            const params = [currentMonthStartStr, currentMonthStartStr, currentMonthStartStr, currentMonthStartStr, currentMonthStartStr];
-            
-            this.db.get(sql, params, (err, row) => {
+            // Check if invoice_type column exists first
+            this.db.get("PRAGMA table_info(invoices)", (err, pragmaResult) => {
                 if (err) {
                     reject(err);
-                } else {
-                    // Pastikan semua nilai adalah angka dan tidak null
-                    const stats = {
-                        // Customer stats
-                        total_customers: parseInt(row.total_customers) || 0,
-                        active_customers: parseInt(row.active_customers) || 0,
-                        
-                        // Invoice counts by type
-                        monthly_invoices: parseInt(row.monthly_invoices) || 0,
-                        voucher_invoices: parseInt(row.voucher_invoices) || 0,
-                        
-                        // Paid invoices by type
-                        paid_monthly_invoices: parseInt(row.paid_monthly_invoices) || 0,
-                        paid_voucher_invoices: parseInt(row.paid_voucher_invoices) || 0,
-                        
-                        // Unpaid invoices by type
-                        unpaid_monthly_invoices: parseInt(row.unpaid_monthly_invoices) || 0,
-                        unpaid_voucher_invoices: parseInt(row.unpaid_voucher_invoices) || 0,
-                        
-                        // Revenue by type
-                        monthly_revenue: parseFloat(row.monthly_revenue) || 0,
-                        voucher_revenue: parseFloat(row.voucher_revenue) || 0,
-                        
-                        // Unpaid amounts by type
-                        monthly_unpaid: parseFloat(row.monthly_unpaid) || 0,
-                        voucher_unpaid: parseFloat(row.voucher_unpaid) || 0,
-                        
-                        // Legacy fields for backward compatibility
-                        total_invoices: (parseInt(row.monthly_invoices) || 0) + (parseInt(row.voucher_invoices) || 0),
-                        paid_invoices: (parseInt(row.paid_monthly_invoices) || 0) + (parseInt(row.paid_voucher_invoices) || 0),
-                        unpaid_invoices: (parseInt(row.unpaid_monthly_invoices) || 0) + (parseInt(row.unpaid_voucher_invoices) || 0),
-                        total_revenue: (parseFloat(row.monthly_revenue) || 0) + (parseFloat(row.voucher_revenue) || 0),
-                        total_unpaid: (parseFloat(row.monthly_unpaid) || 0) + (parseFloat(row.voucher_unpaid) || 0)
-                    };
-                    
-                    // Validasi logika: active_customers tidak boleh lebih dari total_customers
-                    if (stats.active_customers > stats.total_customers) {
-                        console.warn('Warning: Active customers count is higher than total customers. This indicates data inconsistency.');
-                        // Set active_customers to total_customers as fallback
-                        stats.active_customers = stats.total_customers;
+                    return;
+                }
+                
+                // Check all columns
+                this.db.all("PRAGMA table_info(invoices)", (pragmaErr, columns) => {
+                    if (pragmaErr) {
+                        reject(pragmaErr);
+                        return;
                     }
                     
-                    resolve(stats);
-                }
+                    const hasInvoiceType = columns.some(col => col.name === 'invoice_type');
+                    
+                    // Query yang lebih aman dan terpisah untuk menghindari duplikasi data
+                    // Hanya menghitung data bulan berjalan untuk pendapatan
+                    // Use conditional logic based on column existence
+                    let sql;
+                    let params;
+                    
+                    if (hasInvoiceType) {
+                        // Query dengan invoice_type column
+                        sql = `
+                            SELECT 
+                                (SELECT COUNT(*) FROM customers) as total_customers,
+                                (SELECT COUNT(*) FROM customers WHERE status = 'active') as active_customers,
+                                (SELECT COUNT(*) FROM invoices WHERE DATE(created_at) >= ?) as monthly_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE invoice_type = 'voucher') as voucher_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE DATE(created_at) >= ? AND status = 'paid') as paid_monthly_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE DATE(created_at) >= ? AND status = 'unpaid') as unpaid_monthly_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE invoice_type = 'voucher' AND status = 'paid') as paid_voucher_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE invoice_type = 'voucher' AND status = 'unpaid') as unpaid_voucher_invoices,
+                                (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE DATE(created_at) >= ? AND status = 'paid') as monthly_revenue,
+                                (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE invoice_type = 'voucher' AND status = 'paid') as voucher_revenue,
+                                (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE DATE(created_at) >= ? AND status = 'unpaid') as monthly_unpaid,
+                                (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE invoice_type = 'voucher' AND status = 'unpaid') as voucher_unpaid
+                        `;
+                        params = [currentMonthStartStr, currentMonthStartStr, currentMonthStartStr, currentMonthStartStr, currentMonthStartStr];
+                    } else {
+                        // Fallback query tanpa invoice_type (identify voucher by invoice_number pattern)
+                        sql = `
+                            SELECT 
+                                (SELECT COUNT(*) FROM customers) as total_customers,
+                                (SELECT COUNT(*) FROM customers WHERE status = 'active') as active_customers,
+                                (SELECT COUNT(*) FROM invoices WHERE DATE(created_at) >= ?) as monthly_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE invoice_number LIKE 'INV-VCR-%' OR notes LIKE 'Voucher Hotspot%') as voucher_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE DATE(created_at) >= ? AND status = 'paid') as paid_monthly_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE DATE(created_at) >= ? AND status = 'unpaid') as unpaid_monthly_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE (invoice_number LIKE 'INV-VCR-%' OR notes LIKE 'Voucher Hotspot%') AND status = 'paid') as paid_voucher_invoices,
+                                (SELECT COUNT(*) FROM invoices WHERE (invoice_number LIKE 'INV-VCR-%' OR notes LIKE 'Voucher Hotspot%') AND status = 'unpaid') as unpaid_voucher_invoices,
+                                (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE DATE(created_at) >= ? AND status = 'paid') as monthly_revenue,
+                                (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE (invoice_number LIKE 'INV-VCR-%' OR notes LIKE 'Voucher Hotspot%') AND status = 'paid') as voucher_revenue,
+                                (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE DATE(created_at) >= ? AND status = 'unpaid') as monthly_unpaid,
+                                (SELECT COALESCE(SUM(amount), 0) FROM invoices WHERE (invoice_number LIKE 'INV-VCR-%' OR notes LIKE 'Voucher Hotspot%') AND status = 'unpaid') as voucher_unpaid
+                        `;
+                        params = [currentMonthStartStr, currentMonthStartStr, currentMonthStartStr, currentMonthStartStr, currentMonthStartStr];
+                    }
+                    
+                    this.db.get(sql, params, (err, row) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            // Pastikan semua nilai adalah angka dan tidak null
+                            const stats = {
+                                // Customer stats
+                                total_customers: parseInt(row.total_customers) || 0,
+                                active_customers: parseInt(row.active_customers) || 0,
+                                
+                                // Invoice counts by type
+                                monthly_invoices: parseInt(row.monthly_invoices) || 0,
+                                voucher_invoices: parseInt(row.voucher_invoices) || 0,
+                                
+                                // Paid invoices by type
+                                paid_monthly_invoices: parseInt(row.paid_monthly_invoices) || 0,
+                                paid_voucher_invoices: parseInt(row.paid_voucher_invoices) || 0,
+                                
+                                // Unpaid invoices by type
+                                unpaid_monthly_invoices: parseInt(row.unpaid_monthly_invoices) || 0,
+                                unpaid_voucher_invoices: parseInt(row.unpaid_voucher_invoices) || 0,
+                                
+                                // Revenue by type
+                                monthly_revenue: parseFloat(row.monthly_revenue) || 0,
+                                voucher_revenue: parseFloat(row.voucher_revenue) || 0,
+                                
+                                // Unpaid amounts by type
+                                monthly_unpaid: parseFloat(row.monthly_unpaid) || 0,
+                                voucher_unpaid: parseFloat(row.voucher_unpaid) || 0,
+                                
+                                // Legacy fields for backward compatibility
+                                total_invoices: (parseInt(row.monthly_invoices) || 0) + (parseInt(row.voucher_invoices) || 0),
+                                paid_invoices: (parseInt(row.paid_monthly_invoices) || 0) + (parseInt(row.paid_voucher_invoices) || 0),
+                                unpaid_invoices: (parseInt(row.unpaid_monthly_invoices) || 0) + (parseInt(row.unpaid_voucher_invoices) || 0),
+                                total_revenue: (parseFloat(row.monthly_revenue) || 0) + (parseFloat(row.voucher_revenue) || 0),
+                                total_unpaid: (parseFloat(row.monthly_unpaid) || 0) + (parseFloat(row.voucher_unpaid) || 0)
+                            };
+                            
+                            // Validasi logika: active_customers tidak boleh lebih dari total_customers
+                            if (stats.active_customers > stats.total_customers) {
+                                console.warn('Warning: Active customers count is higher than total customers. This indicates data inconsistency.');
+                                // Set active_customers to total_customers as fallback
+                                stats.active_customers = stats.total_customers;
+                            }
+                            
+                            resolve(stats);
+                        }
+                    });
+                });
             });
         });
     }
