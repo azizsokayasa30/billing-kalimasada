@@ -1,9 +1,21 @@
 const logger = require('./logger');
 const billingManager = require('./billing');
-const { getMikrotikConnectionForCustomer } = require('./mikrotik');
+const { getMikrotikConnectionForCustomer, suspendUserRadius, unsuspendUserRadius } = require('./mikrotik');
 const { findDeviceByPhoneNumber, findDeviceByPPPoE, setParameterValues } = require('./genieacs');
 const { getSetting } = require('./settingsManager');
 const staticIPSuspension = require('./staticIPSuspension');
+const { getRadiusConfigValue } = require('./radiusConfig');
+
+// Helper untuk get user_auth_mode (prioritaskan database)
+async function getUserAuthMode() {
+    try {
+        const mode = await getRadiusConfigValue('user_auth_mode', null);
+        if (mode !== null) return mode;
+    } catch (e) {
+        // Fallback ke settings.json
+    }
+    return getSetting('user_auth_mode', 'mikrotik');
+}
 
 class ServiceSuspensionManager {
     constructor() {
@@ -73,52 +85,71 @@ class ServiceSuspensionManager {
             // 1. Prioritas suspend PPPoE jika tersedia
             if (hasPPPoE) {
                 results.suspension_type = 'pppoe';
-                try {
-                    const mikrotik = await getMikrotikConnectionForCustomer(customer);
-                    
-                    // Tentukan profile isolir dari setting
-                    const selectedProfile = getSetting('isolir_profile', 'isolir');
-                    // Pastikan profile isolir ada pada NAS milik customer
-                    await this.ensureIsolirProfile(customer);
-
-                    // Cari .id secret berdasarkan name terlebih dahulu
-                    let secretId = null;
+                const authMode = await getUserAuthMode();
+                
+                // Check jika menggunakan RADIUS mode
+                if (authMode === 'radius') {
                     try {
-                        const secrets = await mikrotik.write('/ppp/secret/print', [
+                        const suspendResult = await suspendUserRadius(pppUser);
+                        if (suspendResult && suspendResult.success) {
+                            results.mikrotik = true;
+                            results.radius = true;
+                            logger.info(`RADIUS: Successfully suspended user ${pppUser} (moved to isolir group)`);
+                        } else {
+                            logger.error(`RADIUS: Suspension failed for ${pppUser}`);
+                        }
+                    } catch (radiusError) {
+                        logger.error(`RADIUS suspension failed for ${customer.username}:`, radiusError.message);
+                    }
+                } else {
+                    // Mode Mikrotik API (original code)
+                    try {
+                        const mikrotik = await getMikrotikConnectionForCustomer(customer);
+                        
+                        // Tentukan profile isolir dari setting
+                        const selectedProfile = getSetting('isolir_profile', 'isolir');
+                        // Pastikan profile isolir ada pada NAS milik customer
+                        await this.ensureIsolirProfile(customer);
+
+                        // Cari .id secret berdasarkan name terlebih dahulu
+                        let secretId = null;
+                        try {
+                            const secrets = await mikrotik.write('/ppp/secret/print', [
+                                `?name=${pppUser}`
+                            ]);
+                            if (secrets && secrets.length > 0) {
+                                secretId = secrets[0]['.id'];
+                            }
+                        } catch (lookupErr) {
+                            logger.warn(`Mikrotik: failed to lookup secret id for ${customer.pppoe_username}: ${lookupErr.message}`);
+                        }
+
+                        // Update PPPoE user dengan profile isolir, gunakan .id bila tersedia, fallback ke =name=
+                        const setParams = secretId
+                            ? [`=.id=${secretId}`, `=profile=${selectedProfile}`, `=comment=SUSPENDED - ${reason}`]
+                            : [`=name=${pppUser}`, `=profile=${selectedProfile}`, `=comment=SUSPENDED - ${reason}`];
+
+                        await mikrotik.write('/ppp/secret/set', setParams);
+                        logger.info(`Mikrotik: Set profile to '${selectedProfile}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'})`);
+                        
+                        // Disconnect active session jika ada
+                        const activeSessions = await mikrotik.write('/ppp/active/print', [
                             `?name=${pppUser}`
                         ]);
-                        if (secrets && secrets.length > 0) {
-                            secretId = secrets[0]['.id'];
+                        
+                        if (activeSessions && activeSessions.length > 0) {
+                            for (const session of activeSessions) {
+                                await mikrotik.write('/ppp/active/remove', [
+                                    `=.id=${session['.id']}`
+                                ]);
+                            }
                         }
-                    } catch (lookupErr) {
-                        logger.warn(`Mikrotik: failed to lookup secret id for ${customer.pppoe_username}: ${lookupErr.message}`);
+                        
+                        results.mikrotik = true;
+                        logger.info(`Mikrotik: Successfully suspended PPPoE user ${customer.pppoe_username} with isolir profile`);
+                    } catch (mikrotikError) {
+                        logger.error(`Mikrotik PPPoE suspension failed for ${customer.username}:`, mikrotikError.message);
                     }
-
-                    // Update PPPoE user dengan profile isolir, gunakan .id bila tersedia, fallback ke =name=
-                    const setParams = secretId
-                        ? [`=.id=${secretId}`, `=profile=${selectedProfile}`, `=comment=SUSPENDED - ${reason}`]
-                        : [`=name=${pppUser}`, `=profile=${selectedProfile}`, `=comment=SUSPENDED - ${reason}`];
-
-                    await mikrotik.write('/ppp/secret/set', setParams);
-                    logger.info(`Mikrotik: Set profile to '${selectedProfile}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'})`);
-                    
-                    // Disconnect active session jika ada
-                    const activeSessions = await mikrotik.write('/ppp/active/print', [
-                        `?name=${pppUser}`
-                    ]);
-                    
-                    if (activeSessions && activeSessions.length > 0) {
-                        for (const session of activeSessions) {
-                            await mikrotik.write('/ppp/active/remove', [
-                                `=.id=${session['.id']}`
-                            ]);
-                        }
-                    }
-                    
-                    results.mikrotik = true;
-                    logger.info(`Mikrotik: Successfully suspended PPPoE user ${customer.pppoe_username} with isolir profile`);
-                } catch (mikrotikError) {
-                    logger.error(`Mikrotik PPPoE suspension failed for ${customer.username}:`, mikrotikError.message);
                 }
             }
             // 2. Jika tidak ada PPPoE, coba suspend IP statik
@@ -271,56 +302,75 @@ class ServiceSuspensionManager {
             // 1. Prioritas restore PPPoE jika tersedia
             if (hasPPPoE) {
                 results.restoration_type = 'pppoe';
-                try {
-                    const mikrotik = await getMikrotikConnectionForCustomer(customer);
-                    
-                    // Ambil profile dari customer atau package, fallback ke default
-                    let profileToUse = customer.pppoe_profile;
-                    if (!profileToUse) {
-                        // Coba ambil dari package
-                        const packageData = await billingManager.getPackageById(customer.package_id);
-                        profileToUse = packageData?.pppoe_profile || getSetting('default_pppoe_profile', 'default');
-                    }
-                    
-                    // Cari .id secret berdasarkan name terlebih dahulu
-                    let secretId = null;
+                const authMode = await getUserAuthMode();
+                
+                // Check jika menggunakan RADIUS mode
+                if (authMode === 'radius') {
                     try {
-                        const secrets = await mikrotik.write('/ppp/secret/print', [
+                        const unsuspendResult = await unsuspendUserRadius(pppUser);
+                        if (unsuspendResult && unsuspendResult.success) {
+                            results.mikrotik = true;
+                            results.radius = true;
+                            logger.info(`RADIUS: Successfully unsuspended user ${pppUser} (restored to previous package)`);
+                        } else {
+                            logger.error(`RADIUS: Unsuspend failed for ${pppUser}`);
+                        }
+                    } catch (radiusError) {
+                        logger.error(`RADIUS unsuspend failed for ${customer.username}:`, radiusError.message);
+                    }
+                } else {
+                    // Mode Mikrotik API (original code)
+                    try {
+                        const mikrotik = await getMikrotikConnectionForCustomer(customer);
+                        
+                        // Ambil profile dari customer atau package, fallback ke default
+                        let profileToUse = customer.pppoe_profile;
+                        if (!profileToUse) {
+                            // Coba ambil dari package
+                            const packageData = await billingManager.getPackageById(customer.package_id);
+                            profileToUse = packageData?.pppoe_profile || getSetting('default_pppoe_profile', 'default');
+                        }
+                        
+                        // Cari .id secret berdasarkan name terlebih dahulu
+                        let secretId = null;
+                        try {
+                            const secrets = await mikrotik.write('/ppp/secret/print', [
+                                `?name=${pppUser}`
+                            ]);
+                            if (secrets && secrets.length > 0) {
+                                secretId = secrets[0]['.id'];
+                            }
+                        } catch (lookupErr) {
+                            logger.warn(`Mikrotik: failed to lookup secret id for ${customer.pppoe_username}: ${lookupErr.message}`);
+                        }
+
+                        // Update PPPoE user dengan profile normal, gunakan .id bila tersedia, fallback ke =name=
+                        const setParams = secretId
+                            ? [`=.id=${secretId}`, `=profile=${profileToUse}`, `=comment=ACTIVE - ${reason}`]
+                            : [`=name=${pppUser}`, `=profile=${profileToUse}`, `=comment=ACTIVE - ${reason}`];
+
+                        await mikrotik.write('/ppp/secret/set', setParams);
+                        logger.info(`Mikrotik: Restored profile to '${profileToUse}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'})`);
+                        
+                        // Disconnect active session agar client reconnect dengan profile baru
+                        const activeSessions = await mikrotik.write('/ppp/active/print', [
                             `?name=${pppUser}`
                         ]);
-                        if (secrets && secrets.length > 0) {
-                            secretId = secrets[0]['.id'];
+                        
+                        if (activeSessions && activeSessions.length > 0) {
+                            for (const session of activeSessions) {
+                                await mikrotik.write('/ppp/active/remove', [
+                                    `=.id=${session['.id']}`
+                                ]);
+                            }
+                            logger.info(`Mikrotik: Disconnected ${activeSessions.length} active session(s) for ${customer.pppoe_username} to apply new profile`);
                         }
-                    } catch (lookupErr) {
-                        logger.warn(`Mikrotik: failed to lookup secret id for ${customer.pppoe_username}: ${lookupErr.message}`);
+
+                        results.mikrotik = true;
+                        logger.info(`Mikrotik: Successfully restored PPPoE user ${customer.pppoe_username} with ${profileToUse} profile`);
+                    } catch (mikrotikError) {
+                        logger.error(`Mikrotik PPPoE restoration failed for ${customer.username}:`, mikrotikError.message);
                     }
-
-                    // Update PPPoE user dengan profile normal, gunakan .id bila tersedia, fallback ke =name=
-                    const setParams = secretId
-                        ? [`=.id=${secretId}`, `=profile=${profileToUse}`, `=comment=ACTIVE - ${reason}`]
-                        : [`=name=${pppUser}`, `=profile=${profileToUse}`, `=comment=ACTIVE - ${reason}`];
-
-                    await mikrotik.write('/ppp/secret/set', setParams);
-                    logger.info(`Mikrotik: Restored profile to '${profileToUse}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'})`);
-                    
-                    // Disconnect active session agar client reconnect dengan profile baru
-                    const activeSessions = await mikrotik.write('/ppp/active/print', [
-                        `?name=${pppUser}`
-                    ]);
-                    
-                    if (activeSessions && activeSessions.length > 0) {
-                        for (const session of activeSessions) {
-                            await mikrotik.write('/ppp/active/remove', [
-                                `=.id=${session['.id']}`
-                            ]);
-                        }
-                        logger.info(`Mikrotik: Disconnected ${activeSessions.length} active session(s) for ${customer.pppoe_username} to apply new profile`);
-                    }
-
-                    results.mikrotik = true;
-                    logger.info(`Mikrotik: Successfully restored PPPoE user ${customer.pppoe_username} with ${profileToUse} profile`);
-                } catch (mikrotikError) {
-                    logger.error(`Mikrotik PPPoE restoration failed for ${customer.username}:`, mikrotikError.message);
                 }
             }
             // 2. Jika tidak ada PPPoE, coba restore IP statik

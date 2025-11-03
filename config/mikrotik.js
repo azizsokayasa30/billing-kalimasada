@@ -130,35 +130,272 @@ async function getMikrotikConnectionForCustomer(customer) {
 
 // Fungsi untuk koneksi ke database RADIUS (MySQL)
 async function getRadiusConnection() {
-    const host = getSetting('radius_host', 'localhost');
-    const user = getSetting('radius_user', 'radius');
-    const password = getSetting('radius_password', 'radius');
-    const database = getSetting('radius_database', 'radius');
+    // Prioritaskan ambil dari database (app_settings), fallback ke settings.json
+    let radiusConfig;
+    try {
+        const { getRadiusConfig } = require('./radiusConfig');
+        radiusConfig = await getRadiusConfig();
+    } catch (e) {
+        // Fallback ke settings.json jika database tidak bisa diakses
+        logger.warn('Failed to get radius config from database, using settings.json fallback:', e.message);
+        radiusConfig = {
+            radius_host: getSetting('radius_host', 'localhost'),
+            radius_user: getSetting('radius_user', 'radius'),
+            radius_password: getSetting('radius_password', 'radius'),
+            radius_database: getSetting('radius_database', 'radius')
+        };
+    }
+    
+    const host = radiusConfig.radius_host || 'localhost';
+    const user = radiusConfig.radius_user || 'radius';
+    const password = radiusConfig.radius_password || 'radius';
+    const database = radiusConfig.radius_database || 'radius';
+    
     return await mysql.createConnection({ host, user, password, database });
 }
 
 // Fungsi untuk mendapatkan seluruh user PPPoE dari RADIUS
 async function getPPPoEUsersRadius() {
     const conn = await getRadiusConnection();
-    const [rows] = await conn.execute("SELECT username, value as password FROM radcheck WHERE attribute='Cleartext-Password'");
-    await conn.end();
-    return rows.map(row => ({ name: row.username, password: row.password }));
+    try {
+        // Join dengan radusergroup untuk mendapatkan package/group info
+        const [rows] = await conn.execute(`
+            SELECT 
+                rc.username, 
+                rc.value as password,
+                COALESCE(rug.groupname, 'default') as profile
+            FROM radcheck rc
+            LEFT JOIN radusergroup rug ON rc.username = rug.username
+            WHERE rc.attribute = 'Cleartext-Password'
+            ORDER BY rc.username
+        `);
+        await conn.end();
+        return rows.map(row => ({ 
+            name: row.username, 
+            password: row.password,
+            profile: row.profile
+        }));
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting PPPoE users from RADIUS: ${error.message}`);
+        // Fallback ke query sederhana jika join gagal
+        const conn2 = await getRadiusConnection();
+        const [rows] = await conn2.execute("SELECT username, value as password FROM radcheck WHERE attribute='Cleartext-Password'");
+        await conn2.end();
+        return rows.map(row => ({ name: row.username, password: row.password, profile: 'default' }));
+    }
 }
 
 // Fungsi untuk menambah user PPPoE ke RADIUS
-async function addPPPoEUserRadius({ username, password }) {
+async function addPPPoEUserRadius({ username, password, profile = null }) {
     const conn = await getRadiusConnection();
-    await conn.execute(
-        "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?)",
-        [username, password]
-    );
-    await conn.end();
-    return { success: true };
+    try {
+        // Insert atau update password di radcheck
+        await conn.execute(
+            "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            [username, password, password]
+        );
+        
+        // Assign user ke group/package jika profile diberikan
+        if (profile) {
+            // Convert profile ke format groupname (misal: "paket_10mbps" atau "default")
+            const groupname = profile.toLowerCase().replace(/\s+/g, '_');
+            await conn.execute(
+                "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+                [username, groupname]
+            );
+        }
+        
+        await conn.end();
+        return { success: true, message: 'User berhasil ditambahkan ke RADIUS' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error adding PPPoE user to RADIUS: ${error.message}`);
+        throw error;
+    }
+}
+
+// Fungsi untuk update password user PPPoE di RADIUS
+async function updatePPPoEUserRadiusPassword({ username, password }) {
+    const conn = await getRadiusConnection();
+    try {
+        await conn.execute(
+            "UPDATE radcheck SET value = ? WHERE username = ? AND attribute = 'Cleartext-Password'",
+            [password, username]
+        );
+        await conn.end();
+        return { success: true, message: 'Password user berhasil diupdate di RADIUS' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error updating PPPoE user password in RADIUS: ${error.message}`);
+        throw error;
+    }
+}
+
+// Fungsi untuk assign user ke package/group di RADIUS
+async function assignPackageRadius({ username, groupname }) {
+    const conn = await getRadiusConnection();
+    try {
+        // Convert groupname ke format yang benar (lowercase, underscore)
+        const normalizedGroupname = groupname.toLowerCase().replace(/\s+/g, '_');
+        
+        await conn.execute(
+            "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+            [username, normalizedGroupname]
+        );
+        await conn.end();
+        return { success: true, message: `User berhasil di-assign ke package ${normalizedGroupname}` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error assigning package in RADIUS: ${error.message}`);
+        throw error;
+    }
+}
+
+// Fungsi untuk suspend user (pindahkan ke group 'isolir')
+async function suspendUserRadius(username) {
+    const conn = await getRadiusConnection();
+    try {
+        // Simpan group sebelumnya (jika ada) untuk bisa restore nanti
+        const [currentGroup] = await conn.execute(
+            "SELECT groupname FROM radusergroup WHERE username = ? LIMIT 1",
+            [username]
+        );
+        
+        // Pindahkan ke group isolir
+        await conn.execute(
+            "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, 'isolir', 1)",
+            [username]
+        );
+        
+        // Simpan group sebelumnya di radreply untuk restore nanti
+        if (currentGroup && currentGroup.length > 0) {
+            await conn.execute(
+                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'X-Previous-Group', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [username, currentGroup[0].groupname, currentGroup[0].groupname]
+            );
+        }
+        
+        await conn.end();
+        return { success: true, message: 'User berhasil di-suspend (isolir)' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error suspending user in RADIUS: ${error.message}`);
+        throw error;
+    }
+}
+
+// Fungsi untuk unsuspend user (kembalikan ke package sebelumnya)
+async function unsuspendUserRadius(username) {
+    const conn = await getRadiusConnection();
+    try {
+        // Ambil group sebelumnya dari radreply
+        const [prevGroup] = await conn.execute(
+            "SELECT value FROM radreply WHERE username = ? AND attribute = 'X-Previous-Group' LIMIT 1",
+            [username]
+        );
+        
+        if (!prevGroup || prevGroup.length === 0) {
+            // Jika tidak ada group sebelumnya, assign ke default
+            await conn.execute(
+                "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, 'default', 1)",
+                [username]
+            );
+            await conn.end();
+            return { success: true, message: 'User di-un suspend ke package default (tidak ada package sebelumnya)' };
+        }
+        
+        const previousGroup = prevGroup[0].value;
+        
+        // Kembalikan ke group sebelumnya
+        await conn.execute(
+            "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+            [username, previousGroup]
+        );
+        
+        // Hapus record X-Previous-Group
+        await conn.execute(
+            "DELETE FROM radreply WHERE username = ? AND attribute = 'X-Previous-Group'",
+            [username]
+        );
+        
+        await conn.end();
+        return { success: true, message: `User di-un suspend ke package ${previousGroup}` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error unsuspending user in RADIUS: ${error.message}`);
+        throw error;
+    }
+}
+
+// Fungsi untuk delete user PPPoE dari RADIUS
+async function deletePPPoEUserRadius(username) {
+    const conn = await getRadiusConnection();
+    try {
+        // Hapus dari radcheck
+        await conn.execute("DELETE FROM radcheck WHERE username = ?", [username]);
+        
+        // Hapus dari radusergroup
+        await conn.execute("DELETE FROM radusergroup WHERE username = ?", [username]);
+        
+        // Hapus dari radreply (jika ada)
+        await conn.execute("DELETE FROM radreply WHERE username = ?", [username]);
+        
+        await conn.end();
+        return { success: true, message: 'User berhasil dihapus dari RADIUS' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error deleting PPPoE user from RADIUS: ${error.message}`);
+        throw error;
+    }
+}
+
+// Fungsi untuk edit user PPPoE di RADIUS (update password dan/atau package)
+async function editPPPoEUserRadius({ username, password, profile = null }) {
+    const conn = await getRadiusConnection();
+    try {
+        // Update password jika diberikan
+        if (password) {
+            await conn.execute(
+                "UPDATE radcheck SET value = ? WHERE username = ? AND attribute = 'Cleartext-Password'",
+                [password, username]
+            );
+        }
+        
+        // Update package/group jika diberikan
+        if (profile) {
+            const groupname = profile.toLowerCase().replace(/\s+/g, '_');
+            await conn.execute(
+                "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+                [username, groupname]
+            );
+        }
+        
+        await conn.end();
+        return { success: true, message: 'User berhasil di-update di RADIUS' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error editing PPPoE user in RADIUS: ${error.message}`);
+        throw error;
+    }
+}
+
+// Async helper untuk get user_auth_mode dari database (prioritaskan database, fallback ke settings.json)
+async function getUserAuthModeAsync() {
+    try {
+        const { getRadiusConfigValue } = require('./radiusConfig');
+        const mode = await getRadiusConfigValue('user_auth_mode', null);
+        if (mode !== null && mode !== undefined) return mode;
+    } catch (e) {
+        // Fallback ke settings.json jika database tidak bisa diakses
+        logger.debug('Failed to get user_auth_mode from database, using settings.json fallback');
+    }
+    return getSetting('user_auth_mode', 'mikrotik');
 }
 
 // Wrapper: Pilih mode autentikasi dari settings
 async function getPPPoEUsers() {
-    const mode = getSetting('user_auth_mode', 'mikrotik');
+    const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
         return await getPPPoEUsersRadius();
     } else {
@@ -183,34 +420,48 @@ async function getPPPoEUsers() {
     }
 }
 
-// Fungsi untuk edit user PPPoE (berdasarkan id)
+// Fungsi untuk edit user PPPoE (berdasarkan id untuk Mikrotik, atau username untuk RADIUS)
 async function editPPPoEUser({ id, username, password, profile }) {
-    try {
-        const conn = await getMikrotikConnection();
-        if (!conn) throw new Error('Koneksi ke Mikrotik gagal');
-        await conn.write('/ppp/secret/set', [
-            '=.id=' + id,
-            '=name=' + username,
-            '=password=' + password,
-            '=profile=' + profile
-        ]);
-        return { success: true };
-    } catch (error) {
-        logger.error(`Error editing PPPoE user: ${error.message}`);
-        throw error;
+    const mode = await getUserAuthModeAsync();
+    if (mode === 'radius') {
+        // Mode RADIUS: menggunakan username (id tidak diperlukan)
+        return await editPPPoEUserRadius({ username, password, profile });
+    } else {
+        // Mode Mikrotik: menggunakan id
+        try {
+            const conn = await getMikrotikConnection();
+            if (!conn) throw new Error('Koneksi ke Mikrotik gagal');
+            await conn.write('/ppp/secret/set', [
+                '=.id=' + id,
+                '=name=' + username,
+                '=password=' + password,
+                '=profile=' + profile
+            ]);
+            return { success: true };
+        } catch (error) {
+            logger.error(`Error editing PPPoE user: ${error.message}`);
+            throw error;
+        }
     }
 }
 
-// Fungsi untuk hapus user PPPoE (berdasarkan id)
-async function deletePPPoEUser(id) {
-    try {
-        const conn = await getMikrotikConnection();
-        if (!conn) throw new Error('Koneksi ke Mikrotik gagal');
-        await conn.write('/ppp/secret/remove', [ '=.id=' + id ]);
-        return { success: true };
-    } catch (error) {
-        logger.error(`Error deleting PPPoE user: ${error.message}`);
-        throw error;
+// Fungsi untuk hapus user PPPoE (berdasarkan id untuk Mikrotik, atau username untuk RADIUS)
+async function deletePPPoEUser(idOrUsername) {
+    const mode = await getUserAuthModeAsync();
+    if (mode === 'radius') {
+        // Mode RADIUS: parameter adalah username
+        return await deletePPPoEUserRadius(idOrUsername);
+    } else {
+        // Mode Mikrotik: parameter adalah id
+        try {
+            const conn = await getMikrotikConnection();
+            if (!conn) throw new Error('Koneksi ke Mikrotik gagal');
+            await conn.write('/ppp/secret/remove', [ '=.id=' + idOrUsername ]);
+            return { success: true };
+        } catch (error) {
+            logger.error(`Error deleting PPPoE user: ${error.message}`);
+            throw error;
+        }
     }
 }
 
@@ -895,7 +1146,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null)
 
 // Wrapper: Pilih mode autentikasi dari settings
 async function getActiveHotspotUsers(routerObj = null) {
-    const mode = getSetting('user_auth_mode', 'mikrotik');
+    const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
         return await getActiveHotspotUsersRadius();
     } else {
@@ -924,7 +1175,7 @@ async function getActiveHotspotUsers(routerObj = null) {
 // Fungsi untuk menambahkan user hotspot
 async function addHotspotUser(username, password, profile, comment = null, customer = null, routerObj = null) {
     let conn = null;
-    const mode = getSetting('user_auth_mode', 'mikrotik');
+    const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
         return await addHotspotUserRadius(username, password, profile, comment);
     } else {
@@ -2527,9 +2778,9 @@ async function getAllUsers() {
 // ...
 // Fungsi tambah user PPPoE (alias addPPPoESecret)
 async function addPPPoEUser({ username, password, profile, customer = null, routerObj = null }) {
-    const mode = getSetting('user_auth_mode', 'mikrotik');
+    const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
-        return await addPPPoEUserRadius({ username, password });
+        return await addPPPoEUserRadius({ username, password, profile });
     } else {
         let conn = null;
         if (customer) {
@@ -2963,5 +3214,11 @@ module.exports = {
     getHotspotServers,
     disconnectHotspotUser,
     generateHotspotVouchers,
-    getInterfaceTraffic
+    getInterfaceTraffic,
+    // RADIUS functions
+    getRadiusConnection,
+    updatePPPoEUserRadiusPassword,
+    assignPackageRadius,
+    suspendUserRadius,
+    unsuspendUserRadius
 };

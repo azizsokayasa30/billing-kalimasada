@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { adminAuth } = require('./adminAuth');
-const { getSettingsWithCache, setSetting } = require('../config/settingsManager');
+const { getRadiusConfig, saveRadiusConfig } = require('../config/radiusConfig');
+const logger = require('../config/logger');
 
 // GET: Halaman Setting RADIUS
 router.get('/radius', adminAuth, async (req, res) => {
   try {
-    const settings = getSettingsWithCache();
+    // Ambil dari database, bukan settings.json
+    const settings = await getRadiusConfig();
     res.render('adminRadius', {
       settings,
       page: 'setting-radius',
@@ -14,8 +16,15 @@ router.get('/radius', adminAuth, async (req, res) => {
       success: null
     });
   } catch (e) {
+    logger.error('Error loading radius config:', e);
     res.render('adminRadius', {
-      settings: {},
+      settings: {
+        user_auth_mode: 'mikrotik',
+        radius_host: 'localhost',
+        radius_user: 'radius',
+        radius_password: '',
+        radius_database: 'radius'
+      },
       page: 'setting-radius',
       error: 'Gagal memuat pengaturan RADIUS',
       success: null
@@ -28,26 +37,38 @@ router.post('/radius', adminAuth, async (req, res) => {
   try {
     const { user_auth_mode, radius_host, radius_user, radius_password, radius_database } = req.body;
 
-    // Simpan nilai
-    setSetting('user_auth_mode', user_auth_mode || 'radius');
-    if (radius_host !== undefined) setSetting('radius_host', radius_host.trim());
-    if (radius_user !== undefined) setSetting('radius_user', radius_user.trim());
-    if (radius_password !== undefined) setSetting('radius_password', radius_password);
-    if (radius_database !== undefined) setSetting('radius_database', radius_database.trim());
+    // Simpan ke database (app_settings table)
+    await saveRadiusConfig({
+      user_auth_mode: user_auth_mode || 'radius',
+      radius_host: radius_host ? radius_host.trim() : 'localhost',
+      radius_user: radius_user ? radius_user.trim() : 'radius',
+      radius_password: radius_password || '',
+      radius_database: radius_database ? radius_database.trim() : 'radius'
+    });
 
-    const settings = getSettingsWithCache();
+    // Reload untuk ditampilkan
+    const settings = await getRadiusConfig();
+    
     res.render('adminRadius', {
       settings,
       page: 'setting-radius',
       error: null,
-      success: 'Pengaturan RADIUS berhasil disimpan'
+      success: 'Pengaturan RADIUS berhasil disimpan ke database'
     });
   } catch (e) {
-    const settings = getSettingsWithCache();
+    logger.error('Error saving radius config:', e);
+    const settings = await getRadiusConfig().catch(() => ({
+      user_auth_mode: 'mikrotik',
+      radius_host: 'localhost',
+      radius_user: 'radius',
+      radius_password: '',
+      radius_database: 'radius'
+    }));
+    
     res.render('adminRadius', {
       settings,
       page: 'setting-radius',
-      error: 'Gagal menyimpan pengaturan RADIUS',
+      error: 'Gagal menyimpan pengaturan RADIUS: ' + e.message,
       success: null
     });
   }
