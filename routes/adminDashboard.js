@@ -5,9 +5,10 @@ const fs = require('fs');
 const path = require('path');
 
 const { getAllDevicesFromAllServers } = require('../config/genieacs');
-const { getMikrotikConnectionForRouter } = require('../config/mikrotik');
+const { getMikrotikConnectionForRouter, getRadiusStatistics, getUserAuthModeAsync } = require('../config/mikrotik');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
+const { getRadiusConfigValue } = require('../config/radiusConfig');
 
 // GET: Dashboard admin
 router.get('/dashboard', adminAuth, async (req, res) => {
@@ -42,44 +43,68 @@ router.get('/dashboard', adminAuth, async (req, res) => {
       // Dashboard tetap bisa dimuat meskipun GenieACS bermasalah
     }
     
-    // Mikrotik agregasi seluruh NAS
+    // Check auth mode - RADIUS atau Mikrotik API
+    let authMode = 'mikrotik';
     try {
-      const sqlite3 = require('sqlite3').verbose();
-      const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
-      const routers = await new Promise((resolve) => {
-        db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []));
-      });
-      db.close();
+      authMode = await getUserAuthModeAsync();
+    } catch (e) {
+      console.warn('⚠️ [DASHBOARD] Could not determine auth mode, defaulting to mikrotik');
+    }
+    
+    // Mikrotik agregasi seluruh NAS (jika mode Mikrotik API)
+    if (authMode === 'mikrotik') {
+      try {
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+        const routers = await new Promise((resolve) => {
+          db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []));
+        });
+        db.close();
 
-      let totalSecrets = 0, totalActive = 0;
-      await Promise.all((routers || []).map(async (r) => {
-        try {
-          const conn = await Promise.race([
-            getMikrotikConnectionForRouter(r),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('connect timeout')), 5000))
-          ]);
-          const [active, secrets] = await Promise.all([
-            conn.write('/ppp/active/print'),
-            conn.write('/ppp/secret/print')
-          ]);
-          totalActive += Array.isArray(active) ? active.length : 0;
-          totalSecrets += Array.isArray(secrets) ? secrets.length : 0;
-        } catch (e) {
-          console.warn('⚠️ [DASHBOARD] Skip router', r && r.nas_ip, e.message);
-        }
-      }));
+        let totalSecrets = 0, totalActive = 0;
+        await Promise.all((routers || []).map(async (r) => {
+          try {
+            const conn = await Promise.race([
+              getMikrotikConnectionForRouter(r),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('connect timeout')), 5000))
+            ]);
+            const [active, secrets] = await Promise.all([
+              conn.write('/ppp/active/print'),
+              conn.write('/ppp/secret/print')
+            ]);
+            totalActive += Array.isArray(active) ? active.length : 0;
+            totalSecrets += Array.isArray(secrets) ? secrets.length : 0;
+          } catch (e) {
+            console.warn('⚠️ [DASHBOARD] Skip router', r && r.nas_ip, e.message);
+          }
+        }));
 
-      mikrotikAktif = totalActive;
-      mikrotikTotal = totalSecrets;
-      mikrotikOffline = Math.max(totalSecrets - totalActive, 0);
-      console.log('✅ [DASHBOARD] Mikrotik aggregated across NAS');
-    } catch (mikrotikError) {
-      console.warn('⚠️ [DASHBOARD] Mikrotik tidak dapat diakses - menggunakan data default:', mikrotikError.message);
-      // Set default values jika Mikrotik tidak bisa diakses
-      mikrotikTotal = 0;
-      mikrotikAktif = 0;
-      mikrotikOffline = 0;
-      // Dashboard tetap bisa dimuat meskipun Mikrotik bermasalah
+        mikrotikAktif = totalActive;
+        mikrotikTotal = totalSecrets;
+        mikrotikOffline = Math.max(totalSecrets - totalActive, 0);
+        console.log('✅ [DASHBOARD] Mikrotik aggregated across NAS');
+      } catch (mikrotikError) {
+        console.warn('⚠️ [DASHBOARD] Mikrotik tidak dapat diakses - menggunakan data default:', mikrotikError.message);
+        // Set default values jika Mikrotik tidak bisa diakses
+        mikrotikTotal = 0;
+        mikrotikAktif = 0;
+        mikrotikOffline = 0;
+        // Dashboard tetap bisa dimuat meskipun Mikrotik bermasalah
+      }
+    } else {
+      // Mode RADIUS - ambil dari database RADIUS
+      try {
+        const stats = await getRadiusStatistics();
+        mikrotikTotal = stats.total;
+        mikrotikAktif = stats.active;
+        mikrotikOffline = stats.offline;
+        console.log('✅ [DASHBOARD] RADIUS statistics loaded:', stats);
+      } catch (radiusError) {
+        console.warn('⚠️ [DASHBOARD] RADIUS tidak dapat diakses - menggunakan data default:', radiusError.message);
+        mikrotikTotal = 0;
+        mikrotikAktif = 0;
+        mikrotikOffline = 0;
+      }
     }
   } catch (e) {
     console.error('❌ [DASHBOARD] Error in dashboard route:', e);

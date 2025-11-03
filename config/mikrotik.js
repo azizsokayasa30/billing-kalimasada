@@ -186,6 +186,83 @@ async function getPPPoEUsersRadius() {
     }
 }
 
+// Fungsi untuk mendapatkan active PPPoE connections dari RADIUS
+async function getActivePPPoEConnectionsRadius() {
+    const conn = await getRadiusConnection();
+    try {
+        // Get active sessions dari radacct (acctstoptime IS NULL)
+        const [activeRows] = await conn.execute(`
+            SELECT 
+                username,
+                acctsessionid,
+                acctstarttime,
+                framedipaddress,
+                acctinputoctets,
+                acctoutputoctets,
+                nasipaddress,
+                TIMESTAMPDIFF(SECOND, acctstarttime, NOW()) as session_time
+            FROM radacct
+            WHERE acctstoptime IS NULL
+            ORDER BY acctstarttime DESC
+        `);
+        
+        await conn.end();
+        return activeRows.map(row => ({
+            name: row.username,
+            ip: row.framedipaddress || 'N/A',
+            uptime: row.session_time || 0,
+            'bytes-in': row.acctinputoctets || 0,
+            'bytes-out': row.acctoutputoctets || 0,
+            nasip: row.nasipaddress || 'N/A'
+        }));
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting active PPPoE connections from RADIUS: ${error.message}`);
+        return [];
+    }
+}
+
+// Fungsi untuk mendapatkan statistik RADIUS (total users, active, offline)
+async function getRadiusStatistics() {
+    const conn = await getRadiusConnection();
+    try {
+        // Total users
+        const [totalRows] = await conn.execute(`
+            SELECT COUNT(DISTINCT username) as total
+            FROM radcheck
+            WHERE attribute = 'Cleartext-Password'
+        `);
+        const totalUsers = totalRows[0]?.total || 0;
+        
+        // Active connections (dari radacct)
+        const [activeRows] = await conn.execute(`
+            SELECT COUNT(DISTINCT username) as active
+            FROM radacct
+            WHERE acctstoptime IS NULL
+        `);
+        const activeConnections = activeRows[0]?.active || 0;
+        
+        // Offline users
+        const offlineUsers = Math.max(totalUsers - activeConnections, 0);
+        
+        await conn.end();
+        
+        return {
+            total: totalUsers,
+            active: activeConnections,
+            offline: offlineUsers
+        };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting RADIUS statistics: ${error.message}`);
+        return {
+            total: 0,
+            active: 0,
+            offline: 0
+        };
+    }
+}
+
 // Fungsi untuk menambah user PPPoE ke RADIUS
 async function addPPPoEUserRadius({ username, password, profile = null }) {
     const conn = await getRadiusConnection();
@@ -391,6 +468,40 @@ async function getUserAuthModeAsync() {
         logger.debug('Failed to get user_auth_mode from database, using settings.json fallback');
     }
     return getSetting('user_auth_mode', 'mikrotik');
+}
+
+// Wrapper: Get active PPPoE connections (RADIUS atau Mikrotik API)
+async function getActivePPPoEConnections() {
+    const mode = await getUserAuthModeAsync();
+    if (mode === 'radius') {
+        return await getActivePPPoEConnectionsRadius();
+    } else {
+        const conn = await getMikrotikConnection();
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return [];
+        }
+        try {
+            const active = await conn.write('/ppp/active/print');
+            const activeNames = Array.isArray(active) ? active.map(s => s.name) : [];
+            
+            const secrets = await conn.write('/ppp/secret/print');
+            return (Array.isArray(secrets) ? secrets : []).map(secret => ({
+                name: secret.name,
+                ip: secret.address || 'N/A',
+                uptime: secret.uptime || '00:00:00',
+                'bytes-in': secret['bytes-in'] || 0,
+                'bytes-out': secret['bytes-out'] || 0
+            })).filter(secret => activeNames.includes(secret.name));
+        } catch (error) {
+            logger.error(`Error getting active PPPoE connections: ${error.message}`);
+            return [];
+        } finally {
+            if (conn && typeof conn.close === 'function') {
+                conn.close();
+            }
+        }
+    }
 }
 
 // Wrapper: Pilih mode autentikasi dari settings
