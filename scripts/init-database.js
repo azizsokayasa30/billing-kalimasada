@@ -39,16 +39,7 @@ db.run('PRAGMA foreign_keys = ON', (err) => {
 });
 
 // Import BillingManager untuk create tabel dasar
-let BillingManager;
-try {
-    // Temporarily set process.cwd to correct directory
-    const originalCwd = process.cwd();
-    process.chdir(path.join(__dirname, '..'));
-    BillingManager = require('../config/billing');
-    process.chdir(originalCwd);
-} catch (e) {
-    console.error('⚠️  Could not load BillingManager, will create tables manually');
-}
+// Note: billing.js exports instance, not class, so we'll create tables directly via SQL
 
 // Run SQL file (ignore "no such table" errors for ALTER/CREATE INDEX - normal for migrations)
 function runSQLFile(filePath) {
@@ -145,31 +136,189 @@ function getMigrationFiles() {
     return files;
 }
 
-// Create base tables using BillingManager
+// Create base tables directly via SQL (from billing.js createTables)
 function createBaseTables() {
     return new Promise((resolve, reject) => {
         console.log('\n📋 Step 1: Creating base tables...');
         
-        if (!BillingManager) {
-            console.warn('⚠️  BillingManager not available, skipping base table creation');
-            console.warn('   Tables will be created when CVLMEDIA starts (may cause first-start error)');
-            return resolve();
-        }
+        const baseTables = [
+            `CREATE TABLE IF NOT EXISTS packages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                speed TEXT NOT NULL,
+                price DECIMAL(10,2) NOT NULL,
+                tax_rate DECIMAL(5,2) DEFAULT 11.00,
+                description TEXT,
+                pppoe_profile TEXT DEFAULT 'default',
+                router_id INTEGER,
+                is_active BOOLEAN DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                image TEXT,
+                FOREIGN KEY (router_id) REFERENCES routers(id)
+            )`,
+            `CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                phone TEXT UNIQUE NOT NULL,
+                pppoe_username TEXT,
+                email TEXT,
+                address TEXT,
+                latitude DECIMAL(10,8),
+                longitude DECIMAL(11,8),
+                package_id INTEGER,
+                pppoe_profile TEXT,
+                status TEXT DEFAULT 'active',
+                join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                cable_type TEXT,
+                cable_length INTEGER,
+                port_number INTEGER,
+                cable_status TEXT DEFAULT 'connected',
+                cable_notes TEXT,
+                odp_id INTEGER,
+                auto_suspension BOOLEAN DEFAULT 1,
+                billing_day INTEGER DEFAULT 15,
+                renewal_type TEXT DEFAULT 'renewal',
+                fix_date INTEGER,
+                FOREIGN KEY (package_id) REFERENCES packages (id)
+            )`,
+            `CREATE TABLE IF NOT EXISTS routers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                nas_ip TEXT NOT NULL,
+                nas_identifier TEXT,
+                secret TEXT,
+                UNIQUE(nas_ip)
+            )`,
+            `CREATE TABLE IF NOT EXISTS customer_router_map (
+                customer_id INTEGER NOT NULL,
+                router_id INTEGER NOT NULL,
+                PRIMARY KEY (customer_id),
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+                FOREIGN KEY (router_id) REFERENCES routers(id) ON DELETE CASCADE
+            )`,
+            `CREATE TABLE IF NOT EXISTS invoices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL,
+                package_id INTEGER NOT NULL,
+                invoice_number TEXT UNIQUE NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                due_date DATE NOT NULL,
+                status TEXT DEFAULT 'unpaid',
+                payment_date DATETIME,
+                payment_method TEXT,
+                payment_gateway TEXT,
+                payment_token TEXT,
+                payment_url TEXT,
+                payment_status TEXT DEFAULT 'pending',
+                notes TEXT,
+                description TEXT,
+                invoice_type TEXT DEFAULT 'monthly',
+                package_name TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (customer_id) REFERENCES customers (id),
+                FOREIGN KEY (package_id) REFERENCES packages (id)
+            )`,
+            `CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invoice_id INTEGER NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                payment_method TEXT NOT NULL,
+                reference_number TEXT,
+                notes TEXT,
+                FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+            )`,
+            `CREATE TABLE IF NOT EXISTS payment_gateway_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invoice_id INTEGER NOT NULL,
+                gateway TEXT NOT NULL,
+                order_id TEXT NOT NULL,
+                payment_url TEXT,
+                token TEXT,
+                amount DECIMAL(10,2) NOT NULL,
+                status TEXT DEFAULT 'pending',
+                payment_type TEXT,
+                fraud_status TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+            )`,
+            `CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                description TEXT NOT NULL,
+                amount REAL NOT NULL,
+                category TEXT NOT NULL,
+                expense_date DATE NOT NULL,
+                payment_method TEXT,
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS odps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                code VARCHAR(50) NOT NULL UNIQUE,
+                latitude DECIMAL(10,8) NOT NULL,
+                longitude DECIMAL(11,8) NOT NULL,
+                address TEXT,
+                capacity INTEGER DEFAULT 64,
+                used_ports INTEGER DEFAULT 0,
+                status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'inactive')),
+                installation_date DATE,
+                notes TEXT,
+                parent_odp_id INTEGER,
+                is_pole BOOLEAN DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS technicians (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT UNIQUE NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('technician', 'field_officer', 'collector')),
+                email TEXT,
+                notes TEXT,
+                is_active INTEGER DEFAULT 1 CHECK (is_active IN (0, 1)),
+                area_coverage TEXT,
+                whatsapp_group TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_login DATETIME
+            )`,
+            `CREATE TABLE IF NOT EXISTS app_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT UNIQUE NOT NULL,
+                value TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`
+        ];
         
-        try {
-            // Create BillingManager instance which will create base tables
-            const billing = new BillingManager();
-            
-            // Wait a bit for tables to be created (async operations)
-            setTimeout(() => {
-                console.log('✅ Base tables created');
-                resolve();
-            }, 2000);
-        } catch (error) {
-            console.error('❌ Error creating base tables:', error.message);
-            // Continue anyway - tables might already exist
-            resolve();
-        }
+        let completed = 0;
+        let errors = [];
+        
+        baseTables.forEach((sql) => {
+            db.run(sql, (err) => {
+                if (err) {
+                    // Ignore "already exists" errors
+                    if (!err.message.includes('already exists')) {
+                        console.warn(`    ⚠️  Warning: ${err.message}`);
+                        errors.push(err);
+                    }
+                }
+                completed++;
+                if (completed === baseTables.length) {
+                    if (errors.length === 0 || errors.every(e => e.message.includes('already exists'))) {
+                        console.log('✅ Base tables created');
+                        resolve();
+                    } else {
+                        console.warn(`⚠️  Some warnings occurred, but continuing...`);
+                        resolve();
+                    }
+                }
+            });
+        });
     });
 }
 
