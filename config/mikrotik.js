@@ -1481,6 +1481,7 @@ async function addHotspotUser(username, password, profile, comment = null, custo
         const result = await addHotspotUserRadius(username, password, profile, comment);
         
         // Buat invoice untuk voucher jika price ada dan > 0
+        let invoiceId = null;
         if (price && parseFloat(price) > 0 && result.success) {
             try {
                 const sqlite3 = require('sqlite3').verbose();
@@ -1532,7 +1533,8 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                             logger.error(`Failed to create invoice for voucher ${username}: ${err.message}`);
                             reject(err);
                         } else {
-                            logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${this.lastID}) - Status: unpaid`);
+                            invoiceId = this.lastID;
+                            logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId}) - Status: unpaid`);
                             resolve();
                         }
                     });
@@ -1544,7 +1546,7 @@ async function addHotspotUser(username, password, profile, comment = null, custo
             }
         }
         
-        return result;
+        return { ...result, invoiceId };
     } else {
         if (customer) {
           conn = await getMikrotikConnectionForCustomer(customer);
@@ -3418,11 +3420,13 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
             try {
                 // Tambahkan user hotspot menggunakan addHotspotUser (otomatis handle RADIUS/Mikrotik)
                 // Di mode RADIUS, routerObj akan diabaikan oleh addHotspotUser
-                await addHotspotUser(username, password, profile, 'voucher', null, routerObj);
+                // Pass price ke addHotspotUser untuk membuat invoice jika price > 0
+                const addResult = await addHotspotUser(username, password, profile, 'voucher', null, routerObj, price || null);
                 
-                // Buat invoice untuk voucher jika price ada
-                let invoiceId = null;
-                if (price && parseFloat(price) > 0) {
+                // Invoice sudah dibuat di dalam addHotspotUser jika price > 0 dan mode RADIUS
+                // Untuk mode Mikrotik API, invoice dibuat di bawah ini jika diperlukan
+                let invoiceId = addResult.invoiceId || null;
+                if (price && parseFloat(price) > 0 && !isRadiusMode) {
                     try {
                         // Insert invoice langsung dengan status unpaid (akan diupdate jadi paid saat voucher digunakan)
                         const sqlite3 = require('sqlite3').verbose();
