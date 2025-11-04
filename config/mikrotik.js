@@ -1484,6 +1484,7 @@ async function addHotspotUser(username, password, profile, comment = null, custo
         // Status 'unpaid' = belum digunakan, akan diupdate jadi 'paid' saat voucher digunakan
         let invoiceId = null;
         if (result.success) {
+            logger.info(`Creating invoice for voucher ${username} with price: ${price || 0}`);
             try {
                 const sqlite3 = require('sqlite3').verbose();
                 const dbPath = require('path').join(__dirname, '../data/billing.db');
