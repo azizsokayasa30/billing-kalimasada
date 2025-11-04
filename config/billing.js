@@ -4547,8 +4547,8 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
                         total_vouchers: parseInt(row.total_vouchers) || 0,
                         paid_vouchers: parseInt(row.paid_vouchers) || 0,
                         unpaid_vouchers: parseInt(row.unpaid_vouchers) || 0,
-                        total_revenue: parseFloat(row.total_revenue) || 0,
-                        unpaid_amount: parseFloat(row.unpaid_amount) || 0,
+                        total_revenue: parseFloat(row.total_revenue) || 0, // Hanya dari voucher yang sudah digunakan (paid)
+                        unpaid_amount: parseFloat(row.unpaid_amount) || 0, // Voucher yang belum digunakan
                         average_price: parseFloat(row.average_price) || 0
                     });
                 }
@@ -4592,35 +4592,98 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
     }
 
     // Fungsi untuk mendapatkan daftar invoice voucher dengan filter tanggal
+    // Juga menampilkan voucher yang belum punya invoice (dari RADIUS)
     async getVoucherInvoices(startDate, endDate, status = null) {
-        return new Promise((resolve, reject) => {
-            let sql = `
-                SELECT 
-                    i.*,
-                    c.name as customer_name,
-                    c.phone as customer_phone
-                FROM invoices i
-                LEFT JOIN customers c ON i.customer_id = c.id
-                WHERE i.invoice_type = 'voucher'
-                AND DATE(i.created_at) >= ? AND DATE(i.created_at) <= ?
-            `;
-            
-            const params = [startDate, endDate];
-            
-            if (status) {
-                sql += ` AND i.status = ?`;
-                params.push(status);
-            }
-            
-            sql += ` ORDER BY i.created_at DESC`;
-            
-            this.db.all(sql, params, (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows || []);
+        return new Promise(async (resolve, reject) => {
+            try {
+                // Dapatkan semua invoice voucher dari billing.db
+                let sql = `
+                    SELECT 
+                        i.*,
+                        c.name as customer_name,
+                        c.phone as customer_phone
+                    FROM invoices i
+                    LEFT JOIN customers c ON i.customer_id = c.id
+                    WHERE i.invoice_type = 'voucher'
+                    AND DATE(i.created_at) >= ? AND DATE(i.created_at) <= ?
+                `;
+                
+                const params = [startDate, endDate];
+                
+                if (status) {
+                    sql += ` AND i.status = ?`;
+                    params.push(status);
                 }
-            });
+                
+                sql += ` ORDER BY i.created_at DESC`;
+                
+                this.db.all(sql, params, async (err, invoiceRows) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    
+                    // Dapatkan semua voucher dari RADIUS yang belum punya invoice
+                    try {
+                        const { getRadiusConnection } = require('./mikrotik');
+                        const conn = await getRadiusConnection();
+                        
+                        // Ambil voucher dari radreply dengan comment 'voucher'
+                        const [voucherRows] = await conn.execute(`
+                            SELECT DISTINCT r.username, r.value as comment
+                            FROM radreply r
+                            WHERE r.attribute = 'Reply-Message' 
+                            AND r.value LIKE '%voucher%'
+                            AND r.username NOT IN (
+                                SELECT SUBSTRING(notes, 18, LENGTH(notes) - 28) as username
+                                FROM invoices
+                                WHERE invoice_type = 'voucher'
+                                AND notes LIKE 'Voucher Hotspot % - Profile:%'
+                            )
+                        `);
+                        
+                        await conn.end();
+                        
+                        // Tambahkan voucher yang belum punya invoice ke hasil
+                        const allVouchers = [...(invoiceRows || [])];
+                        
+                        for (const voucher of voucherRows) {
+                            // Extract username dari voucher
+                            const username = voucher.username;
+                            
+                            // Cek apakah sudah ada di invoice
+                            const exists = invoiceRows.some(inv => {
+                                const match = inv.notes ? inv.notes.match(/Voucher Hotspot\s+(\S+)/i) : null;
+                                return match && match[1] === username;
+                            });
+                            
+                            if (!exists) {
+                                // Tambahkan sebagai voucher tanpa invoice (belum digunakan)
+                                allVouchers.push({
+                                    id: null,
+                                    invoice_number: `VCR-${username}`,
+                                    invoice_type: 'voucher',
+                                    status: 'unpaid',
+                                    amount: 0,
+                                    notes: `Voucher Hotspot ${username} - Profile: (belum ada invoice)`,
+                                    created_at: new Date().toISOString(),
+                                    customer_name: null,
+                                    customer_phone: null,
+                                    is_from_radius: true // Flag untuk menandai dari RADIUS
+                                });
+                            }
+                        }
+                        
+                        resolve(allVouchers);
+                    } catch (radiusError) {
+                        // Jika error mendapatkan dari RADIUS, tetap return invoice yang ada
+                        logger.error('Error getting vouchers from RADIUS:', radiusError.message);
+                        resolve(invoiceRows || []);
+                    }
+                });
+            } catch (error) {
+                reject(error);
+            }
         });
     }
 

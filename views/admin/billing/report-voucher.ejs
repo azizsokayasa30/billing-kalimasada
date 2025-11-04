@@ -61,8 +61,8 @@
                                 <label for="status" class="form-label">Status</label>
                                 <select class="form-select" id="status" name="status">
                                     <option value="all" <%= status === 'all' ? 'selected' : '' %>>Semua</option>
-                                    <option value="paid" <%= status === 'paid' ? 'selected' : '' %>>Lunas</option>
-                                    <option value="unpaid" <%= status === 'unpaid' ? 'selected' : '' %>>Belum Lunas</option>
+                                    <option value="paid" <%= status === 'paid' ? 'selected' : '' %>>Sudah Digunakan (Lunas)</option>
+                                    <option value="unpaid" <%= status === 'unpaid' ? 'selected' : '' %>>Belum Digunakan</option>
                                 </select>
                             </div>
                             <div class="col-md-12">
@@ -93,7 +93,7 @@
                             <div class="card-body">
                                 <h5 class="text-muted mb-3">Pendapatan</h5>
                                 <h2 class="mb-0 text-success">Rp <%= (stats.total_revenue || 0).toLocaleString('id-ID') %></h2>
-                                <small class="text-muted"><%= stats.paid_vouchers || 0 %> voucher lunas</small>
+                                <small class="text-muted"><%= stats.paid_vouchers || 0 %> voucher sudah digunakan</small>
                             </div>
                         </div>
                     </div>
@@ -109,9 +109,9 @@
                     <div class="col-xl-3 col-md-6">
                         <div class="card stat-card unpaid">
                             <div class="card-body">
-                                <h5 class="text-muted mb-3">Belum Lunas</h5>
-                                <h2 class="mb-0 text-danger">Rp <%= (stats.unpaid_amount || 0).toLocaleString('id-ID') %></h2>
-                                <small class="text-muted"><%= stats.unpaid_vouchers || 0 %> voucher</small>
+                                <h5 class="text-muted mb-3">Belum Digunakan</h5>
+                                <h2 class="mb-0 text-muted">Rp <%= (stats.unpaid_amount || 0).toLocaleString('id-ID') %></h2>
+                                <small class="text-muted"><%= stats.unpaid_vouchers || 0 %> voucher (tidak dihitung pemasukan)</small>
                             </div>
                         </div>
                     </div>
@@ -135,7 +135,7 @@
                                         <th>Voucher Username</th>
                                         <th>Tanggal</th>
                                         <th>Jumlah</th>
-                                        <th>Status</th>
+                                        <th>Status Penggunaan</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -160,9 +160,9 @@
                                                 <td><strong>Rp <%= parseFloat(invoice.amount || 0).toLocaleString('id-ID') %></strong></td>
                                                 <td>
                                                     <% if (invoice.status === 'paid') { %>
-                                                        <span class="badge bg-success">Lunas</span>
+                                                        <span class="badge bg-success">Lunas (Sudah Digunakan)</span>
                                                     <% } else { %>
-                                                        <span class="badge bg-warning">Belum Lunas</span>
+                                                        <span class="badge bg-secondary">Belum Digunakan</span>
                                                     <% } %>
                                                 </td>
                                             </tr>

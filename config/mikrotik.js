@@ -1480,9 +1480,10 @@ async function addHotspotUser(username, password, profile, comment = null, custo
     if (mode === 'radius') {
         const result = await addHotspotUserRadius(username, password, profile, comment);
         
-        // Buat invoice untuk voucher jika price ada dan > 0
+        // Buat invoice untuk voucher (selalu dibuat, bahkan jika harga 0)
+        // Status 'unpaid' = belum digunakan, akan diupdate jadi 'paid' saat voucher digunakan
         let invoiceId = null;
-        if (price && parseFloat(price) > 0 && result.success) {
+        if (result.success) {
             try {
                 const sqlite3 = require('sqlite3').verbose();
                 const dbPath = require('path').join(__dirname, '../data/billing.db');
