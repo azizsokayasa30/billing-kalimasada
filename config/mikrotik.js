@@ -1535,13 +1535,14 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                             reject(err);
                         } else {
                             invoiceId = this.lastID;
-                            logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId}) - Status: unpaid (will be paid when used)`);
+                            logger.info(`✅ Invoice created successfully for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId}) - Amount: Rp ${parseFloat(price || 0)} - Status: unpaid`);
                             resolve();
                         }
                     });
                 });
                 
                 db.close();
+                logger.info(`Invoice creation completed for voucher ${username}. Invoice ID: ${invoiceId || 'null'}`);
             } catch (invoiceError) {
                 // Log error dengan detail untuk debugging
                 logger.error(`Error creating invoice for voucher ${username}: ${invoiceError.message}`);
