@@ -964,17 +964,20 @@ router.post('/generate-voucher', async (req, res) => {
         // Log response untuk debugging
         console.log(`Generated ${result.vouchers.length} vouchers successfully`);
         
+        // Ambil harga dari voucher pertama jika ada (karena finalPrice sudah dihitung di generateHotspotVouchers)
+        const voucherPrice = result.vouchers.length > 0 && result.vouchers[0].price ? result.vouchers[0].price : price;
+        
         const response = {
             success: true,
             vouchers: result.vouchers.map(voucher => ({
                 ...voucher,
                 profile: profile, // Pastikan profile ada di setiap voucher
-                price: price // Pastikan harga ada di setiap voucher
+                price: voucher.price || voucherPrice // Gunakan harga dari voucher atau fallback ke harga yang dihitung
             })),
             server,
             profile,
             validUntil,
-            price,
+            price: voucherPrice, // Gunakan harga yang sudah dihitung (dari paket jika harga kosong)
             voucherModel: voucherModel,
             namaHotspot,
             adminKontak
@@ -1161,28 +1164,28 @@ router.post('/generate-auto-voucher', async (req, res) => {
         let routerObj = null;
         // Untuk mode Mikrotik API, router_id diperlukan
         if (userAuthMode !== 'radius') {
-            if (!router_id) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Pilih NAS (Router) terlebih dahulu'
-                });
-            }
-
-            // Fetch router object
-            const db = new sqlite3.Database('./data/billing.db');
-            routerObj = await new Promise((resolve, reject) => {
-                db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-                    db.close();
-                    if (err) reject(err);
-                    else resolve(row || null);
-                });
+        if (!router_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Pilih NAS (Router) terlebih dahulu'
             });
+        }
 
-            if (!routerObj) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Router/NAS tidak ditemukan'
-                });
+        // Fetch router object
+        const db = new sqlite3.Database('./data/billing.db');
+            routerObj = await new Promise((resolve, reject) => {
+            db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+                db.close();
+                if (err) reject(err);
+                else resolve(row || null);
+            });
+        });
+
+        if (!routerObj) {
+            return res.status(400).json({
+                success: false,
+                message: 'Router/NAS tidak ditemukan'
+            });
             }
         }
 

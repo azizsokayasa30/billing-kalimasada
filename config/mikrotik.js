@@ -1523,7 +1523,7 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                         voucherCustomerId,
                         null,
                         invoiceNumber,
-                        parseFloat(price),
+                        parseFloat(finalPrice),
                         dueDate,
                         `Voucher Hotspot ${username} - Profile: ${profile}`,
                         'voucher',
@@ -3346,12 +3346,53 @@ async function deletePPPoEProfile(id, routerObj = null) {
     }
 }
 
+// Fungsi untuk mendapatkan harga paket berdasarkan profile name
+async function getPackagePriceByProfile(profileName) {
+    try {
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        return new Promise((resolve, reject) => {
+            // Cari paket berdasarkan pppoe_profile atau name yang cocok dengan profile
+            db.get(`
+                SELECT price FROM packages 
+                WHERE (pppoe_profile = ? OR LOWER(pppoe_profile) = LOWER(?) OR LOWER(name) = LOWER(?))
+                AND is_active = 1
+                ORDER BY price ASC
+                LIMIT 1
+            `, [profileName, profileName, profileName], (err, row) => {
+                db.close();
+                if (err) {
+                    logger.error(`Error getting package price for profile ${profileName}:`, err.message);
+                    resolve(null);
+                } else {
+                    resolve(row ? parseFloat(row.price) : null);
+                }
+            });
+        });
+    } catch (error) {
+        logger.error(`Error getting package price for profile ${profileName}:`, error.message);
+        return null;
+    }
+}
+
 // Fungsi untuk generate hotspot vouchers
 async function generateHotspotVouchers(count, prefix, profile, server, validUntil, price, charType = 'alphanumeric', routerObj = null) {
     try {
         // Check auth mode - RADIUS atau Mikrotik API
         const mode = await getUserAuthModeAsync();
         const isRadiusMode = mode === 'radius';
+        
+        // Jika harga tidak diisi atau 0, ambil harga dari paket berdasarkan profile
+        let finalPrice = price;
+        if (!price || parseFloat(price) === 0) {
+            const packagePrice = await getPackagePriceByProfile(profile);
+            if (packagePrice && packagePrice > 0) {
+                finalPrice = packagePrice.toString();
+                logger.info(`Using package price ${finalPrice} for profile ${profile}`);
+            }
+        }
         
         // Untuk mode Mikrotik API, validasi koneksi terlebih dahulu
         if (!isRadiusMode) {
@@ -3420,13 +3461,13 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
             try {
                 // Tambahkan user hotspot menggunakan addHotspotUser (otomatis handle RADIUS/Mikrotik)
                 // Di mode RADIUS, routerObj akan diabaikan oleh addHotspotUser
-                // Pass price ke addHotspotUser untuk membuat invoice jika price > 0
-                const addResult = await addHotspotUser(username, password, profile, 'voucher', null, routerObj, price || null);
+                // Pass finalPrice ke addHotspotUser untuk membuat invoice jika price > 0
+                const addResult = await addHotspotUser(username, password, profile, 'voucher', null, routerObj, finalPrice || null);
                 
-                // Invoice sudah dibuat di dalam addHotspotUser jika price > 0 dan mode RADIUS
+                // Invoice sudah dibuat di dalam addHotspotUser jika finalPrice > 0 dan mode RADIUS
                 // Untuk mode Mikrotik API, invoice dibuat di bawah ini jika diperlukan
                 let invoiceId = addResult.invoiceId || null;
-                if (price && parseFloat(price) > 0 && !isRadiusMode) {
+                if (finalPrice && parseFloat(finalPrice) > 0 && !isRadiusMode) {
                     try {
                         // Insert invoice langsung dengan status unpaid (akan diupdate jadi paid saat voucher digunakan)
                         const sqlite3 = require('sqlite3').verbose();
@@ -3476,7 +3517,7 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                                 voucherCustomerId, // Gunakan customer voucher khusus
                                 null, // Package tidak diperlukan untuk voucher
                                 invoiceNumber,
-                                parseFloat(price),
+                                parseFloat(finalPrice),
                                 dueDate,
                                 `Voucher Hotspot ${username} - Profile: ${profile}`,
                                 'voucher',
@@ -3509,7 +3550,7 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                     nas_name: isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.name : 'default'),
                     nas_ip: isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.nas_ip : ''),
                     createdAt: new Date(),
-                    price: price, // Tambahkan harga ke data voucher
+                    price: finalPrice, // Tambahkan harga ke data voucher
                     account_type: accountType, // Tambahkan tipe akun
                     invoice_id: invoiceId // Tambahkan invoice ID jika ada
                 });
