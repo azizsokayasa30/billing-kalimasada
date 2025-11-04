@@ -3346,37 +3346,6 @@ async function deletePPPoEProfile(id, routerObj = null) {
     }
 }
 
-// Fungsi untuk mendapatkan harga paket berdasarkan profile name
-async function getPackagePriceByProfile(profileName) {
-    try {
-        const sqlite3 = require('sqlite3').verbose();
-        const dbPath = require('path').join(__dirname, '../data/billing.db');
-        const db = new sqlite3.Database(dbPath);
-        
-        return new Promise((resolve, reject) => {
-            // Cari paket berdasarkan pppoe_profile atau name yang cocok dengan profile
-            db.get(`
-                SELECT price FROM packages 
-                WHERE (pppoe_profile = ? OR LOWER(pppoe_profile) = LOWER(?) OR LOWER(name) = LOWER(?))
-                AND is_active = 1
-                ORDER BY price ASC
-                LIMIT 1
-            `, [profileName, profileName, profileName], (err, row) => {
-                db.close();
-                if (err) {
-                    logger.error(`Error getting package price for profile ${profileName}:`, err.message);
-                    resolve(null);
-                } else {
-                    resolve(row ? parseFloat(row.price) : null);
-                }
-            });
-        });
-    } catch (error) {
-        logger.error(`Error getting package price for profile ${profileName}:`, error.message);
-        return null;
-    }
-}
-
 // Fungsi untuk generate hotspot vouchers
 async function generateHotspotVouchers(count, prefix, profile, server, validUntil, price, charType = 'alphanumeric', routerObj = null) {
     try {
@@ -3384,15 +3353,9 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
         const mode = await getUserAuthModeAsync();
         const isRadiusMode = mode === 'radius';
         
-        // Jika harga tidak diisi atau 0, ambil harga dari paket berdasarkan profile
-        let finalPrice = price;
-        if (!price || parseFloat(price) === 0) {
-            const packagePrice = await getPackagePriceByProfile(profile);
-            if (packagePrice && packagePrice > 0) {
-                finalPrice = packagePrice.toString();
-                logger.info(`Using package price ${finalPrice} for profile ${profile}`);
-            }
-        }
+        // Harga voucher diambil dari input form "Harga" di /admin/hotspot/voucher
+        // Jika harga tidak diisi atau 0, invoice tidak dibuat
+        const finalPrice = price || null;
         
         // Untuk mode Mikrotik API, validasi koneksi terlebih dahulu
         if (!isRadiusMode) {
