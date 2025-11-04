@@ -10,41 +10,15 @@
  */
 
 const sqlite3 = require('sqlite3').verbose();
-const mysql = require('mysql2/promise');
 const path = require('path');
-const fs = require('fs');
-
-// Load settings
-const settingsPath = path.join(__dirname, '../settings.json');
-let settings = {};
-if (fs.existsSync(settingsPath)) {
-    settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-}
 
 // Database paths
 const billingDbPath = path.join(__dirname, '../data/billing.db');
 
-// RADIUS database config
-const radiusConfig = {
-    host: settings.radius_host || 'localhost',
-    user: settings.radius_user || 'billing',
-    password: settings.radius_password || '',
-    database: settings.radius_database || 'radius'
-};
-
+// Use existing getRadiusConnection function from config/mikrotik.js
 async function getRadiusConnection() {
-    try {
-        const conn = await mysql.createConnection({
-            host: radiusConfig.host,
-            user: radiusConfig.user,
-            password: radiusConfig.password,
-            database: radiusConfig.database
-        });
-        return conn;
-    } catch (error) {
-        console.error('Error connecting to RADIUS database:', error.message);
-        throw error;
-    }
+    const { getRadiusConnection } = require('../config/mikrotik');
+    return await getRadiusConnection();
 }
 
 async function getUsedVouchers() {
@@ -61,12 +35,12 @@ async function getUsedVouchers() {
             ORDER BY username
         `);
         
+        await conn.end();
         return vouchers.map(v => v.username);
     } catch (error) {
+        await conn.end();
         console.error('Error getting used vouchers from RADIUS:', error.message);
         throw error;
-    } finally {
-        await conn.end();
     }
 }
 
