@@ -8,9 +8,6 @@ const CLIENTS_CONF_PATH = '/etc/freeradius/3.0/clients.conf';
 /**
  * Parse clients.conf file dan return array of clients
  */
-/**
- * Parse clients.conf file dan return array of clients
- */
 function parseClientsConf() {
     try {
         if (!fs.existsSync(CLIENTS_CONF_PATH)) {
