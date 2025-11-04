@@ -3354,6 +3354,65 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                 // Di mode RADIUS, routerObj akan diabaikan oleh addHotspotUser
                 await addHotspotUser(username, password, profile, 'voucher', null, routerObj);
                 
+                // Buat invoice untuk voucher jika price ada
+                let invoiceId = null;
+                if (price && parseFloat(price) > 0) {
+                    try {
+                        const BillingManager = require('./billing');
+                        const billingManager = new BillingManager();
+                        
+                        // Buat invoice dengan invoice_type = 'voucher' dan status = 'paid'
+                        // Voucher langsung bisa digunakan, jadi dianggap sudah dibayar
+                        const invoiceNumber = `INV-VCR-${Date.now()}-${username}`;
+                        const dueDate = new Date().toISOString().split('T')[0];
+                        
+                        const invoiceData = {
+                            customer_id: null, // Voucher tidak terikat ke customer tertentu
+                            package_id: null,
+                            amount: parseFloat(price),
+                            due_date: dueDate,
+                            notes: `Voucher Hotspot ${username} - Profile: ${profile}`,
+                            invoice_type: 'voucher',
+                            status: 'paid' // Voucher langsung bisa digunakan, jadi langsung paid
+                        };
+                        
+                        // Insert invoice langsung dengan status paid
+                        const sqlite3 = require('sqlite3').verbose();
+                        const dbPath = require('path').join(__dirname, '../data/billing.db');
+                        const db = new sqlite3.Database(dbPath);
+                        
+                        await new Promise((resolve, reject) => {
+                            db.run(`
+                                INSERT INTO invoices (customer_id, package_id, invoice_number, amount, due_date, notes, invoice_type, status, payment_date, created_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                            `, [
+                                null,
+                                null,
+                                invoiceNumber,
+                                invoiceData.amount,
+                                invoiceData.due_date,
+                                invoiceData.notes,
+                                invoiceData.invoice_type,
+                                invoiceData.status
+                            ], function(err) {
+                                if (err) {
+                                    logger.error(`Failed to create invoice for voucher ${username}: ${err.message}`);
+                                    reject(err);
+                                } else {
+                                    invoiceId = this.lastID;
+                                    logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId})`);
+                                    resolve();
+                                }
+                            });
+                        });
+                        
+                        db.close();
+                    } catch (invoiceError) {
+                        // Log error tapi jangan gagalkan pembuatan voucher
+                        logger.error(`Error creating invoice for voucher ${username}: ${invoiceError.message}`);
+                    }
+                }
+                
                 // Tambahkan ke array vouchers
                 vouchers.push({
                     username,
@@ -3364,10 +3423,11 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                     nas_ip: isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.nas_ip : ''),
                     createdAt: new Date(),
                     price: price, // Tambahkan harga ke data voucher
-                    account_type: accountType // Tambahkan tipe akun
+                    account_type: accountType, // Tambahkan tipe akun
+                    invoice_id: invoiceId // Tambahkan invoice ID jika ada
                 });
                 
-                logger.info(`${accountType === 'voucher' ? 'Voucher' : 'Member'} created: ${username} (password: ${password}) on ${isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.name : 'default')}`);
+                logger.info(`${accountType === 'voucher' ? 'Voucher' : 'Member'} created: ${username} (password: ${password}) on ${isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.name : 'default')}${invoiceId ? ` - Invoice: ${invoiceId}` : ''}`);
             } catch (err) {
                 logger.error(`Failed to create voucher ${username}: ${err.message}`);
                 // Lanjutkan ke voucher berikutnya
