@@ -903,11 +903,19 @@ router.get('/reports/voucher', getAppSettings, adminAuth, async (req, res) => {
         
         // Default date range: current month
         const now = new Date();
-        const startDate = start_date || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        const endDate = end_date || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        // Pastikan menggunakan timezone lokal untuk mendapatkan tanggal yang benar
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const startDate = start_date || new Date(year, month, 1).toISOString().split('T')[0];
+        // Tanggal terakhir bulan ini
+        const endDate = end_date || new Date(year, month + 1, 0).toISOString().split('T')[0];
+        
+        logger.info(`Voucher report query: startDate=${startDate}, endDate=${endDate}, status=${status || 'all'}`);
         
         const stats = await billingManager.getVoucherReportStats(startDate, endDate);
         const invoices = await billingManager.getVoucherInvoices(startDate, endDate, status || null);
+        
+        logger.info(`Found ${invoices.length} voucher invoices for date range ${startDate} to ${endDate}`);
         
         res.render('admin/billing/report-voucher', {
             title: 'Laporan Keuangan Voucher',
