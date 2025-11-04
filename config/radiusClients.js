@@ -8,13 +8,9 @@ const CLIENTS_CONF_PATH = '/etc/freeradius/3.0/clients.conf';
 /**
  * Parse clients.conf file dan return array of clients
  */
-function parseClientsConf() {
-    try {
-        if (!fs.existsSync(CLIENTS_CONF_PATH)) {
-            logger.warn(`clients.conf not found at ${CLIENTS_CONF_PATH}`);
-            return [];
-        }
-
+/**
+ * Parse clients.conf file dan return array of clients
+ */
 function parseClientsConf() {
     try {
         if (!fs.existsSync(CLIENTS_CONF_PATH)) {
@@ -210,6 +206,7 @@ function writeClientsConf(clients) {
         });
 
         // Write to file
+        const fullContent = headerContent + clientsSection;
         try {
             fs.writeFileSync(CLIENTS_CONF_PATH, fullContent, 'utf8');
         } catch (writeError) {
