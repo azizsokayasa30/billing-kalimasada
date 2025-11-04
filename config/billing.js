@@ -1722,8 +1722,8 @@ class BillingManager {
                     let sql = `
                         ${selectClause}
                         FROM invoices i
-                        JOIN customers c ON i.customer_id = c.id
-                        JOIN packages p ON i.package_id = p.id
+                        LEFT JOIN customers c ON i.customer_id = c.id
+                        LEFT JOIN packages p ON i.package_id = p.id
                         WHERE 1=1
                     `;
                     
@@ -1858,7 +1858,7 @@ class BillingManager {
                     let sql = `
                         SELECT COUNT(*) as count
                         FROM invoices i
-                        JOIN customers c ON i.customer_id = c.id
+                        LEFT JOIN customers c ON i.customer_id = c.id
                         WHERE DATE(i.created_at) >= ?
                     `;
                     
@@ -1926,8 +1926,8 @@ class BillingManager {
                 let sql = `
                     ${selectClause}
                     FROM invoices i
-                    JOIN customers c ON i.customer_id = c.id
-                    JOIN packages p ON i.package_id = p.id
+                    LEFT JOIN customers c ON i.customer_id = c.id
+                    LEFT JOIN packages p ON i.package_id = p.id
                     WHERE 1=1
                 `;
                 
@@ -3277,7 +3277,7 @@ class BillingManager {
                 SELECT i.*, c.username as customer_username, c.name as customer_name, c.phone as customer_phone, c.address as customer_address,
                        p.name as package_name, p.speed as package_speed
                 FROM invoices i
-                JOIN customers c ON i.customer_id = c.id
+                LEFT JOIN customers c ON i.customer_id = c.id
                 LEFT JOIN packages p ON i.package_id = p.id
                 WHERE i.invoice_type = ?
                 ORDER BY i.created_at DESC

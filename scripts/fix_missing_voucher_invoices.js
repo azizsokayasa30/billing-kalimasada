@@ -126,90 +126,76 @@ async function createVoucherInvoice(username, profile, amount = 0) {
                 return;
             }
             
-            // Get a dummy customer ID (or create one if needed)
-            db.get('SELECT id FROM customers LIMIT 1', [], (err, customerRow) => {
-                if (err) {
-                    db.close();
-                    reject(err);
-                    return;
-                }
-                
-                // Use first customer or create a dummy customer for vouchers
-                let customerId = customerRow ? customerRow.id : null;
-                
-                // Also get package_id
-                db.get('SELECT id FROM packages LIMIT 1', [], (pkgErr, packageRow) => {
-                    if (pkgErr) {
-                        db.close();
-                        reject(pkgErr);
-                        return;
-                    }
-                    
-                    const packageId = packageRow ? packageRow.id : null;
-                    
-                    // If no customer exists, we need to handle this differently
-                    if (!customerId) {
-                        // Create a dummy customer for vouchers
-                        db.run(`
-                            INSERT INTO customers (name, username, status, created_at)
-                            VALUES (?, ?, ?, datetime('now'))
-                        `, ['Voucher Customer', 'voucher', 'active'], function(createErr) {
-                            if (createErr) {
+                        // Get or create voucher customer
+                        let voucherCustomerId = null;
+                        db.get(`SELECT id FROM customers WHERE username = 'voucher_customer' LIMIT 1`, [], (err, voucherCustomerRow) => {
+                            if (err) {
                                 db.close();
-                                reject(createErr);
+                                reject(err);
                                 return;
                             }
-                            customerId = this.lastID;
-                            createInvoiceRecord(customerId, packageId);
+                            
+                            if (voucherCustomerRow) {
+                                voucherCustomerId = voucherCustomerRow.id;
+                                createInvoiceRecord();
+                            } else {
+                                // Buat customer khusus untuk voucher
+                                db.run(`
+                                    INSERT INTO customers (name, username, phone, status)
+                                    VALUES (?, ?, ?, ?)
+                                `, ['Voucher Customer', 'voucher_customer', '000000000000', 'active'], function(createErr) {
+                                    if (createErr) {
+                                        db.close();
+                                        reject(createErr);
+                                        return;
+                                    }
+                                    voucherCustomerId = this.lastID;
+                                    createInvoiceRecord();
+                                });
+                            }
                         });
-                    } else {
-                        createInvoiceRecord(customerId, packageId);
-                    }
-                });
-            });
-            
-            function createInvoiceRecord(customerId, packageId) {
-                // Create invoice
-                const invoiceNumber = `INV-VCR-${Date.now()}-${username}`;
-                const dueDate = new Date().toISOString().split('T')[0];
-                
-                // Handle customer_id and package_id - use 0 if null not allowed
-                db.run(`
-                    INSERT INTO invoices (
-                        customer_id, 
-                        package_id, 
-                        invoice_number, 
-                        amount, 
-                        due_date, 
-                        notes, 
-                        invoice_type, 
-                        status, 
-                        payment_date, 
-                        created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-                `, [
-                    customerId || 0, // Use 0 if null not allowed
-                    packageId || 0, // Use 0 if null not allowed
-                    invoiceNumber,
-                    amount,
-                    dueDate,
-                    `Voucher Hotspot ${username} - Profile: ${profile}`,
-                    'voucher',
-                    'paid' // Voucher langsung bisa digunakan, jadi langsung paid
-                ], function(err) {
-                    db.close();
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve({
-                            id: this.lastID,
-                            invoice_number: invoiceNumber,
-                            amount: amount
-                        });
-                    }
-                });
-            }
+                        
+                        function createInvoiceRecord() {
+                            // Create invoice
+                            const invoiceNumber = `INV-VCR-${Date.now()}-${username}`;
+                            const dueDate = new Date().toISOString().split('T')[0];
+                            
+                            // Use voucher customer and set status to unpaid (will be paid when voucher is used)
+                            db.run(`
+                                INSERT INTO invoices (
+                                    customer_id, 
+                                    package_id, 
+                                    invoice_number, 
+                                    amount, 
+                                    due_date, 
+                                    notes, 
+                                    invoice_type, 
+                                    status, 
+                                    created_at
+                                )
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                            `, [
+                                voucherCustomerId, // Use voucher customer
+                                0, // Package ID - use 0 if null not allowed
+                                invoiceNumber,
+                                amount,
+                                dueDate,
+                                `Voucher Hotspot ${username} - Profile: ${profile}`,
+                                'voucher',
+                                'unpaid' // Status unpaid, will be paid when voucher is used
+                            ], function(err) {
+                                db.close();
+                                if (err) {
+                                    reject(err);
+                                } else {
+                                    resolve({
+                                        id: this.lastID,
+                                        invoice_number: invoiceNumber,
+                                        amount: amount
+                                    });
+                                }
+                            });
+                        }
         }).catch(reject);
     });
 }

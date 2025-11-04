@@ -43,6 +43,9 @@
                         <button id="cleanupVoucherBtn" class="btn btn-danger me-2" onclick="cleanupVouchers()">
                             <i class="bx bx-trash"></i> Hapus Voucher Expired
                         </button>
+                        <button id="updateVoucherInvoicesBtn" class="btn btn-success me-2" onclick="updateVoucherInvoices()">
+                            <i class="bx bx-refresh"></i> Update Invoice Voucher
+                        </button>
                         <button id="cleanupDataBtn" class="btn btn-warning me-2" onclick="cleanupData()">
                             <i class="bx bx-refresh"></i> Perbaiki Data
                         </button>
@@ -66,6 +69,9 @@
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="#" onclick="cleanupVouchers(); return false;">
                                 <i class="bx bx-trash"></i> Hapus Voucher Expired
+                            </a></li>
+                            <li><a class="dropdown-item text-success" href="#" onclick="updateVoucherInvoices(); return false;">
+                                <i class="bx bx-refresh"></i> Update Invoice Voucher
                             </a></li>
                             <li><a class="dropdown-item text-warning" href="#" onclick="cleanupData(); return false;">
                                 <i class="bx bx-refresh"></i> Perbaiki Data
@@ -627,6 +633,45 @@
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Fungsi untuk update invoice voucher menjadi paid saat voucher digunakan
+        async function updateVoucherInvoices() {
+            const btn = document.getElementById('updateVoucherInvoicesBtn');
+            const originalText = btn.innerHTML;
+            
+            // Disable button dan show loading
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Memproses...';
+            
+            try {
+                const response = await fetch('/admin/billing/api/update-voucher-invoices', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show success message
+                    showAlert('success', 'Berhasil!', result.message);
+                    
+                    // Reload page setelah 2 detik untuk update stats
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else {
+                    showAlert('danger', 'Error!', result.message);
+                }
+            } catch (error) {
+                showAlert('danger', 'Error!', 'Gagal update invoice voucher: ' + error.message);
+            } finally {
+                // Restore button
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
         // Fungsi untuk membersihkan data konsistensi
         async function cleanupData() {
             const btn = document.getElementById('cleanupDataBtn');

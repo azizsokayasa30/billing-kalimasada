@@ -3358,49 +3358,66 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                 let invoiceId = null;
                 if (price && parseFloat(price) > 0) {
                     try {
-                        const BillingManager = require('./billing');
-                        const billingManager = new BillingManager();
-                        
-                        // Buat invoice dengan invoice_type = 'voucher' dan status = 'paid'
-                        // Voucher langsung bisa digunakan, jadi dianggap sudah dibayar
-                        const invoiceNumber = `INV-VCR-${Date.now()}-${username}`;
-                        const dueDate = new Date().toISOString().split('T')[0];
-                        
-                        const invoiceData = {
-                            customer_id: null, // Voucher tidak terikat ke customer tertentu
-                            package_id: null,
-                            amount: parseFloat(price),
-                            due_date: dueDate,
-                            notes: `Voucher Hotspot ${username} - Profile: ${profile}`,
-                            invoice_type: 'voucher',
-                            status: 'paid' // Voucher langsung bisa digunakan, jadi langsung paid
-                        };
-                        
-                        // Insert invoice langsung dengan status paid
+                        // Insert invoice langsung dengan status unpaid (akan diupdate jadi paid saat voucher digunakan)
                         const sqlite3 = require('sqlite3').verbose();
                         const dbPath = require('path').join(__dirname, '../data/billing.db');
                         const db = new sqlite3.Database(dbPath);
                         
+                        // Get or create voucher customer
+                        let voucherCustomerId = null;
+                        await new Promise((resolve, reject) => {
+                            // Cek apakah customer voucher sudah ada
+                            db.get(`SELECT id FROM customers WHERE username = 'voucher_customer' LIMIT 1`, [], (err, row) => {
+                                if (err) {
+                                    reject(err);
+                                    return;
+                                }
+                                
+                                if (row) {
+                                    voucherCustomerId = row.id;
+                                    resolve();
+                                } else {
+                                    // Buat customer khusus untuk voucher
+                                    db.run(`
+                                        INSERT INTO customers (name, username, phone, status)
+                                        VALUES (?, ?, ?, ?)
+                                    `, ['Voucher Customer', 'voucher_customer', '000000000000', 'active'], function(createErr) {
+                                        if (createErr) {
+                                            reject(createErr);
+                                        } else {
+                                            voucherCustomerId = this.lastID;
+                                            logger.info(`Created voucher customer with ID: ${voucherCustomerId}`);
+                                            resolve();
+                                        }
+                                    });
+                                }
+                            });
+                        });
+                        
+                        // Buat invoice dengan status unpaid (akan diupdate jadi paid saat voucher digunakan)
+                        const invoiceNumber = `INV-VCR-${Date.now()}-${username}`;
+                        const dueDate = new Date().toISOString().split('T')[0];
+                        
                         await new Promise((resolve, reject) => {
                             db.run(`
-                                INSERT INTO invoices (customer_id, package_id, invoice_number, amount, due_date, notes, invoice_type, status, payment_date, created_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                                INSERT INTO invoices (customer_id, package_id, invoice_number, amount, due_date, notes, invoice_type, status, created_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
                             `, [
-                                null,
-                                null,
+                                voucherCustomerId, // Gunakan customer voucher khusus
+                                null, // Package tidak diperlukan untuk voucher
                                 invoiceNumber,
-                                invoiceData.amount,
-                                invoiceData.due_date,
-                                invoiceData.notes,
-                                invoiceData.invoice_type,
-                                invoiceData.status
+                                parseFloat(price),
+                                dueDate,
+                                `Voucher Hotspot ${username} - Profile: ${profile}`,
+                                'voucher',
+                                'unpaid' // Status unpaid, akan diupdate jadi paid saat voucher digunakan
                             ], function(err) {
                                 if (err) {
                                     logger.error(`Failed to create invoice for voucher ${username}: ${err.message}`);
                                     reject(err);
                                 } else {
                                     invoiceId = this.lastID;
-                                    logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId})`);
+                                    logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId}) - Status: unpaid (will be paid when voucher is used)`);
                                     resolve();
                                 }
                             });

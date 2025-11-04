@@ -896,6 +896,51 @@ router.get('/api/financial-report', async (req, res) => {
     }
 });
 
+// API untuk update invoice voucher menjadi paid saat voucher digunakan
+router.post('/api/update-voucher-invoices', adminAuth, async (req, res) => {
+    try {
+        const { updateVoucherInvoiceToPaid } = require('../scripts/update_voucher_invoices_on_use');
+        const { getUsedVouchers } = require('../scripts/update_voucher_invoices_on_use');
+        
+        // Get vouchers that have been used
+        const usedVouchers = await getUsedVouchers();
+        
+        if (usedVouchers.length === 0) {
+            return res.json({ 
+                success: true, 
+                message: 'Tidak ada voucher yang digunakan saat ini',
+                updated: 0
+            });
+        }
+        
+        // Update invoices
+        let updatedCount = 0;
+        for (const username of usedVouchers) {
+            try {
+                const result = await updateVoucherInvoiceToPaid(username);
+                if (result) {
+                    updatedCount++;
+                }
+            } catch (error) {
+                logger.error(`Error updating invoice for ${username}:`, error);
+            }
+        }
+        
+        // Refresh stats
+        const stats = await billingManager.getBillingStats();
+        
+        res.json({ 
+            success: true, 
+            message: `Berhasil update ${updatedCount} invoice voucher`,
+            updated: updatedCount,
+            stats
+        });
+    } catch (error) {
+        logger.error('Error updating voucher invoices:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // API untuk cleanup data konsistensi
 router.post('/api/cleanup-data', adminAuth, async (req, res) => {
     try {
