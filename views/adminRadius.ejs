@@ -26,50 +26,64 @@
         <div class="alert alert-success"><%= success %></div>
       <% } %>
 
-      <form method="post" action="/admin/radius" class="card p-3 shadow-sm" style="max-width: 560px;">
-        <div class="mb-3">
-          <label class="form-label">Mode Autentikasi</label>
-          <select name="user_auth_mode" class="form-select">
-            <option value="radius" <%= (settings.user_auth_mode||'radius')==='radius'?'selected':'' %>>RADIUS</option>
-            <option value="mikrotik" <%= settings.user_auth_mode==='mikrotik'?'selected':'' %>>Mikrotik API</option>
-          </select>
+      <form method="post" action="/admin/radius" class="card p-3 shadow-sm">
+        <div class="row">
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label">Mode Autentikasi</label>
+              <select name="user_auth_mode" class="form-select">
+                <option value="radius" <%= (settings.user_auth_mode||'radius')==='radius'?'selected':'' %>>RADIUS</option>
+                <option value="mikrotik" <%= settings.user_auth_mode==='mikrotik'?'selected':'' %>>Mikrotik API</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">RADIUS Host</label>
+              <input type="text" name="radius_host" class="form-control" value="<%= settings.radius_host || 'localhost' %>" placeholder="127.0.0.1">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">RADIUS User</label>
+              <input type="text" name="radius_user" class="form-control" value="<%= settings.radius_user || 'billing' %>" placeholder="billing">
+              <small class="form-text text-muted">Gunakan 'billing' untuk billing server atau 'radius' untuk FreeRADIUS</small>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label">RADIUS Password</label>
+              <input type="password" name="radius_password" class="form-control" value="<%= settings.radius_password || 'radius' %>">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">RADIUS Database</label>
+              <input type="text" name="radius_database" class="form-control" value="<%= settings.radius_database || 'radius' %>">
+            </div>
+            <div class="mb-3">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save"></i> Simpan
+              </button>
+            </div>
+          </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label">RADIUS Host</label>
-          <input type="text" name="radius_host" class="form-control" value="<%= settings.radius_host || 'localhost' %>" placeholder="127.0.0.1">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">RADIUS User</label>
-          <input type="text" name="radius_user" class="form-control" value="<%= settings.radius_user || 'billing' %>" placeholder="billing">
-          <small class="form-text text-muted">Gunakan 'billing' untuk billing server atau 'radius' untuk FreeRADIUS</small>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">RADIUS Password</label>
-          <input type="password" name="radius_password" class="form-control" value="<%= settings.radius_password || 'radius' %>">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">RADIUS Database</label>
-          <input type="text" name="radius_database" class="form-control" value="<%= settings.radius_database || 'radius' %>">
-        </div>
-        <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Simpan</button>
       </form>
 
-      <!-- Test Connection Button -->
-      <div class="card p-3 shadow-sm mt-3" style="max-width: 560px;">
-        <h5 class="mb-3"><i class="bi bi-plug"></i> Test Koneksi</h5>
-        <button type="button" id="testConnectionBtn" class="btn btn-outline-primary">
-          <i class="bi bi-arrow-repeat"></i> Test Koneksi ke RADIUS
-        </button>
-        <div id="testResult" class="mt-3"></div>
-      </div>
-
-      <!-- Manage RADIUS Clients Link -->
-      <div class="card p-3 shadow-sm mt-3" style="max-width: 560px;">
-        <h5 class="mb-3"><i class="bi bi-router"></i> Manage RADIUS Clients (NAS)</h5>
-        <p class="text-muted">Kelola router/NAS yang diizinkan mengirim request autentikasi ke FreeRADIUS</p>
-        <a href="/admin/radius/clients" class="btn btn-outline-primary">
-          <i class="bi bi-gear"></i> Kelola Clients
-        </a>
+      <!-- Test Connection & Manage Clients in 2 columns -->
+      <div class="row mt-3">
+        <div class="col-md-6">
+          <div class="card p-3 shadow-sm">
+            <h5 class="mb-3"><i class="bi bi-plug"></i> Test Koneksi</h5>
+            <button type="button" id="testConnectionBtn" class="btn btn-outline-primary">
+              <i class="bi bi-arrow-repeat"></i> Test Koneksi ke RADIUS
+            </button>
+            <div id="testResult" class="mt-3"></div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card p-3 shadow-sm">
+            <h5 class="mb-3"><i class="bi bi-router"></i> Manage RADIUS Clients (NAS)</h5>
+            <p class="text-muted">Kelola router/NAS yang diizinkan mengirim request autentikasi ke FreeRADIUS</p>
+            <a href="/admin/radius/clients" class="btn btn-outline-primary">
+              <i class="bi bi-gear"></i> Kelola Clients
+            </a>
+          </div>
+        </div>
       </div>
     </main>
   </div>
