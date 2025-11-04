@@ -1474,11 +1474,77 @@ async function getActiveHotspotUsers(routerObj = null) {
 }
 
 // Fungsi untuk menambahkan user hotspot
-async function addHotspotUser(username, password, profile, comment = null, customer = null, routerObj = null) {
+async function addHotspotUser(username, password, profile, comment = null, customer = null, routerObj = null, price = null) {
     let conn = null;
     const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
-        return await addHotspotUserRadius(username, password, profile, comment);
+        const result = await addHotspotUserRadius(username, password, profile, comment);
+        
+        // Buat invoice untuk voucher jika price ada dan > 0
+        if (price && parseFloat(price) > 0 && result.success) {
+            try {
+                const sqlite3 = require('sqlite3').verbose();
+                const dbPath = require('path').join(__dirname, '../data/billing.db');
+                const db = new sqlite3.Database(dbPath);
+                
+                // Get or create voucher customer
+                let voucherCustomerId = null;
+                await new Promise((resolve, reject) => {
+                    db.get(`SELECT id FROM customers WHERE username = 'voucher_customer' LIMIT 1`, [], (err, row) => {
+                        if (err) { reject(err); return; }
+                        if (row) {
+                            voucherCustomerId = row.id;
+                            resolve();
+                        } else {
+                            db.run(`
+                                INSERT INTO customers (name, username, phone, status)
+                                VALUES (?, ?, ?, ?)
+                            `, ['Voucher Customer', 'voucher_customer', '000000000000', 'active'], function(createErr) {
+                                if (createErr) { reject(createErr); } else {
+                                    voucherCustomerId = this.lastID;
+                                    logger.info(`Created voucher customer with ID: ${voucherCustomerId}`);
+                                    resolve();
+                                }
+                            });
+                        }
+                    });
+                });
+                
+                // Create invoice with status unpaid (will be updated to paid when voucher is used)
+                const invoiceNumber = `INV-VCR-${Date.now()}-${username}`;
+                const dueDate = new Date().toISOString().split('T')[0];
+                
+                await new Promise((resolve, reject) => {
+                    db.run(`
+                        INSERT INTO invoices (customer_id, package_id, invoice_number, amount, due_date, notes, invoice_type, status, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                    `, [
+                        voucherCustomerId,
+                        null,
+                        invoiceNumber,
+                        parseFloat(price),
+                        dueDate,
+                        `Voucher Hotspot ${username} - Profile: ${profile}`,
+                        'voucher',
+                        'unpaid'
+                    ], function(err) {
+                        if (err) {
+                            logger.error(`Failed to create invoice for voucher ${username}: ${err.message}`);
+                            reject(err);
+                        } else {
+                            logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${this.lastID}) - Status: unpaid`);
+                            resolve();
+                        }
+                    });
+                });
+                
+                db.close();
+            } catch (invoiceError) {
+                logger.error(`Error creating invoice for voucher ${username}: ${invoiceError.message}`);
+            }
+        }
+        
+        return result;
     } else {
         if (customer) {
           conn = await getMikrotikConnectionForCustomer(customer);

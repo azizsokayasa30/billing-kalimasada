@@ -1039,7 +1039,7 @@ router.post('/delete-voucher', async (req, res) => {
 // POST: Generate manual voucher for online settings
 router.post('/generate-manual-voucher', async (req, res) => {
     try {
-        const { username, password, profile, router_id } = req.body;
+        const { username, password, profile, router_id, price } = req.body;
 
         if (!username || !password || !profile) {
             return res.status(400).json({
@@ -1059,7 +1059,7 @@ router.post('/generate-manual-voucher', async (req, res) => {
 
         // Untuk mode RADIUS, router_id tidak diperlukan
         if (userAuthMode === 'radius') {
-            const result = await addHotspotUser(username, password, profile, 'voucher', null, null);
+            const result = await addHotspotUser(username, password, profile, 'voucher', null, null, price || null);
             if (result.success) {
                 return res.json({
                     success: true,
@@ -1139,7 +1139,7 @@ router.post('/generate-manual-voucher', async (req, res) => {
 // POST: Generate auto voucher for online settings
 router.post('/generate-auto-voucher', async (req, res) => {
     try {
-        const { count, profile, router_id, numericOnly } = req.body;
+        const { count, profile, router_id, numericOnly, price } = req.body;
         const numVouchers = parseInt(count) || 1;
 
         if (numVouchers > 10) {
@@ -1214,7 +1214,7 @@ router.post('/generate-auto-voucher', async (req, res) => {
             }
 
             try {
-                const result = await addHotspotUser(username, password, profile, 'voucher', null, routerObj);
+                const result = await addHotspotUser(username, password, profile, 'voucher', null, routerObj, price || null);
                 if (result.success) {
                     generatedVouchers.push({
                         username,
