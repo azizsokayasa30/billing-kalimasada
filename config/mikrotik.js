@@ -1398,11 +1398,34 @@ async function addHotspotUserRadius(username, password, profile, comment = null)
             [username, password, password]
         );
         
+        // Cek apakah profile exist di radgroupreply dengan case-sensitive
+        // Jika tidak ada, coba dengan normalized version
+        let profileToUse = profile || 'default';
+        const [profileCheck] = await conn.execute(
+            "SELECT DISTINCT groupname FROM radgroupreply WHERE groupname = ? LIMIT 1",
+            [profileToUse]
+        );
+        
+        // Jika profile tidak ditemukan dengan case-sensitive, coba normalized
+        if (profileCheck.length === 0 && profile) {
+            const normalizedProfile = profile.toLowerCase().replace(/\s+/g, '_');
+            const [normalizedCheck] = await conn.execute(
+                "SELECT DISTINCT groupname FROM radgroupreply WHERE groupname = ? LIMIT 1",
+                [normalizedProfile]
+            );
+            
+            if (normalizedCheck.length > 0) {
+                profileToUse = normalizedProfile;
+            } else {
+                // Jika masih tidak ada, gunakan profile asli (case-sensitive)
+                profileToUse = profile;
+            }
+        }
+        
         // Assign user ke group (profile) di radusergroup
-        const normalizedProfile = profile ? profile.toLowerCase().replace(/\s+/g, '_') : 'default';
         await conn.execute(
             "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
-            [username, normalizedProfile]
+            [username, profileToUse]
         );
         
         // Add comment to radreply table if provided
