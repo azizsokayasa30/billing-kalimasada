@@ -2254,13 +2254,28 @@ document.addEventListener('DOMContentLoaded', function () {
         const profile = document.getElementById('autoProfile').value;
         const routerIdEl = document.getElementById('autoRouterId');
         const routerId = routerIdEl ? routerIdEl.value : '';
-        const isNumeric = document.getElementById('autoNumeric').checked;
-        const isRadiusMode = routerIdEl && (routerIdEl.type === 'hidden' || routerIdEl.style.display === 'none');
+        // Deteksi mode RADIUS lebih robust
+        const isRadiusMode = (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') ||
+                             (routerIdEl && routerIdEl.type === 'hidden') ||
+                             (routerIdEl && routerIdEl.style.display === 'none');
+        const numericOnly = document.getElementById('autoNumeric')?.checked || false;
+
+        if (!profile) {
+            showToast('Pilih profile terlebih dahulu!', 'danger');
+            return;
+        }
 
         // Validation: router_id hanya wajib jika bukan mode RADIUS
         if (!isRadiusMode && !routerId) {
-            showToast('Pilih NAS (Router) terlebih dahulu!', 'error');
+            showToast('Pilih NAS (Router) terlebih dahulu!', 'danger');
             return;
+        }
+
+        // Hapus error dari URL jika ada
+        if (window.location.search.includes('error=')) {
+            const url = new URL(window.location);
+            url.searchParams.delete('error');
+            window.history.replaceState({}, '', url);
         }
 
         // Generate voucher otomatis via AJAX
@@ -2272,23 +2287,33 @@ document.addEventListener('DOMContentLoaded', function () {
             body: JSON.stringify({
                 count: count,
                 profile: profile,
-                router_id: routerId,
-                numericOnly: isNumeric
+                router_id: isRadiusMode ? null : routerId,
+                numericOnly: numericOnly
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => {
+                    throw new Error(err.message || 'Request failed');
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
-                showToast(`${count} voucher otomatis berhasil dibuat`, 'success');
-                // Reload page to refresh table
-                setTimeout(() => location.reload(), 2000);
+                showToast(`${data.message || `${data.vouchers?.length || count} voucher otomatis berhasil dibuat`}`, 'success');
+                // Reload page to refresh table setelah delay
+                setTimeout(() => {
+                    // Hapus error dari URL sebelum reload
+                    window.location.href = window.location.pathname + window.location.search.replace(/[?&]error=[^&]*/, '');
+                }, 1500);
             } else {
-                showToast('Gagal membuat voucher: ' + (data.message || 'Unknown error'), 'error');
+                showToast('Gagal membuat voucher: ' + (data.message || 'Unknown error'), 'danger');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            showToast('Error membuat voucher otomatis', 'error');
+            showToast('Error membuat voucher otomatis: ' + error.message, 'danger');
         });
     };
 
@@ -2549,5 +2574,6 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 </body>
+</html> 
 </html> 
 </html> 
