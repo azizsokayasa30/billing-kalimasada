@@ -4522,6 +4522,144 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
             return false;
         }
     }
+
+    // Fungsi untuk mendapatkan statistik laporan keuangan voucher
+    async getVoucherReportStats(startDate, endDate) {
+        return new Promise((resolve, reject) => {
+            const sql = `
+                SELECT 
+                    COUNT(*) as total_vouchers,
+                    SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_vouchers,
+                    SUM(CASE WHEN status = 'unpaid' THEN 1 ELSE 0 END) as unpaid_vouchers,
+                    COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as total_revenue,
+                    COALESCE(SUM(CASE WHEN status = 'unpaid' THEN amount ELSE 0 END), 0) as unpaid_amount,
+                    COALESCE(AVG(CASE WHEN status = 'paid' THEN amount ELSE NULL END), 0) as average_price
+                FROM invoices
+                WHERE invoice_type = 'voucher'
+                AND DATE(created_at) >= ? AND DATE(created_at) <= ?
+            `;
+            
+            this.db.get(sql, [startDate, endDate], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve({
+                        total_vouchers: parseInt(row.total_vouchers) || 0,
+                        paid_vouchers: parseInt(row.paid_vouchers) || 0,
+                        unpaid_vouchers: parseInt(row.unpaid_vouchers) || 0,
+                        total_revenue: parseFloat(row.total_revenue) || 0,
+                        unpaid_amount: parseFloat(row.unpaid_amount) || 0,
+                        average_price: parseFloat(row.average_price) || 0
+                    });
+                }
+            });
+        });
+    }
+
+    // Fungsi untuk mendapatkan statistik laporan keuangan PPPoE
+    async getPPPoEReportStats(startDate, endDate) {
+        return new Promise((resolve, reject) => {
+            const sql = `
+                SELECT 
+                    COUNT(*) as total_invoices,
+                    SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_invoices,
+                    SUM(CASE WHEN status = 'unpaid' THEN 1 ELSE 0 END) as unpaid_invoices,
+                    COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as total_revenue,
+                    COALESCE(SUM(CASE WHEN status = 'unpaid' THEN amount ELSE 0 END), 0) as unpaid_amount,
+                    COUNT(DISTINCT customer_id) as total_customers,
+                    COUNT(DISTINCT CASE WHEN status = 'paid' THEN customer_id ELSE NULL END) as paid_customers
+                FROM invoices
+                WHERE (invoice_type != 'voucher' OR invoice_type IS NULL)
+                AND DATE(created_at) >= ? AND DATE(created_at) <= ?
+            `;
+            
+            this.db.get(sql, [startDate, endDate], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve({
+                        total_invoices: parseInt(row.total_invoices) || 0,
+                        paid_invoices: parseInt(row.paid_invoices) || 0,
+                        unpaid_invoices: parseInt(row.unpaid_invoices) || 0,
+                        total_revenue: parseFloat(row.total_revenue) || 0,
+                        unpaid_amount: parseFloat(row.unpaid_amount) || 0,
+                        total_customers: parseInt(row.total_customers) || 0,
+                        paid_customers: parseInt(row.paid_customers) || 0
+                    });
+                }
+            });
+        });
+    }
+
+    // Fungsi untuk mendapatkan daftar invoice voucher dengan filter tanggal
+    async getVoucherInvoices(startDate, endDate, status = null) {
+        return new Promise((resolve, reject) => {
+            let sql = `
+                SELECT 
+                    i.*,
+                    c.name as customer_name,
+                    c.phone as customer_phone
+                FROM invoices i
+                LEFT JOIN customers c ON i.customer_id = c.id
+                WHERE i.invoice_type = 'voucher'
+                AND DATE(i.created_at) >= ? AND DATE(i.created_at) <= ?
+            `;
+            
+            const params = [startDate, endDate];
+            
+            if (status) {
+                sql += ` AND i.status = ?`;
+                params.push(status);
+            }
+            
+            sql += ` ORDER BY i.created_at DESC`;
+            
+            this.db.all(sql, params, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows || []);
+                }
+            });
+        });
+    }
+
+    // Fungsi untuk mendapatkan daftar invoice PPPoE dengan filter tanggal
+    async getPPPoEInvoices(startDate, endDate, status = null) {
+        return new Promise((resolve, reject) => {
+            let sql = `
+                SELECT 
+                    i.*,
+                    c.name as customer_name,
+                    c.username as customer_username,
+                    c.phone as customer_phone,
+                    p.name as package_name,
+                    p.speed as package_speed
+                FROM invoices i
+                LEFT JOIN customers c ON i.customer_id = c.id
+                LEFT JOIN packages p ON i.package_id = p.id
+                WHERE (i.invoice_type != 'voucher' OR i.invoice_type IS NULL)
+                AND DATE(i.created_at) >= ? AND DATE(i.created_at) <= ?
+            `;
+            
+            const params = [startDate, endDate];
+            
+            if (status) {
+                sql += ` AND i.status = ?`;
+                params.push(status);
+            }
+            
+            sql += ` ORDER BY i.created_at DESC`;
+            
+            this.db.all(sql, params, (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows || []);
+                }
+            });
+        });
+    }
 }
 
 // Create singleton instance

@@ -896,6 +896,68 @@ router.get('/api/financial-report', async (req, res) => {
     }
 });
 
+// Laporan Keuangan Voucher
+router.get('/reports/voucher', getAppSettings, adminAuth, async (req, res) => {
+    try {
+        const { start_date, end_date, status } = req.query;
+        
+        // Default date range: current month
+        const now = new Date();
+        const startDate = start_date || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const endDate = end_date || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        
+        const stats = await billingManager.getVoucherReportStats(startDate, endDate);
+        const invoices = await billingManager.getVoucherInvoices(startDate, endDate, status || null);
+        
+        res.render('admin/billing/report-voucher', {
+            title: 'Laporan Keuangan Voucher',
+            stats,
+            invoices,
+            startDate,
+            endDate,
+            status: status || 'all',
+            appSettings: req.appSettings
+        });
+    } catch (error) {
+        logger.error('Error loading voucher report:', error);
+        res.status(500).render('error', { 
+            message: 'Gagal memuat laporan keuangan voucher',
+            error: error.message 
+        });
+    }
+});
+
+// Laporan Keuangan PPPoE
+router.get('/reports/pppoe', getAppSettings, adminAuth, async (req, res) => {
+    try {
+        const { start_date, end_date, status } = req.query;
+        
+        // Default date range: current month
+        const now = new Date();
+        const startDate = start_date || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const endDate = end_date || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        
+        const stats = await billingManager.getPPPoEReportStats(startDate, endDate);
+        const invoices = await billingManager.getPPPoEInvoices(startDate, endDate, status || null);
+        
+        res.render('admin/billing/report-pppoe', {
+            title: 'Laporan Keuangan PPPoE',
+            stats,
+            invoices,
+            startDate,
+            endDate,
+            status: status || 'all',
+            appSettings: req.appSettings
+        });
+    } catch (error) {
+        logger.error('Error loading PPPoE report:', error);
+        res.status(500).render('error', { 
+            message: 'Gagal memuat laporan keuangan PPPoE',
+            error: error.message 
+        });
+    }
+});
+
 // API untuk update invoice voucher menjadi paid saat voucher digunakan
 router.post('/api/update-voucher-invoices', adminAuth, async (req, res) => {
     try {
