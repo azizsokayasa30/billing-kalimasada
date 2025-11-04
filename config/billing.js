@@ -2312,38 +2312,65 @@ class BillingManager {
                     this.db.run('BEGIN TRANSACTION');
                     
                     // Delete related records first to avoid foreign key constraint violations
+                    // Use a more robust approach with Promise-based deletion
                     const deleteQueries = [
-                        'DELETE FROM payments WHERE invoice_id = ?',
-                        'DELETE FROM payment_gateway_transactions WHERE invoice_id = ?',
-                        'DELETE FROM technician_activities WHERE invoice_id = ?',
-                        'DELETE FROM agent_monthly_payments WHERE invoice_id = ?',
-                        'DELETE FROM agent_payments WHERE invoice_id = ?'
+                        { query: 'DELETE FROM payments WHERE invoice_id = ?', name: 'payments' },
+                        { query: 'DELETE FROM payment_gateway_transactions WHERE invoice_id = ?', name: 'payment_gateway_transactions' },
+                        { query: 'DELETE FROM technician_activities WHERE invoice_id = ?', name: 'technician_activities' },
+                        { query: 'DELETE FROM agent_monthly_payments WHERE invoice_id = ?', name: 'agent_monthly_payments' },
+                        { query: 'DELETE FROM agent_payments WHERE invoice_id = ?', name: 'agent_payments' },
+                        { query: 'DELETE FROM collector_payments WHERE invoice_id = ?', name: 'collector_payments' },
+                        { query: 'DELETE FROM activity_logs WHERE invoice_id = ?', name: 'activity_logs' }
                     ];
                     
                     let completedQueries = 0;
                     let hasError = false;
+                    const errors = [];
                     
-                    deleteQueries.forEach((query, index) => {
-                        this.db.run(query, [id], function(err) {
-                            if (err && !err.message.includes('no such table')) {
-                                console.error(`Error deleting from related table (query ${index + 1}):`, err.message);
-                                hasError = true;
+                    deleteQueries.forEach((queryObj, index) => {
+                        // Check if table exists before trying to delete
+                        this.db.run(queryObj.query, [id], function(err) {
+                            if (err) {
+                                // Ignore "no such table" errors, but log others
+                                if (!err.message.includes('no such table')) {
+                                    console.error(`Error deleting from ${queryObj.name}:`, err.message);
+                                    errors.push(`${queryObj.name}: ${err.message}`);
+                                    // Don't set hasError for non-existent tables
+                                    if (!err.message.includes('no such table')) {
+                                        hasError = true;
+                                    }
+                                }
                             }
                             
                             completedQueries++;
                             if (completedQueries === deleteQueries.length) {
                                 if (hasError) {
-                                    this.db.run('ROLLBACK');
-                                    reject(new Error('Failed to delete related records'));
+                                    this.db.run('ROLLBACK', (rollbackErr) => {
+                                        if (rollbackErr) {
+                                            console.error('Error rolling back transaction:', rollbackErr.message);
+                                        }
+                                        reject(new Error(`Failed to delete related records: ${errors.join('; ')}`));
+                                    });
                                 } else {
                                     // Now delete the invoice itself
                                     this.db.run('DELETE FROM invoices WHERE id = ?', [id], function(err) {
                                         if (err) {
-                                            this.db.run('ROLLBACK');
+                                            this.db.run('ROLLBACK', (rollbackErr) => {
+                                                if (rollbackErr) {
+                                                    console.error('Error rolling back transaction:', rollbackErr.message);
+                                                }
+                                            });
                                             reject(err);
                                         } else {
-                                            this.db.run('COMMIT');
-                                            resolve(invoice);
+                                            this.db.run('COMMIT', (commitErr) => {
+                                                if (commitErr) {
+                                                    console.error('Error committing transaction:', commitErr.message);
+                                                    reject(commitErr);
+                                                } else {
+                                                    console.log(`✅ Successfully deleted invoice ${invoice.invoice_number} (ID: ${id})`);
+                                                    resolve(invoice);
+                                                }
+                                            });
                                         }
                                     }.bind(this));
                                 }
@@ -4524,6 +4551,7 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
     }
 
     // Fungsi untuk mendapatkan statistik laporan keuangan voucher
+    // Menggunakan tabel voucher_revenue (bukan invoices), karena invoice hanya untuk pelanggan PPPoE
     async getVoucherReportStats(startDate, endDate) {
         return new Promise((resolve, reject) => {
             const sql = `
@@ -4531,12 +4559,11 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
                     COUNT(*) as total_vouchers,
                     SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_vouchers,
                     SUM(CASE WHEN status = 'unpaid' THEN 1 ELSE 0 END) as unpaid_vouchers,
-                    COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as total_revenue,
-                    COALESCE(SUM(CASE WHEN status = 'unpaid' THEN amount ELSE 0 END), 0) as unpaid_amount,
-                    COALESCE(AVG(CASE WHEN status = 'paid' THEN amount ELSE NULL END), 0) as average_price
-                FROM invoices
-                WHERE invoice_type = 'voucher'
-                AND DATE(created_at) >= ? AND DATE(created_at) <= ?
+                    COALESCE(SUM(CASE WHEN status = 'paid' THEN price ELSE 0 END), 0) as total_revenue,
+                    COALESCE(SUM(CASE WHEN status = 'unpaid' THEN price ELSE 0 END), 0) as unpaid_amount,
+                    COALESCE(AVG(CASE WHEN status = 'paid' THEN price ELSE NULL END), 0) as average_price
+                FROM voucher_revenue
+                WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?
             `;
             
             this.db.get(sql, [startDate, endDate], (err, row) => {
@@ -4591,106 +4618,97 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
         });
     }
 
-    // Fungsi untuk mendapatkan daftar invoice voucher dengan filter tanggal
-    // Juga menampilkan voucher yang belum punya invoice (dari RADIUS)
+    // Fungsi untuk mendapatkan daftar voucher revenue dengan filter tanggal
+    // Menggunakan tabel voucher_revenue (bukan invoices), karena invoice hanya untuk pelanggan PPPoE
     async getVoucherInvoices(startDate, endDate, status = null) {
         return new Promise(async (resolve, reject) => {
             try {
                 // Log untuk debugging
                 logger.info(`getVoucherInvoices called: startDate=${startDate}, endDate=${endDate}, status=${status || 'all'}`);
                 
-                // Dapatkan semua invoice voucher dari billing.db
+                // Dapatkan semua voucher revenue dari billing.db
                 let sql = `
                     SELECT 
-                        i.*,
-                        c.name as customer_name,
-                        c.phone as customer_phone
-                    FROM invoices i
-                    LEFT JOIN customers c ON i.customer_id = c.id
-                    WHERE i.invoice_type = 'voucher'
-                    AND DATE(i.created_at) >= ? AND DATE(i.created_at) <= ?
+                        id,
+                        username as voucher_username,
+                        price as amount,
+                        profile,
+                        created_at,
+                        used_at,
+                        status,
+                        usage_count,
+                        notes
+                    FROM voucher_revenue
+                    WHERE date(created_at) >= date(?)
+                    AND date(created_at) <= date(?)
                 `;
                 
                 const params = [startDate, endDate];
                 
                 if (status && status !== 'all') {
-                    sql += ` AND i.status = ?`;
+                    sql += ` AND status = ?`;
                     params.push(status);
                 }
                 
-                sql += ` ORDER BY i.created_at DESC`;
+                sql += ` ORDER BY created_at DESC`;
                 
                 logger.info(`Executing SQL: ${sql} with params: [${params.join(', ')}]`);
                 
-                this.db.all(sql, params, async (err, invoiceRows) => {
+                this.db.all(sql, params, async (err, voucherRows) => {
                     if (err) {
-                        logger.error(`Error getting voucher invoices: ${err.message}`);
+                        logger.error(`Error getting voucher revenue: ${err.message}`);
                         reject(err);
                         return;
                     }
                     
-                    logger.info(`Found ${invoiceRows ? invoiceRows.length : 0} invoice rows from database`);
+                    logger.info(`Found ${voucherRows ? voucherRows.length : 0} voucher revenue rows from database`);
                     
-                    // Dapatkan semua voucher dari RADIUS yang belum punya invoice
+                    // Ambil informasi penggunaan voucher dari radacct untuk setiap voucher
                     try {
                         const { getRadiusConnection } = require('./mikrotik');
                         const conn = await getRadiusConnection();
                         
-                        // Ambil voucher dari radreply dengan comment 'voucher'
-                        const [voucherRows] = await conn.execute(`
-                            SELECT DISTINCT r.username, r.value as comment
-                            FROM radreply r
-                            WHERE r.attribute = 'Reply-Message' 
-                            AND r.value LIKE '%voucher%'
-                            AND r.username NOT IN (
-                                SELECT SUBSTRING(notes, 18, LENGTH(notes) - 28) as username
-                                FROM invoices
-                                WHERE invoice_type = 'voucher'
-                                AND notes LIKE 'Voucher Hotspot % - Profile:%'
-                            )
-                        `);
+                        // Ambil informasi penggunaan dari radacct untuk setiap voucher
+                        const vouchersWithUsage = await Promise.all((voucherRows || []).map(async (voucher) => {
+                            const username = voucher.voucher_username;
+                            try {
+                                // Ambil informasi penggunaan dari radacct
+                                const [usageRows] = await conn.execute(`
+                                    SELECT 
+                                        MIN(acctstarttime) as first_used_at,
+                                        MAX(acctstoptime) as last_used_at,
+                                        COUNT(*) as usage_count
+                                    FROM radacct
+                                    WHERE username = ?
+                                    AND acctstarttime IS NOT NULL
+                                `, [username]);
+                                
+                                const usage = usageRows && usageRows.length > 0 ? usageRows[0] : null;
+                                
+                                return {
+                                    ...voucher,
+                                    first_used_at: usage?.first_used_at || null,
+                                    last_used_at: usage?.last_used_at || null,
+                                    usage_count: usage ? parseInt(usage.usage_count) : 0
+                                };
+                            } catch (usageErr) {
+                                logger.error(`Error getting usage for voucher ${username}: ${usageErr.message}`);
+                                return {
+                                    ...voucher,
+                                    first_used_at: null,
+                                    last_used_at: null,
+                                    usage_count: 0
+                                };
+                            }
+                        }));
                         
                         await conn.end();
-                        
-                        logger.info(`Found ${voucherRows ? voucherRows.length : 0} vouchers from RADIUS without invoice`);
-                        
-                        // Tambahkan voucher yang belum punya invoice ke hasil
-                        const allVouchers = [...(invoiceRows || [])];
-                        
-                        for (const voucher of voucherRows) {
-                            // Extract username dari voucher
-                            const username = voucher.username;
-                            
-                            // Cek apakah sudah ada di invoice
-                            const exists = invoiceRows.some(inv => {
-                                const match = inv.notes ? inv.notes.match(/Voucher Hotspot\s+(\S+)/i) : null;
-                                return match && match[1] === username;
-                            });
-                            
-                            if (!exists) {
-                                // Tambahkan sebagai voucher tanpa invoice (belum digunakan)
-                                allVouchers.push({
-                                    id: null,
-                                    invoice_number: `VCR-${username}`,
-                                    invoice_type: 'voucher',
-                                    status: 'unpaid',
-                                    amount: 0,
-                                    notes: `Voucher Hotspot ${username} - Profile: (belum ada invoice)`,
-                                    created_at: new Date().toISOString(),
-                                    customer_name: null,
-                                    customer_phone: null,
-                                    is_from_radius: true // Flag untuk menandai dari RADIUS
-                                });
-                            }
-                        }
-                        
-                        logger.info(`Total vouchers returned: ${allVouchers.length}`);
-                        resolve(allVouchers);
+                        logger.info(`Returning ${vouchersWithUsage.length} vouchers with usage info`);
+                        resolve(vouchersWithUsage || []);
                     } catch (radiusError) {
-                        // Jika error mendapatkan dari RADIUS, tetap return invoice yang ada
-                        logger.error('Error getting vouchers from RADIUS:', radiusError.message);
-                        logger.info(`Returning ${invoiceRows ? invoiceRows.length : 0} invoices from database only`);
-                        resolve(invoiceRows || []);
+                        logger.error(`Error connecting to RADIUS: ${radiusError.message}`);
+                        logger.info(`Returning ${voucherRows ? voucherRows.length : 0} vouchers from database only`);
+                        resolve(voucherRows || []);
                     }
                 });
             } catch (error) {

@@ -664,7 +664,30 @@
                                     <% if (locals.voucherHistory && voucherHistory.length > 0) { %>
                                         <% voucherHistory.forEach(function(voucher) { %>
                                         <tr>
-                                            <td><%= new Date(voucher.createdAt).toLocaleString('id-ID') %></td>
+                                            <td>
+                                                <% 
+                                                    let dateDisplay = '-';
+                                                    if (voucher.createdAt) { 
+                                                        try {
+                                                            const date = new Date(voucher.createdAt);
+                                                            if (!isNaN(date.getTime())) {
+                                                                dateDisplay = date.toLocaleString('id-ID', { 
+                                                                    timeZone: 'Asia/Jakarta', 
+                                                                    year: 'numeric', 
+                                                                    month: '2-digit', 
+                                                                    day: '2-digit', 
+                                                                    hour: '2-digit', 
+                                                                    minute: '2-digit', 
+                                                                    second: '2-digit' 
+                                                                });
+                                                            }
+                                                        } catch(e) {
+                                                            dateDisplay = '-';
+                                                        }
+                                                    }
+                                                %>
+                                                <%= dateDisplay %>
+                                            </td>
                                             <td><%= voucher.username %></td>
                                             <td><%= voucher.password %></td>
                                             <td><%= voucher.profile %></td>
@@ -976,6 +999,19 @@
             const data = {};
             for (const [key, value] of formData.entries()) {
                 data[key] = value;
+            }
+            
+            // Pastikan harga dikirim dengan benar (parse sebagai number)
+            const priceInput = document.getElementById('voucherPrice');
+            if (priceInput && priceInput.value && priceInput.value.trim() !== '') {
+                const priceValue = parseFloat(priceInput.value);
+                if (!isNaN(priceValue)) {
+                    data.price = priceValue; // Kirim sebagai number, bukan string
+                } else {
+                    data.price = 0;
+                }
+            } else {
+                data.price = 0; // Jika kosong, set ke 0
             }
             
             // Validasi data yang diperlukan

@@ -633,9 +633,27 @@
                 showToast('info', 'Memproses...', 'Menghapus tagihan');
                 
                 fetch(`/admin/billing/invoices/${invoiceId}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
                 })
-                .then(response => response.json())
+                .then(response => {
+                    // Check if response is ok
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            let errorMsg = text;
+                            try {
+                                const json = JSON.parse(text);
+                                errorMsg = json.message || json.error || text;
+                            } catch (e) {
+                                // If not JSON, use text as is
+                            }
+                            throw new Error(errorMsg || `HTTP ${response.status}: ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
                         showToast('success', 'Tagihan Dihapus', 'Tagihan berhasil dihapus');
@@ -644,12 +662,13 @@
                             location.reload();
                         }, 1500);
                     } else {
-                        showToast('error', 'Gagal Menghapus', data.message || 'Gagal menghapus tagihan');
+                        showToast('error', 'Gagal Menghapus', data.message || data.error || 'Gagal menghapus tagihan');
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    showToast('error', 'Error', 'Terjadi kesalahan saat menghapus tagihan');
+                    console.error('Error deleting invoice:', error);
+                    const errorMsg = error.message || 'Terjadi kesalahan saat menghapus tagihan';
+                    showToast('error', 'Error', errorMsg);
                 });
             }
         }

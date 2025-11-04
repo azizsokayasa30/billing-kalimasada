@@ -1478,84 +1478,112 @@ async function addHotspotUser(username, password, profile, comment = null, custo
     let conn = null;
     const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
-        const result = await addHotspotUserRadius(username, password, profile, comment);
+        let result = { success: false, message: 'Unknown error' };
+        try {
+            result = await addHotspotUserRadius(username, password, profile, comment);
+        } catch (radiusError) {
+            logger.error(`Error in addHotspotUserRadius for ${username}: ${radiusError.message}`);
+            // Tetap lanjutkan untuk membuat invoice, karena mungkin user sudah dibuat sebagian
+            result = { success: false, message: radiusError.message };
+        }
         
-        // Buat invoice untuk voucher (selalu dibuat, bahkan jika harga 0)
-        // Status 'unpaid' = belum digunakan, akan diupdate jadi 'paid' saat voucher digunakan
-        let invoiceId = null;
-        if (result.success) {
-            logger.info(`Creating invoice for voucher ${username} with price: ${price || 0}`);
-            try {
+        // Simpan data voucher untuk laporan keuangan (TANPA membuat invoice)
+        // Invoice hanya untuk pelanggan PPPoE, bukan untuk voucher
+        let voucherRecordId = null;
+        // Parse price dengan lebih robust: handle string, number, null, undefined
+        let voucherPrice = 0;
+        if (price !== null && price !== undefined && price !== '') {
+            voucherPrice = parseFloat(price);
+            if (isNaN(voucherPrice)) {
+                voucherPrice = 0;
+            }
+        }
+        logger.info(`Saving voucher revenue record for ${username} with price: ${voucherPrice} (original price param: ${price}, type: ${typeof price}) (RADIUS result: ${result.success ? 'success' : 'failed'})`);
+        try {
                 const sqlite3 = require('sqlite3').verbose();
                 const dbPath = require('path').join(__dirname, '../data/billing.db');
                 const db = new sqlite3.Database(dbPath);
                 
-                // Get or create voucher customer
-                let voucherCustomerId = null;
-                await new Promise((resolve, reject) => {
-                    db.get(`SELECT id FROM customers WHERE username = 'voucher_customer' LIMIT 1`, [], (err, row) => {
-                        if (err) { reject(err); return; }
-                        if (row) {
-                            voucherCustomerId = row.id;
-                            resolve();
-                        } else {
-                            db.run(`
-                                INSERT INTO customers (name, username, phone, status)
-                                VALUES (?, ?, ?, ?)
-                            `, ['Voucher Customer', 'voucher_customer', '000000000000', 'active'], function(createErr) {
-                                if (createErr) { reject(createErr); } else {
-                                    voucherCustomerId = this.lastID;
-                                    logger.info(`Created voucher customer with ID: ${voucherCustomerId}`);
-                                    resolve();
-                                }
-                            });
-                        }
-                    });
-                });
+                logger.info(`[DEBUG] Opening database: ${dbPath}`);
                 
-                // Create invoice with status unpaid (will be updated to paid when voucher is used)
-                const invoiceNumber = `INV-VCR-${Date.now()}-${username}`;
-                const dueDate = new Date().toISOString().split('T')[0];
-                
+                // Simpan ke tabel voucher_revenue (bukan invoices)
                 await new Promise((resolve, reject) => {
                     db.run(`
-                        INSERT INTO invoices (customer_id, package_id, invoice_number, amount, due_date, notes, invoice_type, status, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                        INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes)
+                        VALUES (?, ?, ?, datetime('now'), 'unpaid', ?)
                     `, [
-                        voucherCustomerId,
-                        null,
-                        invoiceNumber,
-                        parseFloat(price || 0), // Gunakan harga dari input, jika 0 tetap dibuat invoice
-                        dueDate,
-                        `Voucher Hotspot ${username} - Profile: ${profile}`,
-                        'voucher',
-                        'unpaid' // Status unpaid = belum digunakan, akan jadi paid saat digunakan
+                        username,
+                        voucherPrice, // Harga voucher dari input form
+                        profile,
+                        `Voucher Hotspot ${username} - Profile: ${profile}`
                     ], function(err) {
                         if (err) {
-                            logger.error(`Failed to create invoice for voucher ${username}: ${err.message}`);
+                            logger.error(`Failed to save voucher revenue record for ${username}: ${err.message}`);
+                            logger.error(`[DEBUG] SQL Error details: ${JSON.stringify(err)}`);
                             reject(err);
                         } else {
-                            invoiceId = this.lastID;
-                            logger.info(`✅ Invoice created successfully for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId}) - Amount: Rp ${parseFloat(price || 0)} - Status: unpaid`);
+                            voucherRecordId = this.lastID;
+                            logger.info(`✅ Voucher revenue record saved for ${username}: ID=${voucherRecordId}, Price=Rp ${voucherPrice} - Status: unpaid (will be paid when voucher is used)`);
+                            console.log(`[DEBUG] Voucher revenue record saved for ${username}: id=${voucherRecordId}, amount=${voucherPrice}`);
+                            
+                            // Verify record was created
+                            db.get(`SELECT username, price, status FROM voucher_revenue WHERE id = ?`, [voucherRecordId], (verifyErr, verifyRow) => {
+                                if (verifyErr) {
+                                    logger.error(`[DEBUG] Error verifying voucher revenue record: ${verifyErr.message}`);
+                                } else if (verifyRow) {
+                                    logger.info(`[DEBUG] Voucher revenue record verified: ${verifyRow.username}, price=${verifyRow.price}, status=${verifyRow.status}`);
+                                } else {
+                                    logger.error(`[DEBUG] Voucher revenue record not found after creation! ID: ${voucherRecordId}`);
+                                }
+                            });
+                            
                             resolve();
                         }
                     });
                 });
                 
                 db.close();
-                logger.info(`Invoice creation completed for voucher ${username}. Invoice ID: ${invoiceId || 'null'}`);
-            } catch (invoiceError) {
+                logger.info(`✅ Voucher revenue record creation completed for ${username}. Record ID: ${voucherRecordId || 'null'}`);
+            } catch (voucherError) {
                 // Log error dengan detail untuk debugging
-                logger.error(`Error creating invoice for voucher ${username}: ${invoiceError.message}`);
-                logger.error(`Invoice error stack: ${invoiceError.stack}`);
-                // Jangan throw error, biarkan voucher tetap dibuat meskipun invoice gagal
-                // Invoice bisa dibuat manual nanti jika diperlukan
+                logger.error(`❌ CRITICAL: Error saving voucher revenue record for ${username}: ${voucherError.message}`);
+                logger.error(`Voucher error stack: ${voucherError.stack}`);
+                // Coba sekali lagi dengan retry logic
+                try {
+                    logger.info(`Retrying voucher revenue record creation for ${username}...`);
+                    const sqlite3 = require('sqlite3').verbose();
+                    const dbPath = require('path').join(__dirname, '../data/billing.db');
+                    const db = new sqlite3.Database(dbPath);
+                    
+                    await new Promise((resolve, reject) => {
+                        db.run(`
+                            INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes)
+                            VALUES (?, ?, ?, datetime('now'), 'unpaid', ?)
+                        `, [
+                            username,
+                            voucherPrice, // Gunakan voucherPrice yang sudah di-parse dari retry
+                            profile,
+                            `Voucher Hotspot ${username} - Profile: ${profile}`
+                        ], function(err) {
+                            if (err) {
+                                logger.error(`❌ Retry failed for ${username}: ${err.message}`);
+                                reject(err);
+                            } else {
+                                voucherRecordId = this.lastID;
+                                logger.info(`✅ Retry successful! Voucher revenue record saved for ${username}: ID=${voucherRecordId} - Amount: Rp ${voucherPrice}`);
+                                console.log(`[DEBUG] Retry voucher revenue record saved for ${username}: id=${voucherRecordId}, amount=${voucherPrice}`);
+                                resolve();
+                            }
+                        });
+                    });
+                    
+                    db.close();
+                } catch (retryError) {
+                    logger.error(`❌ Retry also failed for ${username}: ${retryError.message}`);
+                }
             }
-        } else {
-            logger.warn(`Voucher ${username} created but invoice not created because addHotspotUserRadius failed`);
-        }
         
-        return { ...result, invoiceId };
+        return { ...result, voucherRecordId };
     } else {
         if (customer) {
           conn = await getMikrotikConnectionForCustomer(customer);
@@ -1603,6 +1631,38 @@ async function deleteHotspotUser(username, routerObj = null) {
                     [username]
                 );
                 await conn.end();
+                
+                // Hapus invoice terkait dari billing.db
+                try {
+                    const sqlite3 = require('sqlite3').verbose();
+                    const dbPath = require('path').join(__dirname, '../data/billing.db');
+                    const db = new sqlite3.Database(dbPath);
+                    
+                    await new Promise((resolve, reject) => {
+                        // Cari invoice berdasarkan notes yang mengandung username
+                        db.run(`
+                            DELETE FROM invoices 
+                            WHERE invoice_type = 'voucher' 
+                            AND notes LIKE ?
+                        `, [`Voucher Hotspot ${username}%`], function(err) {
+                            if (err) {
+                                logger.error(`Error deleting invoice for voucher ${username}: ${err.message}`);
+                                reject(err);
+                            } else {
+                                if (this.changes > 0) {
+                                    logger.info(`✅ Deleted ${this.changes} invoice(s) for voucher ${username}`);
+                                }
+                                resolve();
+                            }
+                        });
+                    });
+                    
+                    db.close();
+                } catch (invoiceError) {
+                    logger.error(`Error deleting invoice for voucher ${username}: ${invoiceError.message}`);
+                    // Jangan throw error, karena voucher sudah dihapus dari RADIUS
+                }
+                
                 return { success: true, message: 'User hotspot berhasil dihapus dari RADIUS' };
             } catch (error) {
                 await conn.end();
@@ -3363,8 +3423,16 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
         const isRadiusMode = mode === 'radius';
         
         // Harga voucher diambil dari input form "Harga" di /admin/hotspot/voucher
-        // Jika harga tidak diisi atau 0, invoice tidak dibuat
-        const finalPrice = price || null;
+        // Invoice SELALU dibuat untuk voucher, bahkan jika harga 0 atau tidak diisi
+        // Parse price dengan lebih robust: handle string, number, null, undefined, empty string
+        let finalPrice = 0;
+        if (price !== null && price !== undefined && price !== '') {
+            const parsedPrice = parseFloat(price);
+            if (!isNaN(parsedPrice)) {
+                finalPrice = parsedPrice;
+            }
+        }
+        logger.info(`generateHotspotVouchers: Parsed price from ${price} (type: ${typeof price}) to ${finalPrice} for ${count} vouchers`);
         
         // Untuk mode Mikrotik API, validasi koneksi terlebih dahulu
         if (!isRadiusMode) {
@@ -3433,83 +3501,45 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
             try {
                 // Tambahkan user hotspot menggunakan addHotspotUser (otomatis handle RADIUS/Mikrotik)
                 // Di mode RADIUS, routerObj akan diabaikan oleh addHotspotUser
-                // Pass finalPrice ke addHotspotUser untuk membuat invoice jika price > 0
-                const addResult = await addHotspotUser(username, password, profile, 'voucher', null, routerObj, finalPrice || null);
+                // Pass finalPrice ke addHotspotUser untuk menyimpan ke voucher_revenue (TANPA membuat invoice)
+                // Invoice hanya untuk pelanggan PPPoE, bukan untuk voucher
+                const addResult = await addHotspotUser(username, password, profile, 'voucher', null, routerObj, finalPrice);
                 
-                // Invoice sudah dibuat di dalam addHotspotUser untuk mode RADIUS
-                // Untuk mode Mikrotik API, invoice dibuat di bawah ini jika belum dibuat
-                let invoiceId = addResult.invoiceId || null;
-                if (!invoiceId && !isRadiusMode && addResult.success) {
+                // Voucher revenue record sudah dibuat di dalam addHotspotUser untuk mode RADIUS
+                // Untuk mode Mikrotik API, simpan ke voucher_revenue di bawah ini jika belum dibuat
+                let voucherRecordId = addResult.voucherRecordId || null;
+                if (!voucherRecordId && !isRadiusMode && addResult.success) {
                     try {
-                        // Insert invoice langsung dengan status unpaid (akan diupdate jadi paid saat voucher digunakan)
+                        // Simpan ke voucher_revenue (bukan invoices)
                         const sqlite3 = require('sqlite3').verbose();
                         const dbPath = require('path').join(__dirname, '../data/billing.db');
                         const db = new sqlite3.Database(dbPath);
                         
-                        // Get or create voucher customer
-                        let voucherCustomerId = null;
-                        await new Promise((resolve, reject) => {
-                            // Cek apakah customer voucher sudah ada
-                            db.get(`SELECT id FROM customers WHERE username = 'voucher_customer' LIMIT 1`, [], (err, row) => {
-                                if (err) {
-                                    reject(err);
-                                    return;
-                                }
-                                
-                                if (row) {
-                                    voucherCustomerId = row.id;
-                                    resolve();
-                                } else {
-                                    // Buat customer khusus untuk voucher
-                                    db.run(`
-                                        INSERT INTO customers (name, username, phone, status)
-                                        VALUES (?, ?, ?, ?)
-                                    `, ['Voucher Customer', 'voucher_customer', '000000000000', 'active'], function(createErr) {
-                                        if (createErr) {
-                                            reject(createErr);
-                                        } else {
-                                            voucherCustomerId = this.lastID;
-                                            logger.info(`Created voucher customer with ID: ${voucherCustomerId}`);
-                                            resolve();
-                                        }
-                                    });
-                                }
-                            });
-                        });
-                        
-                        // Buat invoice dengan status unpaid (akan diupdate jadi paid saat voucher digunakan)
-                        const invoiceNumber = `INV-VCR-${Date.now()}-${username}`;
-                        const dueDate = new Date().toISOString().split('T')[0];
-                        
                         await new Promise((resolve, reject) => {
                             db.run(`
-                                INSERT INTO invoices (customer_id, package_id, invoice_number, amount, due_date, notes, invoice_type, status, created_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                                INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes)
+                                VALUES (?, ?, ?, datetime('now'), 'unpaid', ?)
                             `, [
-                                voucherCustomerId, // Gunakan customer voucher khusus
-                                null, // Package tidak diperlukan untuk voucher
-                                invoiceNumber,
-                                parseFloat(finalPrice || 0), // Gunakan harga dari input, jika 0 tetap dibuat invoice
-                                dueDate,
-                                `Voucher Hotspot ${username} - Profile: ${profile}`,
-                                'voucher',
-                                'unpaid' // Status unpaid, akan diupdate jadi paid saat voucher digunakan
+                                username,
+                                finalPrice, // Gunakan harga dari input yang sudah di-parse dengan benar
+                                profile,
+                                `Voucher Hotspot ${username} - Profile: ${profile}`
                             ], function(err) {
                                 if (err) {
-                                    logger.error(`Failed to create invoice for voucher ${username}: ${err.message}`);
+                                    logger.error(`Failed to save voucher revenue record for ${username}: ${err.message}`);
                                     reject(err);
                                 } else {
-                                    invoiceId = this.lastID;
-                                    logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId}) - Status: unpaid (will be paid when voucher is used)`);
+                                    voucherRecordId = this.lastID;
+                                    logger.info(`Voucher revenue record saved for ${username}: ID=${voucherRecordId} - Amount: Rp ${finalPrice} - Status: unpaid (will be paid when voucher is used)`);
                                     resolve();
                                 }
                             });
                         });
                         
                         db.close();
-                    } catch (invoiceError) {
+                    } catch (voucherError) {
                         // Log error tapi jangan gagalkan pembuatan voucher
-                        logger.error(`Error creating invoice for voucher ${username}: ${invoiceError.message}`);
+                        logger.error(`Error saving voucher revenue record for ${username}: ${voucherError.message}`);
                     }
                 }
                 
@@ -3524,10 +3554,10 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                     createdAt: new Date(),
                     price: finalPrice, // Tambahkan harga ke data voucher
                     account_type: accountType, // Tambahkan tipe akun
-                    invoice_id: invoiceId // Tambahkan invoice ID jika ada
+                    voucher_record_id: voucherRecordId // Tambahkan voucher revenue record ID jika ada
                 });
                 
-                logger.info(`${accountType === 'voucher' ? 'Voucher' : 'Member'} created: ${username} (password: ${password}) on ${isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.name : 'default')}${invoiceId ? ` - Invoice: ${invoiceId}` : ''}`);
+                logger.info(`${accountType === 'voucher' ? 'Voucher' : 'Member'} created: ${username} (password: ${password}) on ${isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.name : 'default')}${voucherRecordId ? ` - Voucher Revenue Record: ${voucherRecordId} (Amount: Rp ${finalPrice})` : ' - NO VOUCHER RECORD CREATED!'}`);
             } catch (err) {
                 logger.error(`Failed to create voucher ${username}: ${err.message}`);
                 // Lanjutkan ke voucher berikutnya

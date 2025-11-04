@@ -706,21 +706,90 @@ router.get('/voucher', async (req, res) => {
                     ? allUsersResult.data
                     : [];
 
-                // Filter hanya voucher (berdasarkan prefix atau comment)
+                // Query SEMUA invoice voucher terlebih dahulu (tidak perlu filter by username)
+                const invoiceDates = await new Promise((resolve, reject) => {
+                    const query = `
+                        SELECT notes, created_at 
+                        FROM invoices 
+                        WHERE invoice_type = 'voucher' 
+                        AND notes LIKE 'Voucher Hotspot %'
+                    `;
+                    
+                    db.all(query, [], (err, rows) => {
+                        if (err) {
+                            console.error('Error fetching invoice dates:', err);
+                            resolve({});
+                        } else {
+                            const dateMap = {};
+                            rows.forEach(row => {
+                                // Extract username from notes: "Voucher Hotspot {username} - Profile: {profile}"
+                                const match = row.notes.match(/Voucher Hotspot\s+(\S+)/i);
+                                if (match && match[1]) {
+                                    dateMap[match[1]] = row.created_at;
+                                    console.log(`Found invoice date for ${match[1]}: ${row.created_at}`);
+                                }
+                            });
+                            console.log(`Invoice dates map:`, Object.keys(dateMap).length, 'vouchers have invoices');
+                            resolve(dateMap);
+                        }
+                    });
+                });
+
+                // Filter voucher: ambil SEMUA user yang punya invoice, atau semua yang cocok dengan pattern voucher umum
+                // Pattern voucher umum: prefix seperti wifi-, eee, fff, ggg, dll, atau comment = 'voucher'
                 const voucherHistory = allUsers
-                    .filter(user => user.name && (user.name.startsWith('wifi-') || user.comment === 'voucher'))
-                    .map(user => ({
-                        username: user.name || '',
-                        password: '', // Password tidak dikembalikan untuk security
-                        profile: user.profile || 'default',
-                        server: 'all',
-                        createdAt: new Date(),
-                        active: activeUsernames.includes(user.name),
-                        comment: user.comment || '',
-                        nas_id: null,
-                        nas_name: 'RADIUS',
-                        nas_ip: 'RADIUS'
-                    }));
+                    .filter(user => {
+                        if (!user.name) return false;
+                        // Jika punya invoice, SELALU tampilkan
+                        if (invoiceDates[user.name]) return true;
+                        // Jika cocok dengan pattern voucher umum, tampilkan juga
+                        const isVoucherPattern = 
+                            user.name.startsWith('wifi-') || 
+                            user.name.startsWith('eee') || 
+                            user.name.startsWith('fff') || 
+                            user.name.startsWith('ggg') ||
+                            user.name.startsWith('aaa') ||
+                            user.name.startsWith('bbb') ||
+                            user.name.startsWith('ccc') ||
+                            user.name.startsWith('ddd') ||
+                            user.name.startsWith('hhh') ||
+                            user.name.startsWith('iii') ||
+                            user.name.startsWith('jjj') ||
+                            user.name.startsWith('kkk') ||
+                            user.name.startsWith('lll') ||
+                            user.name.startsWith('mmm') ||
+                            user.name.startsWith('nnn') ||
+                            user.name.startsWith('ooo') ||
+                            user.name.startsWith('ppp') ||
+                            user.name.startsWith('qqq') ||
+                            user.name.startsWith('rrr') ||
+                            user.name.startsWith('sss') ||
+                            user.name.startsWith('ttt') ||
+                            user.name.startsWith('uuu') ||
+                            user.name.startsWith('vvv') ||
+                            user.name.startsWith('www') ||
+                            user.name.startsWith('xxx') ||
+                            user.name.startsWith('yyy') ||
+                            user.name.startsWith('zzz') ||
+                            user.comment === 'voucher';
+                        return isVoucherPattern;
+                    })
+                    .map(user => {
+                        // Ambil created_at dari invoice jika ada, jika tidak gunakan null (akan di-handle di frontend)
+                        const invoiceDate = invoiceDates[user.name] || null;
+                        return {
+                            username: user.name || '',
+                            password: '', // Password tidak dikembalikan untuk security
+                            profile: user.profile || 'default',
+                            server: 'all',
+                            createdAt: invoiceDate || null, // Simpan sebagai string, bukan Date object
+                            active: activeUsernames.includes(user.name),
+                            comment: user.comment || '',
+                            nas_id: null,
+                            nas_name: 'RADIUS',
+                            nas_ip: 'RADIUS'
+                        };
+                    });
 
                 const settings = getSettingsWithCache();
                 const company_header = settings.company_header || 'Voucher Hotspot';
@@ -827,21 +896,88 @@ router.get('/voucher', async (req, res) => {
             }
         }
         
+        // Query SEMUA invoice voucher terlebih dahulu (tidak perlu filter by username)
+        const invoiceDates = await new Promise((resolve, reject) => {
+            const query = `
+                SELECT notes, created_at 
+                FROM invoices 
+                WHERE invoice_type = 'voucher' 
+                AND notes LIKE 'Voucher Hotspot %'
+            `;
+            
+            db.all(query, [], (err, rows) => {
+                if (err) {
+                    console.error('Error fetching invoice dates:', err);
+                    resolve({});
+                } else {
+                    const dateMap = {};
+                    rows.forEach(row => {
+                        // Extract username from notes: "Voucher Hotspot {username} - Profile: {profile}"
+                        const match = row.notes.match(/Voucher Hotspot\s+(\S+)/i);
+                        if (match && match[1]) {
+                            dateMap[match[1]] = row.created_at;
+                            console.log(`Found invoice date for ${match[1]}: ${row.created_at}`);
+                        }
+                    });
+                    console.log(`Invoice dates map (Mikrotik):`, dateMap);
+                    resolve(dateMap);
+                }
+            });
+        });
+
         // Filter hanya voucher (berdasarkan prefix atau kriteria lain)
-        const voucherHistory = allUsers.filter(user => 
-            user.name && (user.name.startsWith('wifi-') || user.comment === 'voucher')
-        ).map(user => ({
-            username: user.name || '',
-            password: user.password || '',
-            profile: user.profile || 'default',
-            server: user.server || 'all',
-            createdAt: new Date(),
-            active: activeUsernames.includes(user.name),
-            comment: user.comment || '',
-            nas_id: user.nas_id,
-            nas_name: user.nas_name,
-            nas_ip: user.nas_ip
-        }));
+        // Pattern voucher umum: prefix seperti wifi-, eee, fff, ggg, dll, atau comment = 'voucher'
+        const voucherHistory = allUsers.filter(user => {
+            if (!user.name) return false;
+            // Jika punya invoice, SELALU tampilkan
+            if (invoiceDates[user.name]) return true;
+            // Jika cocok dengan pattern voucher umum, tampilkan juga
+            const isVoucherPattern = 
+                user.name.startsWith('wifi-') || 
+                user.name.startsWith('eee') || 
+                user.name.startsWith('fff') || 
+                user.name.startsWith('ggg') ||
+                user.name.startsWith('aaa') ||
+                user.name.startsWith('bbb') ||
+                user.name.startsWith('ccc') ||
+                user.name.startsWith('ddd') ||
+                user.name.startsWith('hhh') ||
+                user.name.startsWith('iii') ||
+                user.name.startsWith('jjj') ||
+                user.name.startsWith('kkk') ||
+                user.name.startsWith('lll') ||
+                user.name.startsWith('mmm') ||
+                user.name.startsWith('nnn') ||
+                user.name.startsWith('ooo') ||
+                user.name.startsWith('ppp') ||
+                user.name.startsWith('qqq') ||
+                user.name.startsWith('rrr') ||
+                user.name.startsWith('sss') ||
+                user.name.startsWith('ttt') ||
+                user.name.startsWith('uuu') ||
+                user.name.startsWith('vvv') ||
+                user.name.startsWith('www') ||
+                user.name.startsWith('xxx') ||
+                user.name.startsWith('yyy') ||
+                user.name.startsWith('zzz') ||
+                user.comment === 'voucher';
+            return isVoucherPattern;
+        }).map(user => {
+            // Ambil created_at dari invoice jika ada, jika tidak gunakan null (akan di-handle di frontend)
+            const invoiceDate = invoiceDates[user.name] || null;
+            return {
+                username: user.name || '',
+                password: user.password || '',
+                profile: user.profile || 'default',
+                server: user.server || 'all',
+                createdAt: invoiceDate || null, // Simpan sebagai string, bukan Date object
+                active: activeUsernames.includes(user.name),
+                comment: user.comment || '',
+                nas_id: user.nas_id,
+                nas_name: user.nas_name,
+                nas_ip: user.nas_ip
+            };
+        });
         
         console.log(`Loaded ${voucherHistory.length} vouchers for history table`);
         
@@ -909,7 +1045,15 @@ router.post('/generate-voucher', async (req, res) => {
         const router_id = req.body.router_id || req.body.routerId;
         const server = req.body.server || 'all';
         const validUntil = req.body.validUntil || '';
-        const price = req.body.price || '';
+        // Parse price dengan lebih robust: handle string, number, null, undefined, empty string
+        let price = 0;
+        if (req.body.price !== null && req.body.price !== undefined && req.body.price !== '') {
+            const parsedPrice = parseFloat(req.body.price);
+            if (!isNaN(parsedPrice)) {
+                price = parsedPrice;
+            }
+        }
+        console.log(`Price parsing: req.body.price = ${req.body.price} (type: ${typeof req.body.price}) -> parsed price = ${price} (type: ${typeof price})`);
         const voucherModel = req.body.voucherModel || 'standard';
         const charType = req.body.charType || 'alphanumeric';
         

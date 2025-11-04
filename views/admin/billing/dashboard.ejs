@@ -49,6 +49,9 @@
                         <button id="createMissingInvoiceBtn" class="btn btn-info me-2" onclick="createMissingVoucherInvoices()">
                             <i class="bx bx-plus-circle"></i> Buat Invoice Voucher
                         </button>
+                        <button id="cleanupOrphanInvoicesBtn" class="btn btn-danger me-2" onclick="cleanupOrphanVoucherInvoices()">
+                            <i class="bx bx-x-circle"></i> Hapus Invoice Gantung
+                        </button>
                         <button id="cleanupDataBtn" class="btn btn-warning me-2" onclick="cleanupData()">
                             <i class="bx bx-refresh"></i> Perbaiki Data
                         </button>
@@ -78,6 +81,9 @@
                             </a></li>
                             <li><a class="dropdown-item text-info" href="#" onclick="createMissingVoucherInvoices(); return false;">
                                 <i class="bx bx-plus-circle"></i> Buat Invoice Voucher
+                            </a></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="cleanupOrphanVoucherInvoices(); return false;">
+                                <i class="bx bx-x-circle"></i> Hapus Invoice Gantung
                             </a></li>
                             <li><a class="dropdown-item text-warning" href="#" onclick="cleanupData(); return false;">
                                 <i class="bx bx-refresh"></i> Perbaiki Data
@@ -715,6 +721,57 @@
                 }
             } catch (error) {
                 showAlert('danger', 'Error!', 'Gagal update invoice voucher: ' + error.message);
+            } finally {
+                // Restore button
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        // Fungsi untuk membersihkan invoice voucher yang tidak punya voucher lagi
+        async function cleanupOrphanVoucherInvoices() {
+            const btn = document.getElementById('cleanupOrphanInvoicesBtn');
+            const originalText = btn.innerHTML;
+            
+            // Konfirmasi sebelum menghapus
+            if (!confirm('Apakah Anda yakin ingin menghapus invoice voucher yang tidak punya voucher lagi di RADIUS? Tindakan ini tidak dapat dibatalkan!')) {
+                return;
+            }
+            
+            // Disable button dan show loading
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Memproses...';
+            
+            try {
+                const response = await fetch('/admin/billing/api/cleanup-orphan-voucher-invoices', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show success message dengan detail
+                    let message = result.message;
+                    if (result.deleted > 0) {
+                        message += ` Berhasil menghapus ${result.deleted} invoice.`;
+                    }
+                    if (result.failed > 0) {
+                        message += ` ${result.failed} invoice gagal dihapus.`;
+                    }
+                    showAlert('success', 'Berhasil!', message);
+                    
+                    // Reload page setelah 2 detik untuk refresh stats
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    showAlert('danger', 'Error!', result.message);
+                }
+            } catch (error) {
+                showAlert('danger', 'Error!', 'Gagal menghapus invoice gantung: ' + error.message);
             } finally {
                 // Restore button
                 btn.disabled = false;

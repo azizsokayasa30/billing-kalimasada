@@ -4013,6 +4013,68 @@ router.put('/invoices/:id', async (req, res) => {
     }
 });
 
+// API untuk cleanup orphan voucher invoices
+router.post('/api/cleanup-orphan-voucher-invoices', adminAuth, async (req, res) => {
+    try {
+        const { getVoucherInvoices, checkVoucherExists, deleteInvoice } = require('../scripts/cleanup_orphan_voucher_invoices');
+        
+        const invoices = await getVoucherInvoices();
+        const orphanInvoices = [];
+        
+        for (const invoice of invoices) {
+            const match = invoice.notes.match(/Voucher Hotspot\s+(\S+)/i);
+            if (!match || !match[1]) {
+                orphanInvoices.push({ invoice, reason: 'Invalid notes format' });
+                continue;
+            }
+            
+            const username = match[1];
+            const exists = await checkVoucherExists(username);
+            
+            if (!exists) {
+                orphanInvoices.push({ invoice, username, reason: 'Voucher not found in RADIUS' });
+            }
+        }
+        
+        if (orphanInvoices.length === 0) {
+            return res.json({
+                success: true,
+                message: 'Tidak ada invoice yang perlu dihapus',
+                deleted: 0
+            });
+        }
+        
+        let successCount = 0;
+        let errorCount = 0;
+        const errors = [];
+        
+        for (const { invoice, username } of orphanInvoices) {
+            try {
+                await deleteInvoice(invoice.id);
+                successCount++;
+            } catch (error) {
+                errorCount++;
+                errors.push({ invoice_number: invoice.invoice_number, error: error.message });
+            }
+        }
+        
+        return res.json({
+            success: true,
+            message: `Berhasil menghapus ${successCount} invoice`,
+            deleted: successCount,
+            failed: errorCount,
+            errors: errors.length > 0 ? errors : undefined
+        });
+    } catch (error) {
+        logger.error('Error cleaning up orphan voucher invoices:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Gagal membersihkan invoice voucher',
+            error: error.message
+        });
+    }
+});
+
 // Delete invoice
 router.delete('/invoices/:id', adminAuth, async (req, res) => {
     try {

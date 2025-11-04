@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * Script untuk update invoice voucher menjadi paid ketika voucher digunakan
+ * Script untuk update voucher revenue menjadi paid ketika voucher digunakan
  * Script ini akan:
  * 1. Cek voucher yang ada di radacct (sudah digunakan)
- * 2. Update invoice voucher menjadi 'paid' jika belum
+ * 2. Update voucher_revenue menjadi 'paid' jika belum
  * 
  * Bisa dijalankan manual atau via cron job
  */
@@ -44,56 +44,100 @@ async function getUsedVouchers() {
     }
 }
 
-async function updateVoucherInvoiceToPaid(username) {
+async function updateVoucherRevenueToPaid(username) {
     return new Promise((resolve, reject) => {
         const db = new sqlite3.Database(billingDbPath);
         
-        // Find invoice for this voucher username
+        // Find voucher revenue record for this username
         db.get(`
-            SELECT id, invoice_number, status, amount
-            FROM invoices
-            WHERE invoice_type = 'voucher'
-            AND notes LIKE ?
+            SELECT id, username, price, status
+            FROM voucher_revenue
+            WHERE username = ?
             AND status = 'unpaid'
             LIMIT 1
-        `, [`%Voucher Hotspot ${username}%`], (err, invoice) => {
+        `, [username], (err, voucher) => {
             if (err) {
                 db.close();
                 reject(err);
                 return;
             }
             
-            if (!invoice) {
+            if (!voucher) {
                 db.close();
-                resolve(null); // No invoice found or already paid
+                resolve(null); // No voucher record found or already paid
                 return;
             }
             
-            // Update invoice to paid
-            db.run(`
-                UPDATE invoices
-                SET status = 'paid',
-                    payment_date = datetime('now')
-                WHERE id = ?
-            `, [invoice.id], function(updateErr) {
-                db.close();
-                if (updateErr) {
-                    reject(updateErr);
-                } else {
-                    resolve({
-                        id: invoice.id,
-                        invoice_number: invoice.invoice_number,
-                        amount: invoice.amount,
-                        username: username
+            // Get usage count from radacct
+            getRadiusConnection().then(async (conn) => {
+                try {
+                    const [usageRows] = await conn.execute(`
+                        SELECT COUNT(*) as usage_count,
+                               MIN(acctstarttime) as first_used_at,
+                               MAX(acctstoptime) as last_used_at
+                        FROM radacct
+                        WHERE username = ?
+                        AND acctstarttime IS NOT NULL
+                    `, [username]);
+                    
+                    await conn.end();
+                    
+                    const usageCount = usageRows && usageRows.length > 0 ? parseInt(usageRows[0].usage_count) : 0;
+                    const firstUsedAt = usageRows && usageRows.length > 0 ? usageRows[0].first_used_at : null;
+                    
+                    // Update voucher revenue to paid
+                    db.run(`
+                        UPDATE voucher_revenue
+                        SET status = 'paid',
+                            used_at = datetime('now'),
+                            usage_count = ?
+                        WHERE id = ?
+                    `, [usageCount, voucher.id], function(updateErr) {
+                        db.close();
+                        if (updateErr) {
+                            reject(updateErr);
+                        } else {
+                            resolve({
+                                id: voucher.id,
+                                username: voucher.username,
+                                price: voucher.price,
+                                usage_count: usageCount,
+                                first_used_at: firstUsedAt
+                            });
+                        }
+                    });
+                } catch (usageErr) {
+                    await conn.end();
+                    // Update anyway without usage info
+                    db.run(`
+                        UPDATE voucher_revenue
+                        SET status = 'paid',
+                            used_at = datetime('now')
+                        WHERE id = ?
+                    `, [voucher.id], function(updateErr) {
+                        db.close();
+                        if (updateErr) {
+                            reject(updateErr);
+                        } else {
+                            resolve({
+                                id: voucher.id,
+                                username: voucher.username,
+                                price: voucher.price,
+                                usage_count: 0
+                            });
+                        }
                     });
                 }
+            }).catch((connErr) => {
+                db.close();
+                reject(connErr);
             });
         });
     });
 }
 
 async function main() {
-    console.log('🔄 Memulai proses update invoice voucher...\n');
+    console.log('🔄 Memulai proses update voucher revenue...\n');
     
     try {
         // Get vouchers that have been used
@@ -107,29 +151,29 @@ async function main() {
         
         console.log(`✅ Ditemukan ${usedVouchers.length} voucher yang sudah digunakan.\n`);
         
-        // Update invoices
+        // Update voucher revenue records
         let updatedCount = 0;
         let skippedCount = 0;
         
         for (const username of usedVouchers) {
             try {
-                const result = await updateVoucherInvoiceToPaid(username);
+                const result = await updateVoucherRevenueToPaid(username);
                 if (result) {
-                    console.log(`✅ Updated invoice untuk voucher ${username}:`);
-                    console.log(`   Invoice: ${result.invoice_number}`);
-                    console.log(`   Amount: Rp ${result.amount?.toLocaleString('id-ID') || 0}`);
+                    console.log(`✅ Updated voucher revenue untuk ${username}:`);
+                    console.log(`   Price: Rp ${result.price?.toLocaleString('id-ID') || 0}`);
+                    console.log(`   Usage Count: ${result.usage_count || 0}`);
                     updatedCount++;
                 } else {
                     skippedCount++;
                 }
             } catch (error) {
-                console.error(`❌ Error updating invoice for ${username}:`, error.message);
+                console.error(`❌ Error updating voucher revenue for ${username}:`, error.message);
             }
         }
         
         console.log(`\n✅ Selesai!`);
-        console.log(`   Updated: ${updatedCount} invoice`);
-        console.log(`   Skipped: ${skippedCount} (sudah paid atau tidak ada invoice)`);
+        console.log(`   Updated: ${updatedCount} voucher revenue records`);
+        console.log(`   Skipped: ${skippedCount} (sudah paid atau tidak ada record)`);
         
     } catch (error) {
         console.error('\n❌ Error:', error.message);
@@ -143,5 +187,5 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { updateVoucherInvoiceToPaid, getUsedVouchers };
+module.exports = { updateVoucherRevenueToPaid, getUsedVouchers };
 
