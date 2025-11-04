@@ -4596,6 +4596,9 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
     async getVoucherInvoices(startDate, endDate, status = null) {
         return new Promise(async (resolve, reject) => {
             try {
+                // Log untuk debugging
+                logger.info(`getVoucherInvoices called: startDate=${startDate}, endDate=${endDate}, status=${status || 'all'}`);
+                
                 // Dapatkan semua invoice voucher dari billing.db
                 let sql = `
                     SELECT 
@@ -4610,18 +4613,23 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
                 
                 const params = [startDate, endDate];
                 
-                if (status) {
+                if (status && status !== 'all') {
                     sql += ` AND i.status = ?`;
                     params.push(status);
                 }
                 
                 sql += ` ORDER BY i.created_at DESC`;
                 
+                logger.info(`Executing SQL: ${sql} with params: [${params.join(', ')}]`);
+                
                 this.db.all(sql, params, async (err, invoiceRows) => {
                     if (err) {
+                        logger.error(`Error getting voucher invoices: ${err.message}`);
                         reject(err);
                         return;
                     }
+                    
+                    logger.info(`Found ${invoiceRows ? invoiceRows.length : 0} invoice rows from database`);
                     
                     // Dapatkan semua voucher dari RADIUS yang belum punya invoice
                     try {
@@ -4643,6 +4651,8 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
                         `);
                         
                         await conn.end();
+                        
+                        logger.info(`Found ${voucherRows ? voucherRows.length : 0} vouchers from RADIUS without invoice`);
                         
                         // Tambahkan voucher yang belum punya invoice ke hasil
                         const allVouchers = [...(invoiceRows || [])];
@@ -4674,14 +4684,17 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
                             }
                         }
                         
+                        logger.info(`Total vouchers returned: ${allVouchers.length}`);
                         resolve(allVouchers);
                     } catch (radiusError) {
                         // Jika error mendapatkan dari RADIUS, tetap return invoice yang ada
                         logger.error('Error getting vouchers from RADIUS:', radiusError.message);
+                        logger.info(`Returning ${invoiceRows ? invoiceRows.length : 0} invoices from database only`);
                         resolve(invoiceRows || []);
                     }
                 });
             } catch (error) {
+                logger.error(`Error in getVoucherInvoices: ${error.message}`);
                 reject(error);
             }
         });
