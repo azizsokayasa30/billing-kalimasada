@@ -559,18 +559,26 @@
                                 <label for="autoCount" class="form-label">Jumlah Voucher</label>
                                 <input type="number" class="form-control" id="autoCount" value="1" min="1" max="10">
                             </div>
-                            <div class="mb-3">
-                                <label for="autoRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
-                                <select class="form-select" id="autoRouterId" required>
-                                    <% if (routers && routers.length > 0) { %>
-                                        <% routers.forEach(function(router) { %>
-                                            <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
-                                        <% }); %>
-                                    <% } else { %>
-                                        <option value="">Tidak ada router tersedia</option>
-                                    <% } %>
-                                </select>
-                            </div>
+                            <!-- NAS Selection - Hidden jika mode RADIUS -->
+                            <% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
+                                <input type="hidden" id="autoRouterId" value="">
+                                <div class="alert alert-info mb-3">
+                                    <i class="bi bi-info-circle"></i> Mode RADIUS aktif - Voucher akan disimpan ke database RADIUS
+                                </div>
+                            <% } else { %>
+                                <div class="mb-3">
+                                    <label for="autoRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
+                                    <select class="form-select" id="autoRouterId" required>
+                                        <% if (routers && routers.length > 0) { %>
+                                            <% routers.forEach(function(router) { %>
+                                                <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                            <% }); %>
+                                        <% } else { %>
+                                            <option value="">Tidak ada router tersedia</option>
+                                        <% } %>
+                                    </select>
+                                </div>
+                            <% } %>
                             <div class="mb-3">
                                 <label for="autoProfile" class="form-label">Profile</label>
                                 <select class="form-select" id="autoProfile">
@@ -682,18 +690,26 @@
                                 <label for="length" class="form-label">Panjang Karakter</label>
                                 <input type="number" class="form-control" id="length" name="length" value="5" required>
                             </div>
-                            <div class="mb-3">
-                                <label for="voucherRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
-                                <select class="form-select" id="voucherRouterId" name="router_id" required>
-                                    <% if (routers && routers.length > 0) { %>
-                                        <% routers.forEach(function(router) { %>
-                                            <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
-                                        <% }); %>
-                                    <% } else { %>
-                                        <option value="">Tidak ada router tersedia</option>
-                                    <% } %>
-                                </select>
-                            </div>
+                            <!-- NAS Selection - Hidden jika mode RADIUS -->
+                            <% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
+                                <input type="hidden" id="voucherRouterId" name="router_id" value="">
+                                <div class="alert alert-info mb-3">
+                                    <i class="bi bi-info-circle"></i> Mode RADIUS aktif - Voucher akan disimpan ke database RADIUS
+                                </div>
+                            <% } else { %>
+                                <div class="mb-3">
+                                    <label for="voucherRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
+                                    <select class="form-select" id="voucherRouterId" name="router_id" required>
+                                        <% if (routers && routers.length > 0) { %>
+                                            <% routers.forEach(function(router) { %>
+                                                <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                            <% }); %>
+                                        <% } else { %>
+                                            <option value="">Tidak ada router tersedia</option>
+                                        <% } %>
+                                    </select>
+                                </div>
+                            <% } %>
                             <div class="mb-3">
                                 <label for="profileModal" class="form-label">Profile</label>
                                 <select class="form-select" id="profileModal" name="profile" required>
@@ -819,18 +835,26 @@
             </div>
             <div class="modal-body">
                 <form id="addUserForm" action="/admin/hotspot" method="POST">
-                    <div class="mb-3">
-                        <label for="addRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router)</label>
-                        <select class="form-select" id="addRouterId" name="router_id" required>
-                            <% if (routers && routers.length > 0) { %>
-                                <% routers.forEach(function(router) { %>
-                                    <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
-                                <% }); %>
-                            <% } else { %>
-                                <option value="">Tidak ada router tersedia</option>
-                            <% } %>
-                        </select>
-                    </div>
+                    <!-- NAS Selection - Hidden jika mode RADIUS -->
+                    <% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
+                        <input type="hidden" id="addRouterId" name="router_id" value="">
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle"></i> Mode RADIUS aktif - User akan disimpan ke database RADIUS
+                        </div>
+                    <% } else { %>
+                        <div class="mb-3">
+                            <label for="addRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
+                            <select class="form-select" id="addRouterId" name="router_id" required>
+                                <% if (routers && routers.length > 0) { %>
+                                    <% routers.forEach(function(router) { %>
+                                        <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                    <% }); %>
+                                <% } else { %>
+                                    <option value="">Tidak ada router tersedia</option>
+                                <% } %>
+                            </select>
+                        </div>
+                    <% } %>
                     <div class="mb-3">
                         <label for="addUsername" class="form-label"><i class="bi bi-person me-1"></i>Username</label>
                         <input type="text" class="form-control" id="addUsername" name="username" required>
@@ -869,18 +893,26 @@
             <div class="modal-body">
                 <form id="editUserForm" action="/admin/hotspot/edit" method="POST">
                     <input type="hidden" id="originalUsername" name="originalUsername">
-                    <div class="mb-3">
-                        <label for="editRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router)</label>
-                        <select class="form-select" id="editRouterId" name="router_id" required>
-                            <% if (routers && routers.length > 0) { %>
-                                <% routers.forEach(function(router) { %>
-                                    <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
-                                <% }); %>
-                            <% } else { %>
-                                <option value="">Tidak ada router tersedia</option>
-                            <% } %>
-                        </select>
-                    </div>
+                    <!-- NAS Selection - Hidden jika mode RADIUS -->
+                    <% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
+                        <input type="hidden" id="editRouterId" name="router_id" value="">
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle"></i> Mode RADIUS aktif - User akan diupdate di database RADIUS
+                        </div>
+                    <% } else { %>
+                        <div class="mb-3">
+                            <label for="editRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
+                            <select class="form-select" id="editRouterId" name="router_id" required>
+                                <% if (routers && routers.length > 0) { %>
+                                    <% routers.forEach(function(router) { %>
+                                        <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                    <% }); %>
+                                <% } else { %>
+                                    <option value="">Tidak ada router tersedia</option>
+                                <% } %>
+                            </select>
+                        </div>
+                    <% } %>
                     <div class="mb-3">
                         <label for="editUsername" class="form-label"><i class="bi bi-person me-1"></i>Username</label>
                         <input type="text" class="form-control" id="editUsername" name="username" required>
@@ -1985,10 +2017,19 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
     
-    // Event listeners for NAS selection changes
+    // Event listeners for NAS selection changes (hanya untuk mode Mikrotik API)
     const manualRouterSelect = document.getElementById('manualRouterId');
     const autoRouterSelect = document.getElementById('autoRouterId');
     const voucherRouterSelect = document.getElementById('voucherRouterId');
+    const addRouterSelect = document.getElementById('addRouterId');
+    const editRouterSelect = document.getElementById('editRouterId');
+    
+    // Check if mode RADIUS (hidden input)
+    const isRadiusMode = (manualRouterSelect && manualRouterSelect.type === 'hidden') || 
+                         (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius');
+    
+    // Hanya setup event listeners jika bukan mode RADIUS
+    if (!isRadiusMode) {
     
     if (manualRouterSelect) {
         manualRouterSelect.addEventListener('change', function() {
@@ -2005,6 +2046,18 @@ document.addEventListener('DOMContentLoaded', function () {
     if (voucherRouterSelect) {
         voucherRouterSelect.addEventListener('change', function() {
             updateProfileDropdown(this.value, 'profileModal');
+        });
+    }
+    
+    if (addRouterSelect) {
+        addRouterSelect.addEventListener('change', function() {
+            updateProfileDropdown(this.value, 'addProfile');
+        });
+    }
+    
+    if (editRouterSelect) {
+        editRouterSelect.addEventListener('change', function() {
+            updateProfileDropdown(this.value, 'editProfile');
         });
     }
     
@@ -2025,20 +2078,42 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+    } // End if (!isRadiusMode)
+    
+    // Untuk mode RADIUS, show all profiles langsung
+    if (isRadiusMode) {
+        // Initialize semua profile dropdowns dengan semua profiles
+        const profileSelects = ['manualProfile', 'autoProfile', 'profileModal', 'addProfile', 'editProfile'];
+        profileSelects.forEach(function(selectId) {
+            const select = document.getElementById(selectId);
+            if (select) {
+                select.innerHTML = '';
+                allProfiles.forEach(function(profile) {
+                    const option = document.createElement('option');
+                    option.value = profile.name;
+                    option.textContent = profile.name;
+                    select.appendChild(option);
+                });
+            }
+        });
+    }
 
     // Functions untuk Voucher Online Settings
     window.generateManualVoucher = function() {
         const username = document.getElementById('manualUsername').value.trim();
         const password = document.getElementById('manualPassword').value.trim();
         const profile = document.getElementById('manualProfile').value;
-        const routerId = document.getElementById('manualRouterId').value;
+        const routerIdEl = document.getElementById('manualRouterId');
+        const routerId = routerIdEl ? routerIdEl.value : '';
+        const isRadiusMode = routerIdEl && (routerIdEl.type === 'hidden' || routerIdEl.style.display === 'none');
 
         if (!username || !password) {
             showToast('Username dan password harus diisi!', 'error');
             return;
         }
 
-        if (!routerId) {
+        // Validation: router_id hanya wajib jika bukan mode RADIUS
+        if (!isRadiusMode && !routerId) {
             showToast('Pilih NAS (Router) terlebih dahulu!', 'error');
             return;
         }
@@ -2078,10 +2153,13 @@ document.addEventListener('DOMContentLoaded', function () {
     window.generateAutoVoucher = function() {
         const count = parseInt(document.getElementById('autoCount').value) || 1;
         const profile = document.getElementById('autoProfile').value;
-        const routerId = document.getElementById('autoRouterId').value;
+        const routerIdEl = document.getElementById('autoRouterId');
+        const routerId = routerIdEl ? routerIdEl.value : '';
         const isNumeric = document.getElementById('autoNumeric').checked;
+        const isRadiusMode = routerIdEl && (routerIdEl.type === 'hidden' || routerIdEl.style.display === 'none');
 
-        if (!routerId) {
+        // Validation: router_id hanya wajib jika bukan mode RADIUS
+        if (!isRadiusMode && !routerId) {
             showToast('Pilih NAS (Router) terlebih dahulu!', 'error');
             return;
         }
