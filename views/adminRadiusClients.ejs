@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Manage RADIUS Clients</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/css/responsive-admin.css" rel="stylesheet">
+  <style>
+    body { background: #f5f6fa; }
+    .main-content { padding: 32px 24px; }
+    .card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+  </style>
+</head>
+<body>
+<div class="container-fluid">
+  <div class="row">
+    <%- include('partials/admin-responsive-sidebar', { page: 'setting-radius-clients', settings: settings }) %>
+    <main class="col-md-10 ms-sm-auto main-content">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="mb-0"><i class="bi bi-router"></i> Manage RADIUS Clients (NAS)</h3>
+        <a href="/admin/radius" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left"></i> Kembali ke Setting RADIUS
+        </a>
+      </div>
+
+      <% if (error) { %>
+        <div class="alert alert-danger alert-dismissible fade show">
+          <i class="bi bi-exclamation-triangle me-2"></i> <%= error %>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      <% } %>
+      
+      <% if (success) { %>
+        <div class="alert alert-success alert-dismissible fade show">
+          <i class="bi bi-check-circle me-2"></i> <%= success %>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      <% } %>
+
+      <!-- Add Client Button -->
+      <div class="card p-3 shadow-sm mb-4">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addClientModal">
+          <i class="bi bi-plus-circle"></i> Tambah Client (NAS)
+        </button>
+      </div>
+
+      <!-- Clients Table -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0"><i class="bi bi-list-ul"></i> Daftar RADIUS Clients</h5>
+        </div>
+        <div class="card-body">
+          <% if (clients && clients.length > 0) { %>
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>Nama Client</th>
+                    <th>IP Address</th>
+                    <th>Secret</th>
+                    <th>NAS Type</th>
+                    <th>Message Auth</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% clients.forEach(function(client) { %>
+                    <tr>
+                      <td><strong><%= client.name %></strong></td>
+                      <td><code><%= client.ipaddr || '-' %></code></td>
+                      <td>
+                        <code class="secret-text" data-secret="<%= client.secret %>">
+                          <%= client.secret ? '••••••••' : '-' %>
+                        </code>
+                        <button class="btn btn-sm btn-link p-0 ms-2 toggle-secret" title="Tampilkan/Sembunyikan">
+                          <i class="bi bi-eye"></i>
+                        </button>
+                      </td>
+                      <td><%= client.nas_type || 'other' %></td>
+                      <td>
+                        <span class="badge bg-<%= client.require_message_authenticator === 'yes' ? 'success' : 'warning' %>">
+                          <%= client.require_message_authenticator || 'no' %>
+                        </span>
+                      </td>
+                      <td>
+                        <button class="btn btn-sm btn-warning edit-client-btn" 
+                                data-name="<%= client.name %>"
+                                data-ipaddr="<%= client.ipaddr %>"
+                                data-secret="<%= client.secret %>"
+                                data-nas-type="<%= client.nas_type %>"
+                                data-msg-auth="<%= client.require_message_authenticator %>"
+                                data-comment="<%= client.comment || '' %>"
+                                title="Edit">
+                          <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger delete-client-btn" 
+                                data-name="<%= client.name %>"
+                                title="Hapus">
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  <% }); %>
+                </tbody>
+              </table>
+            </div>
+          <% } else { %>
+            <div class="alert alert-info">
+              <i class="bi bi-info-circle"></i> Belum ada client yang dikonfigurasi. Klik "Tambah Client (NAS)" untuk menambahkan.
+            </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Info Box -->
+      <div class="card mt-4 shadow-sm">
+        <div class="card-body">
+          <h6><i class="bi bi-info-circle"></i> Informasi</h6>
+          <ul class="mb-0">
+            <li>Client adalah router/NAS (Network Access Server) yang akan mengirim request autentikasi ke FreeRADIUS</li>
+            <li>Setiap client harus memiliki IP address dan secret yang unik</li>
+            <li>Secret harus sama dengan yang dikonfigurasi di router Mikrotik</li>
+            <li>Setelah menambah/edit/hapus client, FreeRADIUS akan otomatis direstart</li>
+            <li>File konfigurasi: <code>/etc/freeradius/3.0/clients.conf</code></li>
+          </ul>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Add/Edit Client Modal -->
+<div class="modal fade" id="addClientModal" tabindex="-1" aria-labelledby="addClientModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="addClientModalLabel">
+          <i class="bi bi-plus-circle"></i> <span id="modalTitle">Tambah Client (NAS)</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="clientForm">
+        <div class="modal-body">
+          <input type="hidden" id="oldName" name="oldName">
+          
+          <div class="mb-3">
+            <label for="clientName" class="form-label">Nama Client *</label>
+            <input type="text" class="form-control" id="clientName" name="name" required 
+                   placeholder="misal: mikrotik-router-1">
+            <small class="form-text text-muted">Nama unik untuk mengidentifikasi client (bisa nama router)</small>
+          </div>
+
+          <div class="mb-3">
+            <label for="clientIpaddr" class="form-label">IP Address *</label>
+            <input type="text" class="form-control" id="clientIpaddr" name="ipaddr" required 
+                   placeholder="192.168.1.1">
+            <small class="form-text text-muted">IP address router/NAS yang akan mengirim request ke FreeRADIUS</small>
+          </div>
+
+          <div class="mb-3">
+            <label for="clientSecret" class="form-label">Secret *</label>
+            <input type="text" class="form-control" id="clientSecret" name="secret" required 
+                   placeholder="testing123">
+            <small class="form-text text-muted">Shared secret (harus sama dengan yang dikonfigurasi di router)</small>
+          </div>
+
+          <div class="mb-3">
+            <label for="clientNasType" class="form-label">NAS Type</label>
+            <select class="form-select" id="clientNasType" name="nas_type">
+              <option value="other" selected>other</option>
+              <option value="cisco">cisco</option>
+              <option value="juniper">juniper</option>
+              <option value="mikrotik">mikrotik</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="clientMsgAuth" class="form-label">Require Message Authenticator</label>
+            <select class="form-select" id="clientMsgAuth" name="require_message_authenticator">
+              <option value="no" selected>no</option>
+              <option value="yes">yes</option>
+              <option value="auto">auto</option>
+            </select>
+            <small class="form-text text-muted">Untuk keamanan, set ke 'yes' jika router mendukung</small>
+          </div>
+
+          <div class="mb-3">
+            <label for="clientComment" class="form-label">Komentar (Opsional)</label>
+            <input type="text" class="form-control" id="clientComment" name="comment" 
+                   placeholder="misal: Router utama di cabang A">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save"></i> Simpan
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+$(document).ready(function() {
+  const modal = $('#addClientModal');
+  const form = $('#clientForm');
+  let isEditMode = false;
+
+  // Toggle secret visibility
+  $(document).on('click', '.toggle-secret', function() {
+    const $secretText = $(this).siblings('.secret-text');
+    const $icon = $(this).find('i');
+    const secret = $secretText.data('secret');
+    
+    if ($secretText.text().includes('••••')) {
+      $secretText.text(secret);
+      $icon.removeClass('bi-eye').addClass('bi-eye-slash');
+    } else {
+      $secretText.text('••••••••');
+      $icon.removeClass('bi-eye-slash').addClass('bi-eye');
+    }
+  });
+
+  // Edit client button
+  $(document).on('click', '.edit-client-btn', function() {
+    isEditMode = true;
+    const $btn = $(this);
+    
+    $('#modalTitle').text('Edit Client (NAS)');
+    $('#oldName').val($btn.data('name'));
+    $('#clientName').val($btn.data('name'));
+    $('#clientIpaddr').val($btn.data('ipaddr'));
+    $('#clientSecret').val($btn.data('secret'));
+    $('#clientNasType').val($btn.data('nas-type') || 'other');
+    $('#clientMsgAuth').val($btn.data('msg-auth') || 'no');
+    $('#clientComment').val($btn.data('comment') || '');
+    
+    modal.modal('show');
+  });
+
+  // Add new client button
+  $('#addClientModal').on('show.bs.modal', function() {
+    if (!isEditMode) {
+      $('#modalTitle').text('Tambah Client (NAS)');
+      form[0].reset();
+      $('#oldName').val('');
+    }
+    isEditMode = false;
+  });
+
+  // Delete client button
+  $(document).on('click', '.delete-client-btn', function() {
+    const name = $(this).data('name');
+    if (confirm(`Yakin ingin menghapus client "${name}"?`)) {
+      $.ajax({
+        url: '/admin/radius/clients/delete',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ name: name }),
+        success: function(response) {
+          if (response.success) {
+            alert('Client berhasil dihapus' + (response.restart.success ? ' dan FreeRADIUS berhasil direstart' : ''));
+            location.reload();
+          } else {
+            alert('Gagal menghapus client: ' + response.message);
+          }
+        },
+        error: function() {
+          alert('Error menghapus client');
+        }
+      });
+    }
+  });
+
+  // Form submit
+  form.on('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = {
+      name: $('#clientName').val().trim(),
+      ipaddr: $('#clientIpaddr').val().trim(),
+      secret: $('#clientSecret').val().trim(),
+      nas_type: $('#clientNasType').val(),
+      require_message_authenticator: $('#clientMsgAuth').val(),
+      comment: $('#clientComment').val().trim() || null
+    };
+
+    const oldName = $('#oldName').val();
+    const url = oldName ? '/admin/radius/clients/edit' : '/admin/radius/clients/add';
+    
+    if (oldName) {
+      formData.oldName = oldName;
+    }
+
+    // Disable submit button
+    const $submitBtn = form.find('button[type="submit"]');
+    $submitBtn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Menyimpan...');
+
+    $.ajax({
+      url: url,
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(formData),
+      success: function(response) {
+        if (response.success) {
+          alert('Client berhasil ' + (oldName ? 'diupdate' : 'ditambahkan') + 
+                (response.restart.success ? ' dan FreeRADIUS berhasil direstart' : ''));
+          modal.modal('hide');
+          location.reload();
+        } else {
+          alert('Gagal menyimpan client: ' + response.message);
+          $submitBtn.prop('disabled', false).html('<i class="bi bi-save"></i> Simpan');
+        }
+      },
+      error: function(xhr) {
+        const errorMsg = xhr.responseJSON?.message || 'Error menyimpan client';
+        alert(errorMsg);
+        $submitBtn.prop('disabled', false).html('<i class="bi bi-save"></i> Simpan');
+      }
+    });
+  });
+});
+</script>
+</body>
+</html>
+
