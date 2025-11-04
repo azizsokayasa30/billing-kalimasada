@@ -22,7 +22,7 @@ router.get('/radius', adminAuth, async (req, res) => {
       settings: {
         user_auth_mode: 'mikrotik',
         radius_host: 'localhost',
-        radius_user: 'radius',
+        radius_user: 'billing',
         radius_password: '',
         radius_database: 'radius'
       },
@@ -42,7 +42,7 @@ router.post('/radius', adminAuth, async (req, res) => {
     await saveRadiusConfig({
       user_auth_mode: user_auth_mode || 'radius',
       radius_host: radius_host ? radius_host.trim() : 'localhost',
-      radius_user: radius_user ? radius_user.trim() : 'radius',
+      radius_user: radius_user ? radius_user.trim() : 'billing',
       radius_password: radius_password || '',
       radius_database: radius_database ? radius_database.trim() : 'radius'
     });

@@ -40,7 +40,8 @@
         </div>
         <div class="mb-3">
           <label class="form-label">RADIUS User</label>
-          <input type="text" name="radius_user" class="form-control" value="<%= settings.radius_user || 'radius' %>">
+          <input type="text" name="radius_user" class="form-control" value="<%= settings.radius_user || 'billing' %>" placeholder="billing">
+          <small class="form-text text-muted">Gunakan 'billing' untuk billing server atau 'radius' untuk FreeRADIUS</small>
         </div>
         <div class="mb-3">
           <label class="form-label">RADIUS Password</label>
