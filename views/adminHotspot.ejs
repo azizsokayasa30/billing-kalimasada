@@ -2561,7 +2561,12 @@ document.addEventListener('DOMContentLoaded', function () {
             $('#editUsername').val(username);
             $('#editPassword').val(password);
             $('#editProfile').val(profile);
-            $('#editRouterId').val(routerId || '');
+            // Set router_id hanya jika bukan mode RADIUS
+            const isRadiusMode = (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') ||
+                                 ($('#editRouterId').attr('type') === 'hidden');
+            if (!isRadiusMode) {
+                $('#editRouterId').val(routerId || '');
+            }
             $('#originalUsername').val(username);
 
             if ($('#editUserModal').length) {
@@ -2574,6 +2579,4 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 </body>
-</html> 
-</html> 
 </html> 

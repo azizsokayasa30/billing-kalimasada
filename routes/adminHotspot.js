@@ -439,6 +439,24 @@ router.post('/', async (req, res) => {
 router.post('/edit', async (req, res) => {
     const { username, password, profile, router_id, originalUsername } = req.body;
     try {
+        // Check auth mode
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback
+        }
+
+        // Untuk mode RADIUS, router_id tidak diperlukan
+        if (userAuthMode === 'radius') {
+            const { deleteHotspotUser, addHotspotUser } = require('../config/mikrotik');
+            await deleteHotspotUser(originalUsername || username, null);
+            await addHotspotUser(username, password, profile, null, null, null);
+            return res.redirect('/admin/hotspot?success=User+Hotspot+berhasil+diupdate');
+        }
+
+        // Untuk mode Mikrotik API, router_id diperlukan
         if (!router_id) {
             return res.redirect('/admin/hotspot?error=Pilih+NAS+(router)+terlebih+dahulu');
         }
