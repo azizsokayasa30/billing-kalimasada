@@ -15,7 +15,27 @@ function parseClientsConf() {
             return [];
         }
 
-        const content = fs.readFileSync(CLIENTS_CONF_PATH, 'utf8');
+function parseClientsConf() {
+    try {
+        if (!fs.existsSync(CLIENTS_CONF_PATH)) {
+            logger.warn(`clients.conf not found at ${CLIENTS_CONF_PATH}`);
+            return [];
+        }
+
+        // Try to read file directly first
+        let content;
+        try {
+            content = fs.readFileSync(CLIENTS_CONF_PATH, 'utf8');
+        } catch (readError) {
+            // If direct read fails, try with sudo
+            try {
+                content = execSync(`sudo cat ${CLIENTS_CONF_PATH}`, { encoding: 'utf8' });
+            } catch (sudoError) {
+                logger.error(`Cannot read clients.conf: ${readError.message}`);
+                throw new Error(`Tidak dapat membaca file clients.conf: ${readError.message}`);
+            }
+        }
+        
         const clients = [];
         let currentClient = null;
         let inClientBlock = false;
