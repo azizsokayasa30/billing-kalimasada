@@ -1543,11 +1543,15 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                 
                 db.close();
             } catch (invoiceError) {
+                // Log error dengan detail untuk debugging
                 logger.error(`Error creating invoice for voucher ${username}: ${invoiceError.message}`);
+                logger.error(`Invoice error stack: ${invoiceError.stack}`);
+                // Jangan throw error, biarkan voucher tetap dibuat meskipun invoice gagal
+                // Invoice bisa dibuat manual nanti jika diperlukan
             }
+        } else {
+            logger.warn(`Voucher ${username} created but invoice not created because addHotspotUserRadius failed`);
         }
-        
-        return { ...result, invoiceId };
     } else {
         if (customer) {
           conn = await getMikrotikConnectionForCustomer(customer);
