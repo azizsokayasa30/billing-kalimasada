@@ -30,15 +30,15 @@ function convertToSeconds(value, unit) {
   
   const unitLower = String(unit).toLowerCase();
   const unitMap = {
-    'detik': 1,
-    's': 1,
-    'menit': 60,
-    'men': 60,
-    'm': 60,
-    'jam': 3600,
-    'h': 3600,
-    'hari': 86400,
-    'd': 86400
+    's': 1,           // detik (standar Mikrotik)
+    'detik': 1,       // kompatibilitas backward
+    'm': 60,          // menit (standar Mikrotik) - lowercase untuk waktu
+    'menit': 60,      // kompatibilitas backward
+    'men': 60,        // kompatibilitas backward
+    'h': 3600,        // jam (standar Mikrotik)
+    'jam': 3600,      // kompatibilitas backward
+    'd': 86400,       // hari (standar Mikrotik)
+    'hari': 86400     // kompatibilitas backward
   };
   
   const multiplier = unitMap[unitLower] || 1;

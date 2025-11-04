@@ -272,6 +272,7 @@
                                         <option value="G">G</option>
                                     </select>
                                 </div>
+                                <small class="form-text text-muted">k=kbps, M=Mbps, G=Gbps</small>
                             </div>
                         </div>
                         <div class="col-md-4">
@@ -285,7 +286,7 @@
                                         <option value="G">G</option>
                                     </select>
                                 </div>
-                                <small class="form-text text-muted">Burst limit untuk traffic burst (opsional)</small>
+                                <small class="form-text text-muted">Burst limit untuk traffic burst (opsional) - k=kbps, M=Mbps, G=Gbps</small>
                             </div>
                         </div>
                         <div class="col-md-4">
@@ -294,12 +295,13 @@
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="sessionTimeout" name="sessionTimeout" placeholder="0">
                                     <select class="form-select" id="sessionTimeoutUnit" name="sessionTimeoutUnit" style="max-width: 80px;">
-                                        <option value="detik">detik</option>
-                                        <option value="menit">menit</option>
-                                        <option value="jam">jam</option>
-                                        <option value="hari">hari</option>
+                                        <option value="s">S</option>
+                                        <option value="m">m</option>
+                                        <option value="h">h</option>
+                                        <option value="d">d</option>
                                     </select>
                                 </div>
+                                <small class="form-text text-muted">S=detik, m=menit, h=jam, d=hari</small>
                             </div>
                         </div>
                     </div>
@@ -310,12 +312,13 @@
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="idleTimeout" name="idleTimeout" placeholder="0">
                                     <select class="form-select" id="idleTimeoutUnit" name="idleTimeoutUnit" style="max-width: 80px;">
-                                        <option value="detik">detik</option>
-                                        <option value="menit">menit</option>
-                                        <option value="jam">jam</option>
-                                        <option value="hari">hari</option>
+                                        <option value="s">S</option>
+                                        <option value="m">m</option>
+                                        <option value="h">h</option>
+                                        <option value="d">d</option>
                                     </select>
                                 </div>
+                                <small class="form-text text-muted">S=detik, m=menit, h=jam, d=hari</small>
                             </div>
                         </div>
                     </div>
@@ -737,18 +740,18 @@ $(function() {
             if (match) {
                 $('#sessionTimeout').val(match[1]); // Number part
                 const unit = match[2].toLowerCase();
-                // Map Mikrotik unit to form unit (Indonesian)
-                if (unit === 's') $('#sessionTimeoutUnit').val('detik');
-                else if (unit === 'm') $('#sessionTimeoutUnit').val('menit');
-                else if (unit === 'h') $('#sessionTimeoutUnit').val('jam');
-                else if (unit === 'd') $('#sessionTimeoutUnit').val('hari');
+                // Map Mikrotik unit to form unit (S, m, h, d sesuai standar Mikrotik)
+                if (unit === 's') $('#sessionTimeoutUnit').val('s');
+                else if (unit === 'm') $('#sessionTimeoutUnit').val('m');
+                else if (unit === 'h') $('#sessionTimeoutUnit').val('h');
+                else if (unit === 'd') $('#sessionTimeoutUnit').val('d');
             } else {
                 $('#sessionTimeout').val('');
-                $('#sessionTimeoutUnit').val('jam');
+                $('#sessionTimeoutUnit').val('h');
             }
         } else {
             $('#sessionTimeout').val('');
-            $('#sessionTimeoutUnit').val('jam');
+            $('#sessionTimeoutUnit').val('h');
         }
         
         // Parse idle timeout from Mikrotik format (e.g., "3m", "30s", "1h")
@@ -759,18 +762,18 @@ $(function() {
             if (match) {
                 $('#idleTimeout').val(match[1]); // Number part
                 const unit = match[2].toLowerCase();
-                // Map Mikrotik unit to form unit (Indonesian)
-                if (unit === 's') $('#idleTimeoutUnit').val('detik');
-                else if (unit === 'm') $('#idleTimeoutUnit').val('menit');
-                else if (unit === 'h') $('#idleTimeoutUnit').val('jam');
-                else if (unit === 'd') $('#idleTimeoutUnit').val('hari');
+                // Map Mikrotik unit to form unit (S, m, h, d sesuai standar Mikrotik)
+                if (unit === 's') $('#idleTimeoutUnit').val('s');
+                else if (unit === 'm') $('#idleTimeoutUnit').val('m');
+                else if (unit === 'h') $('#idleTimeoutUnit').val('h');
+                else if (unit === 'd') $('#idleTimeoutUnit').val('d');
             } else {
                 $('#idleTimeout').val('');
-                $('#idleTimeoutUnit').val('menit');
+                $('#idleTimeoutUnit').val('m');
             }
         } else {
             $('#idleTimeout').val('');
-            $('#idleTimeoutUnit').val('menit');
+            $('#idleTimeoutUnit').val('m');
         }
         
         // Handle address fields

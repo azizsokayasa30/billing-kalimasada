@@ -2555,7 +2555,13 @@ async function addHotspotProfile(profileData, routerObj = null) {
                     if (sessionTimeout && sessionTimeoutUnit && String(sessionTimeout).trim() !== '' && String(sessionTimeoutUnit).trim() !== '') {
                         const sessionTimeoutValue = String(sessionTimeout).trim();
                         let sessionTimeoutUnitValue = String(sessionTimeoutUnit).trim().toLowerCase();
-                        const timeoutUnitMap = { 'detik': 's', 's': 's', 'menit': 'm', 'men': 'm', 'm': 'm', 'jam': 'h', 'h': 'h', 'hari': 'd', 'd': 'd' };
+                        // Map ke format standar Mikrotik: S, m, h, d
+                        const timeoutUnitMap = { 
+                            's': 's', 'detik': 's',           // detik
+                            'm': 'm', 'menit': 'm', 'men': 'm', // menit (lowercase)
+                            'h': 'h', 'jam': 'h',              // jam
+                            'd': 'd', 'hari': 'd'              // hari
+                        };
                         if (timeoutUnitMap[sessionTimeoutUnitValue]) {
                             sessionTimeoutUnitValue = timeoutUnitMap[sessionTimeoutUnitValue];
                             const numValue = parseInt(sessionTimeoutValue);
@@ -2574,7 +2580,13 @@ async function addHotspotProfile(profileData, routerObj = null) {
                     if (idleTimeout && idleTimeoutUnit && String(idleTimeout).trim() !== '' && String(idleTimeoutUnit).trim() !== '') {
                         const idleTimeoutValue = String(idleTimeout).trim();
                         let idleTimeoutUnitValue = String(idleTimeoutUnit).trim().toLowerCase();
-                        const timeoutUnitMap = { 'detik': 's', 's': 's', 'menit': 'm', 'men': 'm', 'm': 'm', 'jam': 'h', 'h': 'h', 'hari': 'd', 'd': 'd' };
+                        // Map ke format standar Mikrotik: S, m, h, d
+                        const timeoutUnitMap = { 
+                            's': 's', 'detik': 's',           // detik
+                            'm': 'm', 'menit': 'm', 'men': 'm', // menit (lowercase)
+                            'h': 'h', 'jam': 'h',              // jam
+                            'd': 'd', 'hari': 'd'              // hari
+                        };
                         if (timeoutUnitMap[idleTimeoutUnitValue]) {
                             idleTimeoutUnitValue = timeoutUnitMap[idleTimeoutUnitValue];
                             const numValue = parseInt(idleTimeoutValue);
@@ -2842,7 +2854,13 @@ async function editHotspotProfile(profileData, routerObj = null) {
                     if (sessionTimeout && sessionTimeoutUnit && String(sessionTimeout).trim() !== '' && String(sessionTimeoutUnit).trim() !== '') {
                         const sessionTimeoutValue = String(sessionTimeout).trim();
                         let sessionTimeoutUnitValue = String(sessionTimeoutUnit).trim().toLowerCase();
-                        const timeoutUnitMap = { 'detik': 's', 's': 's', 'menit': 'm', 'men': 'm', 'm': 'm', 'jam': 'h', 'h': 'h', 'hari': 'd', 'd': 'd' };
+                        // Map ke format standar Mikrotik: S, m, h, d
+                        const timeoutUnitMap = { 
+                            's': 's', 'detik': 's',           // detik
+                            'm': 'm', 'menit': 'm', 'men': 'm', // menit (lowercase)
+                            'h': 'h', 'jam': 'h',              // jam
+                            'd': 'd', 'hari': 'd'              // hari
+                        };
                         if (timeoutUnitMap[sessionTimeoutUnitValue]) {
                             sessionTimeoutUnitValue = timeoutUnitMap[sessionTimeoutUnitValue];
                             const numValue = parseInt(sessionTimeoutValue);
@@ -2861,7 +2879,13 @@ async function editHotspotProfile(profileData, routerObj = null) {
                     if (idleTimeout && idleTimeoutUnit && String(idleTimeout).trim() !== '' && String(idleTimeoutUnit).trim() !== '') {
                         const idleTimeoutValue = String(idleTimeout).trim();
                         let idleTimeoutUnitValue = String(idleTimeoutUnit).trim().toLowerCase();
-                        const timeoutUnitMap = { 'detik': 's', 's': 's', 'menit': 'm', 'men': 'm', 'm': 'm', 'jam': 'h', 'h': 'h', 'hari': 'd', 'd': 'd' };
+                        // Map ke format standar Mikrotik: S, m, h, d
+                        const timeoutUnitMap = { 
+                            's': 's', 'detik': 's',           // detik
+                            'm': 'm', 'menit': 'm', 'men': 'm', // menit (lowercase)
+                            'h': 'h', 'jam': 'h',              // jam
+                            'd': 'd', 'hari': 'd'              // hari
+                        };
                         if (timeoutUnitMap[idleTimeoutUnitValue]) {
                             idleTimeoutUnitValue = timeoutUnitMap[idleTimeoutUnitValue];
                             const numValue = parseInt(idleTimeoutValue);
