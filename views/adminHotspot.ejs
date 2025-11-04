@@ -528,18 +528,26 @@
                                 <label for="manualPassword" class="form-label">Password</label>
                                 <input type="text" class="form-control" id="manualPassword" placeholder="Masukkan password">
                             </div>
-                            <div class="mb-3">
-                                <label for="manualRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
-                                <select class="form-select" id="manualRouterId" required>
-                                    <% if (routers && routers.length > 0) { %>
-                                        <% routers.forEach(function(router) { %>
-                                            <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
-                                        <% }); %>
-                                    <% } else { %>
-                                        <option value="">Tidak ada router tersedia</option>
-                                    <% } %>
-                                </select>
-                            </div>
+                            <!-- NAS Selection - Hidden jika mode RADIUS -->
+                            <% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
+                                <input type="hidden" id="manualRouterId" value="">
+                                <div class="alert alert-info mb-3">
+                                    <i class="bi bi-info-circle"></i> Mode RADIUS aktif - Voucher akan disimpan ke database RADIUS
+                                </div>
+                            <% } else { %>
+                                <div class="mb-3">
+                                    <label for="manualRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
+                                    <select class="form-select" id="manualRouterId" required>
+                                        <% if (routers && routers.length > 0) { %>
+                                            <% routers.forEach(function(router) { %>
+                                                <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                            <% }); %>
+                                        <% } else { %>
+                                            <option value="">Tidak ada router tersedia</option>
+                                        <% } %>
+                                    </select>
+                                </div>
+                            <% } %>
                             <div class="mb-3">
                                 <label for="manualProfile" class="form-label">Profile</label>
                                 <select class="form-select" id="manualProfile">
