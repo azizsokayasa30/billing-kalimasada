@@ -3234,16 +3234,23 @@ async function deletePPPoEProfile(id, routerObj = null) {
 // Fungsi untuk generate hotspot vouchers
 async function generateHotspotVouchers(count, prefix, profile, server, validUntil, price, charType = 'alphanumeric', routerObj = null) {
     try {
-        let conn = null;
-        if (routerObj) {
-            conn = await getMikrotikConnectionForRouter(routerObj);
-            logger.info(`Connecting to router: ${routerObj.name} (${routerObj.nas_ip}:${routerObj.port || 8728}) for voucher generation`);
-        } else {
-            conn = await getMikrotikConnection();
-        }
-        if (!conn) {
-            logger.error('Tidak dapat terhubung ke Mikrotik');
-            return { success: false, message: 'Tidak dapat terhubung ke Mikrotik', vouchers: [] };
+        // Check auth mode - RADIUS atau Mikrotik API
+        const mode = await getUserAuthModeAsync();
+        const isRadiusMode = mode === 'radius';
+        
+        // Untuk mode Mikrotik API, validasi koneksi terlebih dahulu
+        if (!isRadiusMode) {
+            let conn = null;
+            if (routerObj) {
+                conn = await getMikrotikConnectionForRouter(routerObj);
+                logger.info(`Connecting to router: ${routerObj.name} (${routerObj.nas_ip}:${routerObj.port || 8728}) for voucher generation`);
+            } else {
+                conn = await getMikrotikConnection();
+            }
+            if (!conn) {
+                logger.error('Tidak dapat terhubung ke Mikrotik');
+                return { success: false, message: 'Tidak dapat terhubung ke Mikrotik', vouchers: [] };
+            }
         }
         
         // Get voucher generation settings from database
@@ -3274,7 +3281,7 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
         const vouchers = [];
         
         // Log untuk debugging
-        logger.info(`Generating ${count} vouchers with prefix ${prefix} and profile ${profile}`);
+        logger.info(`Generating ${count} vouchers with prefix ${prefix} and profile ${profile} (Mode: ${isRadiusMode ? 'RADIUS' : 'Mikrotik API'})`);
         
         for (let i = 0; i < count; i++) {
             // Generate username and password based on settings
@@ -3296,7 +3303,8 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
             }
             
             try {
-                // Tambahkan user hotspot ke Mikrotik menggunakan addHotspotUser dengan routerObj
+                // Tambahkan user hotspot menggunakan addHotspotUser (otomatis handle RADIUS/Mikrotik)
+                // Di mode RADIUS, routerObj akan diabaikan oleh addHotspotUser
                 await addHotspotUser(username, password, profile, 'voucher', null, routerObj);
                 
                 // Tambahkan ke array vouchers
@@ -3305,14 +3313,14 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                     password,
                     profile,
                     server: server !== 'all' ? server : 'all',
-                    nas_name: routerObj ? routerObj.name : 'default',
-                    nas_ip: routerObj ? routerObj.nas_ip : '',
+                    nas_name: isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.name : 'default'),
+                    nas_ip: isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.nas_ip : ''),
                     createdAt: new Date(),
                     price: price, // Tambahkan harga ke data voucher
                     account_type: accountType // Tambahkan tipe akun
                 });
                 
-                logger.info(`${accountType === 'voucher' ? 'Voucher' : 'Member'} created: ${username} (password: ${password}) on ${routerObj ? routerObj.name : 'default'}`);
+                logger.info(`${accountType === 'voucher' ? 'Voucher' : 'Member'} created: ${username} (password: ${password}) on ${isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.name : 'default')}`);
             } catch (err) {
                 logger.error(`Failed to create voucher ${username}: ${err.message}`);
                 // Lanjutkan ke voucher berikutnya

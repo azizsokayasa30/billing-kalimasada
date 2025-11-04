@@ -885,8 +885,18 @@ router.get('/voucher', async (req, res) => {
 // POST: Generate voucher dengan JSON response
 router.post('/generate-voucher', async (req, res) => {
     try {
+        // Check auth mode - RADIUS atau Mikrotik API
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback
+        }
+
         // Log request untuk debugging
         console.log('Generate voucher request:', req.body);
+        console.log('Auth Mode:', userAuthMode);
         console.log('Count from request:', req.body.count);
         console.log('Profile from request:', req.body.profile);
         console.log('Router ID from request:', req.body.router_id);
@@ -903,9 +913,18 @@ router.post('/generate-voucher', async (req, res) => {
         const voucherModel = req.body.voucherModel || 'standard';
         const charType = req.body.charType || 'alphanumeric';
         
-        // Fetch router object if router_id is provided
+        // Untuk mode Mikrotik API, router_id diperlukan
+        // Untuk mode RADIUS, router_id tidak diperlukan
         let routerObj = null;
-        if (router_id) {
+        if (userAuthMode !== 'radius') {
+            if (!router_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Pilih NAS (Router) terlebih dahulu'
+                });
+            }
+            
+            // Fetch router object
             const db = new sqlite3.Database('./data/billing.db');
             routerObj = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
@@ -926,7 +945,7 @@ router.post('/generate-voucher', async (req, res) => {
         console.log('Parsed values:');
         console.log('- Count:', count);
         console.log('- Profile:', profile);
-        console.log('- Router:', routerObj ? routerObj.name : 'default');
+        console.log('- Router:', routerObj ? routerObj.name : 'RADIUS');
         console.log('- Price:', price);
         console.log('- CharType:', charType);
         

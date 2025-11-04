@@ -167,6 +167,7 @@
                                 <label for="voucherPrefix" class="form-label"><i class="bi bi-type me-1"></i>Prefix Username</label>
                                 <input type="text" class="form-control" id="voucherPrefix" name="prefix" placeholder="contoh: wifi-" value="wifi-">
                             </div>
+                            <% if (userAuthMode !== 'radius') { %>
                             <div class="mb-3">
                                 <label for="voucherRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
                                 <select class="form-select" id="voucherRouterId" name="router_id" required>
@@ -179,10 +180,22 @@
                                     <% } %>
                                 </select>
                             </div>
+                            <% } else { %>
+                            <input type="hidden" id="voucherRouterId" name="router_id" value="">
+                            <div class="mb-3">
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle me-2"></i>Mode RADIUS aktif. NAS selection otomatis.
+                                </div>
+                            </div>
+                            <% } %>
                             <div class="mb-3">
                                 <label for="voucherProfile" class="form-label"><i class="bi bi-speedometer2 me-1"></i>Profile</label>
                                 <select class="form-select" id="voucherProfile" name="profile" required>
-                                    <option value="">Pilih NAS terlebih dahulu</option>
+                                    <% if (userAuthMode === 'radius') { %>
+                                        <option value="">Memuat profile...</option>
+                                    <% } else { %>
+                                        <option value="">Pilih NAS terlebih dahulu</option>
+                                    <% } %>
                                 </select>
                                 <small class="text-muted">Profile yang dipilih akan digunakan untuk semua voucher yang dibuat</small>
                             </div>
@@ -816,6 +829,7 @@
         
         // Store all profiles with NAS info for filtering
         const allProfiles = <%- JSON.stringify(profiles || []) %>;
+        const isRadiusMode = <%= (userAuthMode === 'radius') ? 'true' : 'false' %>;
         
         // Function to filter and update profile dropdown based on selected NAS
         function updateVoucherProfileDropdown(routerId) {
@@ -825,6 +839,27 @@
             // Clear existing options
             profileSelect.innerHTML = '';
             
+            // Di mode RADIUS, tampilkan semua profile tanpa filter
+            if (isRadiusMode) {
+                if (allProfiles.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'Tidak ada profile tersedia';
+                    profileSelect.appendChild(option);
+                    return;
+                }
+                
+                // Add all profiles to dropdown
+                allProfiles.forEach(function(profile) {
+                    const option = document.createElement('option');
+                    option.value = profile.name;
+                    option.textContent = profile.name;
+                    profileSelect.appendChild(option);
+                });
+                return;
+            }
+            
+            // Mode Mikrotik API: filter berdasarkan NAS
             if (!routerId) {
                 const option = document.createElement('option');
                 option.value = '';
@@ -856,9 +891,9 @@
             });
         }
         
-        // Event listener for NAS selection changes
+        // Event listener for NAS selection changes (hanya di mode Mikrotik API)
         const voucherRouterSelect = document.getElementById('voucherRouterId');
-        if (voucherRouterSelect) {
+        if (voucherRouterSelect && !isRadiusMode) {
             voucherRouterSelect.addEventListener('change', function() {
                 updateVoucherProfileDropdown(this.value);
             });
@@ -867,6 +902,11 @@
             if (voucherRouterSelect.value) {
                 updateVoucherProfileDropdown(voucherRouterSelect.value);
             }
+        }
+        
+        // Di mode RADIUS, populate profile dropdown langsung saat page load
+        if (isRadiusMode) {
+            updateVoucherProfileDropdown(null);
         }
         
         // Initialize preview voucher
@@ -948,6 +988,16 @@
             
             if (!data.profile) {
                 showToast('Profile harus dipilih', 'warning');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Generate Voucher';
+                return;
+            }
+            
+            // Di mode RADIUS, router_id tidak diperlukan
+            if (isRadiusMode) {
+                delete data.router_id;
+            } else if (!data.router_id) {
+                showToast('Pilih NAS (Router) terlebih dahulu', 'warning');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Generate Voucher';
                 return;
