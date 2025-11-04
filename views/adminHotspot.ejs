@@ -1892,20 +1892,37 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Show toast notification
     function showToast(message, type = 'info') {
-        const toastContainer = document.createElement('div');
-        toastContainer.className = 'position-fixed top-0 end-0 p-3';
-        toastContainer.style.zIndex = '1080';
+        // Map type untuk Bootstrap classes
+        const typeMap = {
+            'success': { bg: 'bg-success', text: 'text-white', title: 'Sukses' },
+            'danger': { bg: 'bg-danger', text: 'text-white', title: 'Error' },
+            'error': { bg: 'bg-danger', text: 'text-white', title: 'Error' },
+            'warning': { bg: 'bg-warning', text: 'text-dark', title: 'Peringatan' },
+            'info': { bg: 'bg-info', text: 'text-white', title: 'Info' }
+        };
+        
+        const toastConfig = typeMap[type] || typeMap['info'];
+        
+        // Cek apakah sudah ada toast container
+        let toastContainer = document.querySelector('.toast-container-fixed');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.className = 'toast-container-fixed position-fixed top-0 end-0 p-3';
+            toastContainer.style.zIndex = '1080';
+            document.body.appendChild(toastContainer);
+        }
         
         const toast = document.createElement('div');
-        toast.className = `toast show bg-${type} text-white`;
+        toast.className = `toast show ${toastConfig.bg} ${toastConfig.text}`;
         toast.setAttribute('role', 'alert');
         toast.setAttribute('aria-live', 'assertive');
         toast.setAttribute('aria-atomic', 'true');
+        toast.style.minWidth = '300px';
         
         toast.innerHTML = `
-            <div class="toast-header bg-${type} text-white">
-                <strong class="me-auto">${type === 'success' ? 'Sukses' : type === 'danger' ? 'Error' : 'Info'}</strong>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            <div class="toast-header ${toastConfig.bg} ${toastConfig.text}">
+                <strong class="me-auto">${toastConfig.title}</strong>
+                <button type="button" class="btn-close ${toastConfig.text === 'text-white' ? 'btn-close-white' : ''}" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
             <div class="toast-body">
                 ${message}
@@ -1913,19 +1930,45 @@ document.addEventListener('DOMContentLoaded', function () {
         `;
         
         toastContainer.appendChild(toast);
-        document.body.appendChild(toastContainer);
         
-        // Auto remove after 5 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => toastContainer.remove(), 500);
-        }, 5000);
+        // Initialize Bootstrap toast jika tersedia
+        if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+            const bsToast = new bootstrap.Toast(toast, { autohide: true, delay: 5000 });
+            bsToast.show();
+            
+            toast.addEventListener('hidden.bs.toast', () => {
+                toast.remove();
+                // Hapus container jika kosong
+                if (toastContainer.children.length === 0) {
+                    toastContainer.remove();
+                }
+            });
+        } else {
+            // Fallback jika Bootstrap tidak tersedia
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                    if (toastContainer.children.length === 0) {
+                        toastContainer.remove();
+                    }
+                }, 300);
+            }, 5000);
+        }
         
         // Add click event to close button
-        toast.querySelector('.btn-close').addEventListener('click', () => {
-            toast.classList.remove('show');
-            setTimeout(() => toastContainer.remove(), 500);
-        });
+        const closeBtn = toast.querySelector('.btn-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                    if (toastContainer.children.length === 0) {
+                        toastContainer.remove();
+                    }
+                }, 300);
+            });
+        }
     }
     
     function updateHotspotStats() {
@@ -2025,6 +2068,29 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
     
+    // Define userAuthMode untuk JavaScript
+    const userAuthMode = '<%= typeof userAuthMode !== "undefined" ? userAuthMode : "mikrotik" %>';
+    
+    // Hapus error dari URL setelah alert ditampilkan
+    document.addEventListener('DOMContentLoaded', function() {
+        // Tampilkan alert error/success dari server jika ada
+        <% if (error) { %>
+            showToast('<%= error %>', 'danger');
+        <% } %>
+        <% if (success) { %>
+            showToast('<%= success %>', 'success');
+        <% } %>
+        
+        // Hapus error dari URL setelah beberapa detik
+        if (window.location.search.includes('error=')) {
+            setTimeout(() => {
+                const url = new URL(window.location);
+                url.searchParams.delete('error');
+                window.history.replaceState({}, '', url);
+            }, 3000);
+        }
+    });
+    
     // Event listeners for NAS selection changes (hanya untuk mode Mikrotik API)
     const manualRouterSelect = document.getElementById('manualRouterId');
     const autoRouterSelect = document.getElementById('autoRouterId');
@@ -2113,17 +2179,32 @@ document.addEventListener('DOMContentLoaded', function () {
         const profile = document.getElementById('manualProfile').value;
         const routerIdEl = document.getElementById('manualRouterId');
         const routerId = routerIdEl ? routerIdEl.value : '';
-        const isRadiusMode = routerIdEl && (routerIdEl.type === 'hidden' || routerIdEl.style.display === 'none');
+        // Deteksi mode RADIUS lebih robust
+        const isRadiusMode = (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') ||
+                             (routerIdEl && routerIdEl.type === 'hidden') ||
+                             (routerIdEl && routerIdEl.style.display === 'none');
 
         if (!username || !password) {
-            showToast('Username dan password harus diisi!', 'error');
+            showToast('Username dan password harus diisi!', 'danger');
+            return;
+        }
+
+        if (!profile) {
+            showToast('Pilih profile terlebih dahulu!', 'danger');
             return;
         }
 
         // Validation: router_id hanya wajib jika bukan mode RADIUS
         if (!isRadiusMode && !routerId) {
-            showToast('Pilih NAS (Router) terlebih dahulu!', 'error');
+            showToast('Pilih NAS (Router) terlebih dahulu!', 'danger');
             return;
+        }
+
+        // Hapus error dari URL jika ada
+        if (window.location.search.includes('error=')) {
+            const url = new URL(window.location);
+            url.searchParams.delete('error');
+            window.history.replaceState({}, '', url);
         }
 
         // Generate voucher manual via AJAX
@@ -2136,25 +2217,35 @@ document.addEventListener('DOMContentLoaded', function () {
                 username: username,
                 password: password,
                 profile: profile,
-                router_id: routerId
+                router_id: isRadiusMode ? null : routerId
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => {
+                    throw new Error(err.message || 'Request failed');
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 showToast(`Voucher manual berhasil dibuat: ${username}`, 'success');
                 // Clear form
                 document.getElementById('manualUsername').value = '';
                 document.getElementById('manualPassword').value = '';
-                // Reload page to refresh table
-                setTimeout(() => location.reload(), 2000);
+                // Reload page to refresh table setelah delay
+                setTimeout(() => {
+                    // Hapus error dari URL sebelum reload
+                    window.location.href = window.location.pathname + window.location.search.replace(/[?&]error=[^&]*/, '');
+                }, 1500);
             } else {
-                showToast('Gagal membuat voucher: ' + (data.message || 'Unknown error'), 'error');
+                showToast('Gagal membuat voucher: ' + (data.message || 'Unknown error'), 'danger');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            showToast('Error membuat voucher manual', 'error');
+            showToast('Error membuat voucher manual: ' + error.message, 'danger');
         });
     };
 
@@ -2458,4 +2549,5 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 </body>
+</html> 
 </html> 
