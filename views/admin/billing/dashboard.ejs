@@ -46,6 +46,9 @@
                         <button id="updateVoucherInvoicesBtn" class="btn btn-success me-2" onclick="updateVoucherInvoices()">
                             <i class="bx bx-refresh"></i> Update Invoice Voucher
                         </button>
+                        <button id="createMissingInvoiceBtn" class="btn btn-info me-2" onclick="createMissingVoucherInvoices()">
+                            <i class="bx bx-plus-circle"></i> Buat Invoice Voucher
+                        </button>
                         <button id="cleanupDataBtn" class="btn btn-warning me-2" onclick="cleanupData()">
                             <i class="bx bx-refresh"></i> Perbaiki Data
                         </button>
@@ -72,6 +75,9 @@
                             </a></li>
                             <li><a class="dropdown-item text-success" href="#" onclick="updateVoucherInvoices(); return false;">
                                 <i class="bx bx-refresh"></i> Update Invoice Voucher
+                            </a></li>
+                            <li><a class="dropdown-item text-info" href="#" onclick="createMissingVoucherInvoices(); return false;">
+                                <i class="bx bx-plus-circle"></i> Buat Invoice Voucher
                             </a></li>
                             <li><a class="dropdown-item text-warning" href="#" onclick="cleanupData(); return false;">
                                 <i class="bx bx-refresh"></i> Perbaiki Data
@@ -633,6 +639,50 @@
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Fungsi untuk membuat invoice untuk voucher yang belum punya invoice
+        async function createMissingVoucherInvoices() {
+            const btn = document.getElementById('createMissingInvoiceBtn');
+            const originalText = btn.innerHTML;
+            
+            // Konfirmasi sebelum membuat invoice
+            if (!confirm('Apakah Anda yakin ingin membuat invoice untuk voucher yang belum punya invoice?')) {
+                return;
+            }
+            
+            // Disable button dan show loading
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Memproses...';
+            
+            try {
+                const response = await fetch('/admin/billing/api/create-missing-voucher-invoices', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show success message
+                    showAlert('success', 'Berhasil!', result.message);
+                    
+                    // Reload page setelah 2 detik untuk refresh stats
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    showAlert('danger', 'Error!', result.message || 'Gagal membuat invoice untuk voucher');
+                }
+            } catch (error) {
+                console.error('Error creating missing voucher invoices:', error);
+                showAlert('danger', 'Error!', 'Terjadi kesalahan saat membuat invoice untuk voucher');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
         // Fungsi untuk update invoice voucher menjadi paid saat voucher digunakan
         async function updateVoucherInvoices() {
             const btn = document.getElementById('updateVoucherInvoicesBtn');

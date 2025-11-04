@@ -966,6 +966,66 @@ router.get('/reports/pppoe', getAppSettings, adminAuth, async (req, res) => {
     }
 });
 
+// API untuk create missing voucher invoices retroaktif
+router.post('/api/create-missing-voucher-invoices', adminAuth, async (req, res) => {
+    try {
+        const { getAllVouchersFromRadius, getVoucherInvoices, createInvoiceForVoucher } = require('../scripts/create_missing_voucher_invoices');
+        
+        // Get all vouchers from RADIUS
+        const vouchers = await getAllVouchersFromRadius();
+        
+        // Get existing invoice usernames
+        const existingInvoices = await getVoucherInvoices();
+        
+        // Filter vouchers yang belum punya invoice
+        const vouchersWithoutInvoice = vouchers.filter(v => {
+            return !existingInvoices.includes(v.username);
+        });
+        
+        if (vouchersWithoutInvoice.length === 0) {
+            return res.json({ 
+                success: true, 
+                message: 'Semua voucher sudah punya invoice',
+                created: 0
+            });
+        }
+        
+        // Create invoices untuk voucher yang belum punya
+        let successCount = 0;
+        let errorCount = 0;
+        const errors = [];
+        
+        for (const voucher of vouchersWithoutInvoice) {
+            try {
+                await createInvoiceForVoucher(voucher.username, voucher.profile);
+                successCount++;
+            } catch (error) {
+                errorCount++;
+                errors.push({ username: voucher.username, error: error.message });
+                logger.error(`Error creating invoice for ${voucher.username}:`, error);
+            }
+        }
+        
+        // Refresh stats
+        const stats = await billingManager.getBillingStats();
+        
+        res.json({ 
+            success: true, 
+            message: `Berhasil membuat ${successCount} invoice untuk voucher yang belum punya invoice`,
+            created: successCount,
+            errors: errorCount,
+            errorDetails: errors.length > 0 ? errors : null,
+            stats
+        });
+    } catch (error) {
+        logger.error('Error creating missing voucher invoices:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Gagal membuat invoice untuk voucher: ' + error.message 
+        });
+    }
+});
+
 // API untuk update invoice voucher menjadi paid saat voucher digunakan
 router.post('/api/update-voucher-invoices', adminAuth, async (req, res) => {
     try {
