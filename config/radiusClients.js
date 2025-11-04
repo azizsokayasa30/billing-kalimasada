@@ -114,8 +114,29 @@ function writeClientsConf(clients) {
     try {
         // Backup original file
         const backupPath = `${CLIENTS_CONF_PATH}.backup.${Date.now()}`;
-        if (fs.existsSync(CLIENTS_CONF_PATH)) {
-            fs.copyFileSync(CLIENTS_CONF_PATH, backupPath);
+        let backupCreated = false;
+        
+        try {
+            if (fs.existsSync(CLIENTS_CONF_PATH)) {
+                // Try direct copy first
+                try {
+                    fs.copyFileSync(CLIENTS_CONF_PATH, backupPath);
+                    backupCreated = true;
+                } catch (copyError) {
+                    // If direct copy fails, try with sudo
+                    try {
+                        execSync(`sudo cp ${CLIENTS_CONF_PATH} ${backupPath}`, { encoding: 'utf8' });
+                        backupCreated = true;
+                    } catch (sudoCopyError) {
+                        logger.warn(`Cannot create backup: ${copyError.message}`);
+                    }
+                }
+            }
+        } catch (backupError) {
+            logger.warn(`Backup failed: ${backupError.message}`);
+        }
+        
+        if (backupCreated) {
             logger.info(`Backup created: ${backupPath}`);
         }
 
@@ -169,8 +190,21 @@ function writeClientsConf(clients) {
         });
 
         // Write to file
-        const fullContent = headerContent + clientsSection;
-        fs.writeFileSync(CLIENTS_CONF_PATH, fullContent, 'utf8');
+        try {
+            fs.writeFileSync(CLIENTS_CONF_PATH, fullContent, 'utf8');
+        } catch (writeError) {
+            // If direct write fails, try with sudo
+            try {
+                const tempFile = `/tmp/clients.conf.${Date.now()}`;
+                fs.writeFileSync(tempFile, fullContent, 'utf8');
+                execSync(`sudo cp ${tempFile} ${CLIENTS_CONF_PATH}`, { encoding: 'utf8' });
+                fs.unlinkSync(tempFile);
+            } catch (sudoWriteError) {
+                logger.error(`Cannot write clients.conf: ${writeError.message}`);
+                throw new Error(`Tidak dapat menulis file clients.conf: ${writeError.message}`);
+            }
+        }
+        
         logger.info(`clients.conf updated successfully with ${clients.length} clients`);
 
         return true;
