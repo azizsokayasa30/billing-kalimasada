@@ -349,7 +349,7 @@ router.get('/mikrotik/hotspot-profiles', adminAuth, async (req, res) => {
       }
     }));
     db.close();
-    
+
     // Store userAuthMode untuk digunakan di render
     const userAuthModeForRender = userAuthMode;
 

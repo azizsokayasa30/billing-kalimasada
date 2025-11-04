@@ -203,20 +203,20 @@
                             </div>
                         <% } else { %>
                             <!-- Mode Mikrotik API: Pilih Router -->
-                            <div class="mb-3">
-                                <label for="router_id" class="form-label">NAS (Router) *</label>
-                                <select class="form-select" id="router_id" name="router_id" required>
-                                    <% if (routers && routers.length > 0) { %>
-                                        <option value="">Pilih NAS</option>
-                                        <% routers.forEach(function(router) { %>
-                                            <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
-                                        <% }); %>
-                                    <% } else { %>
-                                        <option value="">Tidak ada router tersedia</option>
-                                    <% } %>
-                                </select>
-                                <small class="form-text text-muted">Pilih router/NAS untuk paket ini. Profile akan difilter berdasarkan NAS yang dipilih.</small>
-                            </div>
+                        <div class="mb-3">
+                            <label for="router_id" class="form-label">NAS (Router) *</label>
+                            <select class="form-select" id="router_id" name="router_id" required>
+                                <% if (routers && routers.length > 0) { %>
+                                    <option value="">Pilih NAS</option>
+                                    <% routers.forEach(function(router) { %>
+                                        <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                    <% }); %>
+                                <% } else { %>
+                                    <option value="">Tidak ada router tersedia</option>
+                                <% } %>
+                            </select>
+                            <small class="form-text text-muted">Pilih router/NAS untuk paket ini. Profile akan difilter berdasarkan NAS yang dipilih.</small>
+                        </div>
                         <% } %>
                         <div class="mb-3">
                             <label for="pppoe_profile" class="form-label">PPPoE Profile</label>
@@ -224,10 +224,10 @@
                                 <% if (userAuthMode === 'radius') { %>
                                     <input type="text" class="form-control" id="pppoe_profile" name="pppoe_profile" value="default" required>
                                 <% } else { %>
-                                    <select class="form-select" id="pppoe_profile" name="pppoe_profile" required>
-                                        <option value="">Pilih NAS terlebih dahulu</option>
-                                    </select>
-                                    <button class="btn btn-outline-secondary" type="button" id="reloadProfilesAdd">Reload</button>
+                                <select class="form-select" id="pppoe_profile" name="pppoe_profile" required>
+                                    <option value="">Pilih NAS terlebih dahulu</option>
+                                </select>
+                                <button class="btn btn-outline-secondary" type="button" id="reloadProfilesAdd">Reload</button>
                                 <% } %>
                             </div>
                             <small class="form-text text-muted">
@@ -375,20 +375,20 @@
                             </div>
                         <% } else { %>
                             <!-- Mode Mikrotik API: Pilih Router -->
-                            <div class="mb-3">
-                                <label for="edit_router_id" class="form-label">NAS (Router) *</label>
-                                <select class="form-select" id="edit_router_id" name="router_id" required>
-                                    <% if (routers && routers.length > 0) { %>
-                                        <option value="">Pilih NAS</option>
-                                        <% routers.forEach(function(router) { %>
-                                            <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
-                                        <% }); %>
-                                    <% } else { %>
-                                        <option value="">Tidak ada router tersedia</option>
-                                    <% } %>
-                                </select>
-                                <small class="form-text text-muted">Pilih router/NAS untuk paket ini. Profile akan difilter berdasarkan NAS yang dipilih.</small>
-                            </div>
+                        <div class="mb-3">
+                            <label for="edit_router_id" class="form-label">NAS (Router) *</label>
+                            <select class="form-select" id="edit_router_id" name="router_id" required>
+                                <% if (routers && routers.length > 0) { %>
+                                    <option value="">Pilih NAS</option>
+                                    <% routers.forEach(function(router) { %>
+                                        <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                    <% }); %>
+                                <% } else { %>
+                                    <option value="">Tidak ada router tersedia</option>
+                                <% } %>
+                            </select>
+                            <small class="form-text text-muted">Pilih router/NAS untuk paket ini. Profile akan difilter berdasarkan NAS yang dipilih.</small>
+                        </div>
                         <% } %>
                         <div class="mb-3">
                             <label for="edit_pppoe_profile" class="form-label">PPPoE Profile</label>
@@ -396,10 +396,10 @@
                                 <% if (userAuthMode === 'radius') { %>
                                     <input type="text" class="form-control" id="edit_pppoe_profile" name="pppoe_profile" required>
                                 <% } else { %>
-                                    <select class="form-select" id="edit_pppoe_profile" name="pppoe_profile" required>
-                                        <option value="">Pilih NAS terlebih dahulu</option>
-                                    </select>
-                                    <button class="btn btn-outline-secondary" type="button" id="reloadProfilesEdit">Reload</button>
+                                <select class="form-select" id="edit_pppoe_profile" name="pppoe_profile" required>
+                                    <option value="">Pilih NAS terlebih dahulu</option>
+                                </select>
+                                <button class="btn btn-outline-secondary" type="button" id="reloadProfilesEdit">Reload</button>
                                 <% } %>
                             </div>
                             <small class="form-text text-muted">
@@ -552,7 +552,7 @@
                 $('#tax_rate_group').hide();
                 $('#tax_rate_group input').prop('disabled', true);
                 $('#tax_rate').val(0);
-            // Reset NAS and profile dropdowns
+                // Reset NAS and profile dropdowns
             <% if (userAuthMode === 'radius') { %>
                 $('#nas_ip').val('');
                 $('#pppoe_profile').val('default');
@@ -907,13 +907,13 @@
         
         // Event listeners for NAS selection changes (only for Mikrotik API mode)
         <% if (userAuthMode !== 'radius') { %>
-            $('#router_id').on('change', function() {
-                updateProfileDropdownByNAS('router_id', 'pppoe_profile');
-            });
-            
-            $('#edit_router_id').on('change', function() {
-                updateProfileDropdownByNAS('edit_router_id', 'edit_pppoe_profile');
-            });
+        $('#router_id').on('change', function() {
+            updateProfileDropdownByNAS('router_id', 'pppoe_profile');
+        });
+        
+        $('#edit_router_id').on('change', function() {
+            updateProfileDropdownByNAS('edit_router_id', 'edit_pppoe_profile');
+        });
         <% } %>
 
         // Add Package Form
@@ -942,7 +942,7 @@
                 formData.append('nas_ip', $('#nas_ip').val().trim() || '');
                 formData.append('router_id', '');
             <% } else { %>
-                formData.append('router_id', $('#router_id').val() || '');
+            formData.append('router_id', $('#router_id').val() || '');
                 formData.append('nas_ip', '');
             <% } %>
             formData.append('pppoe_profile', $('#pppoe_profile').val().trim() || 'default');
@@ -1021,11 +1021,11 @@
                             $('#edit_nas_ip').val(package.nas_ip || '');
                         <% } else { %>
                             // Set router_id for Mikrotik API mode
-                            if (package.router_id) {
-                                $('#edit_router_id').val(package.router_id);
-                            } else {
-                                $('#edit_router_id').val('');
-                            }
+                        if (package.router_id) {
+                            $('#edit_router_id').val(package.router_id);
+                        } else {
+                            $('#edit_router_id').val('');
+                        }
                         <% } %>
                         
                         // Set limit fields
@@ -1051,21 +1051,21 @@
                             // RADIUS mode: just set profile text value
                             $('#edit_pppoe_profile').val(package.pppoe_profile || 'default');
                         <% } else { %>
-                            // Load profiles based on selected router_id, then set selection and show modal
-                            const routerId = package.router_id || null;
-                            const selected = package.pppoe_profile || 'default';
-                            console.log('🔍 Edit package - Loading profiles:', { routerId, selected, package });
-                            
-                            // Always load profiles, even if router_id is not set
-                            if (routerId) {
-                                // Load profiles from specific router
-                                console.log('📡 Loading profiles from router:', routerId);
-                                loadPPPoEProfiles('#edit_pppoe_profile', selected, parseInt(routerId));
-                            } else {
-                                // Load all profiles if no router_id
-                                console.log('📡 Loading all profiles (no router_id)');
-                                loadPPPoEProfiles('#edit_pppoe_profile', selected, null);
-                            }
+                        // Load profiles based on selected router_id, then set selection and show modal
+                        const routerId = package.router_id || null;
+                        const selected = package.pppoe_profile || 'default';
+                        console.log('🔍 Edit package - Loading profiles:', { routerId, selected, package });
+                        
+                        // Always load profiles, even if router_id is not set
+                        if (routerId) {
+                            // Load profiles from specific router
+                            console.log('📡 Loading profiles from router:', routerId);
+                            loadPPPoEProfiles('#edit_pppoe_profile', selected, parseInt(routerId));
+                        } else {
+                            // Load all profiles if no router_id
+                            console.log('📡 Loading all profiles (no router_id)');
+                            loadPPPoEProfiles('#edit_pppoe_profile', selected, null);
+                        }
                         <% } %>
                         
                         // Wait a bit for profiles to load before showing modal
@@ -1098,7 +1098,7 @@
                 formData.append('nas_ip', $('#edit_nas_ip').val().trim() || '');
                 formData.append('router_id', '');
             <% } else { %>
-                formData.append('router_id', $('#edit_router_id').val() || '');
+            formData.append('router_id', $('#edit_router_id').val() || '');
                 formData.append('nas_ip', '');
             <% } %>
             formData.append('pppoe_profile', $('#edit_pppoe_profile').val().trim() || 'default');

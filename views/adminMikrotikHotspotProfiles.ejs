@@ -229,18 +229,18 @@
                             <i class="bi bi-info-circle"></i> Mode RADIUS aktif - Profile akan disimpan ke database RADIUS
                         </div>
                     <% } else { %>
-                        <div class="mb-3">
-                            <label for="profileRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
-                            <select class="form-select" id="profileRouterId" name="router_id" required>
-                                <% if (routers && routers.length > 0) { %>
-                                    <% routers.forEach(function(router) { %>
-                                        <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
-                                    <% }); %>
-                                <% } else { %>
-                                    <option value="">Tidak ada router tersedia</option>
-                                <% } %>
-                            </select>
-                        </div>
+                    <div class="mb-3">
+                        <label for="profileRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
+                        <select class="form-select" id="profileRouterId" name="router_id" required>
+                            <% if (routers && routers.length > 0) { %>
+                                <% routers.forEach(function(router) { %>
+                                    <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                <% }); %>
+                            <% } else { %>
+                                <option value="">Tidak ada router tersedia</option>
+                            <% } %>
+                        </select>
+                    </div>
                     <% } %>
                     
                     <!-- Basic Settings -->
@@ -650,7 +650,7 @@ $(function() {
             fillForm(profile);
             // Set router_id hanya jika bukan mode RADIUS
             if (!profile.is_radius && routerId) {
-                $('#profileRouterId').val(routerId || '');
+            $('#profileRouterId').val(routerId || '');
             }
             $('#profileModalLabel').text('Edit Profile Hotspot');
             $('#profileModal').modal('show');
@@ -705,7 +705,7 @@ $(function() {
         
         // Untuk mode RADIUS, router_id tidak perlu
         if (!profile.is_radius && profile.nas_id) {
-            $('#profileRouterId').val(profile.nas_id || '');
+        $('#profileRouterId').val(profile.nas_id || '');
         }
         
         $('#profileName').val(profile.name);
