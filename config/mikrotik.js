@@ -309,6 +309,78 @@ async function updatePPPoEUserRadiusPassword({ username, password }) {
     }
 }
 
+// Helper: Build rate-limit string untuk Mikrotik format
+function buildMikrotikRateLimit({ upload_limit, download_limit, burst_limit_upload, burst_limit_download, burst_threshold, burst_time }) {
+    if (!download_limit && !upload_limit) return null;
+    
+    const download = download_limit || '0';
+    const upload = upload_limit || '0';
+    let rateLimit = `${download}/${upload}`;
+    
+    // Jika ada burst, format: "download/upload download-burst/upload-burst threshold time"
+    if (burst_limit_download && burst_limit_upload) {
+        rateLimit += ` ${burst_limit_download}/${burst_limit_upload}`;
+        if (burst_threshold) {
+            rateLimit += ` ${burst_threshold}`;
+            if (burst_time) {
+                rateLimit += ` ${burst_time}`;
+            }
+        }
+    }
+    
+    return rateLimit;
+}
+
+// Fungsi untuk sync package limits ke RADIUS (radgroupreply)
+async function syncPackageLimitsToRadius({ groupname, upload_limit, download_limit, burst_limit_upload, burst_limit_download, burst_threshold, burst_time }) {
+    const conn = await getRadiusConnection();
+    try {
+        const normalizedGroupname = groupname.toLowerCase().replace(/\s+/g, '_');
+        
+        // Hapus limit attributes yang lama untuk group ini
+        await conn.execute(
+            "DELETE FROM radgroupreply WHERE groupname = ? AND attribute IN ('MikroTik-Rate-Limit', 'MikroTik-Total-Limit')",
+            [normalizedGroupname]
+        );
+        
+        // Build rate-limit string: "download-limit/upload-limit" atau dengan burst
+        let rateLimitStr = '';
+        if (download_limit && upload_limit) {
+            rateLimitStr = `${download_limit}/${upload_limit}`;
+            
+            // Jika ada burst, tambahkan burst info (format: "download/upload download-burst/upload-burst threshold time")
+            if (burst_limit_download && burst_limit_upload) {
+                rateLimitStr += ` ${burst_limit_download}/${burst_limit_upload}`;
+                if (burst_threshold) {
+                    rateLimitStr += ` ${burst_threshold}`;
+                    if (burst_time) {
+                        rateLimitStr += ` ${burst_time}`;
+                    }
+                }
+            }
+        } else if (download_limit) {
+            rateLimitStr = `${download_limit}/${upload_limit || '0'}`;
+        } else if (upload_limit) {
+            rateLimitStr = `0/${upload_limit}`;
+        }
+        
+        // Insert rate limit ke radgroupreply jika ada
+        if (rateLimitStr) {
+            await conn.execute(
+                "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'MikroTik-Rate-Limit', ':=', ?)",
+                [normalizedGroupname, rateLimitStr]
+            );
+        }
+        
+        await conn.end();
+        return { success: true, message: `Package limits berhasil di-sync ke RADIUS group ${normalizedGroupname}` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error syncing package limits to RADIUS: ${error.message}`);
+        throw error;
+    }
+}
+
 // Fungsi untuk assign user ke package/group di RADIUS
 async function assignPackageRadius({ username, groupname }) {
     const conn = await getRadiusConnection();
@@ -454,6 +526,54 @@ async function editPPPoEUserRadius({ username, password, profile = null }) {
         await conn.end();
         logger.error(`Error editing PPPoE user in RADIUS: ${error.message}`);
         throw error;
+    }
+}
+
+// Fungsi untuk sync package limits ke Mikrotik PPPoE profile
+async function syncPackageLimitsToMikrotik({ profile_name, upload_limit, download_limit, burst_limit_upload, burst_limit_download, burst_threshold, burst_time }, routerObj = null) {
+    try {
+        let conn = null;
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal' };
+        }
+        
+        // Cari profile berdasarkan name
+        const profiles = await conn.write('/ppp/profile/print', ['?name=' + profile_name]);
+        if (!profiles || profiles.length === 0) {
+            logger.warn(`Profile ${profile_name} tidak ditemukan di Mikrotik, skip sync limits`);
+            if (routerObj && conn && typeof conn.close === 'function') {
+                await conn.close();
+            }
+            return { success: false, message: `Profile ${profile_name} tidak ditemukan di Mikrotik` };
+        }
+        
+        const profileId = profiles[0]['.id'];
+        const rateLimit = buildMikrotikRateLimit({ upload_limit, download_limit, burst_limit_upload, burst_limit_download, burst_threshold, burst_time });
+        
+        const params = ['=.id=' + profileId];
+        if (rateLimit) {
+            params.push('=rate-limit=' + rateLimit);
+        } else {
+            // Hapus rate-limit jika tidak ada limit
+            params.push('=rate-limit=');
+        }
+        
+        await conn.write('/ppp/profile/set', params);
+        
+        if (routerObj && conn && typeof conn.close === 'function') {
+            await conn.close();
+        }
+        
+        return { success: true, message: `Package limits berhasil di-sync ke Mikrotik profile ${profile_name}` };
+    } catch (error) {
+        logger.error(`Error syncing package limits to Mikrotik: ${error.message}`);
+        return { success: false, message: `Gagal sync limits ke Mikrotik: ${error.message}` };
     }
 }
 
@@ -1231,28 +1351,75 @@ async function getActiveHotspotUsersRadius() {
     return {
         success: true,
         message: `Ditemukan ${rows.length} user hotspot aktif (RADIUS)` ,
-        data: rows.map(row => ({ name: row.username }))
+        data: rows.map(row => ({ name: row.username, user: row.username }))
     };
+}
+
+// Fungsi untuk mengambil semua hotspot users dari RADIUS
+async function getHotspotUsersRadius() {
+    const conn = await getRadiusConnection();
+    try {
+        // Ambil semua user dari radcheck yang memiliki Cleartext-Password (hotspot users)
+        const [userRows] = await conn.execute(`
+            SELECT DISTINCT c.username, 
+                   (SELECT groupname FROM radusergroup WHERE username = c.username LIMIT 1) as profile,
+                   (SELECT value FROM radreply WHERE username = c.username AND attribute = 'Reply-Message' LIMIT 1) as comment
+            FROM radcheck c
+            WHERE c.attribute = 'Cleartext-Password'
+            ORDER BY c.username
+        `);
+        
+        await conn.end();
+        return {
+            success: true,
+            data: userRows.map(row => ({
+                name: row.username,
+                password: '', // Password tidak dikembalikan untuk security
+                profile: row.profile || 'default',
+                comment: row.comment || '',
+                nas_name: 'RADIUS',
+                nas_ip: 'RADIUS'
+            }))
+        };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting hotspot users from RADIUS: ${error.message}`);
+        return { success: false, message: error.message, data: [] };
+    }
 }
 
 // Fungsi untuk menambah user hotspot ke RADIUS
 async function addHotspotUserRadius(username, password, profile, comment = null) {
     const conn = await getRadiusConnection();
-    await conn.execute(
-        "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?)",
-        [username, password]
-    );
-    
-    // Add comment to radreply table if provided
-    if (comment) {
+    try {
+        // Insert password ke radcheck
         await conn.execute(
-            "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Reply-Message', ':=', ?)",
-            [username, comment]
+            "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            [username, password, password]
         );
+        
+        // Assign user ke group (profile) di radusergroup
+        const normalizedProfile = profile ? profile.toLowerCase().replace(/\s+/g, '_') : 'default';
+        await conn.execute(
+            "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+            [username, normalizedProfile]
+        );
+        
+        // Add comment to radreply table if provided
+        if (comment) {
+            await conn.execute(
+                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Reply-Message', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [username, comment, comment]
+            );
+        }
+        
+        await conn.end();
+        return { success: true, message: 'User hotspot berhasil ditambahkan ke RADIUS' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error adding hotspot user to RADIUS: ${error.message}`);
+        throw error;
     }
-    
-    await conn.end();
-    return { success: true, message: 'User hotspot berhasil ditambahkan ke RADIUS' };
 }
 
 // Wrapper: Pilih mode autentikasi dari settings
@@ -1315,28 +1482,58 @@ async function addHotspotUser(username, password, profile, comment = null, custo
 // Fungsi untuk menghapus user hotspot
 async function deleteHotspotUser(username, routerObj = null) {
     try {
-        let conn = null;
-        if (routerObj) {
-            conn = await getMikrotikConnectionForRouter(routerObj);
+        const mode = await getUserAuthModeAsync();
+        if (mode === 'radius') {
+            // Delete dari RADIUS database
+            const conn = await getRadiusConnection();
+            try {
+                // Hapus dari radcheck
+                await conn.execute(
+                    "DELETE FROM radcheck WHERE username = ?",
+                    [username]
+                );
+                // Hapus dari radusergroup
+                await conn.execute(
+                    "DELETE FROM radusergroup WHERE username = ?",
+                    [username]
+                );
+                // Hapus dari radreply
+                await conn.execute(
+                    "DELETE FROM radreply WHERE username = ?",
+                    [username]
+                );
+                await conn.end();
+                return { success: true, message: 'User hotspot berhasil dihapus dari RADIUS' };
+            } catch (error) {
+                await conn.end();
+                logger.error(`Error deleting hotspot user from RADIUS: ${error.message}`);
+                throw error;
+            }
         } else {
-            conn = await getMikrotikConnection();
+            // Delete dari Mikrotik
+            let conn = null;
+            if (routerObj) {
+                conn = await getMikrotikConnectionForRouter(routerObj);
+            } else {
+                conn = await getMikrotikConnection();
+            }
+            if (!conn) {
+                logger.error('No Mikrotik connection available');
+                return { success: false, message: 'Koneksi ke Mikrotik gagal' };
+            }
+            // Cari user hotspot
+            const users = await conn.write('/ip/hotspot/user/print', [
+                '?name=' + username
+            ]);
+            if (users.length === 0) {
+                return { success: false, message: 'User hotspot tidak ditemukan' };
+            }
+            // Hapus user hotspot
+            await conn.write('/ip/hotspot/user/remove', [
+                '=.id=' + users[0]['.id']
+            ]);
+            return { success: true, message: 'User hotspot berhasil dihapus' };
         }
-        if (!conn) {
-            logger.error('No Mikrotik connection available');
-            return { success: false, message: 'Koneksi ke Mikrotik gagal' };
-        }
-        // Cari user hotspot
-        const users = await conn.write('/ip/hotspot/user/print', [
-            '?name=' + username
-        ]);
-        if (users.length === 0) {
-            return { success: false, message: 'User hotspot tidak ditemukan' };
-        }
-        // Hapus user hotspot
-        await conn.write('/ip/hotspot/user/remove', [
-            '=.id=' + users[0]['.id']
-        ]);
-        return { success: true, message: 'User hotspot berhasil dihapus' };
     } catch (error) {
         logger.error(`Error deleting hotspot user: ${error.message}`);
         return { success: false, message: `Gagal menghapus user hotspot: ${error.message}` };
@@ -3322,6 +3519,7 @@ module.exports = {
     addHotspotProfile,
     editHotspotProfile,
     deleteHotspotProfile,
+    getHotspotUsersRadius,
     getHotspotServers,
     disconnectHotspotUser,
     generateHotspotVouchers,
@@ -3331,5 +3529,8 @@ module.exports = {
     updatePPPoEUserRadiusPassword,
     assignPackageRadius,
     suspendUserRadius,
-    unsuspendUserRadius
+    unsuspendUserRadius,
+    syncPackageLimitsToRadius,
+    syncPackageLimitsToMikrotik,
+    buildMikrotikRateLimit
 };

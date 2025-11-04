@@ -2655,7 +2655,12 @@ router.get('/packages', getAppSettings, async (req, res) => {
 
 router.post('/packages', imageUpload.single('image'), async (req, res) => {
     try {
-        const { name, speed, price, tax_rate, description, pppoe_profile, router_id, nas_ip } = req.body;
+        const { 
+            name, speed, price, tax_rate, description, pppoe_profile, router_id, nas_ip,
+            upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
+            burst_threshold, burst_time 
+        } = req.body;
+        
         const packageData = {
             name: name.trim(),
             speed: speed.trim(),
@@ -2664,7 +2669,13 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
             description: description.trim(),
             pppoe_profile: pppoe_profile ? pppoe_profile.trim() : 'default',
             router_id: router_id ? parseInt(router_id) : null,
-            nas_ip: nas_ip ? nas_ip.trim() : null
+            nas_ip: nas_ip ? nas_ip.trim() : null,
+            upload_limit: upload_limit ? upload_limit.trim() : null,
+            download_limit: download_limit ? download_limit.trim() : null,
+            burst_limit_upload: burst_limit_upload ? burst_limit_upload.trim() : null,
+            burst_limit_download: burst_limit_download ? burst_limit_download.trim() : null,
+            burst_threshold: burst_threshold ? burst_threshold.trim() : null,
+            burst_time: burst_time ? burst_time.trim() : null
         };
 
         // Add image filename if uploaded
@@ -2682,59 +2693,110 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
         const newPackage = await billingManager.createPackage(packageData);
         logger.info(`Package created: ${newPackage.name} with tax_rate: ${newPackage.tax_rate}, router_id: ${newPackage.router_id}`);
         
-        // Optional: Create PPPoE profile in Mikrotik if router_id is set and profile doesn't exist
-        let profileCreated = false;
-        if (newPackage.router_id && newPackage.pppoe_profile) {
+        // Auto-sync limits berdasarkan mode
+        const { getUserAuthModeAsync } = require('../config/mikrotik');
+        const { getRadiusConfigValue } = require('../config/radiusConfig');
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback
+        }
+        
+        let syncResult = null;
+        if (userAuthMode === 'radius') {
+            // Sync ke RADIUS (radgroupreply)
             try {
-                const sqlite3 = require('sqlite3').verbose();
-                const db = new sqlite3.Database('./data/billing.db');
-                const routerObj = await new Promise((resolve, reject) => {
-                    db.get('SELECT * FROM routers WHERE id=?', [newPackage.router_id], (err, row) => {
-                        db.close();
-                        if (err) reject(err);
-                        else resolve(row || null);
-                    });
+                const { syncPackageLimitsToRadius } = require('../config/mikrotik');
+                syncResult = await syncPackageLimitsToRadius({
+                    groupname: newPackage.pppoe_profile,
+                    upload_limit: newPackage.upload_limit,
+                    download_limit: newPackage.download_limit,
+                    burst_limit_upload: newPackage.burst_limit_upload,
+                    burst_limit_download: newPackage.burst_limit_download,
+                    burst_threshold: newPackage.burst_threshold,
+                    burst_time: newPackage.burst_time
                 });
-                
-                if (routerObj) {
-                    const { getPPPoEProfiles, addPPPoEProfile } = require('../config/mikrotik');
-                    // Check if profile already exists
-                    const profilesResult = await getPPPoEProfiles(routerObj);
-                    const profileExists = profilesResult.success && profilesResult.data && 
-                        profilesResult.data.some(p => (p.name || p['name']) === newPackage.pppoe_profile);
+                if (syncResult && syncResult.success) {
+                    logger.info(`Package limits synced to RADIUS for ${newPackage.pppoe_profile}`);
+                }
+            } catch (syncError) {
+                logger.warn(`Failed to sync limits to RADIUS: ${syncError.message}`);
+            }
+        } else {
+            // Sync ke Mikrotik (PPPoE profile rate-limit)
+            if (newPackage.router_id && newPackage.pppoe_profile) {
+                try {
+                    const sqlite3 = require('sqlite3').verbose();
+                    const db = new sqlite3.Database('./data/billing.db');
+                    const routerObj = await new Promise((resolve, reject) => {
+                        db.get('SELECT * FROM routers WHERE id=?', [newPackage.router_id], (err, row) => {
+                            db.close();
+                            if (err) reject(err);
+                            else resolve(row || null);
+                        });
+                    });
                     
-                    if (!profileExists) {
-                        // Create profile in Mikrotik
-                        // Determine rate limit from speed (e.g., "10Mbps" -> "10M/10M")
-                        const speedMatch = newPackage.speed.match(/(\d+)\s*Mbps/i);
-                        const rateLimit = speedMatch ? `${speedMatch[1]}M/${speedMatch[1]}M` : '10M/10M';
+                    if (routerObj) {
+                        const { syncPackageLimitsToMikrotik, getPPPoEProfiles, addPPPoEProfile, buildMikrotikRateLimit } = require('../config/mikrotik');
                         
-                        const profileData = {
-                            name: newPackage.pppoe_profile,
-                            'remote-address': 'POOL-PPPOE-NEW', // Default pool, bisa disesuaikan
-                            'rate-limit': rateLimit
-                        };
+                        // Check if profile exists
+                        const profilesResult = await getPPPoEProfiles(routerObj);
+                        const profileExists = profilesResult.success && profilesResult.data && 
+                            profilesResult.data.some(p => (p.name || p['name']) === newPackage.pppoe_profile);
                         
-                        const createResult = await addPPPoEProfile(profileData, routerObj);
-                        if (createResult && createResult.success) {
-                            profileCreated = true;
-                            logger.info(`PPPoE profile ${newPackage.pppoe_profile} created in Mikrotik for router ${routerObj.name}`);
+                        if (profileExists) {
+                            // Update existing profile dengan limits
+                            syncResult = await syncPackageLimitsToMikrotik({
+                                profile_name: newPackage.pppoe_profile,
+                                upload_limit: newPackage.upload_limit,
+                                download_limit: newPackage.download_limit,
+                                burst_limit_upload: newPackage.burst_limit_upload,
+                                burst_limit_download: newPackage.burst_limit_download,
+                                burst_threshold: newPackage.burst_threshold,
+                                burst_time: newPackage.burst_time
+                            }, routerObj);
+                            if (syncResult && syncResult.success) {
+                                logger.info(`Package limits synced to Mikrotik profile ${newPackage.pppoe_profile}`);
+                            }
+                        } else {
+                            // Create profile baru dengan limits
+                            const rateLimit = buildMikrotikRateLimit({
+                                upload_limit: newPackage.upload_limit,
+                                download_limit: newPackage.download_limit,
+                                burst_limit_upload: newPackage.burst_limit_upload,
+                                burst_limit_download: newPackage.burst_limit_download,
+                                burst_threshold: newPackage.burst_threshold,
+                                burst_time: newPackage.burst_time
+                            });
+                            
+                            const profileData = {
+                                name: newPackage.pppoe_profile,
+                                'remote-address': 'POOL-PPPOE-NEW',
+                                'rate-limit': rateLimit || undefined
+                            };
+                            
+                            const createResult = await addPPPoEProfile(profileData, routerObj);
+                            if (createResult && createResult.success) {
+                                syncResult = { success: true, message: 'Profile created with limits' };
+                                logger.info(`PPPoE profile ${newPackage.pppoe_profile} created in Mikrotik with limits`);
+                            }
                         }
                     }
+                } catch (profileError) {
+                    logger.warn(`Failed to sync limits to Mikrotik: ${profileError.message}`);
                 }
-            } catch (profileError) {
-                logger.warn(`Failed to auto-create PPPoE profile: ${profileError.message}`);
-                // Don't fail the package creation if profile creation fails
             }
         }
         
         res.json({
             success: true,
-            message: profileCreated 
-                ? `Paket berhasil ditambahkan dan profile PPPoE "${newPackage.pppoe_profile}" dibuat di Mikrotik`
+            message: syncResult && syncResult.success 
+                ? `Paket berhasil ditambahkan dan limits di-sync ke ${userAuthMode === 'radius' ? 'RADIUS' : 'Mikrotik'}`
                 : 'Paket berhasil ditambahkan',
             package: newPackage,
-            profile_created: profileCreated
+            limits_synced: syncResult ? syncResult.success : false
         });
     } catch (error) {
         logger.error('Error creating package:', error);
@@ -2749,7 +2811,12 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
 router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, speed, price, tax_rate, description, pppoe_profile, router_id, nas_ip } = req.body;
+        const { 
+            name, speed, price, tax_rate, description, pppoe_profile, router_id, nas_ip,
+            upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
+            burst_threshold, burst_time 
+        } = req.body;
+        
         const packageData = {
             name: name.trim(),
             speed: speed.trim(),
@@ -2758,7 +2825,13 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
             description: description.trim(),
             pppoe_profile: pppoe_profile ? pppoe_profile.trim() : 'default',
             router_id: router_id ? parseInt(router_id) : null,
-            nas_ip: nas_ip ? nas_ip.trim() : null
+            nas_ip: nas_ip ? nas_ip.trim() : null,
+            upload_limit: upload_limit ? upload_limit.trim() : null,
+            download_limit: download_limit ? download_limit.trim() : null,
+            burst_limit_upload: burst_limit_upload ? burst_limit_upload.trim() : null,
+            burst_limit_download: burst_limit_download ? burst_limit_download.trim() : null,
+            burst_threshold: burst_threshold ? burst_threshold.trim() : null,
+            burst_time: burst_time ? burst_time.trim() : null
         };
 
         // Add image filename if uploaded
@@ -2776,10 +2849,79 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
         const updatedPackage = await billingManager.updatePackage(id, packageData);
         logger.info(`Package updated: ${updatedPackage.name} with tax_rate: ${updatedPackage.tax_rate}, router_id: ${updatedPackage.router_id}`);
         
+        // Auto-sync limits berdasarkan mode
+        const { getUserAuthModeAsync } = require('../config/mikrotik');
+        const { getRadiusConfigValue } = require('../config/radiusConfig');
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback
+        }
+        
+        let syncResult = null;
+        if (userAuthMode === 'radius') {
+            // Sync ke RADIUS (radgroupreply)
+            try {
+                const { syncPackageLimitsToRadius } = require('../config/mikrotik');
+                syncResult = await syncPackageLimitsToRadius({
+                    groupname: updatedPackage.pppoe_profile,
+                    upload_limit: updatedPackage.upload_limit,
+                    download_limit: updatedPackage.download_limit,
+                    burst_limit_upload: updatedPackage.burst_limit_upload,
+                    burst_limit_download: updatedPackage.burst_limit_download,
+                    burst_threshold: updatedPackage.burst_threshold,
+                    burst_time: updatedPackage.burst_time
+                });
+                if (syncResult && syncResult.success) {
+                    logger.info(`Package limits synced to RADIUS for ${updatedPackage.pppoe_profile}`);
+                }
+            } catch (syncError) {
+                logger.warn(`Failed to sync limits to RADIUS: ${syncError.message}`);
+            }
+        } else {
+            // Sync ke Mikrotik (PPPoE profile rate-limit)
+            if (updatedPackage.router_id && updatedPackage.pppoe_profile) {
+                try {
+                    const sqlite3 = require('sqlite3').verbose();
+                    const db = new sqlite3.Database('./data/billing.db');
+                    const routerObj = await new Promise((resolve, reject) => {
+                        db.get('SELECT * FROM routers WHERE id=?', [updatedPackage.router_id], (err, row) => {
+                            db.close();
+                            if (err) reject(err);
+                            else resolve(row || null);
+                        });
+                    });
+                    
+                    if (routerObj) {
+                        const { syncPackageLimitsToMikrotik } = require('../config/mikrotik');
+                        syncResult = await syncPackageLimitsToMikrotik({
+                            profile_name: updatedPackage.pppoe_profile,
+                            upload_limit: updatedPackage.upload_limit,
+                            download_limit: updatedPackage.download_limit,
+                            burst_limit_upload: updatedPackage.burst_limit_upload,
+                            burst_limit_download: updatedPackage.burst_limit_download,
+                            burst_threshold: updatedPackage.burst_threshold,
+                            burst_time: updatedPackage.burst_time
+                        }, routerObj);
+                        if (syncResult && syncResult.success) {
+                            logger.info(`Package limits synced to Mikrotik profile ${updatedPackage.pppoe_profile}`);
+                        }
+                    }
+                } catch (profileError) {
+                    logger.warn(`Failed to sync limits to Mikrotik: ${profileError.message}`);
+                }
+            }
+        }
+        
         res.json({
             success: true,
-            message: 'Paket berhasil diupdate',
-            package: updatedPackage
+            message: syncResult && syncResult.success 
+                ? `Paket berhasil diupdate dan limits di-sync ke ${userAuthMode === 'radius' ? 'RADIUS' : 'Mikrotik'}`
+                : 'Paket berhasil diupdate',
+            package: updatedPackage,
+            limits_synced: syncResult ? syncResult.success : false
         });
     } catch (error) {
         logger.error('Error updating package:', error);

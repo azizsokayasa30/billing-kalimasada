@@ -252,6 +252,12 @@ class BillingManager {
                 description TEXT,
                 pppoe_profile TEXT DEFAULT 'default',
                 router_id INTEGER,
+                upload_limit TEXT,
+                download_limit TEXT,
+                burst_limit_upload TEXT,
+                burst_limit_download TEXT,
+                burst_threshold TEXT,
+                burst_time TEXT,
                 is_active BOOLEAN DEFAULT 1,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (router_id) REFERENCES routers(id)
@@ -735,16 +741,35 @@ class BillingManager {
     // Paket Management
     async createPackage(packageData) {
         return new Promise((resolve, reject) => {
-            // Add router_id and nas_ip columns if they don't exist (migration)
-            this.db.run(`ALTER TABLE packages ADD COLUMN router_id INTEGER`, (err) => {
-                // Ignore error if column already exists
-            });
-            this.db.run(`ALTER TABLE packages ADD COLUMN nas_ip TEXT`, (err) => {
-                // Ignore error if column already exists
+            // Add columns if they don't exist (migration)
+            const migrations = [
+                'router_id INTEGER',
+                'nas_ip TEXT',
+                'upload_limit TEXT',
+                'download_limit TEXT',
+                'burst_limit_upload TEXT',
+                'burst_limit_download TEXT',
+                'burst_threshold TEXT',
+                'burst_time TEXT'
+            ];
+            
+            migrations.forEach(col => {
+                this.db.run(`ALTER TABLE packages ADD COLUMN ${col}`, (err) => {
+                    // Ignore error if column already exists
+                });
             });
             
-            const { name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip } = packageData;
-            const sql = `INSERT INTO packages (name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const { 
+                name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip,
+                upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
+                burst_threshold, burst_time 
+            } = packageData;
+            
+            const sql = `INSERT INTO packages (
+                name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip,
+                upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
+                burst_threshold, burst_time
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
             this.db.run(sql, [
                 name, 
@@ -755,7 +780,13 @@ class BillingManager {
                 pppoe_profile || 'default', 
                 image || null, 
                 router_id || null,
-                nas_ip || null
+                nas_ip || null,
+                upload_limit || null,
+                download_limit || null,
+                burst_limit_upload || null,
+                burst_limit_download || null,
+                burst_threshold || null,
+                burst_time || null
             ], function(err) {
                 if (err) {
                     reject(err);
@@ -796,16 +827,36 @@ class BillingManager {
 
     async updatePackage(id, packageData) {
         return new Promise((resolve, reject) => {
-            // Add router_id and nas_ip columns if they don't exist (migration)
-            this.db.run(`ALTER TABLE packages ADD COLUMN router_id INTEGER`, (err) => {
-                // Ignore error if column already exists
-            });
-            this.db.run(`ALTER TABLE packages ADD COLUMN nas_ip TEXT`, (err) => {
-                // Ignore error if column already exists
+            // Add columns if they don't exist (migration)
+            const migrations = [
+                'router_id INTEGER',
+                'nas_ip TEXT',
+                'upload_limit TEXT',
+                'download_limit TEXT',
+                'burst_limit_upload TEXT',
+                'burst_limit_download TEXT',
+                'burst_threshold TEXT',
+                'burst_time TEXT'
+            ];
+            
+            migrations.forEach(col => {
+                this.db.run(`ALTER TABLE packages ADD COLUMN ${col}`, (err) => {
+                    // Ignore error if column already exists
+                });
             });
             
-            const { name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip } = packageData;
-            const sql = `UPDATE packages SET name = ?, speed = ?, price = ?, tax_rate = ?, description = ?, pppoe_profile = ?, image = ?, router_id = ?, nas_ip = ? WHERE id = ?`;
+            const { 
+                name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip,
+                upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
+                burst_threshold, burst_time 
+            } = packageData;
+            
+            const sql = `UPDATE packages SET 
+                name = ?, speed = ?, price = ?, tax_rate = ?, description = ?, pppoe_profile = ?, 
+                image = ?, router_id = ?, nas_ip = ?,
+                upload_limit = ?, download_limit = ?, burst_limit_upload = ?, burst_limit_download = ?,
+                burst_threshold = ?, burst_time = ?
+                WHERE id = ?`;
             
             this.db.run(sql, [
                 name, 
@@ -817,6 +868,12 @@ class BillingManager {
                 image || null, 
                 router_id || null,
                 nas_ip || null,
+                upload_limit || null,
+                download_limit || null,
+                burst_limit_upload || null,
+                burst_limit_download || null,
+                burst_threshold || null,
+                burst_time || null,
                 id
             ], function(err) {
                 if (err) {

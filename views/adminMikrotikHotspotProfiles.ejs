@@ -222,19 +222,26 @@
                 <div class="modal-body">
                     <input type="hidden" id="profileId" name="id">
                     
-                    <!-- NAS Selection -->
-                    <div class="mb-3">
-                        <label for="profileRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
-                        <select class="form-select" id="profileRouterId" name="router_id" required>
-                            <% if (routers && routers.length > 0) { %>
-                                <% routers.forEach(function(router) { %>
-                                    <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
-                                <% }); %>
-                            <% } else { %>
-                                <option value="">Tidak ada router tersedia</option>
-                            <% } %>
-                        </select>
-                    </div>
+                    <!-- NAS Selection - Hidden jika mode RADIUS -->
+                    <% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
+                        <input type="hidden" id="profileRouterId" name="router_id" value="">
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle"></i> Mode RADIUS aktif - Profile akan disimpan ke database RADIUS
+                        </div>
+                    <% } else { %>
+                        <div class="mb-3">
+                            <label for="profileRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
+                            <select class="form-select" id="profileRouterId" name="router_id" required>
+                                <% if (routers && routers.length > 0) { %>
+                                    <% routers.forEach(function(router) { %>
+                                        <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                    <% }); %>
+                                <% } else { %>
+                                    <option value="">Tidak ada router tersedia</option>
+                                <% } %>
+                            </select>
+                        </div>
+                    <% } %>
                     
                     <!-- Basic Settings -->
                     <div class="row">
@@ -616,14 +623,21 @@ $(function() {
     // Edit Profile
     $(document).on('click', '.btn-edit', function() {
         const id = $(this).data('id');
-        const profile = profiles.find(p => p['.id'] === id);
+        // Cari profile berdasarkan .id atau name (untuk mode RADIUS)
+        const profile = profiles.find(p => (p['.id'] === id) || (p.name === id && p.is_radius));
         const routerId = $(this).data('router-id');
         
         if (profile) {
             fillForm(profile);
-            $('#profileRouterId').val(routerId || '');
+            // Set router_id hanya jika bukan mode RADIUS
+            if (!profile.is_radius && routerId) {
+                $('#profileRouterId').val(routerId || '');
+            }
             $('#profileModalLabel').text('Edit Profile Hotspot');
             $('#profileModal').modal('show');
+        } else {
+            alert('Profile tidak ditemukan!');
+            console.error('Profile not found:', id, 'Available profiles:', profiles.map(p => ({ id: p['.id'], name: p.name, is_radius: p.is_radius })));
         }
     });
 
@@ -637,11 +651,11 @@ $(function() {
     // Delete Profile
     $(document).on('click', '.btn-delete', function() {
         const id = $(this).data('id');
-        const name = $(this).data('name');
+        const name = $(this).data('name') || id; // Fallback ke id jika name tidak ada
         const routerId = $(this).data('router-id');
         
         if (confirm(`Yakin ingin menghapus profile "${name}"?`)) {
-            deleteProfile(id, routerId);
+            deleteProfile(id, routerId, name);
         }
     });
 
@@ -666,10 +680,17 @@ $(function() {
     }
 
     function fillForm(profile) {
-        $('#profileId').val(profile['.id']);
-        $('#profileRouterId').val(profile.nas_id || '');
+        // Handle ID untuk mode RADIUS (menggunakan name sebagai ID) atau Mikrotik (menggunakan .id)
+        const profileId = profile['.id'] || profile.name || '';
+        $('#profileId').val(profileId);
+        
+        // Untuk mode RADIUS, router_id tidak perlu
+        if (!profile.is_radius && profile.nas_id) {
+            $('#profileRouterId').val(profile.nas_id || '');
+        }
+        
         $('#profileName').val(profile.name);
-        $('#profileComment').val(profile.comment);
+        $('#profileComment').val(profile.comment || '');
         
         // Parse rate limit from Mikrotik format (e.g., "5M/5M" or "5M")
         const rateLimitRaw = profile['rate-limit'] || profile.rateLimit || '';
@@ -746,9 +767,12 @@ $(function() {
     }
 
     function saveProfile() {
+        // Check if mode RADIUS (field router_id is hidden)
+        const isRadiusMode = $('#profileRouterId').is(':hidden') || $('#profileRouterId').length === 0 || $('#profileRouterId').val() === '';
+        
         const formData = {
             id: $('#profileId').val(),
-            router_id: $('#profileRouterId').val(),
+            router_id: isRadiusMode ? '' : $('#profileRouterId').val(), // Empty jika mode RADIUS
             name: $('#profileName').val(),
             comment: $('#profileComment').val(),
             rateLimit: $('#rateLimit').val(),
@@ -765,8 +789,23 @@ $(function() {
             sharedUsers: $('#sharedUsers').val()
         };
 
+        // Validation: nama profile wajib
+        if (!formData.name || formData.name.trim() === '') {
+            alert('Nama profile harus diisi!');
+            $('#profileName').focus();
+            return;
+        }
+
+        // Validation: router_id wajib hanya jika bukan mode RADIUS
+        if (!isRadiusMode && (!formData.router_id || formData.router_id === '')) {
+            alert('Pilih NAS (router) terlebih dahulu!');
+            $('#profileRouterId').focus();
+            return;
+        }
+
         // Debug logging
         console.log('=== Saving Profile ===');
+        console.log('Mode RADIUS:', isRadiusMode);
         console.log('Form Data:', formData);
         console.log('Rate Limit:', formData.rateLimit, formData.rateLimitUnit);
         console.log('Session Timeout:', formData.sessionTimeout, formData.sessionTimeoutUnit);
@@ -778,25 +817,32 @@ $(function() {
             if (res.success) {
                 alert('Profile berhasil disimpan!');
                 $('#profileModal').modal('hide');
-                loadProfiles();
+                resetForm(); // Reset form sebelum reload
+                loadProfiles(); // Reload data untuk menampilkan profile baru
             } else {
                 alert('Gagal menyimpan profile: ' + (res.message || 'Unknown error'));
                 console.error('Save error:', res);
             }
         }).fail(function(xhr, status, error) {
             console.error('AJAX Error:', status, error);
-            alert('Gagal menyimpan profile: ' + error);
+            const errorMsg = xhr.responseJSON?.message || error;
+            alert('Gagal menyimpan profile: ' + errorMsg);
         });
     }
 
-    function deleteProfile(id, routerId) {
-        $.post('/admin/mikrotik/hotspot-profiles/delete', { id, router_id: routerId }, function(res) {
+    function deleteProfile(id, routerId, name) {
+        // Untuk mode RADIUS, gunakan name jika id tidak ada
+        const deleteData = { id: id || name, router_id: routerId || '', name: name || id };
+        $.post('/admin/mikrotik/hotspot-profiles/delete', deleteData, function(res) {
             if (res.success) {
                 alert('Profile berhasil dihapus!');
                 loadProfiles();
             } else {
                 alert('Gagal menghapus profile: ' + (res.message || 'Unknown error'));
             }
+        }).fail(function(xhr) {
+            const errorMsg = xhr.responseJSON?.message || 'Unknown error';
+            alert('Gagal menghapus profile: ' + errorMsg);
         });
     }
 

@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { addHotspotUser, getActiveHotspotUsers, getHotspotProfiles, deleteHotspotUser, generateHotspotVouchers, getHotspotServers, disconnectHotspotUser, getMikrotikConnectionForRouter } = require('../config/mikrotik');
+const { addHotspotUser, getActiveHotspotUsers, getHotspotProfiles, deleteHotspotUser, generateHotspotVouchers, getHotspotServers, disconnectHotspotUser, getMikrotikConnectionForRouter, getHotspotUsersRadius, getUserAuthModeAsync } = require('../config/mikrotik');
 const { getMikrotikConnection } = require('../config/mikrotik');
+const { getRadiusConfigValue } = require('../config/radiusConfig');
 const fs = require('fs');
 const path = require('path');
 const { getSettingsWithCache } = require('../config/settingsManager')
@@ -169,6 +170,15 @@ async function getVoucherOnlineSettings() {
 // GET: Tampilkan form tambah user hotspot dan daftar user hotspot
 router.get('/', async (req, res) => {
     try {
+        // Check auth mode - RADIUS atau Mikrotik API
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback
+        }
+
         // Fetch routers from database
         const db = new sqlite3.Database('./data/billing.db');
         const routers = await new Promise((resolve, reject) => {
@@ -178,6 +188,91 @@ router.get('/', async (req, res) => {
             });
         });
 
+        // Untuk mode RADIUS, ambil dari RADIUS database
+        if (userAuthMode === 'radius') {
+            try {
+                // Get active users from RADIUS
+                const activeResult = await getActiveHotspotUsers();
+                const activeUsersList = activeResult.success && Array.isArray(activeResult.data) 
+                    ? activeResult.data.map(user => ({
+                        ...user,
+                        nas_name: 'RADIUS',
+                        nas_ip: 'RADIUS'
+                    }))
+                    : [];
+
+                // Get profiles from RADIUS (from adminMikrotik.js route logic)
+                const { getRadiusConnection } = require('../config/mikrotik');
+                const conn = await getRadiusConnection();
+                const [profileRows] = await conn.execute(`
+                    SELECT DISTINCT gr.groupname as name, 
+                           MAX(CASE WHEN gr.attribute = 'MikroTik-Rate-Limit' THEN gr.value END) as rate_limit,
+                           MAX(CASE WHEN gr.attribute = 'Session-Timeout' THEN gr.value END) as session_timeout,
+                           MAX(CASE WHEN gr.attribute = 'Idle-Timeout' THEN gr.value END) as idle_timeout
+                    FROM radgroupreply gr
+                    WHERE gr.groupname NOT IN ('isolir', 'default')
+                    GROUP BY gr.groupname
+                    ORDER BY gr.groupname
+                `);
+                await conn.end();
+                
+                const profiles = profileRows.map(row => ({
+                    name: row.name,
+                    'rate-limit': row.rate_limit || '',
+                    'session-timeout': row.session_timeout || '',
+                    'idle-timeout': row.idle_timeout || '',
+                    nas_id: null,
+                    nas_name: 'RADIUS',
+                    nas_ip: 'RADIUS'
+                }));
+
+                // Get all hotspot users from RADIUS
+                const allUsersResult = await getHotspotUsersRadius();
+                const allUsers = allUsersResult.success && Array.isArray(allUsersResult.data)
+                    ? allUsersResult.data
+                    : [];
+
+                const settings = getSettingsWithCache();
+                const company_header = settings.company_header || 'Voucher Hotspot';
+                const adminKontak = settings['admins.0'] || '-';
+                const voucherOnlineSettings = await getVoucherOnlineSettings();
+                db.close();
+
+                return res.render('adminHotspot', {
+                    users: activeUsersList,
+                    profiles,
+                    allUsers,
+                    routers: [],
+                    voucherOnlineSettings,
+                    success: req.query.success,
+                    error: req.query.error,
+                    company_header,
+                    adminKontak,
+                    settings,
+                    versionInfo: getVersionInfo(),
+                    versionBadge: getVersionBadge(),
+                    userAuthMode: 'radius'
+                });
+            } catch (radiusError) {
+                console.error('Error fetching hotspot data from RADIUS:', radiusError);
+                db.close();
+                return res.render('adminHotspot', {
+                    users: [],
+                    profiles: [],
+                    allUsers: [],
+                    routers: [],
+                    voucherOnlineSettings: {},
+                    success: null,
+                    error: `Gagal mengambil data dari RADIUS: ${radiusError.message}`,
+                    settings: getSettingsWithCache(),
+                    versionInfo: getVersionInfo(),
+                    versionBadge: getVersionBadge(),
+                    userAuthMode: 'radius'
+                });
+            }
+        }
+
+        // Untuk mode Mikrotik API, ambil dari semua router
         // Aggregate active users from all NAS
         const activeUsersList = [];
         for (const router of routers) {
@@ -260,7 +355,8 @@ router.get('/', async (req, res) => {
             adminKontak,
             settings,
             versionInfo: getVersionInfo(),
-            versionBadge: getVersionBadge()
+            versionBadge: getVersionBadge(),
+            userAuthMode: userAuthMode
         });
     } catch (error) {
         console.error('Error in hotspot GET route:', error);
@@ -301,6 +397,22 @@ router.post('/delete', async (req, res) => {
 router.post('/', async (req, res) => {
     const { username, password, profile, router_id } = req.body;
     try {
+        // Check auth mode
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback
+        }
+
+        // Untuk mode RADIUS, router_id tidak diperlukan
+        if (userAuthMode === 'radius') {
+            await addHotspotUser(username, password, profile, null, null, null);
+            return res.redirect('/admin/hotspot?success=User+Hotspot+berhasil+ditambahkan');
+        }
+
+        // Untuk mode Mikrotik API, router_id diperlukan
         if (!router_id) {
             return res.redirect('/admin/hotspot?error=Pilih+NAS+(router)+terlebih+dahulu');
         }
@@ -518,6 +630,15 @@ router.get('/active-users', async (req, res) => {
 // GET: Tampilkan halaman voucher hotspot
 router.get('/voucher', async (req, res) => {
     try {
+        // Check auth mode - RADIUS atau Mikrotik API
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback
+        }
+
         // Fetch routers from database
         const db = new sqlite3.Database('./data/billing.db');
         const routers = await new Promise((resolve, reject) => {
@@ -527,6 +648,100 @@ router.get('/voucher', async (req, res) => {
             });
         });
 
+        // Untuk mode RADIUS, ambil dari RADIUS database
+        if (userAuthMode === 'radius') {
+            try {
+                // Get profiles from RADIUS
+                const { getRadiusConnection } = require('../config/mikrotik');
+                const conn = await getRadiusConnection();
+                const [profileRows] = await conn.execute(`
+                    SELECT DISTINCT gr.groupname as name, 
+                           MAX(CASE WHEN gr.attribute = 'MikroTik-Rate-Limit' THEN gr.value END) as rate_limit,
+                           MAX(CASE WHEN gr.attribute = 'Session-Timeout' THEN gr.value END) as session_timeout,
+                           MAX(CASE WHEN gr.attribute = 'Idle-Timeout' THEN gr.value END) as idle_timeout
+                    FROM radgroupreply gr
+                    WHERE gr.groupname NOT IN ('isolir', 'default')
+                    GROUP BY gr.groupname
+                    ORDER BY gr.groupname
+                `);
+                await conn.end();
+                
+                const profiles = profileRows.map(row => ({
+                    name: row.name,
+                    'rate-limit': row.rate_limit || '',
+                    'session-timeout': row.session_timeout || '',
+                    'idle-timeout': row.idle_timeout || '',
+                    nas_id: null,
+                    nas_name: 'RADIUS',
+                    nas_ip: 'RADIUS'
+                }));
+
+                // Get active users untuk check status
+                const activeResult = await getActiveHotspotUsers();
+                const activeUsernames = activeResult.success && Array.isArray(activeResult.data)
+                    ? activeResult.data.map(u => u.user || u.name || '').filter(Boolean)
+                    : [];
+
+                // Get all hotspot users from RADIUS (filter voucher)
+                const allUsersResult = await getHotspotUsersRadius();
+                const allUsers = allUsersResult.success && Array.isArray(allUsersResult.data)
+                    ? allUsersResult.data
+                    : [];
+
+                // Filter hanya voucher (berdasarkan prefix atau comment)
+                const voucherHistory = allUsers
+                    .filter(user => user.name && (user.name.startsWith('wifi-') || user.comment === 'voucher'))
+                    .map(user => ({
+                        username: user.name || '',
+                        password: '', // Password tidak dikembalikan untuk security
+                        profile: user.profile || 'default',
+                        server: 'all',
+                        createdAt: new Date(),
+                        active: activeUsernames.includes(user.name),
+                        comment: user.comment || '',
+                        nas_id: null,
+                        nas_name: 'RADIUS',
+                        nas_ip: 'RADIUS'
+                    }));
+
+                const settings = getSettingsWithCache();
+                const company_header = settings.company_header || 'Voucher Hotspot';
+                const adminKontak = settings['footer_info'] || '-';
+                db.close();
+
+                return res.render('adminVoucher', {
+                    profiles,
+                    servers: [],
+                    voucherHistory,
+                    routers: [],
+                    success: req.query.success,
+                    error: req.query.error,
+                    company_header,
+                    adminKontak,
+                    settings,
+                    versionInfo: getVersionInfo(),
+                    versionBadge: getVersionBadge(),
+                    userAuthMode: 'radius'
+                });
+            } catch (radiusError) {
+                console.error('Error fetching voucher data from RADIUS:', radiusError);
+                db.close();
+                return res.render('adminVoucher', {
+                    profiles: [],
+                    servers: [],
+                    voucherHistory: [],
+                    routers: [],
+                    success: null,
+                    error: `Gagal mengambil data dari RADIUS: ${radiusError.message}`,
+                    settings: getSettingsWithCache(),
+                    versionInfo: getVersionInfo(),
+                    versionBadge: getVersionBadge(),
+                    userAuthMode: 'radius'
+                });
+            }
+        }
+
+        // Untuk mode Mikrotik API, ambil dari semua router
         // Aggregate profiles from all NAS
         let profiles = [];
         for (const router of routers) {
@@ -630,7 +845,8 @@ router.get('/voucher', async (req, res) => {
             adminKontak,
             settings,
             versionInfo: getVersionInfo(),
-            versionBadge: getVersionBadge()
+            versionBadge: getVersionBadge(),
+            userAuthMode: userAuthMode
         });
     } catch (error) {
         console.error('Error rendering voucher page:', error);
@@ -795,6 +1011,39 @@ router.post('/generate-manual-voucher', async (req, res) => {
             });
         }
 
+        // Check auth mode
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback
+        }
+
+        // Untuk mode RADIUS, router_id tidak diperlukan
+        if (userAuthMode === 'radius') {
+            const result = await addHotspotUser(username, password, profile, 'voucher', null, null);
+            if (result.success) {
+                return res.json({
+                    success: true,
+                    message: 'Voucher manual berhasil dibuat',
+                    voucher: {
+                        username,
+                        password,
+                        profile,
+                        nas_name: 'RADIUS',
+                        nas_ip: 'RADIUS'
+                    }
+                });
+            } else {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Gagal membuat voucher: ' + (result.message || 'Unknown error')
+                });
+            }
+        }
+
+        // Untuk mode Mikrotik API, router_id diperlukan
         if (!router_id) {
             return res.status(400).json({
                 success: false,
@@ -863,28 +1112,41 @@ router.post('/generate-auto-voucher', async (req, res) => {
             });
         }
 
-        if (!router_id) {
-            return res.status(400).json({
-                success: false,
-                message: 'Pilih NAS (Router) terlebih dahulu'
-            });
+        // Check auth mode
+        let userAuthMode = 'mikrotik';
+        try {
+            const mode = await getRadiusConfigValue('user_auth_mode', null);
+            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
+        } catch (e) {
+            // Fallback
         }
 
-        // Fetch router object
-        const db = new sqlite3.Database('./data/billing.db');
-        const routerObj = await new Promise((resolve, reject) => {
-            db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-                db.close();
-                if (err) reject(err);
-                else resolve(row || null);
-            });
-        });
+        let routerObj = null;
+        // Untuk mode Mikrotik API, router_id diperlukan
+        if (userAuthMode !== 'radius') {
+            if (!router_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Pilih NAS (Router) terlebih dahulu'
+                });
+            }
 
-        if (!routerObj) {
-            return res.status(400).json({
-                success: false,
-                message: 'Router/NAS tidak ditemukan'
+            // Fetch router object
+            const db = new sqlite3.Database('./data/billing.db');
+            routerObj = await new Promise((resolve, reject) => {
+                db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+                    db.close();
+                    if (err) reject(err);
+                    else resolve(row || null);
+                });
             });
+
+            if (!routerObj) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Router/NAS tidak ditemukan'
+                });
+            }
         }
 
         const generatedVouchers = [];
@@ -921,8 +1183,8 @@ router.post('/generate-auto-voucher', async (req, res) => {
                         username,
                         password,
                         profile,
-                        nas_name: routerObj.name,
-                        nas_ip: routerObj.nas_ip
+                        nas_name: userAuthMode === 'radius' ? 'RADIUS' : routerObj.name,
+                        nas_ip: userAuthMode === 'radius' ? 'RADIUS' : routerObj.nas_ip
                     });
                 }
             } catch (e) {
