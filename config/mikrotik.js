@@ -1524,18 +1524,18 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                         voucherCustomerId,
                         null,
                         invoiceNumber,
-                        parseFloat(finalPrice),
+                        parseFloat(price || 0), // Gunakan harga dari input, jika 0 tetap dibuat invoice
                         dueDate,
                         `Voucher Hotspot ${username} - Profile: ${profile}`,
                         'voucher',
-                        'unpaid'
+                        'unpaid' // Status unpaid = belum digunakan, akan jadi paid saat digunakan
                     ], function(err) {
                         if (err) {
                             logger.error(`Failed to create invoice for voucher ${username}: ${err.message}`);
                             reject(err);
                         } else {
                             invoiceId = this.lastID;
-                            logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId}) - Status: unpaid`);
+                            logger.info(`Invoice created for voucher ${username}: ${invoiceNumber} (ID: ${invoiceId}) - Status: unpaid (will be paid when used)`);
                             resolve();
                         }
                     });

@@ -174,8 +174,8 @@
                                         <th colspan="4" class="text-end">Total:</th>
                                         <th>Rp <%= invoices.reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0).toLocaleString('id-ID') %></th>
                                         <th>
-                                            <span class="badge bg-success"><%= invoices.filter(i => i.status === 'paid').length %> Lunas</span>
-                                            <span class="badge bg-warning"><%= invoices.filter(i => i.status === 'unpaid').length %> Belum</span>
+                                            <span class="badge bg-success"><%= invoices.filter(i => i.status === 'paid').length %> Sudah Digunakan</span>
+                                            <span class="badge bg-secondary"><%= invoices.filter(i => i.status === 'unpaid').length %> Belum Digunakan</span>
                                         </th>
                                     </tr>
                                 </tfoot>
