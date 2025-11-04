@@ -1554,20 +1554,29 @@ async function addHotspotUser(username, password, profile, comment = null, custo
         } else {
             logger.warn(`Voucher ${username} created but invoice not created because addHotspotUserRadius failed`);
         }
-                db.close();
-                logger.info(`Invoice creation completed for voucher ${username}. Invoice ID: ${invoiceId || 'null'}`);
-            } catch (invoiceError) {
-                // Log error dengan detail untuk debugging
-                logger.error(`❌ Error creating invoice for voucher ${username}: ${invoiceError.message}`);
-                logger.error(`Invoice error stack: ${invoiceError.stack}`);
-                // Jangan throw error, biarkan voucher tetap dibuat meskipun invoice gagal
-                // Invoice bisa dibuat manual nanti jika diperlukan
-            }
-        } else {
-            logger.warn(`Voucher ${username} created but invoice not created because addHotspotUserRadius failed`);
-        }
         
         return { ...result, invoiceId };
+    } else {
+        if (customer) {
+          conn = await getMikrotikConnectionForCustomer(customer);
+        } else if (routerObj) {
+          conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+          conn = await getMikrotikConnection();
+        }
+        if (!conn) throw new Error('Koneksi ke router gagal: Data router/NAS tidak ditemukan');
+            // Prepare parameters
+            const params = [
+                '=name=' + username,
+                '=password=' + password,
+                '=profile=' + profile
+            ];
+            if (comment) {
+                params.push('=comment=' + comment);
+            }
+            await conn.write('/ip/hotspot/user/add', params);
+            return { success: true, message: 'User hotspot berhasil ditambahkan' };
+    }
 }
 
 // Fungsi untuk menghapus user hotspot
