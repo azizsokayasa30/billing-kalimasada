@@ -276,6 +276,20 @@
                         </div>
                         <div class="col-md-4">
                             <div class="mb-3">
+                                <label for="burstLimit" class="form-label">Burst Limit</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="burstLimit" name="burstLimit" placeholder="0">
+                                    <select class="form-select" id="burstLimitUnit" name="burstLimitUnit" style="max-width: 80px;">
+                                        <option value="k">k</option>
+                                        <option value="M">M</option>
+                                        <option value="G">G</option>
+                                    </select>
+                                </div>
+                                <small class="form-text text-muted">Burst limit untuk traffic burst (opsional)</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
                                 <label for="sessionTimeout" class="form-label">Session Timeout</label>
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="sessionTimeout" name="sessionTimeout" placeholder="0">
@@ -288,6 +302,8 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                    <div class="row">
                         <div class="col-md-4">
                             <div class="mb-3">
                                 <label for="idleTimeout" class="form-label">Idle Timeout</label>

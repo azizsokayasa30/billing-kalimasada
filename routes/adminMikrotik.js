@@ -23,6 +23,28 @@ const path = require('path');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 
+// Helper function untuk konversi timeout ke detik (untuk RADIUS)
+function convertToSeconds(value, unit) {
+  const numValue = parseInt(value);
+  if (isNaN(numValue) || numValue <= 0) return 0;
+  
+  const unitLower = String(unit).toLowerCase();
+  const unitMap = {
+    'detik': 1,
+    's': 1,
+    'menit': 60,
+    'men': 60,
+    'm': 60,
+    'jam': 3600,
+    'h': 3600,
+    'hari': 86400,
+    'd': 86400
+  };
+  
+  const multiplier = unitMap[unitLower] || 1;
+  return numValue * multiplier;
+}
+
 // GET: List User PPPoE
 router.get('/mikrotik', adminAuth, async (req, res) => {
   try {
@@ -669,7 +691,7 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
       // Fallback
     }
 
-    const { router_id, id, name, rateLimit, rateLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, sharedUsers, comment } = req.body;
+    const { router_id, id, name, rateLimit, rateLimitUnit, burstLimit, burstLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, sharedUsers, comment } = req.body;
 
     // Untuk mode RADIUS, simpan ke RADIUS database
     if (userAuthMode === 'radius') {
@@ -682,12 +704,19 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
         const conn = await getRadiusConnection();
         const groupname = name.toLowerCase().replace(/\s+/g, '_');
 
-        // Build rate limit string
+        // Build rate limit string dengan burst limit (jika ada)
         let rateLimitStr = '';
         if (rateLimit && rateLimitUnit) {
           const download = `${rateLimit}${rateLimitUnit.toUpperCase()}`;
           const upload = `${rateLimit}${rateLimitUnit.toUpperCase()}`;
           rateLimitStr = `${download}/${upload}`;
+          
+          // Tambahkan burst limit jika ada
+          if (burstLimit && burstLimitUnit) {
+            const burstDownload = `${burstLimit}${burstLimitUnit.toUpperCase()}`;
+            const burstUpload = `${burstLimit}${burstLimitUnit.toUpperCase()}`;
+            rateLimitStr += `:${burstDownload}/${burstUpload}`;
+          }
         }
 
         // Insert rate limit ke radgroupreply
@@ -698,28 +727,26 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
           );
         }
 
-        // Session timeout
+        // Session timeout - konversi ke detik untuk RADIUS
         if (sessionTimeout && sessionTimeoutUnit) {
-          let timeoutUnit = sessionTimeoutUnit.toLowerCase();
-          const timeoutUnitMap = { 'detik': 's', 's': 's', 'menit': 'm', 'men': 'm', 'm': 'm', 'jam': 'h', 'h': 'h', 'hari': 'd', 'd': 'd' };
-          timeoutUnit = timeoutUnitMap[timeoutUnit] || timeoutUnit;
-          const timeoutValue = `${sessionTimeout}${timeoutUnit}`;
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, timeoutValue, timeoutValue]
-          );
+          const timeoutValue = convertToSeconds(sessionTimeout, sessionTimeoutUnit);
+          if (timeoutValue > 0) {
+            await conn.execute(
+              "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+              [groupname, timeoutValue.toString(), timeoutValue.toString()]
+            );
+          }
         }
 
-        // Idle timeout
+        // Idle timeout - konversi ke detik untuk RADIUS
         if (idleTimeout && idleTimeoutUnit) {
-          let timeoutUnit = idleTimeoutUnit.toLowerCase();
-          const timeoutUnitMap = { 'detik': 's', 's': 's', 'menit': 'm', 'men': 'm', 'm': 'm', 'jam': 'h', 'h': 'h', 'hari': 'd', 'd': 'd' };
-          timeoutUnit = timeoutUnitMap[timeoutUnit] || timeoutUnit;
-          const timeoutValue = `${idleTimeout}${timeoutUnit}`;
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Idle-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, timeoutValue, timeoutValue]
-          );
+          const timeoutValue = convertToSeconds(idleTimeout, idleTimeoutUnit);
+          if (timeoutValue > 0) {
+            await conn.execute(
+              "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Idle-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+              [groupname, timeoutValue.toString(), timeoutValue.toString()]
+            );
+          }
         }
 
         await conn.end();
@@ -782,7 +809,7 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
       // Fallback
     }
 
-    const { router_id, id, name, rateLimit, rateLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, sharedUsers, comment } = req.body;
+    const { router_id, id, name, rateLimit, rateLimitUnit, burstLimit, burstLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, sharedUsers, comment } = req.body;
 
     // Untuk mode RADIUS, update di RADIUS database
     if (userAuthMode === 'radius') {
@@ -796,15 +823,20 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
         // Gunakan id (yang adalah name) atau name sebagai groupname
         const groupname = (id || name).toLowerCase().replace(/\s+/g, '_');
 
-        // Build rate limit string
+        // Build rate limit string dengan burst limit (jika ada)
         let rateLimitStr = '';
         if (rateLimit && rateLimitUnit) {
           const download = `${rateLimit}${rateLimitUnit.toUpperCase()}`;
           const upload = `${rateLimit}${rateLimitUnit.toUpperCase()}`;
           rateLimitStr = `${download}/${upload}`;
+          
+          // Tambahkan burst limit jika ada
+          if (burstLimit && burstLimitUnit) {
+            const burstDownload = `${burstLimit}${burstLimitUnit.toUpperCase()}`;
+            const burstUpload = `${burstLimit}${burstLimitUnit.toUpperCase()}`;
+            rateLimitStr += `:${burstDownload}/${burstUpload}`;
+          }
         }
-
-        // Update atau insert rate limit ke radgroupreply
         if (rateLimitStr) {
           await conn.execute(
             "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'MikroTik-Rate-Limit', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
@@ -818,16 +850,15 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
           );
         }
 
-        // Session timeout
+        // Session timeout - konversi ke detik untuk RADIUS
         if (sessionTimeout && sessionTimeoutUnit) {
-          let timeoutUnit = sessionTimeoutUnit.toLowerCase();
-          const timeoutUnitMap = { 'detik': 's', 's': 's', 'menit': 'm', 'men': 'm', 'm': 'm', 'jam': 'h', 'h': 'h', 'hari': 'd', 'd': 'd' };
-          timeoutUnit = timeoutUnitMap[timeoutUnit] || timeoutUnit;
-          const timeoutValue = `${sessionTimeout}${timeoutUnit}`;
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, timeoutValue, timeoutValue]
-          );
+          const timeoutValue = convertToSeconds(sessionTimeout, sessionTimeoutUnit);
+          if (timeoutValue > 0) {
+            await conn.execute(
+              "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+              [groupname, timeoutValue.toString(), timeoutValue.toString()]
+            );
+          }
         } else {
           await conn.execute(
             "DELETE FROM radgroupreply WHERE groupname = ? AND attribute = 'Session-Timeout'",
@@ -835,16 +866,15 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
           );
         }
 
-        // Idle timeout
+        // Idle timeout - konversi ke detik untuk RADIUS
         if (idleTimeout && idleTimeoutUnit) {
-          let timeoutUnit = idleTimeoutUnit.toLowerCase();
-          const timeoutUnitMap = { 'detik': 's', 's': 's', 'menit': 'm', 'men': 'm', 'm': 'm', 'jam': 'h', 'h': 'h', 'hari': 'd', 'd': 'd' };
-          timeoutUnit = timeoutUnitMap[timeoutUnit] || timeoutUnit;
-          const timeoutValue = `${idleTimeout}${timeoutUnit}`;
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Idle-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, timeoutValue, timeoutValue]
-          );
+          const timeoutValue = convertToSeconds(idleTimeout, idleTimeoutUnit);
+          if (timeoutValue > 0) {
+            await conn.execute(
+              "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Idle-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+              [groupname, timeoutValue.toString(), timeoutValue.toString()]
+            );
+          }
         } else {
           await conn.execute(
             "DELETE FROM radgroupreply WHERE groupname = ? AND attribute = 'Idle-Timeout'",
