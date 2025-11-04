@@ -964,20 +964,19 @@ router.post('/generate-voucher', async (req, res) => {
         // Log response untuk debugging
         console.log(`Generated ${result.vouchers.length} vouchers successfully`);
         
-        // Ambil harga dari voucher pertama jika ada (karena finalPrice sudah dihitung di generateHotspotVouchers)
-        const voucherPrice = result.vouchers.length > 0 && result.vouchers[0].price ? result.vouchers[0].price : price;
-        
+        // Harga voucher diambil dari input form "Harga" di /admin/hotspot/voucher
+        // Tidak menggunakan harga dari paket PPPoE
         const response = {
             success: true,
             vouchers: result.vouchers.map(voucher => ({
                 ...voucher,
                 profile: profile, // Pastikan profile ada di setiap voucher
-                price: voucher.price || voucherPrice // Gunakan harga dari voucher atau fallback ke harga yang dihitung
+                price: price || voucher.price || null // Harga dari input form /admin/hotspot/voucher
             })),
             server,
             profile,
             validUntil,
-            price: voucherPrice, // Gunakan harga yang sudah dihitung (dari paket jika harga kosong)
+            price: price || null, // Harga dari input form /admin/hotspot/voucher
             voucherModel: voucherModel,
             namaHotspot,
             adminKontak
