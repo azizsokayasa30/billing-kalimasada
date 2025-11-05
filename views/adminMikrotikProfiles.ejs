@@ -231,7 +231,9 @@
                         <tr>
                             <th>No</th>
                             <th>Nama Profile</th>
+                            <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
                             <th>NAS</th>
+                            <% } %>
                             <th>Rate Limit</th>
                             <th>Local Address</th>
                             <th>Remote Address</th>
@@ -251,6 +253,7 @@
                                     <span class="badge bg-primary ms-1">Default</span>
                                 <% } %>
                             </td>
+                            <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
                             <td>
                                 <% if (profile.nas_name) { %>
                                     <span class="badge bg-secondary"><%= profile.nas_name %></span>
@@ -258,6 +261,7 @@
                                     <span class="text-muted">-</span>
                                 <% } %>
                             </td>
+                            <% } %>
                             <td>
                                 <% if(profile['rate-limit']) { %>
                                     <code class="text-success"><%= profile['rate-limit'] %></code>
@@ -357,7 +361,14 @@
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="profileId" name="id">
+                    <input type="hidden" id="profileGroupname" name="groupname">
                     
+                    <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                    <div class="alert alert-info mb-3">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Mode RADIUS Aktif:</strong> Profile akan disimpan ke database RADIUS sebagai <code>groupname</code> di tabel <code>radgroupreply</code>.
+                    </div>
+                    <% } else { %>
                     <div class="mb-3">
                         <label for="routerId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
                         <select class="form-select" id="routerId" name="router_id" required>
@@ -372,6 +383,7 @@
                         </select>
                         <small class="text-muted">Pilih NAS (router) tempat profile akan dibuat</small>
                     </div>
+                    <% } %>
                     
                     <div class="row">
                         <div class="col-md-6">
@@ -600,6 +612,8 @@
 
 <script>
 $(function() {
+    const isRadiusMode = <%= typeof authMode !== 'undefined' && authMode === 'radius' ? 'true' : 'false' %>;
+    
     let profileTable = new DataTable('#profileTable', {
         "pageLength": 25,
         "order": [[1, "asc"]],
@@ -625,6 +639,7 @@ $(function() {
     // Tambah Profile
     $('#btnTambahProfile').on('click', function() {
         $('#profileId').val('');
+        $('#profileGroupname').val('');
         $('#routerId').val('');
         $('#profileName').val('');
         $('#rateLimit').val('');
@@ -729,7 +744,9 @@ $(function() {
 
     // Edit Profile
     $(document).on('click', '.edit-profile-btn', function() {
-        $('#profileId').val($(this).data('id'));
+        const id = $(this).data('id');
+        $('#profileId').val(id);
+        $('#profileGroupname').val(id); // In RADIUS mode, id is groupname
         $('#routerId').val($(this).data('router-id') || '');
         $('#profileName').val($(this).data('name'));
         $('#rateLimit').val($(this).data('rate-limit') || '');
@@ -752,16 +769,27 @@ $(function() {
     // Submit Tambah/Edit Profile
     $('#profileForm').submit(function(e) {
         e.preventDefault();
+        const id = $('#profileId').val();
+        const groupname = $('#profileGroupname').val();
         const routerId = $('#routerId').val();
-        if (!routerId) {
+        const name = $('#profileName').val();
+        
+        // In RADIUS mode, router_id is not required
+        if (!isRadiusMode && !routerId && !id) {
             alert('Pilih NAS (router) terlebih dahulu!');
             return;
         }
         
+        if (!name) {
+            alert('Nama profile tidak boleh kosong!');
+            return;
+        }
+        
         const formData = {
-            id: $('#profileId').val(),
+            id: id || groupname,
+            groupname: groupname || id,
             router_id: routerId,
-            name: $('#profileName').val(),
+            name: name,
             'rate-limit': $('#rateLimit').val(),
             'local-address': $('#localAddress').val(),
             'remote-address': $('#remoteAddress').val(),
@@ -777,7 +805,7 @@ $(function() {
             'change-tcp-mss': $('#changeTcpMss').val()
         };
         
-        const url = formData.id ? '/admin/mikrotik/edit-profile' : '/admin/mikrotik/add-profile';
+        const url = (id || groupname) ? '/admin/mikrotik/edit-profile' : '/admin/mikrotik/add-profile';
         
         $.post(url, formData, function(res) {
             if(res.success) {
@@ -786,6 +814,8 @@ $(function() {
             } else {
                 alert('Gagal menyimpan profile: ' + (res.message || 'Unknown error'));
             }
+        }).fail(function() {
+            alert('Gagal menyimpan profile. Pastikan koneksi ke server stabil.');
         });
     });
 
