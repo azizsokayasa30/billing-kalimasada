@@ -1717,7 +1717,7 @@ async function getHotspotUsersRadius() {
 }
 
 // Fungsi untuk menambah user hotspot ke RADIUS
-async function addHotspotUserRadius(username, password, profile, comment = null) {
+async function addHotspotUserRadius(username, password, profile, comment = null, server = null) {
     const conn = await getRadiusConnection();
     try {
         // Insert password ke radcheck
@@ -1771,6 +1771,16 @@ async function addHotspotUserRadius(username, password, profile, comment = null)
             );
         }
         
+        // Add Mikrotik-Server attribute to radreply if server is provided
+        // Ini digunakan untuk menentukan server instance yang akan digunakan oleh user
+        if (server && server.trim() !== '' && server !== 'all') {
+            await conn.execute(
+                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Mikrotik-Server', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [username, server, server]
+            );
+            logger.info(`Added Mikrotik-Server attribute for ${username}: ${server}`);
+        }
+        
         await conn.end();
         return { success: true, message: 'User hotspot berhasil ditambahkan ke RADIUS' };
     } catch (error) {
@@ -1809,13 +1819,13 @@ async function getActiveHotspotUsers(routerObj = null) {
 }
 
 // Fungsi untuk menambahkan user hotspot
-async function addHotspotUser(username, password, profile, comment = null, customer = null, routerObj = null, price = null) {
+async function addHotspotUser(username, password, profile, comment = null, customer = null, routerObj = null, price = null, server = null) {
     let conn = null;
     const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
         let result = { success: false, message: 'Unknown error' };
         try {
-            result = await addHotspotUserRadius(username, password, profile, comment);
+            result = await addHotspotUserRadius(username, password, profile, comment, server);
         } catch (radiusError) {
             logger.error(`Error in addHotspotUserRadius for ${username}: ${radiusError.message}`);
             // Tetap lanjutkan untuk membuat invoice, karena mungkin user sudah dibuat sebagian
@@ -1936,6 +1946,10 @@ async function addHotspotUser(username, password, profile, comment = null, custo
             ];
             if (comment) {
                 params.push('=comment=' + comment);
+            }
+            // Add server parameter if provided (untuk menentukan server instance)
+            if (server && server.trim() !== '' && server !== 'all') {
+                params.push('=server=' + server);
             }
             await conn.write('/ip/hotspot/user/add', params);
             return { success: true, message: 'User hotspot berhasil ditambahkan' };
@@ -4798,7 +4812,8 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                 // Di mode RADIUS, routerObj akan diabaikan oleh addHotspotUser
                 // Pass finalPrice ke addHotspotUser untuk menyimpan ke voucher_revenue (TANPA membuat invoice)
                 // Invoice hanya untuk pelanggan PPPoE, bukan untuk voucher
-                const addResult = await addHotspotUser(username, password, profile, 'voucher', null, routerObj, finalPrice);
+                // Pass server parameter untuk menentukan server instance (jika dipilih)
+                const addResult = await addHotspotUser(username, password, profile, 'voucher', null, routerObj, finalPrice, server);
                 
                 // Voucher revenue record sudah dibuat di dalam addHotspotUser untuk mode RADIUS
                 // Untuk mode Mikrotik API, simpan ke voucher_revenue di bawah ini jika belum dibuat

@@ -552,10 +552,17 @@ router.post('/generate-vouchers', async (req, res) => {
         // Gunakan fungsi generateHotspotVouchers dengan parameter yang benar
         const count = parseInt(quantity) || parseInt(req.body.count) || 5;
         const prefix = req.body.prefix || 'wifi-'; // Default prefix
-        const server = 'all'; // Default server
+        // Ambil serverProfile dari form jika ada, jika tidak gunakan 'all' atau server yang dipilih
+        let server = req.body.serverProfile || req.body.server || 'all';
+        // Jika server kosong atau 'all', gunakan 'all'
+        if (!server || server.trim() === '' || server === 'all') {
+            server = 'all';
+        }
         const validUntil = req.body.validUntil || '';
         const voucherPrice = price || req.body.price || '';
         const charTypeValue = charType || req.body.charType || 'alphanumeric';
+        
+        logger.info(`Generating vouchers with server: ${server} (from serverProfile: ${req.body.serverProfile || 'not provided'})`);
         
         const result = await generateHotspotVouchers(count, prefix, profile, server, validUntil, voucherPrice, charTypeValue, routerObj);
         
