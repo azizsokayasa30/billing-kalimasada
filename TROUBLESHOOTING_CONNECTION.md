@@ -300,6 +300,8 @@ Script ini sekarang sudah mencakup pembuatan tabel `voucher_revenue`.
 
 ---
 
+## ⚠️ Error Khusus: `SQLITE_ERROR: no such table: technicians`
+
 ### Penyebab
 Tabel `technicians` belum dibuat di database. Ini terjadi jika:
 - Script `setup.sh` tidak dijalankan dengan lengkap
