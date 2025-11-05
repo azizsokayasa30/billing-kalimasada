@@ -409,8 +409,16 @@ async function addPPPoEUserRadius({ username, password, profile = null }) {
         if (profile) {
             // Convert profile ke format groupname (misal: "paket_10mbps" atau "default")
             const groupname = profile.toLowerCase().replace(/\s+/g, '_');
+            
+            // HAPUS SEMUA groupname untuk username ini terlebih dahulu untuk menghindari duplikasi
             await conn.execute(
-                "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+                "DELETE FROM radusergroup WHERE username = ?",
+                [username]
+            );
+            
+            // Insert groupname yang baru
+            await conn.execute(
+                "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
                 [username, groupname]
             );
         }
@@ -560,10 +568,18 @@ async function assignPackageRadius({ username, groupname }) {
         // Convert groupname ke format yang benar (lowercase, underscore)
         const normalizedGroupname = groupname.toLowerCase().replace(/\s+/g, '_');
         
+        // HAPUS SEMUA groupname untuk username ini terlebih dahulu untuk menghindari duplikasi
         await conn.execute(
-            "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+            "DELETE FROM radusergroup WHERE username = ?",
+            [username]
+        );
+        
+        // Insert groupname yang baru
+        await conn.execute(
+            "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
             [username, normalizedGroupname]
         );
+        
         await conn.end();
         return { success: true, message: `User berhasil di-assign ke package ${normalizedGroupname}` };
     } catch (error) {
@@ -672,23 +688,93 @@ async function deletePPPoEUserRadius(username) {
 }
 
 // Fungsi untuk edit user PPPoE di RADIUS (update password dan/atau package)
-async function editPPPoEUserRadius({ username, password, profile = null }) {
+async function editPPPoEUserRadius({ oldUsername, username, password, profile = null }) {
     const conn = await getRadiusConnection();
     try {
+        // Jika username berubah, perlu rename user (delete dan insert baru)
+        if (oldUsername && username && oldUsername !== username) {
+            logger.info(`Renaming user from ${oldUsername} to ${username}`);
+            
+            // 1. Copy data dari user lama ke user baru
+            // Ambil password dari user lama jika password baru tidak diberikan
+            let passwordToUse = password;
+            if (!passwordToUse) {
+                const [oldPasswordRows] = await conn.execute(
+                    "SELECT value FROM radcheck WHERE username = ? AND attribute = 'Cleartext-Password'",
+                    [oldUsername]
+                );
+                if (oldPasswordRows.length > 0) {
+                    passwordToUse = oldPasswordRows[0].value;
+                }
+            }
+            
+            // Ambil profile dari user lama jika profile baru tidak diberikan
+            let profileToUse = profile;
+            if (!profileToUse) {
+                const [oldProfileRows] = await conn.execute(
+                    "SELECT groupname FROM radusergroup WHERE username = ? LIMIT 1",
+                    [oldUsername]
+                );
+                if (oldProfileRows.length > 0) {
+                    profileToUse = oldProfileRows[0].groupname;
+                }
+            }
+            
+            // 2. Insert user baru dengan username baru
+            if (passwordToUse) {
+                await conn.execute(
+                    "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?)",
+                    [username, passwordToUse]
+                );
+            }
+            
+            if (profileToUse) {
+                const groupname = profileToUse.toLowerCase().replace(/\s+/g, '_');
+                await conn.execute(
+                    "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+                    [username, groupname]
+                );
+            }
+            
+            // 3. Delete user lama
+            await conn.execute("DELETE FROM radcheck WHERE username = ?", [oldUsername]);
+            await conn.execute("DELETE FROM radusergroup WHERE username = ?", [oldUsername]);
+            await conn.execute("DELETE FROM radreply WHERE username = ?", [oldUsername]);
+            
+            await conn.end();
+            return { success: true, message: `User berhasil di-rename dari ${oldUsername} ke ${username}` };
+        }
+        
+        // Jika username tidak berubah, hanya update password dan/atau profile
+        const usernameToUpdate = username || oldUsername;
+        if (!usernameToUpdate) {
+            await conn.end();
+            return { success: false, message: 'Username tidak ditemukan' };
+        }
+        
         // Update password jika diberikan
         if (password) {
             await conn.execute(
                 "UPDATE radcheck SET value = ? WHERE username = ? AND attribute = 'Cleartext-Password'",
-                [password, username]
+                [password, usernameToUpdate]
             );
         }
         
         // Update package/group jika diberikan
         if (profile) {
             const groupname = profile.toLowerCase().replace(/\s+/g, '_');
+            
+            // HAPUS SEMUA groupname untuk username ini terlebih dahulu untuk menghindari duplikasi
+            // Karena REPLACE INTO tidak bekerja jika tidak ada PRIMARY KEY/UNIQUE constraint
             await conn.execute(
-                "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
-                [username, groupname]
+                "DELETE FROM radusergroup WHERE username = ?",
+                [usernameToUpdate]
+            );
+            
+            // Insert groupname yang baru
+            await conn.execute(
+                "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+                [usernameToUpdate, groupname]
             );
         }
         
@@ -827,8 +913,8 @@ async function getPPPoEUsers() {
 async function editPPPoEUser({ id, username, password, profile }) {
     const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
-        // Mode RADIUS: menggunakan username (id tidak diperlukan)
-        return await editPPPoEUserRadius({ username, password, profile });
+        // Mode RADIUS: id adalah username lama, username adalah username baru (atau sama jika tidak diubah)
+        return await editPPPoEUserRadius({ oldUsername: id, username, password, profile });
     } else {
         // Mode Mikrotik: menggunakan id
         try {
@@ -1665,8 +1751,15 @@ async function addHotspotUserRadius(username, password, profile, comment = null)
         }
         
         // Assign user ke group (profile) di radusergroup
+        // HAPUS SEMUA groupname untuk username ini terlebih dahulu untuk menghindari duplikasi
         await conn.execute(
-            "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+            "DELETE FROM radusergroup WHERE username = ?",
+            [username]
+        );
+        
+        // Insert groupname yang baru
+        await conn.execute(
+            "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
             [username, profileToUse]
         );
         
@@ -3569,17 +3662,161 @@ async function updateHotspotUser(username, password, profile) {
 // Fungsi untuk generate voucher hotspot secara massal (versi lama - dihapus)
 // Fungsi ini diganti dengan fungsi generateHotspotVouchers yang lebih lengkap di bawah
 
-// Fungsi untuk mendapatkan daftar profile PPPoE dari RADIUS (radgroupreply)
+// Fungsi untuk mendapatkan daftar profile Hotspot dari RADIUS (yang digunakan oleh voucher users)
+async function getHotspotProfilesRadius() {
+    const conn = await getRadiusConnection();
+    try {
+        // Ambil daftar groupname yang digunakan oleh hotspot voucher users (yang ada di voucher_revenue)
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const voucherUsernames = await new Promise((resolve, reject) => {
+            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                if (err) {
+                    logger.warn(`Error getting voucher usernames for hotspot profiles: ${err.message}`);
+                    resolve([]);
+                } else {
+                    resolve(rows.map(r => r.username));
+                }
+            });
+        });
+        db.close();
+        
+        logger.info(`Found ${voucherUsernames.length} voucher usernames for hotspot profile filtering`);
+        
+        // Jika tidak ada voucher, return empty (atau bisa juga return semua profil yang memiliki Session-Timeout)
+        let groupnames = [];
+        if (voucherUsernames.length > 0) {
+            // Ambil groupname yang digunakan oleh voucher users
+            const placeholders = voucherUsernames.map(() => '?').join(',');
+            const [groupRows] = await conn.execute(`
+                SELECT DISTINCT groupname
+                FROM radusergroup
+                WHERE username IN (${placeholders})
+                AND groupname IS NOT NULL AND groupname != ''
+            `, voucherUsernames);
+            groupnames = groupRows.map(row => row.groupname);
+        }
+        
+        // Juga ambil profil yang memiliki Session-Timeout (karena hotspot voucher biasanya punya Session-Timeout)
+        const [sessionTimeoutRows] = await conn.execute(`
+            SELECT DISTINCT groupname
+            FROM radgroupreply
+            WHERE attribute = 'Session-Timeout'
+            AND groupname IS NOT NULL AND groupname != ''
+        `);
+        
+        // Gabungkan kedua list (unique)
+        const allGroupnames = [...new Set([...groupnames, ...sessionTimeoutRows.map(r => r.groupname)])];
+        
+        logger.info(`Found ${allGroupnames.length} hotspot groupnames (${groupnames.length} from vouchers, ${sessionTimeoutRows.length} with Session-Timeout)`);
+        
+        const profiles = [];
+        for (const groupname of allGroupnames) {
+            // Get all attributes for this group
+            const [attrRows] = await conn.execute(`
+                SELECT attribute, value
+                FROM radgroupreply
+                WHERE groupname = ?
+                ORDER BY attribute
+            `, [groupname]);
+            
+            // Build profile object
+            const profile = {
+                name: groupname,
+                '.id': groupname, // Use groupname as ID for RADIUS
+                groupname: groupname,
+                'rate-limit': null,
+                'session-timeout': null,
+                'idle-timeout': null,
+                'shared-users': null,
+                nas_name: 'RADIUS',
+                nas_ip: 'RADIUS Server'
+            };
+            
+            // Parse attributes
+            attrRows.forEach(attr => {
+                if (attr.attribute === 'MikroTik-Rate-Limit' || attr.attribute === 'Mikrotik-Rate-Limit') {
+                    profile['rate-limit'] = attr.value;
+                } else if (attr.attribute === 'Session-Timeout') {
+                    profile['session-timeout'] = attr.value;
+                } else if (attr.attribute === 'Idle-Timeout') {
+                    profile['idle-timeout'] = attr.value;
+                } else if (attr.attribute === 'Mikrotik-Shared-Users') {
+                    profile['shared-users'] = attr.value;
+                }
+            });
+            
+            profiles.push(profile);
+        }
+        
+        await conn.end();
+        return {
+            success: true,
+            message: `Ditemukan ${profiles.length} profile hotspot dari RADIUS`,
+            data: profiles
+        };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting hotspot profiles from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal ambil data profile hotspot dari RADIUS: ${error.message}`, data: [] };
+    }
+}
+
+// Fungsi untuk mendapatkan daftar profile PPPoE dari RADIUS (yang digunakan oleh PPPoE users, BUKAN voucher)
 async function getPPPoEProfilesRadius() {
     const conn = await getRadiusConnection();
     try {
-        // Get distinct groupnames from radgroupreply
-        const [groupRows] = await conn.execute(`
+        // Ambil daftar groupname yang digunakan oleh PPPoE users (yang TIDAK ada di voucher_revenue)
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const voucherUsernames = await new Promise((resolve, reject) => {
+            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                if (err) {
+                    logger.warn(`Error getting voucher usernames for PPPoE profiles: ${err.message}`);
+                    resolve([]);
+                } else {
+                    resolve(rows.map(r => r.username));
+                }
+            });
+        });
+        db.close();
+        
+        logger.info(`Found ${voucherUsernames.length} voucher usernames to exclude from PPPoE profiles`);
+        
+        // Ambil groupname yang digunakan oleh voucher users untuk di-exclude
+        let voucherGroupnames = [];
+        if (voucherUsernames.length > 0) {
+            const placeholders = voucherUsernames.map(() => '?').join(',');
+            const [voucherGroups] = await conn.execute(`
+                SELECT DISTINCT groupname
+                FROM radusergroup
+                WHERE username IN (${placeholders})
+            `, voucherUsernames);
+            voucherGroupnames = voucherGroups.map(r => r.groupname);
+        }
+        
+        // Ambil semua groupname dari radgroupreply, exclude yang digunakan oleh voucher
+        let query = `
             SELECT DISTINCT groupname
             FROM radgroupreply
             WHERE groupname IS NOT NULL AND groupname != ''
-            ORDER BY groupname ASC
-        `);
+            AND groupname NOT IN ('isolir', 'default')
+        `;
+        
+        const params = [];
+        if (voucherGroupnames.length > 0) {
+            const excludePlaceholders = voucherGroupnames.map(() => '?').join(',');
+            query += ` AND groupname NOT IN (${excludePlaceholders})`;
+            params.push(...voucherGroupnames);
+        }
+        
+        query += ` ORDER BY groupname ASC`;
+        
+        const [groupRows] = await conn.execute(query, params);
         
         const profiles = [];
         for (const row of groupRows) {
@@ -3625,13 +3862,13 @@ async function getPPPoEProfilesRadius() {
         await conn.end();
         return {
             success: true,
-            message: `Ditemukan ${profiles.length} profile dari RADIUS`,
+            message: `Ditemukan ${profiles.length} profile PPPoE dari RADIUS`,
             data: profiles
         };
     } catch (error) {
         await conn.end();
         logger.error(`Error getting PPPoE profiles from RADIUS: ${error.message}`);
-        return { success: false, message: `Gagal ambil data profile dari RADIUS: ${error.message}`, data: [] };
+        return { success: false, message: `Gagal ambil data profile PPPoE dari RADIUS: ${error.message}`, data: [] };
     }
 }
 
@@ -3739,32 +3976,100 @@ async function addPPPoEProfileRadius(profileData) {
 async function editPPPoEProfileRadius(profileData) {
     const conn = await getRadiusConnection();
     try {
-        // Use groupname as ID for RADIUS
-        const groupname = profileData.groupname || profileData.id || profileData.name;
+        // Old groupname (dari id atau groupname)
+        const oldGroupname = profileData.groupname || profileData.id || profileData.name;
         
-        if (!groupname) {
+        // New groupname (dari name yang diinput user, normalized)
+        const newGroupname = profileData.name ? profileData.name.toLowerCase().replace(/\s+/g, '_') : oldGroupname;
+        
+        if (!oldGroupname) {
             await conn.end();
             return { success: false, message: 'Groupname tidak ditemukan' };
         }
         
-        // Check if groupname exists
+        // Check if old groupname exists
         const [existing] = await conn.execute(`
             SELECT COUNT(*) as count
             FROM radgroupreply
             WHERE groupname = ?
-        `, [groupname]);
+        `, [oldGroupname]);
         
         if (!existing || existing.length === 0 || existing[0].count === 0) {
             await conn.end();
-            return { success: false, message: `Profile dengan nama ${groupname} tidak ditemukan` };
+            return { success: false, message: `Profile dengan nama ${oldGroupname} tidak ditemukan` };
         }
         
-        // Delete old attributes
+        // Jika nama berubah, perlu rename groupname di semua tabel terkait
+        if (newGroupname && newGroupname !== oldGroupname && newGroupname !== '') {
+            logger.info(`Renaming profile from ${oldGroupname} to ${newGroupname}`);
+            
+            // Check if new groupname already exists
+            const [newExists] = await conn.execute(`
+                SELECT COUNT(*) as count
+                FROM radgroupreply
+                WHERE groupname = ?
+            `, [newGroupname]);
+            
+            if (newExists && newExists.length > 0 && newExists[0].count > 0) {
+                await conn.end();
+                return { success: false, message: `Profile dengan nama ${newGroupname} sudah ada` };
+            }
+            
+            // 1. Copy semua data dari old groupname ke new groupname
+            // Copy dari radgroupreply
+            const [oldReplyRows] = await conn.execute(`
+                SELECT attribute, op, value
+                FROM radgroupreply
+                WHERE groupname = ?
+            `, [oldGroupname]);
+            
+            for (const row of oldReplyRows) {
+                // Skip attributes yang akan diupdate
+                if (['MikroTik-Rate-Limit', 'Mikrotik-Rate-Limit', 'Session-Timeout', 'Idle-Timeout'].includes(row.attribute)) {
+                    continue; // Akan diinsert dengan nilai baru nanti
+                }
+                
+                await conn.execute(`
+                    INSERT INTO radgroupreply (groupname, attribute, op, value)
+                    VALUES (?, ?, ?, ?)
+                `, [newGroupname, row.attribute, row.op, row.value]);
+            }
+            
+            // Copy dari radgroupcheck
+            const [oldCheckRows] = await conn.execute(`
+                SELECT attribute, op, value
+                FROM radgroupcheck
+                WHERE groupname = ?
+            `, [oldGroupname]);
+            
+            for (const row of oldCheckRows) {
+                await conn.execute(`
+                    INSERT INTO radgroupcheck (groupname, attribute, op, value)
+                    VALUES (?, ?, ?, ?)
+                `, [newGroupname, row.attribute, row.op, row.value]);
+            }
+            
+            // 2. Update radusergroup untuk semua user yang menggunakan groupname lama
+            await conn.execute(`
+                UPDATE radusergroup
+                SET groupname = ?
+                WHERE groupname = ?
+            `, [newGroupname, oldGroupname]);
+            
+            // 3. Delete old groupname
+            await conn.execute(`DELETE FROM radgroupreply WHERE groupname = ?`, [oldGroupname]);
+            await conn.execute(`DELETE FROM radgroupcheck WHERE groupname = ?`, [oldGroupname]);
+        }
+        
+        // Gunakan groupname yang baru untuk update attributes
+        const groupnameToUpdate = (newGroupname && newGroupname !== oldGroupname && newGroupname !== '') ? newGroupname : oldGroupname;
+        
+        // Delete old attributes yang akan diupdate
         await conn.execute(`
             DELETE FROM radgroupreply
             WHERE groupname = ?
             AND attribute IN ('MikroTik-Rate-Limit', 'Mikrotik-Rate-Limit', 'Session-Timeout', 'Idle-Timeout')
-        `, [groupname]);
+        `, [groupnameToUpdate]);
         
         // Build rate-limit string
         let rateLimitStr = '';
@@ -3805,21 +4110,21 @@ async function editPPPoEProfileRadius(profileData) {
             await conn.execute(`
                 INSERT INTO radgroupreply (groupname, attribute, op, value)
                 VALUES (?, 'MikroTik-Rate-Limit', ':=', ?)
-            `, [groupname, rateLimitStr]);
+            `, [groupnameToUpdate, rateLimitStr]);
         }
         
         if (sessionTimeout) {
             await conn.execute(`
                 INSERT INTO radgroupreply (groupname, attribute, op, value)
                 VALUES (?, 'Session-Timeout', ':=', ?)
-            `, [groupname, sessionTimeout.toString()]);
+            `, [groupnameToUpdate, sessionTimeout.toString()]);
         }
         
         if (idleTimeout) {
             await conn.execute(`
                 INSERT INTO radgroupreply (groupname, attribute, op, value)
                 VALUES (?, 'Idle-Timeout', ':=', ?)
-            `, [groupname, idleTimeout.toString()]);
+            `, [groupnameToUpdate, idleTimeout.toString()]);
         }
         
         // Update Simultaneous-Use if provided
@@ -3827,17 +4132,18 @@ async function editPPPoEProfileRadius(profileData) {
             await conn.execute(`
                 DELETE FROM radgroupcheck
                 WHERE groupname = ? AND attribute = 'Simultaneous-Use'
-            `, [groupname]);
+            `, [groupnameToUpdate]);
             
             await conn.execute(`
                 INSERT INTO radgroupcheck (groupname, attribute, op, value)
                 VALUES (?, 'Simultaneous-Use', ':=', ?)
-            `, [groupname, profileData['simultaneous-use']]);
+            `, [groupnameToUpdate, profileData['simultaneous-use']]);
         }
         
         await conn.end();
-        logger.info(`✅ Profile RADIUS berhasil diupdate: ${groupname}`);
-        return { success: true, message: `Profile ${groupname} berhasil diupdate di RADIUS` };
+        const finalGroupname = (newGroupname && newGroupname !== oldGroupname && newGroupname !== '') ? newGroupname : oldGroupname;
+        logger.info(`✅ Profile RADIUS berhasil diupdate: ${finalGroupname}`);
+        return { success: true, message: `Profile ${finalGroupname} berhasil diupdate di RADIUS` };
     } catch (error) {
         await conn.end();
         logger.error(`Error editing PPPoE profile in RADIUS: ${error.message}`);
@@ -4428,6 +4734,7 @@ module.exports = {
     deletePPPoEProfileRadius,
     getPPPoEProfileDetailRadius,
     getHotspotProfiles,
+    getHotspotProfilesRadius,
     getHotspotProfileDetail,
     addHotspotProfile,
     editHotspotProfile,

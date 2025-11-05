@@ -936,7 +936,7 @@
                         <div class="mb-3">
                             <label for="package_id" class="form-label">Paket *</label>
                             <select class="form-control" id="package_id" name="package_id" onchange="updateProfileField()" required>
-                                <option value="">Pilih NAS terlebih dahulu</option>
+                                <option value="">Pilih Paket Berlangganan</option>
                                 <% if (packages && packages.length > 0) { %>
                                     <% packages.forEach(function(package) { %>
                                         <option value="<%= package.id %>" 
@@ -946,7 +946,7 @@
                                     <% }); %>
                                 <% } %>
                             </select>
-                            <small class="form-text text-muted">Pilih NAS terlebih dahulu untuk melihat paket yang tersedia.</small>
+                            <small class="form-text text-muted">Pilih paket berlangganan untuk pelanggan ini.</small>
                         </div>
                         <div class="mb-3">
                             <label for="odp_id" class="form-label">ODP (Optical Distribution Point)</label>
@@ -1124,7 +1124,7 @@
                         <div class="mb-3">
                             <label for="edit_package_id" class="form-label">Paket *</label>
                             <select class="form-control" id="edit_package_id" name="package_id" onchange="updateEditProfileField()" required>
-                                <option value="">Pilih NAS terlebih dahulu</option>
+                                <option value="">Pilih Paket Berlangganan</option>
                                 <% if (packages && packages.length > 0) { %>
                                     <% packages.forEach(function(package) { %>
                                         <option value="<%= package.id %>" 
@@ -1134,7 +1134,7 @@
                                     <% }); %>
                                 <% } %>
                             </select>
-                            <small class="form-text text-muted">Pilih NAS terlebih dahulu untuk melihat paket yang tersedia.</small>
+                            <small class="form-text text-muted">Pilih paket berlangganan untuk pelanggan ini.</small>
                         </div>
                         <div class="mb-3">
                             <label for="edit_odp_id" class="form-label">ODP (Optical Distribution Point)</label>
@@ -1422,7 +1422,7 @@
                 const firstOption = packageSelect.querySelector('option[value=""]');
                 if (firstOption) {
                     if (!selectedRouterId) {
-                        firstOption.textContent = 'Pilih NAS terlebih dahulu';
+                        firstOption.textContent = 'Pilih Paket Berlangganan';
                     } else if (visibleCount === 0) {
                         firstOption.textContent = 'Tidak ada paket untuk NAS ini';
                     } else {

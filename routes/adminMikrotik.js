@@ -205,13 +205,19 @@ router.post('/mikrotik/edit-user', adminAuth, async (req, res) => {
   try {
     const { id, username, password, profile } = req.body;
     
+    // Validasi: id harus ada untuk edit
+    if (!id) {
+      return res.json({ success: false, message: 'ID user tidak ditemukan. Pastikan Anda mengedit user yang sudah ada.' });
+    }
+    
     // Check auth mode
     const { getUserAuthModeAsync } = require('../config/mikrotik');
     const authMode = await getUserAuthModeAsync();
     
     if (authMode === 'radius') {
       // RADIUS mode: Update in radcheck and radusergroup
-      logger.info('RADIUS mode: Updating user in RADIUS database');
+      // id adalah username lama di mode RADIUS
+      logger.info(`RADIUS mode: Updating user in RADIUS database. Old username: ${id}, New username: ${username}`);
       const result = await editPPPoEUser({ id, username, password, profile });
       if (result.success) {
         return res.json({ success: true, message: result.message });
@@ -220,12 +226,18 @@ router.post('/mikrotik/edit-user', adminAuth, async (req, res) => {
       }
     }
     
-    // Mikrotik API mode
-    await editPPPoEUser({ id, username, password, profile });
-    res.json({ success: true });
+    // Mikrotik API mode: id adalah Mikrotik ID
+    logger.info(`Mikrotik API mode: Updating user. ID: ${id}, Username: ${username}`);
+    const result = await editPPPoEUser({ id, username, password, profile });
+    if (result.success) {
+      return res.json({ success: true, message: result.message || 'User berhasil di-update' });
+    } else {
+      return res.json({ success: false, message: result.message || 'Gagal mengupdate user' });
+    }
   } catch (err) {
     logger.error('Error editing PPPoE user:', err);
-    res.json({ success: false, message: err.message });
+    logger.error('Error stack:', err.stack);
+    res.json({ success: false, message: err.message || 'Terjadi kesalahan saat mengupdate user' });
   }
 });
 
@@ -634,51 +646,31 @@ router.get('/mikrotik/hotspot-profiles', adminAuth, async (req, res) => {
     // Untuk mode RADIUS, tidak perlu router - ambil dari RADIUS database
     if (userAuthMode === 'radius') {
       try {
-        const { getRadiusConnection } = require('../config/mikrotik');
-        const conn = await getRadiusConnection();
-        // Ambil semua groupname dari radgroupreply (lebih lengkap, termasuk yang belum ada user)
-        // Gunakan DISTINCT untuk menghindari duplikasi
-        const [rows] = await conn.execute(`
-          SELECT DISTINCT gr.groupname as name, 
-                 MAX(CASE WHEN gr.attribute = 'MikroTik-Rate-Limit' THEN gr.value END) as rate_limit,
-                 MAX(CASE WHEN gr.attribute = 'Session-Timeout' THEN gr.value END) as session_timeout,
-                 MAX(CASE WHEN gr.attribute = 'Idle-Timeout' THEN gr.value END) as idle_timeout
-          FROM radgroupreply gr
-          WHERE gr.groupname NOT IN ('isolir', 'default')
-          GROUP BY gr.groupname
-          ORDER BY gr.groupname
-        `);
-        await conn.end();
-        
-        const profiles = rows.map(row => ({
-          name: row.name,
-          '.id': row.name, // Gunakan name sebagai ID untuk mode RADIUS
-          'rate-limit': row.rate_limit || '',
-          'session-timeout': row.session_timeout || '',
-          'idle-timeout': row.idle_timeout || '',
-          nas_id: null,
-          nas_name: 'RADIUS',
-          nas_ip: 'RADIUS',
-          is_radius: true // Flag untuk identifikasi mode RADIUS
-        }));
-        
-        const settings = getSettingsWithCache();
-        return res.render('adminMikrotikHotspotProfiles', { 
-          profiles: profiles, 
-          routers: [],
-          error: null,
-          settings,
-          versionInfo: getVersionInfo(),
-          versionBadge: getVersionBadge(),
-          userAuthMode: 'radius'
-        });
+        const { getHotspotProfilesRadius } = require('../config/mikrotik');
+        logger.info('RADIUS mode: Loading hotspot profiles from RADIUS database');
+        const result = await getHotspotProfilesRadius();
+        if (result.success) {
+          const profiles = result.data || [];
+          const settings = getSettingsWithCache();
+          return res.render('adminMikrotikHotspotProfiles', { 
+            profiles: profiles, 
+            routers: [],
+            error: null,
+            settings,
+            versionInfo: getVersionInfo(),
+            versionBadge: getVersionBadge(),
+            userAuthMode: 'radius'
+          });
+        } else {
+          throw new Error(result.message || 'Failed to get hotspot profiles');
+        }
       } catch (radiusError) {
-        console.error('Error fetching hotspot profiles from RADIUS:', radiusError);
+        logger.error('Error fetching hotspot profiles from RADIUS:', radiusError);
         const settings = getSettingsWithCache();
         return res.render('adminMikrotikHotspotProfiles', { 
           profiles: [], 
           routers: [],
-          error: `Gagal mengambil data profile dari RADIUS: ${radiusError.message}`, 
+          error: `Gagal mengambil data profile hotspot dari RADIUS: ${radiusError.message}`, 
           settings,
           versionInfo: getVersionInfo(),
           versionBadge: getVersionBadge(),
@@ -841,41 +833,20 @@ router.get('/mikrotik/hotspot-profiles/api', adminAuth, async (req, res) => {
       // Fallback
     }
 
-    // Untuk mode RADIUS, ambil dari RADIUS database
+    // Untuk mode RADIUS, ambil dari RADIUS database (hotspot profiles)
     if (userAuthMode === 'radius') {
       try {
-        const { getRadiusConnection } = require('../config/mikrotik');
-        const conn = await getRadiusConnection();
-        // Ambil semua groupname dari radgroupreply (lebih lengkap, termasuk yang belum ada user)
-        // Gunakan GROUP BY dengan CASE untuk aggregasi attributes
-        const [rows] = await conn.execute(`
-          SELECT DISTINCT gr.groupname as name, 
-                 MAX(CASE WHEN gr.attribute = 'MikroTik-Rate-Limit' THEN gr.value END) as rate_limit,
-                 MAX(CASE WHEN gr.attribute = 'Session-Timeout' THEN gr.value END) as session_timeout,
-                 MAX(CASE WHEN gr.attribute = 'Idle-Timeout' THEN gr.value END) as idle_timeout
-          FROM radgroupreply gr
-          WHERE gr.groupname NOT IN ('isolir', 'default')
-          GROUP BY gr.groupname
-          ORDER BY gr.groupname
-        `);
-        await conn.end();
-        
-        const profiles = rows.map(row => ({
-          name: row.name,
-          '.id': row.name, // Gunakan name sebagai ID untuk mode RADIUS
-          'rate-limit': row.rate_limit || '',
-          'session-timeout': row.session_timeout || '',
-          'idle-timeout': row.idle_timeout || '',
-          nas_id: null,
-          nas_name: 'RADIUS',
-          nas_ip: 'RADIUS',
-          is_radius: true // Flag untuk identifikasi mode RADIUS
-        }));
-        
-        return res.json({ success: true, profiles: profiles });
+        const { getHotspotProfilesRadius } = require('../config/mikrotik');
+        logger.info('RADIUS mode: Loading hotspot profiles from RADIUS database (API)');
+        const result = await getHotspotProfilesRadius();
+        if (result.success) {
+          return res.json({ success: true, profiles: result.data || [] });
+        } else {
+          throw new Error(result.message || 'Failed to get hotspot profiles');
+        }
       } catch (radiusError) {
-        console.error('Error fetching hotspot profiles from RADIUS:', radiusError);
-        return res.json({ success: false, profiles: [], message: `Gagal mengambil data profile dari RADIUS: ${radiusError.message}` });
+        logger.error('Error fetching hotspot profiles from RADIUS (API):', radiusError);
+        return res.json({ success: false, profiles: [], message: `Gagal mengambil data profile hotspot dari RADIUS: ${radiusError.message}` });
       }
     }
 

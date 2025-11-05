@@ -228,9 +228,6 @@
                                     <button class="btn btn-outline-secondary" type="button" id="reloadRadiusProfilesAdd" title="Refresh daftar profil">
                                         <i class="bi bi-arrow-clockwise"></i> Refresh
                                     </button>
-                                    <button class="btn btn-outline-info" type="button" id="addNewRadiusProfileBtn" title="Tambah profil baru">
-                                        <i class="bi bi-plus-circle"></i> Baru
-                                    </button>
                                 <% } else { %>
                                 <select class="form-select" id="pppoe_profile" name="pppoe_profile" required>
                                     <option value="">Pilih NAS terlebih dahulu</option>
@@ -241,7 +238,7 @@
                             <small class="form-text text-muted">
                                 <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
                                     <i class="bi bi-info-circle"></i> Pilih profil PPPoE yang sudah ada di RADIUS server (groupname di radusergroup/radgroupreply). 
-                                    Klik <strong>"Baru"</strong> untuk membuat profil baru, atau ketik langsung jika profil belum ada di daftar.
+                                    Atau ketik langsung jika profil belum ada di daftar.
                                     <div id="profileStatusAdd" class="mt-2"></div>
                                 <% } else { %>
                                     Pilih profile PPPoE dari Mikrotik. Profile akan muncul setelah memilih NAS.
@@ -249,98 +246,6 @@
                             </small>
                         </div>
                         
-                        <!-- Modal untuk input profil baru (RADIUS mode) -->
-                        <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
-                        <div class="modal fade" id="newRadiusProfileModal" tabindex="-1">
-                            <div class="modal-dialog">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Tambah Profil PPPoE Baru</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                        <div class="alert alert-info">
-                                            <i class="bi bi-info-circle"></i> Profil baru akan dibuat sebagai groupname di RADIUS server. 
-                                            Pastikan nama profil mengikuti format yang benar (lowercase dengan underscore, contoh: paket_10mbps).
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="new_profile_name" class="form-label">Nama Profil (Groupname) *</label>
-                                            <input type="text" class="form-control" id="new_profile_name" placeholder="Contoh: paket_10mbps, paket_30mbps">
-                                            <small class="form-text text-muted">
-                                                Format: lowercase dengan underscore. Contoh: paket_10mbps, paket_30mbps, default_profile
-                                            </small>
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                                        <button type="button" class="btn btn-primary" id="saveNewRadiusProfileBtn">Simpan</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <% } %>
-                        
-                        <!-- Limit Fields -->
-                        <div class="card p-3 mb-3" style="background-color: #f8f9fa;">
-                            <h6 class="mb-3"><i class="bi bi-speedometer2"></i> Limit Bandwidth</h6>
-                            
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="download_limit" class="form-label">Download Limit *</label>
-                                    <input type="text" class="form-control" id="download_limit" name="download_limit" placeholder="Contoh: 10M, 100M, 1G" required>
-                                    <small class="form-text text-muted">Format: angka + unit (K/M/G). Contoh: 10M, 100M, 1G</small>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="upload_limit" class="form-label">Upload Limit *</label>
-                                    <input type="text" class="form-control" id="upload_limit" name="upload_limit" placeholder="Contoh: 10M, 100M, 1G" required>
-                                    <small class="form-text text-muted">Format: angka + unit (K/M/G). Contoh: 5M, 50M, 500M</small>
-                                </div>
-                            </div>
-                            
-                            <div class="accordion" id="burstAccordion">
-                                <div class="accordion-item">
-                                    <h2 class="accordion-header">
-                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#burstCollapse">
-                                            <i class="bi bi-lightning-charge"></i> Burst Limit (Opsional)
-                                        </button>
-                                    </h2>
-                                    <div id="burstCollapse" class="accordion-collapse collapse" data-bs-parent="#burstAccordion">
-                                        <div class="accordion-body">
-                                            <div class="row">
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="burst_limit_download" class="form-label">Burst Download</label>
-                                                    <input type="text" class="form-control" id="burst_limit_download" name="burst_limit_download" placeholder="Contoh: 20M">
-                                                    <small class="form-text text-muted">Kecepatan burst untuk download</small>
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="burst_limit_upload" class="form-label">Burst Upload</label>
-                                                    <input type="text" class="form-control" id="burst_limit_upload" name="burst_limit_upload" placeholder="Contoh: 10M">
-                                                    <small class="form-text text-muted">Kecepatan burst untuk upload</small>
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="burst_threshold" class="form-label">Burst Threshold</label>
-                                                    <input type="text" class="form-control" id="burst_threshold" name="burst_threshold" placeholder="Contoh: 50M">
-                                                    <small class="form-text text-muted">Threshold untuk trigger burst</small>
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="burst_time" class="form-label">Burst Time</label>
-                                                    <input type="text" class="form-control" id="burst_time" name="burst_time" placeholder="Contoh: 30s, 1m">
-                                                    <small class="form-text text-muted">Durasi burst (contoh: 30s, 1m)</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="alert alert-info mt-2 mb-0">
-                                <small>
-                                    <i class="bi bi-info-circle"></i> 
-                                    Limits akan otomatis di-sync ke <strong><%= (typeof authMode !== 'undefined' && authMode === 'radius') ? 'RADIUS' : 'Mikrotik' %></strong> saat paket disimpan.
-                                    Format Mikrotik: "download/upload" atau "download/upload burst-download/burst-upload threshold time"
-                                </small>
-                            </div>
-                        </div>
                         <div class="mb-3">
                             <label for="image" class="form-label">Gambar Paket (JPG)</label>
                             <input type="file" class="form-control" id="image" name="image" accept="image/jpeg,image/jpg">
@@ -441,9 +346,6 @@
                                     <button class="btn btn-outline-secondary" type="button" id="reloadRadiusProfilesEdit" title="Refresh daftar profil">
                                         <i class="bi bi-arrow-clockwise"></i> Refresh
                                     </button>
-                                    <button class="btn btn-outline-info" type="button" id="addNewRadiusProfileEditBtn" title="Tambah profil baru">
-                                        <i class="bi bi-plus-circle"></i> Baru
-                                    </button>
                                 <% } else { %>
                                 <select class="form-select" id="edit_pppoe_profile" name="pppoe_profile" required>
                                     <option value="">Pilih NAS terlebih dahulu</option>
@@ -454,7 +356,7 @@
                             <small class="form-text text-muted">
                                 <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
                                     <i class="bi bi-info-circle"></i> Pilih profil PPPoE yang sudah ada di RADIUS server (groupname di radusergroup/radgroupreply). 
-                                    Klik <strong>"Baru"</strong> untuk membuat profil baru, atau ketik langsung jika profil belum ada di daftar.
+                                    Atau ketik langsung jika profil belum ada di daftar.
                                     <div id="profileStatusEdit" class="mt-2"></div>
                                 <% } else { %>
                                     Pilih profile PPPoE dari Mikrotik. Profile akan muncul setelah memilih NAS.
@@ -462,66 +364,6 @@
                             </small>
                         </div>
                         
-                        <!-- Limit Fields Edit -->
-                        <div class="card p-3 mb-3" style="background-color: #f8f9fa;">
-                            <h6 class="mb-3"><i class="bi bi-speedometer2"></i> Limit Bandwidth</h6>
-                            
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="edit_download_limit" class="form-label">Download Limit *</label>
-                                    <input type="text" class="form-control" id="edit_download_limit" name="download_limit" placeholder="Contoh: 10M, 100M, 1G" required>
-                                    <small class="form-text text-muted">Format: angka + unit (K/M/G). Contoh: 10M, 100M, 1G</small>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="edit_upload_limit" class="form-label">Upload Limit *</label>
-                                    <input type="text" class="form-control" id="edit_upload_limit" name="upload_limit" placeholder="Contoh: 10M, 100M, 1G" required>
-                                    <small class="form-text text-muted">Format: angka + unit (K/M/G). Contoh: 5M, 50M, 500M</small>
-                                </div>
-                            </div>
-                            
-                            <div class="accordion" id="editBurstAccordion">
-                                <div class="accordion-item">
-                                    <h2 class="accordion-header">
-                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#editBurstCollapse">
-                                            <i class="bi bi-lightning-charge"></i> Burst Limit (Opsional)
-                                        </button>
-                                    </h2>
-                                    <div id="editBurstCollapse" class="accordion-collapse collapse" data-bs-parent="#editBurstAccordion">
-                                        <div class="accordion-body">
-                                            <div class="row">
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="edit_burst_limit_download" class="form-label">Burst Download</label>
-                                                    <input type="text" class="form-control" id="edit_burst_limit_download" name="burst_limit_download" placeholder="Contoh: 20M">
-                                                    <small class="form-text text-muted">Kecepatan burst untuk download</small>
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="edit_burst_limit_upload" class="form-label">Burst Upload</label>
-                                                    <input type="text" class="form-control" id="edit_burst_limit_upload" name="burst_limit_upload" placeholder="Contoh: 10M">
-                                                    <small class="form-text text-muted">Kecepatan burst untuk upload</small>
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="edit_burst_threshold" class="form-label">Burst Threshold</label>
-                                                    <input type="text" class="form-control" id="edit_burst_threshold" name="burst_threshold" placeholder="Contoh: 50M">
-                                                    <small class="form-text text-muted">Threshold untuk trigger burst</small>
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="edit_burst_time" class="form-label">Burst Time</label>
-                                                    <input type="text" class="form-control" id="edit_burst_time" name="burst_time" placeholder="Contoh: 30s, 1m">
-                                                    <small class="form-text text-muted">Durasi burst (contoh: 30s, 1m)</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="alert alert-info mt-2 mb-0">
-                                <small>
-                                    <i class="bi bi-info-circle"></i> 
-                                    Limits akan otomatis di-sync ke <strong><%= (typeof authMode !== 'undefined' && authMode === 'radius') ? 'RADIUS' : 'Mikrotik' %></strong> saat paket diupdate.
-                                </small>
-                            </div>
-                        </div>
                         <div class="mb-3">
                             <label for="edit_image" class="form-label">Gambar Paket (JPG)</label>
                             <input type="file" class="form-control" id="edit_image" name="image" accept="image/jpeg,image/jpg">
@@ -613,13 +455,6 @@
                 $('#router_id').val('');
                 $('#pppoe_profile').html('<option value="">Pilih NAS terlebih dahulu</option>').prop('disabled', true);
             <% } %>
-            // Reset limit fields
-            $('#download_limit').val('');
-            $('#upload_limit').val('');
-            $('#burst_limit_download').val('');
-            $('#burst_limit_upload').val('');
-            $('#burst_threshold').val('');
-            $('#burst_time').val('');
                 // Ensure price with tax shows base price
                 const price = parseFloat($('#price').val()) || 0;
                 $('#price_with_tax').val(price.toLocaleString('id-ID'));
@@ -656,47 +491,7 @@
                 loadRadiusGroupnames('#edit_pppoe_profile', $('#edit_pppoe_profile').val());
             });
             
-            // Button "Baru" untuk tambah profil baru
-            $('#addNewRadiusProfileBtn').on('click', function(){
-                $('#new_profile_name').val('');
-                $('#newRadiusProfileModal').modal('show');
-            });
-            $('#addNewRadiusProfileEditBtn').on('click', function(){
-                $('#new_profile_name').val('');
-                $('#newRadiusProfileModal').data('target-select', '#edit_pppoe_profile');
-                $('#newRadiusProfileModal').modal('show');
-            });
-            
-            // Save new profile
-            $('#saveNewRadiusProfileBtn').on('click', function(){
-                const profileName = $('#new_profile_name').val().trim().toLowerCase().replace(/\s+/g, '_');
-                const targetSelect = $('#newRadiusProfileModal').data('target-select') || '#pppoe_profile';
-                
-                if (!profileName) {
-                    showAlert('warning', 'Nama profil tidak boleh kosong');
-                    return;
-                }
-                
-                // Validate format (lowercase, underscore, alphanumeric)
-                if (!/^[a-z0-9_]+$/.test(profileName)) {
-                    showAlert('warning', 'Format tidak valid. Gunakan lowercase dengan underscore (contoh: paket_10mbps)');
-                    return;
-                }
-                
-                // Add to dropdown
-                const select = $(targetSelect);
-                const option = $('<option></option>').attr('value', profileName).text(profileName);
-                select.append(option);
-                select.val(profileName);
-                
-                // Close modal
-                $('#newRadiusProfileModal').modal('hide');
-                $('#profileStatusAdd').html('<div class="alert alert-info alert-sm mt-2 mb-0 p-2"><small><i class="bi bi-info-circle"></i> Profil baru akan dibuat saat paket disimpan: <strong>' + profileName + '</strong></small></div>');
-                
-                showAlert('success', 'Profil baru ditambahkan: ' + profileName);
-            });
-            
-            // Function to load RADIUS groupnames
+            // Function to load RADIUS groupnames from /admin/mikrotik/profiles/api
             function loadRadiusGroupnames(selectSelector, selectedValue = '') {
                 const sel = $(selectSelector);
                 if (!sel || sel.length === 0) {
@@ -706,7 +501,8 @@
                 
                 sel.html('<option value="">Memuat daftar profil...</option>');
                 
-                fetch('/admin/billing/api/radius/groupnames')
+                // Fetch dari /admin/mikrotik/profiles/api (otomatis detect RADIUS atau Mikrotik API)
+                fetch('/admin/mikrotik/profiles/api')
                     .then(response => {
                         if (!response.ok) {
                             throw new Error('HTTP error! status: ' + response.status);
@@ -714,24 +510,30 @@
                         return response.json();
                     })
                     .then(data => {
-                        if (data.success && data.groupnames && data.groupnames.length > 0) {
+                        if (data.success && data.profiles && data.profiles.length > 0) {
                             sel.html('<option value="">Pilih profil atau ketik nama baru</option>');
-                            data.groupnames.forEach(groupname => {
-                                const option = $('<option></option>').attr('value', groupname).text(groupname);
-                                if (selectedValue === groupname) {
-                                    option.prop('selected', true);
+                            data.profiles.forEach(profile => {
+                                const profileName = profile.name || profile['.name'] || profile['.id'] || profile.groupname || '';
+                                if (profileName) {
+                                    const option = $('<option></option>').attr('value', profileName).text(profileName);
+                                    if (selectedValue === profileName) {
+                                        option.prop('selected', true);
+                                    }
+                                    sel.append(option);
                                 }
-                                sel.append(option);
                             });
                             
                             // Check if selectedValue is not in the list (custom/new profile)
-                            if (selectedValue && !data.groupnames.includes(selectedValue)) {
+                            if (selectedValue && !data.profiles.some(p => {
+                                const name = p.name || p['.name'] || p['.id'] || p.groupname || '';
+                                return name === selectedValue;
+                            })) {
                                 const customOption = $('<option></option>').attr('value', selectedValue).text(selectedValue + ' (baru)');
                                 customOption.prop('selected', true);
                                 sel.append(customOption);
                             }
                         } else {
-                            sel.html('<option value="">Tidak ada profil ditemukan. Klik "Baru" untuk menambah.</option>');
+                            sel.html('<option value="">Tidak ada profil ditemukan. Ketik langsung jika profil belum ada di daftar.</option>');
                             if (selectedValue) {
                                 const customOption = $('<option></option>').attr('value', selectedValue).text(selectedValue);
                                 customOption.prop('selected', true);
@@ -740,7 +542,7 @@
                         }
                     })
                     .catch(error => {
-                        console.error('Error loading RADIUS groupnames:', error);
+                        console.error('Error loading PPPoE profiles:', error);
                         // Fallback: show selected value if available
                         sel.html('<option value="">Error memuat profil</option>');
                         if (selectedValue) {
@@ -748,8 +550,7 @@
                             customOption.prop('selected', true);
                             sel.append(customOption);
                         }
-                        // Don't show alert here to avoid popup spam
-                        console.warn('Failed to load RADIUS groupnames, using fallback');
+                        console.warn('Failed to load PPPoE profiles, using fallback');
                     });
             }
             <% } %>
@@ -1107,14 +908,6 @@
             <% } %>
             formData.append('pppoe_profile', $('#pppoe_profile').val().trim() || 'default');
             
-            // Add limit fields
-            formData.append('download_limit', $('#download_limit').val().trim() || '');
-            formData.append('upload_limit', $('#upload_limit').val().trim() || '');
-            formData.append('burst_limit_download', $('#burst_limit_download').val().trim() || '');
-            formData.append('burst_limit_upload', $('#burst_limit_upload').val().trim() || '');
-            formData.append('burst_threshold', $('#burst_threshold').val().trim() || '');
-            formData.append('burst_time', $('#burst_time').val().trim() || '');
-            
             // Add image file if selected
             const imageFile = $('#image')[0].files[0];
             if (imageFile) {
@@ -1198,14 +991,6 @@
                             }
                         <% } %>
                         
-                        // Set limit fields
-                        $('#edit_download_limit').val(package.download_limit || '');
-                        $('#edit_upload_limit').val(package.upload_limit || '');
-                        $('#edit_burst_limit_download').val(package.burst_limit_download || '');
-                        $('#edit_burst_limit_upload').val(package.burst_limit_upload || '');
-                        $('#edit_burst_threshold').val(package.burst_threshold || '');
-                        $('#edit_burst_time').val(package.burst_time || '');
-                        
                         // Handle image preview
                         if (package.image) {
                             $('#currentImage').attr('src', '/img/' + package.image);
@@ -1277,14 +1062,6 @@
                 formData.append('nas_ip', '');
             <% } %>
             formData.append('pppoe_profile', $('#edit_pppoe_profile').val().trim() || 'default');
-            
-            // Add limit fields
-            formData.append('download_limit', $('#edit_download_limit').val().trim() || '');
-            formData.append('upload_limit', $('#edit_upload_limit').val().trim() || '');
-            formData.append('burst_limit_download', $('#edit_burst_limit_download').val().trim() || '');
-            formData.append('burst_limit_upload', $('#edit_burst_limit_upload').val().trim() || '');
-            formData.append('burst_threshold', $('#edit_burst_threshold').val().trim() || '');
-            formData.append('burst_time', $('#edit_burst_time').val().trim() || '');
             
             // Add image file if selected
             const imageFile = $('#edit_image')[0].files[0];
