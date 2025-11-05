@@ -3884,6 +3884,13 @@ async function addPPPoEProfileRadius(profileData) {
             return { success: false, message: 'Nama profile tidak boleh kosong' };
         }
         
+        // Prevent creating reserved profiles
+        const reservedNames = ['isolir', 'default'];
+        if (reservedNames.includes(groupname)) {
+            await conn.end();
+            return { success: false, message: `Profile dengan nama "${groupname}" adalah profile sistem yang sudah ada dan tidak dapat dibuat ulang. Profile ini digunakan untuk isolir/suspension.` };
+        }
+        
         // Check if groupname already exists
         const [existing] = await conn.execute(`
             SELECT COUNT(*) as count
@@ -3893,7 +3900,7 @@ async function addPPPoEProfileRadius(profileData) {
         
         if (existing && existing.length > 0 && existing[0].count > 0) {
             await conn.end();
-            return { success: false, message: `Profile dengan nama ${groupname} sudah ada` };
+            return { success: false, message: `Profile dengan nama "${groupname}" sudah ada di database RADIUS` };
         }
         
         // Build rate-limit string

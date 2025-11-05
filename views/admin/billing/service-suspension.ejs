@@ -129,11 +129,17 @@
                     <div class="col-md-6">
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
-                                <strong>Pilih Profile Isolir (Mikrotik)</strong>
+                                <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                                    <strong>Profile Isolir (RADIUS)</strong>
+                                <% } else { %>
+                                    <strong>Pilih Profile Isolir (Mikrotik)</strong>
+                                <% } %>
                                 <div>
-                                    <button class="btn btn-sm btn-outline-secondary me-2" id="reloadIsolirProfilesBtn">
-                                        <i class="bx bx-refresh me-1"></i>Reload
-                                    </button>
+                                    <% if (typeof authMode !== 'undefined' && authMode !== 'radius') { %>
+                                        <button class="btn btn-sm btn-outline-secondary me-2" id="reloadIsolirProfilesBtn">
+                                            <i class="bx bx-refresh me-1"></i>Reload
+                                        </button>
+                                    <% } %>
                                     <button class="btn btn-sm btn-primary" id="saveIsolirProfileBtn">
                                         <i class="bx bx-save me-1"></i>Simpan
                                     </button>
@@ -141,10 +147,18 @@
                             </div>
                             <div class="card-body">
                                 <label for="isolirProfileSelect" class="form-label">Profile Isolir</label>
-                                <select id="isolirProfileSelect" class="form-select">
-                                    <option value="default">Loading...</option>
-                                </select>
-                                <small class="text-muted">Dipakai saat Suspend. Profil dari Mikrotik dengan highlight pada profil aktif dari settings.json</small>
+                                <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                                    <input type="text" id="isolirProfileSelect" class="form-control" value="isolir" readonly>
+                                    <small class="text-muted">
+                                        <i class="bi bi-info-circle"></i> Di mode RADIUS, sistem menggunakan groupname <strong>'isolir'</strong> di tabel <code>radusergroup</code>. 
+                                        Pastikan group 'isolir' sudah ada di <code>radgroupreply</code> dengan rate-limit yang sesuai (misalnya 1k/1k).
+                                    </small>
+                                <% } else { %>
+                                    <select id="isolirProfileSelect" class="form-select">
+                                        <option value="default">Loading...</option>
+                                    </select>
+                                    <small class="text-muted">Dipakai saat Suspend. Profil dari Mikrotik dengan highlight pada profil aktif dari settings.json</small>
+                                <% } %>
                             </div>
                         </div>
                     </div>
@@ -444,9 +458,20 @@
         });
 
         // Load Mikrotik PPPoE profiles with active profile highlighting from settings.json
+        // Atau load RADIUS groups jika mode RADIUS
         function loadIsolirProfiles(selected) {
             const sel = document.getElementById('isolirProfileSelect');
             if (!sel) return;
+            
+            // Check if RADIUS mode
+            <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                // In RADIUS mode, isolir profile is always 'isolir' (groupname)
+                // Just set the value
+                sel.value = 'isolir';
+                return;
+            <% } %>
+            
+            // Mikrotik API mode
             sel.innerHTML = '<option>Loading...</option>';
 
             // Pertama, ambil profil aktif dari settings.json
@@ -560,6 +585,13 @@
         $('#saveIsolirProfileBtn').click(function(){
             const sel = document.getElementById('isolirProfileSelect');
             if (!sel) return;
+            
+            <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                // In RADIUS mode, isolir is always 'isolir' (groupname)
+                showToast('info', 'Info', 'Di mode RADIUS, isolir selalu menggunakan groupname "isolir" di tabel radusergroup');
+                return;
+            <% } %>
+            
             const value = sel.value || 'isolir';
             const btn = $(this);
             btn.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin me-1"></i>Menyimpan...');
@@ -632,32 +664,34 @@
 
         // Reload profiles button
         $('#reloadIsolirProfilesBtn').click(function(){
-            // Ambil nilai terkini dari settings.json lalu reload profiles dengan pilihan itu
-            fetch('/admin/billing/service-suspension/isolir-profile')
-                .then(r => r.json())
-                .then(data => {
-                    const current = (data && data.success && data.isolir_profile) ? data.isolir_profile : (document.getElementById('isolirProfileSelect')?.value || 'isolir');
-                    loadIsolirProfiles(current);
-                    // Setelah memuat, pastikan profil aktif tetap ter-highlight
-                    setTimeout(() => {
-                        const sel = document.getElementById('isolirProfileSelect');
-                        if (sel) {
-                            for (let i = 0; i < sel.options.length; i++) {
-                                const option = sel.options[i];
-                                if (option.value === current) {
-                                    option.textContent = current + ' (Aktif)';
-                                    option.selected = true;
-                                } else if (option.textContent.includes(' (Aktif)')) {
-                                    option.textContent = option.value;
+            <% if (typeof authMode !== 'undefined' && authMode !== 'radius') { %>
+                // Ambil nilai terkini dari settings.json lalu reload profiles dengan pilihan itu
+                fetch('/admin/billing/service-suspension/isolir-profile')
+                    .then(r => r.json())
+                    .then(data => {
+                        const current = (data && data.success && data.isolir_profile) ? data.isolir_profile : (document.getElementById('isolirProfileSelect')?.value || 'isolir');
+                        loadIsolirProfiles(current);
+                        // Setelah memuat, pastikan profil aktif tetap ter-highlight
+                        setTimeout(() => {
+                            const sel = document.getElementById('isolirProfileSelect');
+                            if (sel) {
+                                for (let i = 0; i < sel.options.length; i++) {
+                                    const option = sel.options[i];
+                                    if (option.value === current) {
+                                        option.textContent = current + ' (Aktif)';
+                                        option.selected = true;
+                                    } else if (option.textContent.includes(' (Aktif)')) {
+                                        option.textContent = option.value;
+                                    }
                                 }
                             }
-                        }
-                    }, 300);
-                })
-                .catch(() => {
-                    const current = document.getElementById('isolirProfileSelect')?.value;
-                    loadIsolirProfiles(current);
-                });
+                        }, 300);
+                    })
+                    .catch(() => {
+                        const current = document.getElementById('isolirProfileSelect')?.value;
+                        loadIsolirProfiles(current);
+                    });
+            <% } %>
         });
 
         // Load current grace period setting

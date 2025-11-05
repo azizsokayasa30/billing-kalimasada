@@ -5943,9 +5943,14 @@ router.post('/service-suspension/check-paid', async (req, res) => {
 // Service Suspension Settings Page
 router.get('/service-suspension', getAppSettings, async (req, res) => {
     try {
+        // Get authentication mode
+        const { getUserAuthModeAsync } = require('../config/mikrotik');
+        const authMode = await getUserAuthModeAsync();
+        
         res.render('admin/billing/service-suspension', {
             title: 'Service Suspension',
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            authMode: authMode || 'mikrotik'
         });
     } catch (error) {
         logger.error('Error loading service suspension page:', error);
