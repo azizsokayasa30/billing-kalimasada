@@ -317,15 +317,33 @@ function buildMikrotikRateLimit({ upload_limit, download_limit, burst_limit_uplo
     const upload = upload_limit || '0';
     let rateLimit = `${download}/${upload}`;
     
-    // Jika ada burst, format: "download/upload download-burst/upload-burst threshold time"
-    if (burst_limit_download && burst_limit_upload) {
+    // Jika ada burst, format Mikrotik: "download/upload download-burst/upload-burst [threshold/threshold] time/time"
+    // Contoh: "30M/30M 40M/40M 30M/30M 10/10"
+    // PENTING: burst_time harus dalam format "10/10" (detik tanpa unit), bukan "10s"
+    if (burst_limit_download && burst_limit_upload && burst_time) {
         rateLimit += ` ${burst_limit_download}/${burst_limit_upload}`;
-        if (burst_threshold) {
-            rateLimit += ` ${burst_threshold}`;
-            if (burst_time) {
-                rateLimit += ` ${burst_time}`;
+        
+        // Threshold opsional - format: "download-threshold/upload-threshold"
+        if (burst_threshold && burst_threshold.trim() !== '') {
+            if (burst_threshold.includes('/')) {
+                rateLimit += ` ${burst_threshold}`;
+            } else {
+                rateLimit += ` ${burst_threshold}/${burst_threshold}`;
             }
         }
+        
+        // burst_time wajib ada dan harus dalam format "10/10" (detik tanpa unit)
+        // Convert dari format "10s" atau "10" menjadi "10/10"
+        let burstTimeFormatted = burst_time;
+        // Remove unit jika ada (s, m, h, d)
+        burstTimeFormatted = burstTimeFormatted.replace(/[smhd]$/i, '');
+        // Extract numeric value
+        const timeValue = parseInt(burstTimeFormatted) || 10;
+        // Format sebagai "time/time" untuk download dan upload
+        rateLimit += ` ${timeValue}/${timeValue}`;
+    } else if (burst_limit_download && burst_limit_upload && !burst_time) {
+        // Jika ada burst_limit tapi tidak ada burst_time, log warning dan skip burst
+        logger.warn(`Burst limit ditemukan tapi burst_time tidak ada. Mengabaikan burst untuk menghindari error Mikrotik.`);
     }
     
     return rateLimit;
@@ -348,15 +366,36 @@ async function syncPackageLimitsToRadius({ groupname, upload_limit, download_lim
         if (download_limit && upload_limit) {
             rateLimitStr = `${download_limit}/${upload_limit}`;
             
-            // Jika ada burst, tambahkan burst info (format: "download/upload download-burst/upload-burst threshold time")
-            if (burst_limit_download && burst_limit_upload) {
+            // Jika ada burst, tambahkan burst info
+            // Format Mikrotik RADIUS: "rx-rate[/tx-rate] [rx-burst-rate[/tx-burst-rate] [rx-burst-threshold[/tx-burst-threshold] [rx-burst-time[/tx-burst-time]]]]"
+            // Contoh: "30M/30M 40M/40M 30M/30M 10/10"
+            // PENTING: burst_time harus dalam format "10/10" (detik, tanpa unit), bukan "10s"
+            if (burst_limit_download && burst_limit_upload && burst_time) {
                 rateLimitStr += ` ${burst_limit_download}/${burst_limit_upload}`;
-                if (burst_threshold) {
-                    rateLimitStr += ` ${burst_threshold}`;
-                    if (burst_time) {
-                        rateLimitStr += ` ${burst_time}`;
+                
+                // Threshold opsional - format: "download-threshold/upload-threshold"
+                if (burst_threshold && burst_threshold.trim() !== '') {
+                    // Jika threshold adalah single value, duplikasi untuk upload
+                    if (burst_threshold.includes('/')) {
+                        rateLimitStr += ` ${burst_threshold}`;
+                    } else {
+                        // Jika single value, gunakan untuk download dan upload
+                        rateLimitStr += ` ${burst_threshold}/${burst_threshold}`;
                     }
                 }
+                
+                // burst_time wajib ada dan harus dalam format "10/10" (detik tanpa unit)
+                // Convert dari format "10s" atau "10" menjadi "10/10"
+                let burstTimeFormatted = burst_time;
+                // Remove unit jika ada (s, m, h, d)
+                burstTimeFormatted = burstTimeFormatted.replace(/[smhd]$/i, '');
+                // Extract numeric value
+                const timeValue = parseInt(burstTimeFormatted) || 10;
+                // Format sebagai "time/time" untuk download dan upload
+                rateLimitStr += ` ${timeValue}/${timeValue}`;
+            } else if (burst_limit_download && burst_limit_upload && !burst_time) {
+                // Jika ada burst_limit tapi tidak ada burst_time, log warning dan skip burst
+                logger.warn(`Burst limit ditemukan untuk group ${normalizedGroupname} tapi burst_time tidak ada. Mengabaikan burst untuk menghindari error Mikrotik.`);
             }
         } else if (download_limit) {
             rateLimitStr = `${download_limit}/${upload_limit || '0'}`;
@@ -370,6 +409,7 @@ async function syncPackageLimitsToRadius({ groupname, upload_limit, download_lim
                 "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'MikroTik-Rate-Limit', ':=', ?)",
                 [normalizedGroupname, rateLimitStr]
             );
+            logger.info(`✅ Rate limit untuk group ${normalizedGroupname}: ${rateLimitStr}`);
         }
         
         await conn.end();
@@ -3771,6 +3811,7 @@ module.exports = {
     getInterfaceTraffic,
     // RADIUS functions
     getRadiusConnection,
+    getUserAuthModeAsync,
     updatePPPoEUserRadiusPassword,
     assignPackageRadius,
     suspendUserRadius,

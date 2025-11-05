@@ -2789,6 +2789,51 @@ router.post('/whatsapp-settings/broadcast', async (req, res) => {
     }
 });
 
+// API: Get RADIUS groupnames (for dropdown/autocomplete)
+router.get('/api/radius/groupnames', async (req, res) => {
+    try {
+        const { getRadiusConnection } = require('../config/mikrotik');
+        const conn = await getRadiusConnection();
+        
+        // Get unique groupnames from radgroupreply and radusergroup
+        const [groupReplyRows] = await conn.execute(`
+            SELECT DISTINCT groupname 
+            FROM radgroupreply 
+            WHERE groupname IS NOT NULL AND groupname != ''
+            ORDER BY groupname ASC
+        `);
+        
+        const [userGroupRows] = await conn.execute(`
+            SELECT DISTINCT groupname 
+            FROM radusergroup 
+            WHERE groupname IS NOT NULL AND groupname != ''
+            ORDER BY groupname ASC
+        `);
+        
+        await conn.end();
+        
+        // Combine and deduplicate groupnames
+        const groupnamesSet = new Set();
+        (groupReplyRows || []).forEach(row => groupnamesSet.add(row.groupname));
+        (userGroupRows || []).forEach(row => groupnamesSet.add(row.groupname));
+        
+        const groupnames = Array.from(groupnamesSet).sort();
+        
+        res.json({
+            success: true,
+            groupnames: groupnames
+        });
+    } catch (error) {
+        logger.error('Error getting RADIUS groupnames:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Gagal mengambil daftar groupname dari RADIUS',
+            error: error.message,
+            groupnames: []
+        });
+    }
+});
+
 // Paket Management
 router.get('/packages', getAppSettings, async (req, res) => {
     try {
@@ -2806,21 +2851,14 @@ router.get('/packages', getAppSettings, async (req, res) => {
         
         // Get user auth mode for conditional display
         const { getUserAuthModeAsync } = require('../config/mikrotik');
-        const { getRadiusConfigValue } = require('../config/radiusConfig');
-        let userAuthMode = 'mikrotik';
-        try {
-            const mode = await getRadiusConfigValue('user_auth_mode', null);
-            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-        } catch (e) {
-            // Fallback to mikrotik
-        }
+        const authMode = await getUserAuthModeAsync();
         
         res.render('admin/billing/packages', {
             title: 'Kelola Paket',
             packages,
             routers,
             appSettings: req.appSettings,
-            userAuthMode
+            authMode // Pass auth mode ke view
         });
     } catch (error) {
         logger.error('Error loading packages:', error);
@@ -2872,24 +2910,18 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
         const newPackage = await billingManager.createPackage(packageData);
         logger.info(`Package created: ${newPackage.name} with tax_rate: ${newPackage.tax_rate}, router_id: ${newPackage.router_id}`);
         
-        // Auto-sync limits berdasarkan mode
-        const { getUserAuthModeAsync } = require('../config/mikrotik');
-        const { getRadiusConfigValue } = require('../config/radiusConfig');
-        let userAuthMode = 'mikrotik';
-        try {
-            const mode = await getRadiusConfigValue('user_auth_mode', null);
-            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-        } catch (e) {
-            // Fallback
-        }
+        // Auto-sync limits berdasarkan mode (RADIUS atau API)
+        const { getUserAuthModeAsync, syncPackageLimitsToRadius, syncPackageLimitsToMikrotik, getPPPoEProfiles, addPPPoEProfile, buildMikrotikRateLimit } = require('../config/mikrotik');
+        const authMode = await getUserAuthModeAsync();
         
         let syncResult = null;
-        if (userAuthMode === 'radius') {
+        if (authMode === 'radius') {
             // Sync ke RADIUS (radgroupreply)
             try {
-                const { syncPackageLimitsToRadius } = require('../config/mikrotik');
+                // Convert profile name ke format groupname (lowercase dengan underscore)
+                const groupname = newPackage.pppoe_profile.toLowerCase().replace(/\s+/g, '_');
                 syncResult = await syncPackageLimitsToRadius({
-                    groupname: newPackage.pppoe_profile,
+                    groupname: groupname,
                     upload_limit: newPackage.upload_limit,
                     download_limit: newPackage.download_limit,
                     burst_limit_upload: newPackage.burst_limit_upload,
@@ -2898,13 +2930,13 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
                     burst_time: newPackage.burst_time
                 });
                 if (syncResult && syncResult.success) {
-                    logger.info(`Package limits synced to RADIUS for ${newPackage.pppoe_profile}`);
+                    logger.info(`✅ Package limits synced to RADIUS for group: ${groupname}`);
                 }
             } catch (syncError) {
                 logger.warn(`Failed to sync limits to RADIUS: ${syncError.message}`);
             }
         } else {
-            // Sync ke Mikrotik (PPPoE profile rate-limit)
+            // Sync ke Mikrotik (PPPoE profile rate-limit) - hanya jika router_id ada
             if (newPackage.router_id && newPackage.pppoe_profile) {
                 try {
                     const sqlite3 = require('sqlite3').verbose();
@@ -2918,8 +2950,6 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
                     });
                     
                     if (routerObj) {
-                        const { syncPackageLimitsToMikrotik, getPPPoEProfiles, addPPPoEProfile, buildMikrotikRateLimit } = require('../config/mikrotik');
-                        
                         // Check if profile exists
                         const profilesResult = await getPPPoEProfiles(routerObj);
                         const profileExists = profilesResult.success && profilesResult.data && 
@@ -2937,7 +2967,7 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
                                 burst_time: newPackage.burst_time
                             }, routerObj);
                             if (syncResult && syncResult.success) {
-                                logger.info(`Package limits synced to Mikrotik profile ${newPackage.pppoe_profile}`);
+                                logger.info(`✅ Package limits synced to Mikrotik profile: ${newPackage.pppoe_profile}`);
                             }
                         } else {
                             // Create profile baru dengan limits
@@ -2959,7 +2989,7 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
                             const createResult = await addPPPoEProfile(profileData, routerObj);
                             if (createResult && createResult.success) {
                                 syncResult = { success: true, message: 'Profile created with limits' };
-                                logger.info(`PPPoE profile ${newPackage.pppoe_profile} created in Mikrotik with limits`);
+                                logger.info(`✅ PPPoE profile created with limits: ${newPackage.pppoe_profile}`);
                             }
                         }
                     }
@@ -2972,10 +3002,10 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
         res.json({
             success: true,
             message: syncResult && syncResult.success 
-                ? `Paket berhasil ditambahkan dan limits di-sync ke ${userAuthMode === 'radius' ? 'RADIUS' : 'Mikrotik'}`
+                ? `Paket berhasil ditambahkan dan limits di-sync ke ${authMode === 'radius' ? 'RADIUS' : 'Mikrotik'}`
                 : 'Paket berhasil ditambahkan',
             package: newPackage,
-            limits_synced: syncResult ? syncResult.success : false
+            syncResult
         });
     } catch (error) {
         logger.error('Error creating package:', error);
@@ -3028,24 +3058,18 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
         const updatedPackage = await billingManager.updatePackage(id, packageData);
         logger.info(`Package updated: ${updatedPackage.name} with tax_rate: ${updatedPackage.tax_rate}, router_id: ${updatedPackage.router_id}`);
         
-        // Auto-sync limits berdasarkan mode
-        const { getUserAuthModeAsync } = require('../config/mikrotik');
-        const { getRadiusConfigValue } = require('../config/radiusConfig');
-        let userAuthMode = 'mikrotik';
-        try {
-            const mode = await getRadiusConfigValue('user_auth_mode', null);
-            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-        } catch (e) {
-            // Fallback
-        }
+        // Auto-sync limits berdasarkan mode (RADIUS atau API)
+        const { getUserAuthModeAsync, syncPackageLimitsToRadius, syncPackageLimitsToMikrotik, getPPPoEProfiles, addPPPoEProfile, buildMikrotikRateLimit } = require('../config/mikrotik');
+        const authMode = await getUserAuthModeAsync();
         
         let syncResult = null;
-        if (userAuthMode === 'radius') {
+        if (authMode === 'radius') {
             // Sync ke RADIUS (radgroupreply)
             try {
-                const { syncPackageLimitsToRadius } = require('../config/mikrotik');
+                // Convert profile name ke format groupname (lowercase dengan underscore)
+                const groupname = updatedPackage.pppoe_profile.toLowerCase().replace(/\s+/g, '_');
                 syncResult = await syncPackageLimitsToRadius({
-                    groupname: updatedPackage.pppoe_profile,
+                    groupname: groupname,
                     upload_limit: updatedPackage.upload_limit,
                     download_limit: updatedPackage.download_limit,
                     burst_limit_upload: updatedPackage.burst_limit_upload,
@@ -3054,13 +3078,13 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
                     burst_time: updatedPackage.burst_time
                 });
                 if (syncResult && syncResult.success) {
-                    logger.info(`Package limits synced to RADIUS for ${updatedPackage.pppoe_profile}`);
+                    logger.info(`✅ Package limits synced to RADIUS for group: ${groupname}`);
                 }
             } catch (syncError) {
                 logger.warn(`Failed to sync limits to RADIUS: ${syncError.message}`);
             }
         } else {
-            // Sync ke Mikrotik (PPPoE profile rate-limit)
+            // Sync ke Mikrotik (PPPoE profile rate-limit) - hanya jika router_id ada
             if (updatedPackage.router_id && updatedPackage.pppoe_profile) {
                 try {
                     const sqlite3 = require('sqlite3').verbose();
@@ -3074,18 +3098,47 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
                     });
                     
                     if (routerObj) {
-                        const { syncPackageLimitsToMikrotik } = require('../config/mikrotik');
-                        syncResult = await syncPackageLimitsToMikrotik({
-                            profile_name: updatedPackage.pppoe_profile,
-                            upload_limit: updatedPackage.upload_limit,
-                            download_limit: updatedPackage.download_limit,
-                            burst_limit_upload: updatedPackage.burst_limit_upload,
-                            burst_limit_download: updatedPackage.burst_limit_download,
-                            burst_threshold: updatedPackage.burst_threshold,
-                            burst_time: updatedPackage.burst_time
-                        }, routerObj);
-                        if (syncResult && syncResult.success) {
-                            logger.info(`Package limits synced to Mikrotik profile ${updatedPackage.pppoe_profile}`);
+                        // Check if profile exists
+                        const profilesResult = await getPPPoEProfiles(routerObj);
+                        const profileExists = profilesResult.success && profilesResult.data && 
+                            profilesResult.data.some(p => (p.name || p['name']) === updatedPackage.pppoe_profile);
+                        
+                        if (profileExists) {
+                            // Update existing profile dengan limits
+                            syncResult = await syncPackageLimitsToMikrotik({
+                                profile_name: updatedPackage.pppoe_profile,
+                                upload_limit: updatedPackage.upload_limit,
+                                download_limit: updatedPackage.download_limit,
+                                burst_limit_upload: updatedPackage.burst_limit_upload,
+                                burst_limit_download: updatedPackage.burst_limit_download,
+                                burst_threshold: updatedPackage.burst_threshold,
+                                burst_time: updatedPackage.burst_time
+                            }, routerObj);
+                            if (syncResult && syncResult.success) {
+                                logger.info(`✅ Package limits synced to Mikrotik profile: ${updatedPackage.pppoe_profile}`);
+                            }
+                        } else {
+                            // Create profile baru dengan limits
+                            const rateLimit = buildMikrotikRateLimit({
+                                upload_limit: updatedPackage.upload_limit,
+                                download_limit: updatedPackage.download_limit,
+                                burst_limit_upload: updatedPackage.burst_limit_upload,
+                                burst_limit_download: updatedPackage.burst_limit_download,
+                                burst_threshold: updatedPackage.burst_threshold,
+                                burst_time: updatedPackage.burst_time
+                            });
+                            
+                            const profileData = {
+                                name: updatedPackage.pppoe_profile,
+                                'remote-address': 'POOL-PPPOE-NEW',
+                                'rate-limit': rateLimit || undefined
+                            };
+                            
+                            const createResult = await addPPPoEProfile(profileData, routerObj);
+                            if (createResult && createResult.success) {
+                                syncResult = { success: true, message: 'Profile created with limits' };
+                                logger.info(`✅ PPPoE profile created with limits: ${updatedPackage.pppoe_profile}`);
+                            }
                         }
                     }
                 } catch (profileError) {
@@ -3097,10 +3150,10 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
         res.json({
             success: true,
             message: syncResult && syncResult.success 
-                ? `Paket berhasil diupdate dan limits di-sync ke ${userAuthMode === 'radius' ? 'RADIUS' : 'Mikrotik'}`
+                ? `Paket berhasil diupdate dan limits di-sync ke ${authMode === 'radius' ? 'RADIUS' : 'Mikrotik'}`
                 : 'Paket berhasil diupdate',
             package: updatedPackage,
-            limits_synced: syncResult ? syncResult.success : false
+            syncResult
         });
     } catch (error) {
         logger.error('Error updating package:', error);
@@ -3198,7 +3251,27 @@ router.get('/customers', getAppSettings, async (req, res) => {
         // Ensure routers table exists and load routers for dropdown & filter
         const db = require('../config/billing').db;
         await new Promise((resolve) => db.run(`CREATE TABLE IF NOT EXISTS routers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, nas_ip TEXT NOT NULL, nas_identifier TEXT, secret TEXT, location TEXT, pop TEXT, UNIQUE(nas_ip))`, () => resolve()));
+        
+        // Get auth mode untuk auto-select NAS
+        const { getUserAuthModeAsync } = require('../config/mikrotik');
+        const authMode = await getUserAuthModeAsync();
+        
+        // Load routers dari database
         const routers = await new Promise((resolve) => db.all(`SELECT id, name, nas_ip FROM routers ORDER BY id`, (err, rows) => resolve(rows || [])));
+        
+        // Jika mode RADIUS, cek apakah ada router "RADIUS" atau buat virtual entry
+        let radiusRouterId = null;
+        if (authMode === 'radius') {
+            // Cek apakah sudah ada router dengan nama "RADIUS"
+            const radiusRouter = await new Promise((resolve) => db.get(`SELECT id FROM routers WHERE name = 'RADIUS' OR nas_ip = 'RADIUS' LIMIT 1`, (err, row) => resolve(row || null)));
+            if (radiusRouter) {
+                radiusRouterId = radiusRouter.id;
+            } else {
+                // Buat virtual router RADIUS untuk display (tidak disimpan ke DB)
+                routers.unshift({ id: 'RADIUS', name: 'RADIUS', nas_ip: 'RADIUS Server' });
+            }
+        }
+        
         const routerFilter = req.query.router ? parseInt(req.query.router) : null;
         let customers;
         if (routerFilter) {
@@ -3270,6 +3343,8 @@ router.get('/customers', getAppSettings, async (req, res) => {
             odps,
             routers,
             routerFilter,
+            authMode, // Pass auth mode ke view
+            radiusRouterId, // Pass radius router ID jika ada
             appSettings: req.appSettings
         });
     } catch (error) {
@@ -3347,43 +3422,90 @@ router.post('/customers', async (req, res) => {
 
         const result = await billingManager.createCustomer(customerData);
         // Map customer ke router jika dipilih
+        // Handle khusus untuk mode RADIUS: router_id bisa berupa "RADIUS" (string)
         let mappedRouterId = null;
         try {
-            if (router_id) {
+            if (router_id && router_id !== '' && router_id !== 'RADIUS') {
+                // Mode API: router_id adalah integer ID router
                 const db = require('../config/billing').db;
                 mappedRouterId = parseInt(router_id);
-                await new Promise((resolve, reject) => {
-                    db.run(`INSERT OR REPLACE INTO customer_router_map (customer_id, router_id) VALUES (?, ?)`, [result.id, mappedRouterId], (err) => err ? reject(err) : resolve());
-                });
+                if (!isNaN(mappedRouterId)) {
+                    await new Promise((resolve, reject) => {
+                        db.run(`INSERT OR REPLACE INTO customer_router_map (customer_id, router_id) VALUES (?, ?)`, [result.id, mappedRouterId], (err) => err ? reject(err) : resolve());
+                    });
+                }
+            } else if (router_id === 'RADIUS') {
+                // Mode RADIUS: tidak perlu mapping ke router spesifik, semua menggunakan RADIUS database
+                logger.info(`Customer ${result.id} menggunakan mode RADIUS - tidak perlu router mapping`);
             }
         } catch (e) {
             logger.warn('Gagal menyimpan mapping customer_router_map: ' + e.message);
         }
 
-        // Optional: create PPPoE user in Mikrotik
+        // Optional: create PPPoE user (support both API and RADIUS mode)
+        // Auto-create jika checkbox dicentang atau jika pppoe_username diisi
         let pppoeCreate = { attempted: false, created: false, message: '' };
         try {
             const shouldCreate = create_pppoe_user === 1 || create_pppoe_user === '1' || create_pppoe_user === true || create_pppoe_user === 'true';
-            if (shouldCreate && pppoe_username) {
+            // Jika checkbox dicentang atau pppoe_username diisi, buat PPPoE user
+            if ((shouldCreate || pppoe_username) && pppoe_username) {
                 pppoeCreate.attempted = true;
-                // determine profile (already computed as profileToUse)
+                
+                // Generate password jika tidak diberikan
                 const passwordToUse = (pppoe_password && String(pppoe_password).trim())
                     ? String(pppoe_password).trim()
                     : (Math.random().toString(36).slice(-8) + Math.floor(Math.random()*10));
 
-                const { addPPPoEUser } = require('../config/mikrotik');
-                // Pass customer object with id for per-router connection; mapping dilakukan di atas
-                const addRes = await addPPPoEUser({ username: pppoe_username, password: passwordToUse, profile: profileToUse, customer: { id: result.id } });
+                const { addPPPoEUser, getUserAuthModeAsync } = require('../config/mikrotik');
+                
+                // Helper function untuk get router by ID
+                const getRouterById = async (routerId) => {
+                    try {
+                        const db = require('../config/billing').db;
+                        return new Promise((resolve, reject) => {
+                            db.get('SELECT * FROM routers WHERE id = ?', [parseInt(routerId)], (err, row) => {
+                                if (err) reject(err);
+                                else resolve(row || null);
+                            });
+                        });
+                    } catch (err) {
+                        logger.warn(`Failed to get router by ID ${routerId}: ${err.message}`);
+                        return null;
+                    }
+                };
+                
+                // Cek mode autentikasi untuk logging
+                const authMode = await getUserAuthModeAsync();
+                logger.info(`Creating PPPoE user ${pppoe_username} with profile ${profileToUse} (Mode: ${authMode})`);
+                
+                // Pass customer object dengan id untuk per-router connection di mode API
+                // Di mode RADIUS, routerObj tidak diperlukan karena semua router pakai database yang sama
+                // Handle router_id: jika "RADIUS", set routerObj ke null
+                let routerObj = null;
+                if (router_id && router_id !== '' && router_id !== 'RADIUS') {
+                    routerObj = await getRouterById(router_id);
+                }
+                const addRes = await addPPPoEUser({ 
+                    username: pppoe_username, 
+                    password: passwordToUse, 
+                    profile: profileToUse, 
+                    customer: { id: result.id },
+                    routerObj: routerObj
+                });
+                
                 if (addRes && addRes.success) {
                     pppoeCreate.created = true;
-                    pppoeCreate.message = 'User PPPoE berhasil dibuat di Mikrotik';
+                    pppoeCreate.message = `User PPPoE berhasil dibuat di ${authMode === 'radius' ? 'RADIUS' : 'Mikrotik'}`;
+                    pppoeCreate.password = passwordToUse; // Return password untuk ditampilkan ke user
+                    logger.info(`✅ PPPoE user ${pppoe_username} created successfully in ${authMode} mode`);
                 } else {
                     pppoeCreate.created = false;
                     pppoeCreate.message = (addRes && addRes.message) ? addRes.message : 'Gagal membuat user PPPoE';
+                    logger.error(`❌ Failed to create PPPoE user ${pppoe_username}: ${addRes?.message || 'Unknown error'}`);
                 }
             }
         } catch (e) {
-            logger.warn('Gagal membuat user PPPoE di Mikrotik (opsional): ' + e.message);
+            logger.error('Gagal membuat user PPPoE (opsional): ' + e.message);
             pppoeCreate.created = false;
             pppoeCreate.message = e.message;
         }
@@ -3444,6 +3566,52 @@ router.get('/customers/:phone', getAppSettings, async (req, res) => {
             });
         }
 
+        // Get PPPoE password (from RADIUS or Mikrotik API)
+        let pppoePassword = null;
+        let authMode = null;
+        try {
+            const { getUserAuthModeAsync, getRadiusConnection, getMikrotikConnection } = require('../config/mikrotik');
+            authMode = await getUserAuthModeAsync();
+            const pppoeUsername = customer.pppoe_username || customer.username;
+            
+            if (pppoeUsername) {
+                if (authMode === 'radius') {
+                    // Get password from RADIUS database
+                    const conn = await getRadiusConnection();
+                    try {
+                        const [rows] = await conn.execute(`
+                            SELECT value as password 
+                            FROM radcheck 
+                            WHERE username = ? AND attribute = 'Cleartext-Password'
+                            LIMIT 1
+                        `, [pppoeUsername]);
+                        await conn.end();
+                        if (rows && rows.length > 0) {
+                            pppoePassword = rows[0].password;
+                        }
+                    } catch (radiusError) {
+                        logger.warn(`Failed to get password from RADIUS for ${pppoeUsername}: ${radiusError.message}`);
+                        await conn.end();
+                    }
+                } else {
+                    // Get password from Mikrotik API
+                    try {
+                        const conn = await getMikrotikConnection();
+                        if (conn) {
+                            const secrets = await conn.write('/ppp/secret/print', ['?name=' + pppoeUsername]);
+                            if (secrets && secrets.length > 0) {
+                                pppoePassword = secrets[0].password || null;
+                            }
+                        }
+                    } catch (mikrotikError) {
+                        logger.warn(`Failed to get password from Mikrotik for ${pppoeUsername}: ${mikrotikError.message}`);
+                    }
+                }
+            }
+        } catch (passwordError) {
+            logger.warn(`Error getting PPPoE password: ${passwordError.message}`);
+        }
+
         const invoices = await billingManager.getInvoicesByCustomer(customer.id);
         const packages = await billingManager.getPackages();
         // Load trouble report history for this customer (by phone)
@@ -3462,6 +3630,8 @@ router.get('/customers/:phone', getAppSettings, async (req, res) => {
             res.render('admin/billing/customer-detail', {
                 title: 'Detail Pelanggan',
                 customer,
+                pppoePassword, // Pass password to view
+                authMode, // Pass auth mode to view
                 invoices: invoices || [],
                 packages: packages || [],
                 troubleReports,
@@ -3693,26 +3863,143 @@ router.put('/customers/:phone', async (req, res) => {
             logger.warn('Gagal update mapping customer_router_map: ' + e.message);
         }
 
-        // Jika update berhasil dan customer memiliki PPPoE, update profil di Mikrotik
+        // Optional: create or update PPPoE user (support both API and RADIUS mode)
+        // Auto-create jika checkbox dicentang atau jika pppoe_username baru/diubah
+        let pppoeCreate = { attempted: false, created: false, updated: false, message: '' };
+        try {
+            const shouldCreate = req.body.create_pppoe_user === 1 || req.body.create_pppoe_user === '1' || req.body.create_pppoe_user === true || req.body.create_pppoe_user === 'true';
+            const newPPPoEUsername = pppoe_username || currentCustomer.pppoe_username;
+            const pppoePassword = req.body.pppoe_password || null;
+            
+            // Helper function untuk get router by ID
+            const getRouterById = async (routerId) => {
+                try {
+                    const db = require('../config/billing').db;
+                    return new Promise((resolve, reject) => {
+                        db.get('SELECT * FROM routers WHERE id = ?', [parseInt(routerId)], (err, row) => {
+                            if (err) reject(err);
+                            else resolve(row || null);
+                        });
+                    });
+                } catch (err) {
+                    logger.warn(`Failed to get router by ID ${routerId}: ${err.message}`);
+                    return null;
+                }
+            };
+            
+            // Jika checkbox dicentang atau pppoe_username baru/diubah, buat/update PPPoE user
+            if ((shouldCreate || (newPPPoEUsername && newPPPoEUsername !== currentCustomer.pppoe_username)) && newPPPoEUsername) {
+                pppoeCreate.attempted = true;
+                
+                // Generate password jika tidak diberikan
+                const passwordToUse = (pppoePassword && String(pppoePassword).trim())
+                    ? String(pppoePassword).trim()
+                    : (Math.random().toString(36).slice(-8) + Math.floor(Math.random()*10));
+
+                const { addPPPoEUser, editPPPoEUser, getUserAuthModeAsync, getPPPoEUsers } = require('../config/mikrotik');
+                
+                // Cek mode autentikasi untuk logging
+                const authMode = await getUserAuthModeAsync();
+                logger.info(`Creating/updating PPPoE user ${newPPPoEUsername} with profile ${profileToUse} (Mode: ${authMode})`);
+                
+                // Cek apakah user sudah ada di RADIUS atau Mikrotik
+                const existingUsers = await getPPPoEUsers();
+                const userExists = existingUsers.some(u => u.name === newPPPoEUsername || u.username === newPPPoEUsername);
+                
+                let addRes;
+                const updatedCustomer = await billingManager.getCustomerByPhone(customerData.phone || phone);
+                const customerId = updatedCustomer ? updatedCustomer.id : result.id;
+                
+                if (userExists && currentCustomer.pppoe_username === newPPPoEUsername) {
+                    // Update existing user (password atau profile)
+                    if (authMode === 'radius') {
+                        const { editPPPoEUserRadius } = require('../config/mikrotik');
+                        addRes = await editPPPoEUserRadius({ 
+                            username: newPPPoEUsername, 
+                            password: passwordToUse, 
+                            profile: profileToUse 
+                        });
+                    } else {
+                        // Mode Mikrotik: cari ID user dulu
+                        const existingUser = existingUsers.find(u => (u.name === newPPPoEUsername || u.username === newPPPoEUsername));
+                        if (existingUser && existingUser.id) {
+                            addRes = await editPPPoEUser({ 
+                                id: existingUser.id, 
+                                username: newPPPoEUsername, 
+                                password: passwordToUse, 
+                                profile: profileToUse 
+                            });
+                        } else {
+                            // Fallback: create new jika tidak ketemu ID
+                            // Handle router_id: jika "RADIUS", set routerObj ke null
+                            let routerObj = null;
+                            if (router_id && router_id !== '' && router_id !== 'RADIUS') {
+                                routerObj = await getRouterById(router_id);
+                            }
+                            addRes = await addPPPoEUser({ 
+                                username: newPPPoEUsername, 
+                                password: passwordToUse, 
+                                profile: profileToUse, 
+                                customer: { id: customerId },
+                                routerObj: routerObj
+                            });
+                        }
+                    }
+                    pppoeCreate.updated = true;
+                } else {
+                    // Create new user
+                    // Handle router_id: jika "RADIUS", set routerObj ke null
+                    let routerObj = null;
+                    if (router_id && router_id !== '' && router_id !== 'RADIUS') {
+                        routerObj = await getRouterById(router_id);
+                    }
+                    addRes = await addPPPoEUser({ 
+                        username: newPPPoEUsername, 
+                        password: passwordToUse, 
+                        profile: profileToUse, 
+                        customer: { id: customerId },
+                        routerObj: routerObj
+                    });
+                }
+                
+                if (addRes && addRes.success) {
+                    pppoeCreate.created = true;
+                    pppoeCreate.message = `User PPPoE berhasil ${pppoeCreate.updated ? 'diupdate' : 'dibuat'} di ${authMode === 'radius' ? 'RADIUS' : 'Mikrotik'}`;
+                    pppoeCreate.password = passwordToUse; // Return password untuk ditampilkan ke user
+                    logger.info(`✅ PPPoE user ${newPPPoEUsername} ${pppoeCreate.updated ? 'updated' : 'created'} successfully in ${authMode} mode`);
+                } else {
+                    pppoeCreate.created = false;
+                    pppoeCreate.message = (addRes && addRes.message) ? addRes.message : 'Gagal membuat/update user PPPoE';
+                    logger.error(`❌ Failed to create/update PPPoE user ${newPPPoEUsername}: ${addRes?.message || 'Unknown error'}`);
+                }
+            }
+        } catch (e) {
+            logger.error('Gagal membuat/update user PPPoE (opsional): ' + e.message);
+            pppoeCreate.created = false;
+            pppoeCreate.message = e.message;
+        }
+        
+        // Jika update berhasil dan customer memiliki PPPoE, update profil di Mikrotik (untuk perubahan package)
         if (result && customerData.pppoe_username) {
             try {
                 // Cek apakah paket benar-benar berubah
                 const updatedCustomer = await billingManager.getCustomerByPhone(customerData.phone || phone);
                 if (updatedCustomer && updatedCustomer.package_id !== currentCustomer.package_id) {
-                    logger.info(`[BILLING] Package changed for ${updatedCustomer.username}, updating Mikrotik PPPoE profile...`);
+                    logger.info(`[BILLING] Package changed for ${updatedCustomer.username}, updating PPPoE profile...`);
                     await serviceSuspension.restoreCustomerService(updatedCustomer, 'Package changed');
-                    logger.info(`[BILLING] Mikrotik PPPoE profile updated successfully for ${updatedCustomer.username}`);
+                    logger.info(`[BILLING] PPPoE profile updated successfully for ${updatedCustomer.username}`);
                 }
             } catch (mikrotikError) {
-                logger.error(`[BILLING] Failed to update Mikrotik profile for ${customerData.username}:`, mikrotikError.message);
-                // Jangan gagal kan update customer jika Mikrotik error
+                logger.error(`[BILLING] Failed to update PPPoE profile for ${customerData.username}:`, mikrotikError.message);
+                // Jangan gagal kan update customer jika error
             }
         }
 
         res.json({
             success: true,
             message: 'Pelanggan berhasil diupdate',
-            customer: result
+            customer: result,
+            pppoeCreate
         });
     } catch (error) {
         logger.error('Error updating customer:', error);

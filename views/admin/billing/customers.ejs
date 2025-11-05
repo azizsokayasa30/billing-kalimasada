@@ -753,14 +753,27 @@
                             <small class="form-text text-muted">Email akan digunakan untuk notifikasi. Format otomatis: nama@gembok.com</small>
                         </div>
                         <div class="mb-3">
-                            <label for="router_id" class="form-label">NAS (Router)</label>
-                            <select class="form-select" id="router_id" name="router_id">
-                                <option value="">- Pilih NAS -</option>
-                                <% if (typeof routers !== 'undefined') { routers.forEach(function(r){ %>
-                                    <option value="<%= r.id %>"><%= r.name %> (<%= r.nas_ip %>)</option>
-                                <% }); } %>
+                            <label for="router_id" class="form-label">NAS (Router) <small class="text-muted">(Opsional)</small></label>
+                            <select class="form-select" id="router_id" name="router_id" <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>disabled<% } %>>
+                                <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                                    <option value="RADIUS" selected>RADIUS Server (Mode RADIUS)</option>
+                                <% } else { %>
+                                    <option value="">- Pilih NAS (Opsional) -</option>
+                                    <% if (typeof routers !== 'undefined') { routers.forEach(function(r){ %>
+                                        <option value="<%= r.id %>"><%= r.name %> (<%= r.nas_ip %>)</option>
+                                    <% }); } %>
+                                <% } %>
                             </select>
-                            <small class="form-text text-muted">Pilih router tempat pelanggan ini biasanya terkoneksi (untuk pelabelan & rekap per-router).</small>
+                            <small class="form-text text-muted">
+                                <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                                    Mode RADIUS aktif - NAS otomatis menggunakan RADIUS Server
+                                <% } else { %>
+                                    Pilih router tempat pelanggan ini biasanya terkoneksi (untuk pelabelan & rekap per-router). Bisa dikosongkan.
+                                <% } %>
+                            </small>
+                            <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                                <input type="hidden" id="router_id_hidden" name="router_id" value="RADIUS">
+                            <% } %>
                         </div>
                         <div class="mb-3">
                             <label for="pppoe_username" class="form-label">PPPoE Username (opsional)</label>
@@ -778,7 +791,7 @@
                         <div class="form-check mb-2">
                             <input class="form-check-input" type="checkbox" id="create_pppoe_user" name="create_pppoe_user">
                             <label class="form-check-label" for="create_pppoe_user">
-                                Buat user PPPoE di Mikrotik sekarang (pakai profile dari paket)
+                                Buat user PPPoE sekarang (pakai profile dari paket) - Otomatis untuk mode API & RADIUS
                             </label>
                         </div>
                         <div class="row g-2 align-items-end mb-3" id="pppoe_password_row" style="display:none;">
@@ -1147,14 +1160,27 @@
                             <small class="form-text text-muted">Profile PPPoE yang akan digunakan untuk pelanggan ini</small>
                         </div>
                         <div class="mb-3">
-                            <label for="edit_router_id" class="form-label">NAS (Router)</label>
-                            <select class="form-control" id="edit_router_id" name="router_id">
-                                <option value="">- Pilih NAS -</option>
-                                <% if (typeof routers !== 'undefined') { routers.forEach(function(r){ %>
-                                    <option value="<%= r.id %>"><%= r.name %> (<%= r.nas_ip %>)</option>
-                                <% }); } %>
+                            <label for="edit_router_id" class="form-label">NAS (Router) <small class="text-muted">(Opsional)</small></label>
+                            <select class="form-control" id="edit_router_id" name="router_id" <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>disabled<% } %>>
+                                <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                                    <option value="RADIUS" selected>RADIUS Server (Mode RADIUS)</option>
+                                <% } else { %>
+                                    <option value="">- Pilih NAS (Opsional) -</option>
+                                    <% if (typeof routers !== 'undefined') { routers.forEach(function(r){ %>
+                                        <option value="<%= r.id %>"><%= r.name %> (<%= r.nas_ip %>)</option>
+                                    <% }); } %>
+                                <% } %>
                             </select>
-                            <small class="form-text text-muted">Pilih router tempat pelanggan ini terhubung untuk operasi isolir/restore.</small>
+                            <small class="form-text text-muted">
+                                <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                                    Mode RADIUS aktif - NAS otomatis menggunakan RADIUS Server
+                                <% } else { %>
+                                    Pilih router tempat pelanggan ini terhubung untuk operasi isolir/restore. Bisa dikosongkan.
+                                <% } %>
+                            </small>
+                            <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
+                                <input type="hidden" id="edit_router_id_hidden" name="router_id" value="RADIUS">
+                            <% } %>
                         </div>
                         <div class="mb-3">
                             <label for="edit_auto_suspension" class="form-label">Auto Suspension</label>
