@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { addHotspotUser, getActiveHotspotUsers, getHotspotProfiles, deleteHotspotUser, generateHotspotVouchers, getHotspotServers, disconnectHotspotUser, getMikrotikConnectionForRouter, getHotspotUsersRadius, getUserAuthModeAsync } = require('../config/mikrotik');
+const { addHotspotUser, getActiveHotspotUsers, getHotspotProfiles, getHotspotProfilesRadius, deleteHotspotUser, generateHotspotVouchers, getHotspotServers, disconnectHotspotUser, getMikrotikConnectionForRouter, getHotspotUsersRadius, getUserAuthModeAsync } = require('../config/mikrotik');
 const { getMikrotikConnection } = require('../config/mikrotik');
 const { getRadiusConfigValue } = require('../config/radiusConfig');
 const fs = require('fs');
@@ -669,30 +669,23 @@ router.get('/voucher', async (req, res) => {
         // Untuk mode RADIUS, ambil dari RADIUS database
         if (userAuthMode === 'radius') {
             try {
-                // Get profiles from RADIUS
-                const { getRadiusConnection } = require('../config/mikrotik');
-                const conn = await getRadiusConnection();
-                const [profileRows] = await conn.execute(`
-                    SELECT DISTINCT gr.groupname as name, 
-                           MAX(CASE WHEN gr.attribute = 'MikroTik-Rate-Limit' THEN gr.value END) as rate_limit,
-                           MAX(CASE WHEN gr.attribute = 'Session-Timeout' THEN gr.value END) as session_timeout,
-                           MAX(CASE WHEN gr.attribute = 'Idle-Timeout' THEN gr.value END) as idle_timeout
-                    FROM radgroupreply gr
-                    WHERE gr.groupname NOT IN ('isolir', 'default')
-                    GROUP BY gr.groupname
-                    ORDER BY gr.groupname
-                `);
-                await conn.end();
+                // Get HOTSPOT profiles from RADIUS (hanya Hotspot Profiles, bukan PPPoE)
+                // Fungsi getHotspotProfilesRadius() sudah memfilter hanya profil yang memiliki Session-Timeout
+                // atau profil yang digunakan oleh voucher users
+                const hotspotProfilesResult = await getHotspotProfilesRadius();
                 
-                const profiles = profileRows.map(row => ({
-                    name: row.name,
-                    'rate-limit': row.rate_limit || '',
-                    'session-timeout': row.session_timeout || '',
-                    'idle-timeout': row.idle_timeout || '',
-                    nas_id: null,
-                    nas_name: 'RADIUS',
-                    nas_ip: 'RADIUS'
-                }));
+                let profiles = [];
+                if (hotspotProfilesResult.success && Array.isArray(hotspotProfilesResult.data)) {
+                    profiles = hotspotProfilesResult.data.map(prof => ({
+                        name: prof.name || prof.groupname || '',
+                        'rate-limit': prof['rate-limit'] || '',
+                        'session-timeout': prof['session-timeout'] || '',
+                        'idle-timeout': prof['idle-timeout'] || '',
+                        nas_id: null,
+                        nas_name: 'RADIUS',
+                        nas_ip: 'RADIUS'
+                    }));
+                }
 
                 // Get active users untuk check status
                 const activeResult = await getActiveHotspotUsers();
