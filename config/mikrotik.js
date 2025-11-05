@@ -154,12 +154,33 @@ async function getRadiusConnection() {
     return await mysql.createConnection({ host, user, password, database });
 }
 
-// Fungsi untuk mendapatkan seluruh user PPPoE dari RADIUS
+// Fungsi untuk mendapatkan seluruh user PPPoE dari RADIUS (BUKAN hotspot voucher)
 async function getPPPoEUsersRadius() {
     const conn = await getRadiusConnection();
     try {
-        // Join dengan radusergroup untuk mendapatkan package/group info
-        const [rows] = await conn.execute(`
+        logger.info('Fetching PPPoE users from RADIUS database (excluding hotspot vouchers)...');
+        
+        // Ambil daftar username yang merupakan voucher dari tabel voucher_revenue
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const voucherUsernames = await new Promise((resolve, reject) => {
+            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                if (err) {
+                    logger.warn(`Error getting voucher usernames: ${err.message}`);
+                    resolve([]);
+                } else {
+                    resolve(rows.map(r => r.username));
+                }
+            });
+        });
+        db.close();
+        
+        logger.info(`Found ${voucherUsernames.length} voucher usernames to exclude`);
+        
+        // Query untuk mendapatkan PPPoE users (exclude voucher users)
+        let query = `
             SELECT 
                 rc.username, 
                 rc.value as password,
@@ -167,31 +188,97 @@ async function getPPPoEUsersRadius() {
             FROM radcheck rc
             LEFT JOIN radusergroup rug ON rc.username = rug.username
             WHERE rc.attribute = 'Cleartext-Password'
-            ORDER BY rc.username
-        `);
+        `;
+        
+        const params = [];
+        if (voucherUsernames.length > 0) {
+            // Exclude voucher usernames
+            const placeholders = voucherUsernames.map(() => '?').join(',');
+            query += ` AND rc.username NOT IN (${placeholders})`;
+            params.push(...voucherUsernames);
+        }
+        
+        query += ` ORDER BY rc.username`;
+        
+        const [rows] = await conn.execute(query, params);
+        
+        logger.info(`Found ${rows.length} PPPoE users in radcheck table (excluding ${voucherUsernames.length} vouchers)`);
+        
         await conn.end();
-        return rows.map(row => ({ 
+        
+        const users = rows.map(row => ({ 
             name: row.username, 
             password: row.password,
             profile: row.profile
         }));
+        
+        logger.info(`Mapped ${users.length} PPPoE users successfully`);
+        return users;
     } catch (error) {
         await conn.end();
         logger.error(`Error getting PPPoE users from RADIUS: ${error.message}`);
+        logger.error(`Error stack: ${error.stack}`);
+        
         // Fallback ke query sederhana jika join gagal
-        const conn2 = await getRadiusConnection();
-        const [rows] = await conn2.execute("SELECT username, value as password FROM radcheck WHERE attribute='Cleartext-Password'");
-        await conn2.end();
-        return rows.map(row => ({ name: row.username, password: row.password, profile: 'default' }));
+        try {
+            logger.info('Trying fallback query without join...');
+            const conn2 = await getRadiusConnection();
+            
+            // Get voucher usernames for fallback
+            const sqlite3 = require('sqlite3').verbose();
+            const dbPath = require('path').join(__dirname, '../data/billing.db');
+            const db = new sqlite3.Database(dbPath);
+            const voucherUsernames = await new Promise((resolve, reject) => {
+                db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                    if (err) resolve([]);
+                    else resolve(rows.map(r => r.username));
+                });
+            });
+            db.close();
+            
+            let fallbackQuery = "SELECT username, value as password FROM radcheck WHERE attribute='Cleartext-Password'";
+            const params = [];
+            if (voucherUsernames.length > 0) {
+                const placeholders = voucherUsernames.map(() => '?').join(',');
+                fallbackQuery += ` AND username NOT IN (${placeholders})`;
+                params.push(...voucherUsernames);
+            }
+            fallbackQuery += " ORDER BY username";
+            
+            const [rows] = await conn2.execute(fallbackQuery, params);
+            await conn2.end();
+            logger.info(`Fallback query found ${rows.length} PPPoE users`);
+            return rows.map(row => ({ name: row.username, password: row.password, profile: 'default' }));
+        } catch (fallbackError) {
+            logger.error(`Fallback query also failed: ${fallbackError.message}`);
+            return [];
+        }
     }
 }
 
-// Fungsi untuk mendapatkan active PPPoE connections dari RADIUS
+// Fungsi untuk mendapatkan active PPPoE connections dari RADIUS (BUKAN hotspot voucher)
 async function getActivePPPoEConnectionsRadius() {
     const conn = await getRadiusConnection();
     try {
-        // Get active sessions dari radacct (acctstoptime IS NULL)
-        const [activeRows] = await conn.execute(`
+        // Ambil daftar voucher usernames untuk exclude
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const voucherUsernames = await new Promise((resolve, reject) => {
+            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                if (err) {
+                    logger.warn(`Error getting voucher usernames for active connections: ${err.message}`);
+                    resolve([]);
+                } else {
+                    resolve(rows.map(r => r.username));
+                }
+            });
+        });
+        db.close();
+        
+        // Get active sessions dari radacct (acctstoptime IS NULL), exclude vouchers
+        let query = `
             SELECT 
                 username,
                 acctsessionid,
@@ -203,8 +290,18 @@ async function getActivePPPoEConnectionsRadius() {
                 TIMESTAMPDIFF(SECOND, acctstarttime, NOW()) as session_time
             FROM radacct
             WHERE acctstoptime IS NULL
-            ORDER BY acctstarttime DESC
-        `);
+        `;
+        
+        const params = [];
+        if (voucherUsernames.length > 0) {
+            const placeholders = voucherUsernames.map(() => '?').join(',');
+            query += ` AND username NOT IN (${placeholders})`;
+            params.push(...voucherUsernames);
+        }
+        
+        query += ` ORDER BY acctstarttime DESC`;
+        
+        const [activeRows] = await conn.execute(query, params);
         
         await conn.end();
         return activeRows.map(row => ({
@@ -222,30 +319,65 @@ async function getActivePPPoEConnectionsRadius() {
     }
 }
 
-// Fungsi untuk mendapatkan statistik RADIUS (total users, active, offline)
+// Fungsi untuk mendapatkan statistik RADIUS (total users, active, offline) - HANYA PPPoE, BUKAN voucher
 async function getRadiusStatistics() {
     const conn = await getRadiusConnection();
     try {
-        // Total users
-        const [totalRows] = await conn.execute(`
+        // Ambil daftar voucher usernames untuk exclude
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const voucherUsernames = await new Promise((resolve, reject) => {
+            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                if (err) {
+                    logger.warn(`Error getting voucher usernames for stats: ${err.message}`);
+                    resolve([]);
+                } else {
+                    resolve(rows.map(r => r.username));
+                }
+            });
+        });
+        db.close();
+        
+        // Total PPPoE users (exclude vouchers)
+        let totalQuery = `
             SELECT COUNT(DISTINCT username) as total
             FROM radcheck
             WHERE attribute = 'Cleartext-Password'
-        `);
+        `;
+        const params = [];
+        if (voucherUsernames.length > 0) {
+            const placeholders = voucherUsernames.map(() => '?').join(',');
+            totalQuery += ` AND username NOT IN (${placeholders})`;
+            params.push(...voucherUsernames);
+        }
+        
+        const [totalRows] = await conn.execute(totalQuery, params);
         const totalUsers = totalRows[0]?.total || 0;
         
-        // Active connections (dari radacct)
-        const [activeRows] = await conn.execute(`
+        // Active PPPoE connections (dari radacct, exclude vouchers)
+        let activeQuery = `
             SELECT COUNT(DISTINCT username) as active
             FROM radacct
             WHERE acctstoptime IS NULL
-        `);
+        `;
+        const activeParams = [];
+        if (voucherUsernames.length > 0) {
+            const placeholders = voucherUsernames.map(() => '?').join(',');
+            activeQuery += ` AND username NOT IN (${placeholders})`;
+            activeParams.push(...voucherUsernames);
+        }
+        
+        const [activeRows] = await conn.execute(activeQuery, activeParams);
         const activeConnections = activeRows[0]?.active || 0;
         
         // Offline users
         const offlineUsers = Math.max(totalUsers - activeConnections, 0);
         
         await conn.end();
+        
+        logger.info(`RADIUS Statistics - Total: ${totalUsers}, Active: ${activeConnections}, Offline: ${offlineUsers} (excluded ${voucherUsernames.length} vouchers)`);
         
         return {
             total: totalUsers,
@@ -1382,11 +1514,46 @@ async function getResourceInfo() {
     }
 }
 
-// Fungsi untuk mendapatkan daftar user hotspot aktif dari RADIUS
+// Fungsi untuk mendapatkan daftar user hotspot aktif dari RADIUS (HANYA voucher hotspot, BUKAN PPPoE)
 async function getActiveHotspotUsersRadius() {
     const conn = await getRadiusConnection();
-    // Ambil user yang sedang online dari radacct (acctstoptime IS NULL)
-    const [rows] = await conn.execute("SELECT DISTINCT username FROM radacct WHERE acctstoptime IS NULL");
+    
+    // Ambil daftar voucher usernames untuk filter
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = require('path').join(__dirname, '../data/billing.db');
+    const db = new sqlite3.Database(dbPath);
+    
+    const voucherUsernames = await new Promise((resolve, reject) => {
+        db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+            if (err) {
+                logger.warn(`Error getting voucher usernames for active hotspot: ${err.message}`);
+                resolve([]);
+            } else {
+                resolve(rows.map(r => r.username));
+            }
+        });
+    });
+    db.close();
+    
+    // Jika tidak ada voucher, return empty
+    if (voucherUsernames.length === 0) {
+        await conn.end();
+        return {
+            success: true,
+            message: 'Tidak ada voucher hotspot aktif',
+            data: []
+        };
+    }
+    
+    // Ambil user yang sedang online dari radacct (acctstoptime IS NULL) HANYA untuk voucher
+    const placeholders = voucherUsernames.map(() => '?').join(',');
+    const [rows] = await conn.execute(`
+        SELECT DISTINCT username 
+        FROM radacct 
+        WHERE acctstoptime IS NULL 
+        AND username IN (${placeholders})
+    `, voucherUsernames);
+    
     await conn.end();
     return {
         success: true,
@@ -1395,19 +1562,54 @@ async function getActiveHotspotUsersRadius() {
     };
 }
 
-// Fungsi untuk mengambil semua hotspot users dari RADIUS
+// Fungsi untuk mengambil semua hotspot users dari RADIUS (HANYA voucher hotspot, BUKAN PPPoE users)
 async function getHotspotUsersRadius() {
     const conn = await getRadiusConnection();
     try {
-        // Ambil semua user dari radcheck yang memiliki Cleartext-Password (hotspot users)
+        logger.info('Fetching hotspot voucher users from RADIUS database (excluding PPPoE users)...');
+        
+        // Ambil daftar username yang merupakan voucher dari tabel voucher_revenue
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const voucherUsernames = await new Promise((resolve, reject) => {
+            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                if (err) {
+                    logger.warn(`Error getting voucher usernames for hotspot: ${err.message}`);
+                    resolve([]);
+                } else {
+                    resolve(rows.map(r => r.username));
+                }
+            });
+        });
+        db.close();
+        
+        logger.info(`Found ${voucherUsernames.length} voucher usernames to include`);
+        
+        // Jika tidak ada voucher, return empty array
+        if (voucherUsernames.length === 0) {
+            await conn.end();
+            logger.info('No voucher users found in voucher_revenue table');
+            return {
+                success: true,
+                data: []
+            };
+        }
+        
+        // Query untuk mendapatkan HANYA voucher users (yang ada di voucher_revenue)
+        const placeholders = voucherUsernames.map(() => '?').join(',');
         const [userRows] = await conn.execute(`
             SELECT DISTINCT c.username, 
                    (SELECT groupname FROM radusergroup WHERE username = c.username LIMIT 1) as profile,
                    (SELECT value FROM radreply WHERE username = c.username AND attribute = 'Reply-Message' LIMIT 1) as comment
             FROM radcheck c
             WHERE c.attribute = 'Cleartext-Password'
+            AND c.username IN (${placeholders})
             ORDER BY c.username
-        `);
+        `, voucherUsernames);
+        
+        logger.info(`Found ${userRows.length} hotspot voucher users in radcheck table`);
         
         await conn.end();
         return {
@@ -2304,6 +2506,13 @@ async function getSystemLogs(topics = '', count = '50') {
 
 // Fungsi untuk mendapatkan daftar profile PPPoE
 async function getPPPoEProfiles(routerObj = null) {
+    // Check auth mode
+    const mode = await getUserAuthModeAsync();
+    if (mode === 'radius') {
+        return await getPPPoEProfilesRadius();
+    }
+    
+    // Mikrotik API mode
     let conn = null;
     try {
         if (routerObj) {
@@ -2353,6 +2562,13 @@ async function getPPPoEProfiles(routerObj = null) {
 // Fungsi untuk mendapatkan detail profile PPPoE
 async function getPPPoEProfileDetail(id) {
     try {
+        // Check auth mode - if id is a groupname (string), it's RADIUS mode
+        const mode = await getUserAuthModeAsync();
+        if (mode === 'radius' || (typeof id === 'string' && !id.match(/^\d+$/))) {
+            return await getPPPoEProfileDetailRadius(id);
+        }
+        
+        // Mikrotik API mode
         const conn = await getMikrotikConnection();
         if (!conn) {
             logger.error('No Mikrotik connection available');
@@ -3353,9 +3569,401 @@ async function updateHotspotUser(username, password, profile) {
 // Fungsi untuk generate voucher hotspot secara massal (versi lama - dihapus)
 // Fungsi ini diganti dengan fungsi generateHotspotVouchers yang lebih lengkap di bawah
 
+// Fungsi untuk mendapatkan daftar profile PPPoE dari RADIUS (radgroupreply)
+async function getPPPoEProfilesRadius() {
+    const conn = await getRadiusConnection();
+    try {
+        // Get distinct groupnames from radgroupreply
+        const [groupRows] = await conn.execute(`
+            SELECT DISTINCT groupname
+            FROM radgroupreply
+            WHERE groupname IS NOT NULL AND groupname != ''
+            ORDER BY groupname ASC
+        `);
+        
+        const profiles = [];
+        for (const row of groupRows) {
+            const groupname = row.groupname;
+            
+            // Get all attributes for this group
+            const [attrRows] = await conn.execute(`
+                SELECT attribute, value
+                FROM radgroupreply
+                WHERE groupname = ?
+                ORDER BY attribute
+            `, [groupname]);
+            
+            // Build profile object
+            const profile = {
+                name: groupname,
+                '.id': groupname, // Use groupname as ID for RADIUS
+                groupname: groupname,
+                'rate-limit': null,
+                'session-timeout': null,
+                'idle-timeout': null,
+                'simultaneous-use': null,
+                nas_name: 'RADIUS',
+                nas_ip: 'RADIUS Server'
+            };
+            
+            // Parse attributes
+            attrRows.forEach(attr => {
+                if (attr.attribute === 'MikroTik-Rate-Limit' || attr.attribute === 'Mikrotik-Rate-Limit') {
+                    profile['rate-limit'] = attr.value;
+                } else if (attr.attribute === 'Session-Timeout') {
+                    profile['session-timeout'] = attr.value;
+                } else if (attr.attribute === 'Idle-Timeout') {
+                    profile['idle-timeout'] = attr.value;
+                } else if (attr.attribute === 'Simultaneous-Use') {
+                    profile['simultaneous-use'] = attr.value;
+                }
+            });
+            
+            profiles.push(profile);
+        }
+        
+        await conn.end();
+        return {
+            success: true,
+            message: `Ditemukan ${profiles.length} profile dari RADIUS`,
+            data: profiles
+        };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting PPPoE profiles from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal ambil data profile dari RADIUS: ${error.message}`, data: [] };
+    }
+}
+
+// Fungsi untuk menambah profile PPPoE ke RADIUS (radgroupreply)
+async function addPPPoEProfileRadius(profileData) {
+    const conn = await getRadiusConnection();
+    try {
+        // Normalize groupname: lowercase, underscore-separated
+        const groupname = (profileData.name || '').toLowerCase().replace(/\s+/g, '_');
+        
+        if (!groupname || groupname === '') {
+            await conn.end();
+            return { success: false, message: 'Nama profile tidak boleh kosong' };
+        }
+        
+        // Check if groupname already exists
+        const [existing] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM radgroupreply
+            WHERE groupname = ?
+        `, [groupname]);
+        
+        if (existing && existing.length > 0 && existing[0].count > 0) {
+            await conn.end();
+            return { success: false, message: `Profile dengan nama ${groupname} sudah ada` };
+        }
+        
+        // Build rate-limit string
+        let rateLimitStr = '';
+        if (profileData['rate-limit']) {
+            rateLimitStr = profileData['rate-limit'];
+        } else if (profileData.rateLimit) {
+            // Handle format from UI
+            const upload = profileData.uploadLimit || '0';
+            const download = profileData.downloadLimit || '0';
+            rateLimitStr = `${download}/${upload}`;
+            
+            // Add burst if provided
+            if (profileData.burstLimitDownload && profileData.burstLimitUpload && profileData.burstTime) {
+                const burstTime = parseInt(profileData.burstTime.replace(/[smhd]/i, '')) || 10;
+                rateLimitStr += ` ${profileData.burstLimitDownload}/${profileData.burstLimitUpload}`;
+                if (profileData.burstThreshold) {
+                    rateLimitStr += ` ${profileData.burstThreshold}/${profileData.burstThreshold}`;
+                }
+                rateLimitStr += ` ${burstTime}/${burstTime}`;
+            }
+        }
+        
+        // Convert timeout to seconds
+        const convertToSeconds = (value, unit) => {
+            if (!value) return null;
+            const num = parseInt(value);
+            if (isNaN(num)) return null;
+            const unitLower = String(unit || 's').toLowerCase();
+            const multipliers = { 's': 1, 'm': 60, 'h': 3600, 'd': 86400 };
+            return num * (multipliers[unitLower] || 1);
+        };
+        
+        const sessionTimeout = profileData['session-timeout'] || 
+                             (profileData.sessionTimeout ? convertToSeconds(profileData.sessionTimeout, profileData.sessionTimeoutUnit) : null);
+        const idleTimeout = profileData['idle-timeout'] || 
+                          (profileData.idleTimeout ? convertToSeconds(profileData.idleTimeout, profileData.idleTimeoutUnit) : null);
+        
+        // Insert Simultaneous-Use (required)
+        await conn.execute(`
+            INSERT INTO radgroupcheck (groupname, attribute, op, value)
+            VALUES (?, 'Simultaneous-Use', ':=', ?)
+        `, [groupname, profileData['simultaneous-use'] || '1']);
+        
+        // Insert Rate-Limit if provided
+        if (rateLimitStr) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'MikroTik-Rate-Limit', ':=', ?)
+            `, [groupname, rateLimitStr]);
+        }
+        
+        // Insert Session-Timeout if provided
+        if (sessionTimeout) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'Session-Timeout', ':=', ?)
+            `, [groupname, sessionTimeout.toString()]);
+        }
+        
+        // Insert Idle-Timeout if provided
+        if (idleTimeout) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'Idle-Timeout', ':=', ?)
+            `, [groupname, idleTimeout.toString()]);
+        }
+        
+        await conn.end();
+        logger.info(`✅ Profile RADIUS berhasil ditambahkan: ${groupname}`);
+        return { success: true, message: `Profile ${groupname} berhasil ditambahkan ke RADIUS` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error adding PPPoE profile to RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal menambahkan profile ke RADIUS: ${error.message}` };
+    }
+}
+
+// Fungsi untuk edit profile PPPoE di RADIUS (radgroupreply)
+async function editPPPoEProfileRadius(profileData) {
+    const conn = await getRadiusConnection();
+    try {
+        // Use groupname as ID for RADIUS
+        const groupname = profileData.groupname || profileData.id || profileData.name;
+        
+        if (!groupname) {
+            await conn.end();
+            return { success: false, message: 'Groupname tidak ditemukan' };
+        }
+        
+        // Check if groupname exists
+        const [existing] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM radgroupreply
+            WHERE groupname = ?
+        `, [groupname]);
+        
+        if (!existing || existing.length === 0 || existing[0].count === 0) {
+            await conn.end();
+            return { success: false, message: `Profile dengan nama ${groupname} tidak ditemukan` };
+        }
+        
+        // Delete old attributes
+        await conn.execute(`
+            DELETE FROM radgroupreply
+            WHERE groupname = ?
+            AND attribute IN ('MikroTik-Rate-Limit', 'Mikrotik-Rate-Limit', 'Session-Timeout', 'Idle-Timeout')
+        `, [groupname]);
+        
+        // Build rate-limit string
+        let rateLimitStr = '';
+        if (profileData['rate-limit']) {
+            rateLimitStr = profileData['rate-limit'];
+        } else if (profileData.rateLimit) {
+            const upload = profileData.uploadLimit || '0';
+            const download = profileData.downloadLimit || '0';
+            rateLimitStr = `${download}/${upload}`;
+            
+            if (profileData.burstLimitDownload && profileData.burstLimitUpload && profileData.burstTime) {
+                const burstTime = parseInt(profileData.burstTime.replace(/[smhd]/i, '')) || 10;
+                rateLimitStr += ` ${profileData.burstLimitDownload}/${profileData.burstLimitUpload}`;
+                if (profileData.burstThreshold) {
+                    rateLimitStr += ` ${profileData.burstThreshold}/${profileData.burstThreshold}`;
+                }
+                rateLimitStr += ` ${burstTime}/${burstTime}`;
+            }
+        }
+        
+        // Convert timeout to seconds
+        const convertToSeconds = (value, unit) => {
+            if (!value) return null;
+            const num = parseInt(value);
+            if (isNaN(num)) return null;
+            const unitLower = String(unit || 's').toLowerCase();
+            const multipliers = { 's': 1, 'm': 60, 'h': 3600, 'd': 86400 };
+            return num * (multipliers[unitLower] || 1);
+        };
+        
+        const sessionTimeout = profileData['session-timeout'] || 
+                             (profileData.sessionTimeout ? convertToSeconds(profileData.sessionTimeout, profileData.sessionTimeoutUnit) : null);
+        const idleTimeout = profileData['idle-timeout'] || 
+                          (profileData.idleTimeout ? convertToSeconds(profileData.idleTimeout, profileData.idleTimeoutUnit) : null);
+        
+        // Insert updated attributes
+        if (rateLimitStr) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'MikroTik-Rate-Limit', ':=', ?)
+            `, [groupname, rateLimitStr]);
+        }
+        
+        if (sessionTimeout) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'Session-Timeout', ':=', ?)
+            `, [groupname, sessionTimeout.toString()]);
+        }
+        
+        if (idleTimeout) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'Idle-Timeout', ':=', ?)
+            `, [groupname, idleTimeout.toString()]);
+        }
+        
+        // Update Simultaneous-Use if provided
+        if (profileData['simultaneous-use'] !== undefined) {
+            await conn.execute(`
+                DELETE FROM radgroupcheck
+                WHERE groupname = ? AND attribute = 'Simultaneous-Use'
+            `, [groupname]);
+            
+            await conn.execute(`
+                INSERT INTO radgroupcheck (groupname, attribute, op, value)
+                VALUES (?, 'Simultaneous-Use', ':=', ?)
+            `, [groupname, profileData['simultaneous-use']]);
+        }
+        
+        await conn.end();
+        logger.info(`✅ Profile RADIUS berhasil diupdate: ${groupname}`);
+        return { success: true, message: `Profile ${groupname} berhasil diupdate di RADIUS` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error editing PPPoE profile in RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal mengupdate profile di RADIUS: ${error.message}` };
+    }
+}
+
+// Fungsi untuk hapus profile PPPoE dari RADIUS (radgroupreply)
+async function deletePPPoEProfileRadius(groupname) {
+    const conn = await getRadiusConnection();
+    try {
+        if (!groupname) {
+            await conn.end();
+            return { success: false, message: 'Groupname tidak boleh kosong' };
+        }
+        
+        // Check if groupname is used by any user
+        const [userCheck] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM radusergroup
+            WHERE groupname = ?
+        `, [groupname]);
+        
+        if (userCheck && userCheck.length > 0 && userCheck[0].count > 0) {
+            await conn.end();
+            return { success: false, message: `Profile ${groupname} masih digunakan oleh ${userCheck[0].count} user. Pindahkan user ke profile lain terlebih dahulu.` };
+        }
+        
+        // Delete from radgroupreply
+        await conn.execute(`
+            DELETE FROM radgroupreply
+            WHERE groupname = ?
+        `, [groupname]);
+        
+        // Delete from radgroupcheck
+        await conn.execute(`
+            DELETE FROM radgroupcheck
+            WHERE groupname = ?
+        `, [groupname]);
+        
+        await conn.end();
+        logger.info(`✅ Profile RADIUS berhasil dihapus: ${groupname}`);
+        return { success: true, message: `Profile ${groupname} berhasil dihapus dari RADIUS` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error deleting PPPoE profile from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal menghapus profile dari RADIUS: ${error.message}` };
+    }
+}
+
+// Fungsi untuk mendapatkan detail profile PPPoE dari RADIUS
+async function getPPPoEProfileDetailRadius(groupname) {
+    const conn = await getRadiusConnection();
+    try {
+        if (!groupname) {
+            await conn.end();
+            return { success: false, message: 'Groupname tidak boleh kosong', data: null };
+        }
+        
+        // Get all attributes for this group
+        const [attrRows] = await conn.execute(`
+            SELECT attribute, value
+            FROM radgroupreply
+            WHERE groupname = ?
+            ORDER BY attribute
+        `, [groupname]);
+        
+        const [checkRows] = await conn.execute(`
+            SELECT attribute, value
+            FROM radgroupcheck
+            WHERE groupname = ?
+            ORDER BY attribute
+        `, [groupname]);
+        
+        if (attrRows.length === 0 && checkRows.length === 0) {
+            await conn.end();
+            return { success: false, message: 'Profile tidak ditemukan', data: null };
+        }
+        
+        // Build profile object
+        const profile = {
+            name: groupname,
+            '.id': groupname,
+            groupname: groupname,
+            'rate-limit': null,
+            'session-timeout': null,
+            'idle-timeout': null,
+            'simultaneous-use': null
+        };
+        
+        // Parse attributes
+        [...attrRows, ...checkRows].forEach(attr => {
+            if (attr.attribute === 'MikroTik-Rate-Limit' || attr.attribute === 'Mikrotik-Rate-Limit') {
+                profile['rate-limit'] = attr.value;
+            } else if (attr.attribute === 'Session-Timeout') {
+                profile['session-timeout'] = attr.value;
+            } else if (attr.attribute === 'Idle-Timeout') {
+                profile['idle-timeout'] = attr.value;
+            } else if (attr.attribute === 'Simultaneous-Use') {
+                profile['simultaneous-use'] = attr.value;
+            }
+        });
+        
+        await conn.end();
+        return {
+            success: true,
+            message: 'Detail profile berhasil diambil',
+            data: profile
+        };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting PPPoE profile detail from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal ambil detail profile: ${error.message}`, data: null };
+    }
+}
+
 // Fungsi untuk menambah profile PPPoE
 async function addPPPoEProfile(profileData, routerObj = null) {
     try {
+        // Check auth mode
+        const mode = await getUserAuthModeAsync();
+        if (mode === 'radius') {
+            return await addPPPoEProfileRadius(profileData);
+        }
+        
+        // Mikrotik API mode
         let conn = null;
         if (routerObj) {
             conn = await getMikrotikConnectionForRouter(routerObj);
@@ -3396,6 +4004,13 @@ async function addPPPoEProfile(profileData, routerObj = null) {
 // Fungsi untuk edit profile PPPoE
 async function editPPPoEProfile(profileData, routerObj = null) {
     try {
+        // Check auth mode
+        const mode = await getUserAuthModeAsync();
+        if (mode === 'radius') {
+            return await editPPPoEProfileRadius(profileData);
+        }
+        
+        // Mikrotik API mode
         let conn = null;
         if (routerObj) {
             conn = await getMikrotikConnectionForRouter(routerObj);
@@ -3437,6 +4052,13 @@ async function editPPPoEProfile(profileData, routerObj = null) {
 // Fungsi untuk hapus profile PPPoE
 async function deletePPPoEProfile(id, routerObj = null) {
     try {
+        // Check auth mode - if id is a groupname (string), it's RADIUS mode
+        const mode = await getUserAuthModeAsync();
+        if (mode === 'radius' || (typeof id === 'string' && !id.match(/^\d+$/))) {
+            return await deletePPPoEProfileRadius(id);
+        }
+        
+        // Mikrotik API mode
         let conn = null;
         if (routerObj) {
             conn = await getMikrotikConnectionForRouter(routerObj);
@@ -3799,6 +4421,12 @@ module.exports = {
     addPPPoEProfile,
     editPPPoEProfile,
     deletePPPoEProfile,
+    // RADIUS profile functions
+    getPPPoEProfilesRadius,
+    addPPPoEProfileRadius,
+    editPPPoEProfileRadius,
+    deletePPPoEProfileRadius,
+    getPPPoEProfileDetailRadius,
     getHotspotProfiles,
     getHotspotProfileDetail,
     addHotspotProfile,
@@ -3812,6 +4440,9 @@ module.exports = {
     // RADIUS functions
     getRadiusConnection,
     getUserAuthModeAsync,
+    getRadiusStatistics,
+    getPPPoEUsersRadius,
+    getActivePPPoEConnectionsRadius,
     updatePPPoEUserRadiusPassword,
     assignPackageRadius,
     suspendUserRadius,

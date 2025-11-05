@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { adminAuth } = require('./adminAuth');
+const logger = require('../config/logger'); // Add logger
 const { 
     addPPPoEUser, 
     editPPPoEUser, 
@@ -48,49 +49,109 @@ function convertToSeconds(value, unit) {
 // GET: List User PPPoE
 router.get('/mikrotik', adminAuth, async (req, res) => {
   try {
-    // Aggregate across all NAS
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
-    const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
-    db.close();
-
+    // Check auth mode
+    const { getUserAuthModeAsync, getPPPoEUsersRadius, getActivePPPoEConnectionsRadius } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    logger.info(`Loading PPPoE users in ${authMode} mode`);
+    
     let combined = [];
-    for (const r of routers) {
+    let routers = [];
+    
+    if (authMode === 'radius') {
+      // RADIUS mode: Get users from RADIUS database
+      logger.info('RADIUS mode: Loading users from RADIUS database');
       try {
-        const conn = await getMikrotikConnectionForRouter(r);
-        const [secrets, active] = await Promise.all([
-          conn.write('/ppp/secret/print'),
-          conn.write('/ppp/active/print')
-        ]);
-        const activeNames = new Set((active || []).map(a => a.name));
-        (secrets || []).forEach(sec => {
-          combined.push({
-            id: sec['.id'],
-            name: sec.name,
-            password: sec.password,
-            profile: sec.profile,
-            active: activeNames.has(sec.name),
-            nas_name: r.name,
-            nas_ip: r.nas_ip
+        const users = await getPPPoEUsersRadius();
+        logger.info(`Found ${users.length} users in RADIUS database`);
+        
+        const activeConnections = await getActivePPPoEConnectionsRadius();
+        logger.info(`Found ${activeConnections.length} active connections in RADIUS`);
+        
+        const activeNames = new Set(activeConnections.map(a => a.name));
+        
+        combined = users.map(user => ({
+          id: user.name, // Use username as ID for RADIUS
+          name: user.name,
+          password: user.password,
+          profile: user.profile || 'default',
+          active: activeNames.has(user.name),
+          nas_name: 'RADIUS',
+          nas_ip: 'RADIUS Server'
+        }));
+        
+        logger.info(`Mapped ${combined.length} users for display`);
+      } catch (radiusError) {
+        logger.error(`Error loading users from RADIUS: ${radiusError.message}`, radiusError);
+        // Return empty array but log the error
+        combined = [];
+      }
+      // No routers needed for RADIUS mode
+    } else {
+      // Mikrotik API mode: Get users from routers
+      logger.info('Mikrotik API mode: Loading users from routers');
+      const sqlite3 = require('sqlite3').verbose();
+      const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+      routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
+      db.close();
+
+      logger.info(`Found ${routers.length} routers configured`);
+
+      // Aggregate across all NAS
+      for (const r of routers) {
+        try {
+          const conn = await getMikrotikConnectionForRouter(r);
+          const [secrets, active] = await Promise.all([
+            conn.write('/ppp/secret/print'),
+            conn.write('/ppp/active/print')
+          ]);
+          const activeNames = new Set((active || []).map(a => a.name));
+          (secrets || []).forEach(sec => {
+            combined.push({
+              id: sec['.id'],
+              name: sec.name,
+              password: sec.password,
+              profile: sec.profile,
+              active: activeNames.has(sec.name),
+              nas_name: r.name,
+              nas_ip: r.nas_ip
+            });
           });
-        });
-      } catch (e) {
-        // Skip this NAS on error
+          logger.info(`Loaded ${secrets?.length || 0} users from router ${r.name}`);
+        } catch (e) {
+          logger.error(`Error getting users from router ${r.name}:`, e.message);
+          // Skip this NAS on error
+        }
       }
     }
+    
+    logger.info(`Total users to display: ${combined.length}`);
+    
+    // Debug: Log first few users
+    if (combined.length > 0) {
+      logger.info(`Sample users: ${JSON.stringify(combined.slice(0, 3).map(u => ({ name: u.name, profile: u.profile })))}`);
+    } else {
+      logger.warn('No users found to display!');
+    }
+    
     const settings = getSettingsWithCache();
     res.render('adminMikrotik', { 
       users: combined, 
-      routers,
+      routers: routers,
+      authMode: authMode, // Pass auth mode to view
       settings,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge()
     });
   } catch (err) {
+    logger.error('Error loading PPPoE users:', err);
+    logger.error('Error stack:', err.stack);
     const settings = getSettingsWithCache();
     res.render('adminMikrotik', { 
       users: [], 
-      error: 'Gagal mengambil data user PPPoE.', 
+      routers: [],
+      authMode: 'mikrotik',
+      error: `Gagal mengambil data user PPPoE: ${err.message}`, 
       settings,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge()
@@ -102,16 +163,39 @@ router.get('/mikrotik', adminAuth, async (req, res) => {
 router.post('/mikrotik/add-user', adminAuth, async (req, res) => {
   try {
     const { username, password, profile, router_id } = req.body;
-    if (!router_id) return res.json({ success: false, message: 'Pilih NAS (router) terlebih dahulu' });
-    // Pass routerObj via lookup to addPPPoEUser
+    
+    // Check auth mode
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      // RADIUS mode: Save to radcheck and radusergroup
+      logger.info('RADIUS mode: Adding user to RADIUS database');
+      const result = await addPPPoEUser({ username, password, profile });
+      if (result.success) {
+        return res.json({ success: true, message: result.message });
+      } else {
+        return res.json({ success: false, message: result.message });
+      }
+    }
+    
+    // Mikrotik API mode: Need router_id
+    if (!router_id) {
+      return res.json({ success: false, message: 'Pilih NAS (router) terlebih dahulu' });
+    }
+    
     const sqlite3 = require('sqlite3').verbose();
     const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
     const router = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => resolve(row || null)));
     db.close();
-    if (!router) return res.json({ success: false, message: 'Router tidak ditemukan' });
+    if (!router) {
+      return res.json({ success: false, message: 'Router tidak ditemukan' });
+    }
+    
     await addPPPoEUser({ username, password, profile, routerObj: router });
     res.json({ success: true });
   } catch (err) {
+    logger.error('Error adding PPPoE user:', err);
     res.json({ success: false, message: err.message });
   }
 });
@@ -120,9 +204,27 @@ router.post('/mikrotik/add-user', adminAuth, async (req, res) => {
 router.post('/mikrotik/edit-user', adminAuth, async (req, res) => {
   try {
     const { id, username, password, profile } = req.body;
+    
+    // Check auth mode
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      // RADIUS mode: Update in radcheck and radusergroup
+      logger.info('RADIUS mode: Updating user in RADIUS database');
+      const result = await editPPPoEUser({ id, username, password, profile });
+      if (result.success) {
+        return res.json({ success: true, message: result.message });
+      } else {
+        return res.json({ success: false, message: result.message });
+      }
+    }
+    
+    // Mikrotik API mode
     await editPPPoEUser({ id, username, password, profile });
     res.json({ success: true });
   } catch (err) {
+    logger.error('Error editing PPPoE user:', err);
     res.json({ success: false, message: err.message });
   }
 });
@@ -131,9 +233,27 @@ router.post('/mikrotik/edit-user', adminAuth, async (req, res) => {
 router.post('/mikrotik/delete-user', adminAuth, async (req, res) => {
   try {
     const { id } = req.body;
+    
+    // Check auth mode
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      // RADIUS mode: Delete from radcheck and radusergroup
+      logger.info('RADIUS mode: Deleting user from RADIUS database');
+      const result = await deletePPPoEUser(id); // In RADIUS mode, id is username
+      if (result.success) {
+        return res.json({ success: true, message: result.message });
+      } else {
+        return res.json({ success: false, message: result.message });
+      }
+    }
+    
+    // Mikrotik API mode
     await deletePPPoEUser(id);
     res.json({ success: true });
   } catch (err) {
+    logger.error('Error deleting PPPoE user:', err);
     res.json({ success: false, message: err.message });
   }
 });
@@ -141,29 +261,45 @@ router.post('/mikrotik/delete-user', adminAuth, async (req, res) => {
 // GET: List Profile PPPoE
 router.get('/mikrotik/profiles', adminAuth, async (req, res) => {
   try {
-    // Fetch routers from database
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
-    const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
-    db.close();
-
-    // Aggregate profiles from all NAS
+    // Check auth mode
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
     let profiles = [];
-    for (const router of routers) {
-      try {
-        const result = await getPPPoEProfiles(router);
-        if (result.success && Array.isArray(result.data)) {
-          result.data.forEach(prof => {
-            profiles.push({
-              ...prof,
-              nas_id: router.id,
-              nas_name: router.name,
-              nas_ip: router.nas_ip
+    let routers = [];
+    
+    if (authMode === 'radius') {
+      // RADIUS mode: Get profiles from RADIUS database
+      logger.info('RADIUS mode: Loading profiles from RADIUS database');
+      const result = await getPPPoEProfiles();
+      if (result.success) {
+        profiles = result.data || [];
+      }
+      // No routers needed for RADIUS mode
+    } else {
+      // Mikrotik API mode: Get profiles from routers
+      const sqlite3 = require('sqlite3').verbose();
+      const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+      routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
+      db.close();
+
+      // Aggregate profiles from all NAS
+      for (const router of routers) {
+        try {
+          const result = await getPPPoEProfiles(router);
+          if (result.success && Array.isArray(result.data)) {
+            result.data.forEach(prof => {
+              profiles.push({
+                ...prof,
+                nas_id: router.id,
+                nas_name: router.name,
+                nas_ip: router.nas_ip
+              });
             });
-          });
+          }
+        } catch (e) {
+          logger.error(`Error getting profiles from ${router.name}:`, e.message);
         }
-      } catch (e) {
-        console.error(`Error getting profiles from ${router.name}:`, e.message);
       }
     }
 
@@ -171,16 +307,18 @@ router.get('/mikrotik/profiles', adminAuth, async (req, res) => {
     res.render('adminMikrotikProfiles', { 
       profiles: profiles, 
       routers: routers,
+      authMode: authMode, // Pass auth mode to view
       settings,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge()
     });
   } catch (err) {
-    console.error('Error loading PPPoE profiles:', err);
+    logger.error('Error loading PPPoE profiles:', err);
     const settings = getSettingsWithCache();
     res.render('adminMikrotikProfiles', { 
       profiles: [], 
       routers: [],
+      authMode: 'mikrotik',
       error: 'Gagal mengambil data profile PPPoE.', 
       settings,
       versionInfo: getVersionInfo(),
@@ -194,6 +332,29 @@ router.get('/mikrotik/profiles/api', adminAuth, async (req, res) => {
   try {
     const { router_id } = req.query;
     
+    // Check if system is in RADIUS mode
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      // In RADIUS mode, return profiles from RADIUS database
+      logger.info('RADIUS mode: Returning profiles from RADIUS database');
+      const result = await getPPPoEProfiles();
+      if (result.success) {
+        return res.json({ 
+          success: true, 
+          profiles: result.data || [],
+          message: `Ditemukan ${result.data?.length || 0} profile dari RADIUS`
+        });
+      } else {
+        return res.json({ 
+          success: true, 
+          profiles: [], 
+          message: result.message || 'Tidak ada profile ditemukan di RADIUS'
+        });
+      }
+    }
+    
     // If router_id is provided, only fetch from that router
     if (router_id) {
       const sqlite3 = require('sqlite3').verbose();
@@ -202,26 +363,89 @@ router.get('/mikrotik/profiles/api', adminAuth, async (req, res) => {
         db.close();
         resolve(row || null);
       }));
+      
       if (!routerObj) {
         return res.json({ success: false, profiles: [], message: 'Router tidak ditemukan' });
       }
-      const result = await getPPPoEProfiles(routerObj);
-      if (result.success) {
-        res.json({ success: true, profiles: result.data });
-      } else {
-        res.json({ success: false, profiles: [], message: result.message });
+      
+      try {
+        const result = await getPPPoEProfiles(routerObj);
+        if (result.success) {
+          return res.json({ success: true, profiles: result.data || [] });
+        } else {
+          // Return empty array instead of error to prevent UI blocking
+          logger.warn(`Failed to get profiles from router ${routerObj.name}: ${result.message}`);
+          return res.json({ success: true, profiles: [], message: `Tidak dapat mengambil profile dari ${routerObj.name}. Pastikan router dapat diakses.` });
+        }
+      } catch (profileError) {
+        logger.error(`Error getting profiles from router ${routerObj.name}:`, profileError.message);
+        return res.json({ success: true, profiles: [], message: `Error: ${profileError.message}` });
       }
     } else {
       // Fetch from all routers (aggregate)
-      const result = await getPPPoEProfiles();
-      if (result.success) {
-        res.json({ success: true, profiles: result.data });
+      // First, check if there are any routers configured
+      const sqlite3 = require('sqlite3').verbose();
+      const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+      const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
+        db.close();
+        resolve(rows || []);
+      }));
+      
+      if (!routers || routers.length === 0) {
+        return res.json({ 
+          success: true, 
+          profiles: [], 
+          message: 'Tidak ada router yang dikonfigurasi. Silakan tambahkan router terlebih dahulu.' 
+        });
+      }
+      
+      // Try to fetch from routers, aggregate results
+      let allProfiles = [];
+      let errors = [];
+      
+      for (const router of routers) {
+        try {
+          const result = await getPPPoEProfiles(router);
+          if (result.success && Array.isArray(result.data)) {
+            allProfiles = allProfiles.concat(result.data.map(prof => ({
+              ...prof,
+              nas_id: router.id,
+              nas_name: router.name,
+              nas_ip: router.nas_ip
+            })));
+          } else {
+            errors.push(`${router.name}: ${result.message || 'Unknown error'}`);
+          }
+        } catch (routerError) {
+          logger.warn(`Error getting profiles from router ${router.name}:`, routerError.message);
+          errors.push(`${router.name}: ${routerError.message}`);
+        }
+      }
+      
+      // Return profiles even if some routers failed
+      if (allProfiles.length > 0 || errors.length === 0) {
+        return res.json({ 
+          success: true, 
+          profiles: allProfiles,
+          message: errors.length > 0 ? `Beberapa router tidak dapat diakses: ${errors.join(', ')}` : undefined
+        });
       } else {
-        res.json({ success: false, profiles: [], message: result.message });
+        // All routers failed, but return empty array to prevent UI blocking
+        return res.json({ 
+          success: true, 
+          profiles: [], 
+          message: `Tidak dapat mengambil profile dari router: ${errors.join(', ')}. Pastikan router dapat diakses dan kredensial benar.` 
+        });
       }
     }
   } catch (err) {
-    res.json({ success: false, profiles: [], message: err.message });
+    logger.error('Error in /mikrotik/profiles/api:', err);
+    // Return empty array instead of error to prevent UI blocking
+    res.json({ 
+      success: true, 
+      profiles: [], 
+      message: `Error: ${err.message || 'Gagal mengambil daftar profile PPPOE'}` 
+    });
   }
 });
 
@@ -244,6 +468,23 @@ router.get('/mikrotik/profile/:id', adminAuth, async (req, res) => {
 router.post('/mikrotik/add-profile', adminAuth, async (req, res) => {
   try {
     const { router_id, ...profileData } = req.body;
+    
+    // Check auth mode
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      // RADIUS mode: Save to radgroupreply
+      logger.info('RADIUS mode: Adding profile to RADIUS database');
+      const result = await addPPPoEProfile(profileData);
+      if (result.success) {
+        return res.json({ success: true, message: result.message });
+      } else {
+        return res.json({ success: false, message: result.message });
+      }
+    }
+    
+    // Mikrotik API mode: Need router_id
     if (!router_id) {
       return res.json({ success: false, message: 'Pilih NAS (router) terlebih dahulu' });
     }
@@ -266,6 +507,7 @@ router.post('/mikrotik/add-profile', adminAuth, async (req, res) => {
       res.json({ success: false, message: result.message });
     }
   } catch (err) {
+    logger.error('Error adding PPPoE profile:', err);
     res.json({ success: false, message: err.message });
   }
 });
@@ -274,6 +516,23 @@ router.post('/mikrotik/add-profile', adminAuth, async (req, res) => {
 router.post('/mikrotik/edit-profile', adminAuth, async (req, res) => {
   try {
     const { router_id, ...profileData } = req.body;
+    
+    // Check auth mode
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      // RADIUS mode: Update in radgroupreply
+      logger.info('RADIUS mode: Updating profile in RADIUS database');
+      const result = await editPPPoEProfile(profileData);
+      if (result.success) {
+        return res.json({ success: true, message: result.message });
+      } else {
+        return res.json({ success: false, message: result.message });
+      }
+    }
+    
+    // Mikrotik API mode: Need router_id
     if (!router_id) {
       return res.json({ success: false, message: 'Pilih NAS (router) terlebih dahulu' });
     }
@@ -296,6 +555,7 @@ router.post('/mikrotik/edit-profile', adminAuth, async (req, res) => {
       res.json({ success: false, message: result.message });
     }
   } catch (err) {
+    logger.error('Error editing PPPoE profile:', err);
     res.json({ success: false, message: err.message });
   }
 });
@@ -304,6 +564,23 @@ router.post('/mikrotik/edit-profile', adminAuth, async (req, res) => {
 router.post('/mikrotik/delete-profile', adminAuth, async (req, res) => {
   try {
     const { id, router_id } = req.body;
+    
+    // Check auth mode
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      // RADIUS mode: Delete from radgroupreply
+      logger.info('RADIUS mode: Deleting profile from RADIUS database');
+      const result = await deletePPPoEProfile(id);
+      if (result.success) {
+        return res.json({ success: true, message: result.message });
+      } else {
+        return res.json({ success: false, message: result.message });
+      }
+    }
+    
+    // Mikrotik API mode
     let routerObj = null;
     if (router_id) {
       const sqlite3 = require('sqlite3').verbose();
@@ -320,6 +597,7 @@ router.post('/mikrotik/delete-profile', adminAuth, async (req, res) => {
       res.json({ success: false, message: result.message });
     }
   } catch (err) {
+    logger.error('Error deleting PPPoE profile:', err);
     res.json({ success: false, message: err.message });
   }
 });
@@ -1018,6 +1296,34 @@ router.post('/mikrotik/disconnect-session', adminAuth, async (req, res) => {
 // GET: Get PPPoE user statistics
 router.get('/mikrotik/user-stats', adminAuth, async (req, res) => {
   try {
+    // Check auth mode
+    const { getUserAuthModeAsync, getRadiusStatistics } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      // RADIUS mode: Get statistics from RADIUS database
+      logger.info('RADIUS mode: Getting user statistics from RADIUS database');
+      try {
+        const stats = await getRadiusStatistics();
+        return res.json({ 
+          success: true, 
+          totalUsers: stats.total || 0, 
+          activeUsers: stats.active || 0, 
+          offlineUsers: stats.offline || 0
+        });
+      } catch (radiusError) {
+        logger.error(`Error getting RADIUS statistics: ${radiusError.message}`);
+        return res.json({ 
+          success: true, 
+          totalUsers: 0, 
+          activeUsers: 0, 
+          offlineUsers: 0 
+        });
+      }
+    }
+    
+    // Mikrotik API mode: Get statistics from routers
+    logger.info('Mikrotik API mode: Getting user statistics from routers');
     const sqlite3 = require('sqlite3').verbose();
     const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
     const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
@@ -1043,7 +1349,7 @@ router.get('/mikrotik/user-stats', adminAuth, async (req, res) => {
       offlineUsers 
     });
   } catch (err) {
-    console.error('Error getting PPPoE user stats:', err);
+    logger.error('Error getting PPPoE user stats:', err);
     res.status(500).json({ 
       success: false, 
       message: err.message,
