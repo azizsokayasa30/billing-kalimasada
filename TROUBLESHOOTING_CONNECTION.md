@@ -110,13 +110,30 @@ cd /path/to/BillCVLmedia
 # Cek apakah database sudah ada
 ls -la data/billing.db
 
-# Jika belum ada, jalankan setup
-npm start
-# Tunggu sampai aplikasi berjalan, lalu tekan Ctrl+C
-# Database akan otomatis dibuat
-
-# Atau jalankan script setup
+# Jika belum ada, jalankan setup script lengkap
 bash setup.sh
+
+# Script ini akan otomatis:
+# - Setup payment gateway tables
+# - Setup technician tables (PENTING!)
+# - Run SQL migrations
+# - Setup default data
+```
+
+**Jika error: `SQLITE_ERROR: no such table: technicians`**
+
+Ini berarti tabel technicians belum dibuat. Jalankan script ini:
+
+```bash
+cd /path/to/BillCVLmedia
+
+# Jalankan script untuk membuat tabel technicians
+node scripts/add-technician-tables.js
+
+# Setelah itu, restart aplikasi
+pm2 restart BillCVLmedia
+# atau
+pm2 restart cvlmedia
 ```
 
 ### 7. ✅ Cek Logs Aplikasi
@@ -194,8 +211,11 @@ pkill -f node
 cd /path/to/BillCVLmedia
 npm install
 
-# Setup database
+# Setup database LENGKAP (PENTING!)
 bash setup.sh
+
+# Jika error "no such table: technicians", jalankan ini:
+node scripts/add-technician-tables.js
 
 # Start aplikasi
 pm2 start app.js --name cvlmedia
@@ -208,6 +228,43 @@ sudo ufw reload
 # Cek status
 pm2 status
 pm2 logs cvlmedia
+```
+
+## ⚠️ Error Khusus: `SQLITE_ERROR: no such table: technicians`
+
+### Penyebab
+Tabel `technicians` belum dibuat di database. Ini terjadi jika:
+- Script `setup.sh` tidak dijalankan dengan lengkap
+- Script `add-technician-tables.js` tidak dijalankan
+- Database baru dibuat tanpa setup lengkap
+
+### Solusi Cepat
+
+```bash
+cd /path/to/BillCVLmedia
+
+# 1. Buat tabel technicians
+node scripts/add-technician-tables.js
+
+# 2. Restart aplikasi
+pm2 restart BillCVLmedia
+# atau jika nama berbeda
+pm2 restart cvlmedia
+
+# 3. Cek logs untuk memastikan tidak ada error lagi
+pm2 logs BillCVLmedia --lines 20
+```
+
+### Verifikasi Tabel Sudah Dibuat
+
+```bash
+cd /path/to/BillCVLmedia
+
+# Cek apakah tabel technicians sudah ada
+sqlite3 data/billing.db "SELECT name FROM sqlite_master WHERE type='table' AND name='technicians';"
+
+# Jika muncul "technicians", berarti tabel sudah ada
+# Jika tidak muncul, jalankan lagi: node scripts/add-technician-tables.js
 ```
 
 ## 🌐 Akses Web Portal
