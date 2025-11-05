@@ -4663,51 +4663,74 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
                     
                     logger.info(`Found ${voucherRows ? voucherRows.length : 0} voucher revenue rows from database`);
                     
-                    // Ambil informasi penggunaan voucher dari radacct untuk setiap voucher
+                    // Optimasi: Query radacct sekali saja untuk semua voucher menggunakan batch query
+                    // Jangan query per voucher karena sangat lambat!
                     try {
                         const { getRadiusConnection } = require('./mikrotik');
                         const conn = await getRadiusConnection();
                         
-                        // Ambil informasi penggunaan dari radacct untuk setiap voucher
-                        const vouchersWithUsage = await Promise.all((voucherRows || []).map(async (voucher) => {
-                            const username = voucher.voucher_username;
-                            try {
-                                // Ambil informasi penggunaan dari radacct
-                                const [usageRows] = await conn.execute(`
-                                    SELECT 
-                                        MIN(acctstarttime) as first_used_at,
-                                        MAX(acctstoptime) as last_used_at,
-                                        COUNT(*) as usage_count
-                                    FROM radacct
-                                    WHERE username = ?
-                                    AND acctstarttime IS NOT NULL
-                                `, [username]);
-                                
-                                const usage = usageRows && usageRows.length > 0 ? usageRows[0] : null;
-                                
-                                return {
-                                    ...voucher,
-                                    first_used_at: usage?.first_used_at || null,
-                                    last_used_at: usage?.last_used_at || null,
-                                    usage_count: usage ? parseInt(usage.usage_count) : 0
-                                };
-                            } catch (usageErr) {
-                                logger.error(`Error getting usage for voucher ${username}: ${usageErr.message}`);
-                                return {
-                                    ...voucher,
-                                    first_used_at: null,
-                                    last_used_at: null,
-                                    usage_count: 0
-                                };
-                            }
-                        }));
+                        // Ambil semua username dari voucherRows
+                        const usernames = (voucherRows || []).map(v => v.voucher_username).filter(u => u);
+                        
+                        if (usernames.length === 0) {
+                            await conn.end();
+                            resolve(voucherRows || []);
+                            return;
+                        }
+                        
+                        // Batch query: ambil semua usage info sekaligus dengan satu query
+                        const placeholders = usernames.map(() => '?').join(',');
+                        const [usageRows] = await conn.execute(`
+                            SELECT 
+                                username,
+                                MIN(acctstarttime) as first_used_at,
+                                MAX(acctstoptime) as last_used_at,
+                                COUNT(*) as usage_count
+                            FROM radacct
+                            WHERE username IN (${placeholders})
+                            AND acctstarttime IS NOT NULL
+                            GROUP BY username
+                        `, usernames);
                         
                         await conn.end();
-                        logger.info(`Returning ${vouchersWithUsage.length} vouchers with usage info`);
+                        
+                        // Buat map untuk lookup cepat
+                        const usageMap = new Map();
+                        (usageRows || []).forEach(usage => {
+                            usageMap.set(usage.username, {
+                                first_used_at: usage.first_used_at || null,
+                                last_used_at: usage.last_used_at || null,
+                                usage_count: parseInt(usage.usage_count) || 0
+                            });
+                        });
+                        
+                        // Merge voucher data dengan usage info
+                        const vouchersWithUsage = (voucherRows || []).map(voucher => {
+                            const usage = usageMap.get(voucher.voucher_username);
+                            if (usage) {
+                                return {
+                                    ...voucher,
+                                    first_used_at: usage.first_used_at,
+                                    last_used_at: usage.last_used_at,
+                                    usage_count: usage.usage_count
+                                };
+                            } else {
+                                // Jika sudah ada di voucher_revenue (used_at, usage_count), gunakan itu
+                                return {
+                                    ...voucher,
+                                    first_used_at: voucher.used_at || null,
+                                    last_used_at: voucher.used_at || null,
+                                    usage_count: voucher.usage_count || 0
+                                };
+                            }
+                        });
+                        
+                        logger.info(`Returning ${vouchersWithUsage.length} vouchers with usage info (batch query)`);
                         resolve(vouchersWithUsage || []);
                     } catch (radiusError) {
                         logger.error(`Error connecting to RADIUS: ${radiusError.message}`);
                         logger.info(`Returning ${voucherRows ? voucherRows.length : 0} vouchers from database only`);
+                        // Jika error, tetap return data dari voucher_revenue (sudah ada used_at dan usage_count)
                         resolve(voucherRows || []);
                     }
                 });

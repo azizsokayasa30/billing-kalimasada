@@ -912,6 +912,10 @@ router.get('/reports/voucher', getAppSettings, adminAuth, async (req, res) => {
         
         logger.info(`Voucher report query: startDate=${startDate}, endDate=${endDate}, status=${status || 'all'}`);
         
+        // Catatan: Auto-update dihapus untuk performa
+        // Script update_voucher_invoices_on_use.js sebaiknya dijalankan via cron job
+        // atau manual via tombol "Update Status" di UI
+        
         const stats = await billingManager.getVoucherReportStats(startDate, endDate);
         const invoices = await billingManager.getVoucherInvoices(startDate, endDate, status || null);
         
