@@ -73,6 +73,14 @@ else
     echo "⚠️  Technician tables setup script tidak ditemukan"
 fi
 
+# Setup voucher_revenue table (CRITICAL for separating vouchers from PPPoE users)
+if [ -f "scripts/create-voucher-revenue-table.js" ]; then
+    node scripts/create-voucher-revenue-table.js
+    echo "✅ Voucher revenue table setup completed"
+else
+    echo "⚠️  Voucher revenue table setup script tidak ditemukan"
+fi
+
 # Run SQL migrations
 if [ -f "scripts/run-migrations.js" ]; then
     node scripts/run-migrations.js

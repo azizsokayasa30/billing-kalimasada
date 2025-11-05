@@ -230,7 +230,75 @@ pm2 status
 pm2 logs cvlmedia
 ```
 
-## ⚠️ Error Khusus: `SQLITE_ERROR: no such table: technicians`
+## ⚠️ Error Khusus: Voucher Masuk ke `/admin/mikrotik` (PPPoE Users)
+
+### Penyebab
+Di server baru setelah `git clone`, voucher yang dibuat masuk ke `/admin/mikrotik` padahal seharusnya muncul di `/admin/hotspot`. Ini terjadi karena:
+- **Tabel `voucher_revenue` belum dibuat** di database
+- Sistem membedakan voucher dari PPPoE users berdasarkan tabel `voucher_revenue`
+- Tanpa tabel ini, sistem tidak tahu mana yang voucher dan mana yang PPPoE user
+
+### Solusi Cepat
+
+```bash
+cd /path/to/BillCVLmedia
+
+# 1. Buat tabel voucher_revenue (PENTING!)
+node scripts/create-voucher-revenue-table.js
+
+# 2. Restart aplikasi
+pm2 restart BillCVLmedia
+# atau jika nama berbeda
+pm2 restart cvlmedia
+
+# 3. Verifikasi tabel sudah dibuat
+sqlite3 data/billing.db "SELECT name FROM sqlite_master WHERE type='table' AND name='voucher_revenue';"
+
+# 4. Cek apakah ada voucher yang sudah dibuat sebelumnya
+sqlite3 data/billing.db "SELECT COUNT(*) as count FROM voucher_revenue;"
+```
+
+### Jika Voucher Sudah Terlanjur Dibuat
+
+Jika voucher sudah dibuat sebelum tabel `voucher_revenue` dibuat, Anda perlu memindahkan data voucher ke tabel `voucher_revenue`:
+
+```bash
+cd /path/to/BillCVLmedia
+
+# 1. Pastikan tabel voucher_revenue sudah dibuat
+node scripts/create-voucher-revenue-table.js
+
+# 2. Jika voucher sudah dibuat di RADIUS tapi belum ada di voucher_revenue,
+#    Anda perlu membuat script untuk migrate data voucher yang sudah ada
+#    (hubungi support untuk script migration)
+```
+
+### Verifikasi Setup Lengkap
+
+```bash
+cd /path/to/BillCVLmedia
+
+# Jalankan setup script lengkap
+bash setup.sh
+
+# Script ini akan otomatis:
+# - Setup payment gateway tables
+# - Setup technician tables
+# - Setup voucher_revenue table (BARU!)
+# - Run SQL migrations
+# - Setup default data
+```
+
+### Prevent Future Issues
+
+Pastikan di server baru selalu jalankan:
+```bash
+bash setup.sh
+```
+
+Script ini sekarang sudah mencakup pembuatan tabel `voucher_revenue`.
+
+---
 
 ### Penyebab
 Tabel `technicians` belum dibuat di database. Ini terjadi jika:
