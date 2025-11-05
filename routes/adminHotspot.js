@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { addHotspotUser, getActiveHotspotUsers, getHotspotProfiles, getHotspotProfilesRadius, deleteHotspotUser, generateHotspotVouchers, getHotspotServers, disconnectHotspotUser, getMikrotikConnectionForRouter, getHotspotUsersRadius, getUserAuthModeAsync } = require('../config/mikrotik');
+const { addHotspotUser, getActiveHotspotUsers, getHotspotProfiles, getHotspotProfilesRadius, getHotspotServerProfiles, getHotspotServerProfilesRadius, deleteHotspotUser, generateHotspotVouchers, getHotspotServers, disconnectHotspotUser, getMikrotikConnectionForRouter, getHotspotUsersRadius, getUserAuthModeAsync } = require('../config/mikrotik');
 const { getMikrotikConnection } = require('../config/mikrotik');
 const { getRadiusConfigValue } = require('../config/radiusConfig');
 const fs = require('fs');
@@ -687,6 +687,18 @@ router.get('/voucher', async (req, res) => {
                     }));
                 }
 
+                // Get Server Profiles from RADIUS
+                const serverProfilesResult = await getHotspotServerProfilesRadius();
+                let serverProfiles = [];
+                if (serverProfilesResult.success && Array.isArray(serverProfilesResult.data)) {
+                    serverProfiles = serverProfilesResult.data.map(prof => ({
+                        name: prof.name || '',
+                        nas_id: null,
+                        nas_name: 'RADIUS',
+                        nas_ip: 'RADIUS'
+                    }));
+                }
+
                 // Get active users untuk check status
                 const activeResult = await getActiveHotspotUsers();
                 const activeUsernames = activeResult.success && Array.isArray(activeResult.data)
@@ -791,6 +803,7 @@ router.get('/voucher', async (req, res) => {
 
                 return res.render('adminVoucher', {
                     profiles,
+                    serverProfiles: serverProfiles,
                     servers: [],
                     voucherHistory,
                     routers: [],
@@ -808,6 +821,7 @@ router.get('/voucher', async (req, res) => {
                 db.close();
                 return res.render('adminVoucher', {
                     profiles: [],
+                    serverProfiles: [],
                     servers: [],
                     voucherHistory: [],
                     routers: [],
@@ -842,6 +856,29 @@ router.get('/voucher', async (req, res) => {
                 }
             } catch (e) {
                 console.error(`Error getting profiles from ${router.name}:`, e.message);
+            }
+        }
+        
+        // Aggregate server profiles from all NAS
+        let serverProfiles = [];
+        for (const router of routers) {
+            try {
+                const serverProfilesResult = await getHotspotServerProfiles(router);
+                if (serverProfilesResult.success && Array.isArray(serverProfilesResult.data)) {
+                    serverProfilesResult.data.forEach(prof => {
+                        const existing = serverProfiles.find(p => p.name === prof.name && p.nas_id === router.id);
+                        if (!existing) {
+                            serverProfiles.push({
+                                ...prof,
+                                nas_id: router.id,
+                                nas_name: router.name,
+                                nas_ip: router.nas_ip
+                            });
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error(`Error getting server profiles from ${router.name}:`, e.message);
             }
         }
         
@@ -983,6 +1020,7 @@ router.get('/voucher', async (req, res) => {
 
         res.render('adminVoucher', {
             profiles,
+            serverProfiles: serverProfiles,
             servers,
             voucherHistory,
             routers,
@@ -999,6 +1037,7 @@ router.get('/voucher', async (req, res) => {
         console.error('Error rendering voucher page:', error);
         res.render('adminVoucher', {
             profiles: [],
+            serverProfiles: [],
             servers: [],
             voucherHistory: [],
             routers: [],

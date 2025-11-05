@@ -1,0 +1,372 @@
+<!-- Halaman Server Profile Hotspot -->
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Server Profile Hotspot - Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link href="/css/responsive-admin.css" rel="stylesheet">
+    <style>
+        body { background: #f5f6fa; }
+        .form-label { font-weight: 600; }
+        .main-content {
+            padding: 32px 24px;
+        }
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <!-- Include Responsive Admin Sidebar -->
+        <%- include('../../../partials/admin-responsive-sidebar', { page: 'hotspot-server-profiles', settings: settings, versionInfo: versionInfo, versionBadge: versionBadge }) %>
+
+        <main class="col-md-10 main-content ms-sm-auto">
+            <button class="hamburger d-block d-md-none mb-3" id="hamburgerBtn" aria-label="Menu"><i class="bi bi-list"></i></button>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3><i class="bi bi-server me-2"></i>Server Profile Hotspot</h3>
+                <% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
+                    <button class="btn btn-primary" id="btnTambahProfile">
+                        <i class="bi bi-plus-circle"></i> Tambah Server Profile
+                    </button>
+                <% } else { %>
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle"></i> Mode Mikrotik API: Server Profile dikelola langsung di Mikrotik Router
+                    </div>
+                <% } %>
+            </div>
+
+            <% if (error) { %>
+                <div class="alert alert-danger alert-dismissible fade show">
+                    <i class="bi bi-exclamation-triangle"></i> <%= error %>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            <% } %>
+
+            <!-- Statistik -->
+            <div class="row mb-4">
+                <div class="col-md-6 mb-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Total Server Profile</h5>
+                            <h3 id="totalProfiles">0</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Mode</h5>
+                            <h3><%= typeof userAuthMode !== 'undefined' && userAuthMode === 'radius' ? 'RADIUS' : 'Mikrotik API' %></h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabel Server Profile -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="profileTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>No</th>
+                                    <th>Nama Profile</th>
+                                    <th>NAS</th>
+                                    <th>Rate Limit</th>
+                                    <th>Session Timeout</th>
+                                    <th>Idle Timeout</th>
+                                    <th>Shared Users</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="profileTableBody">
+                                <!-- Data akan diisi via JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- Modal Tambah/Edit Server Profile -->
+<% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
+<div class="modal fade" id="profileModal" tabindex="-1" aria-labelledby="profileModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <form id="profileForm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="profileModalLabel">Tambah Server Profile Hotspot</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="profileId" name="id">
+                    
+                    <div class="alert alert-info mb-3">
+                        <i class="bi bi-info-circle"></i> Mode RADIUS aktif - Server Profile akan disimpan ke database RADIUS
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="profileName" class="form-label">Nama Server Profile *</label>
+                        <input type="text" class="form-control" id="profileName" name="name" required>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="rateLimit" class="form-label">Rate Limit</label>
+                                <input type="text" class="form-control" id="rateLimit" name="rate-limit" placeholder="contoh: 1M/1M">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="sessionTimeout" class="form-label">Session Timeout</label>
+                                <input type="text" class="form-control" id="sessionTimeout" name="session-timeout" placeholder="contoh: 1h">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="idleTimeout" class="form-label">Idle Timeout</label>
+                                <input type="text" class="form-control" id="idleTimeout" name="idle-timeout" placeholder="contoh: 30m">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="sharedUsers" class="form-label">Shared Users</label>
+                                <input type="number" class="form-control" id="sharedUsers" name="shared-users" value="1" min="1">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="openStatusPage" class="form-label">Open Status Page</label>
+                                <select class="form-select" id="openStatusPage" name="open-status-page">
+                                    <option value="http-login">http-login</option>
+                                    <option value="https-login">https-login</option>
+                                    <option value="none">none</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="profileComment" class="form-label">Komentar</label>
+                        <input type="text" class="form-control" id="profileComment" name="comment">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<% } %>
+
+<!-- Scripts -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+$(function() {
+    let profiles = [];
+    let dataTable;
+    const isRadiusMode = <%= (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') ? 'true' : 'false' %>;
+
+    // Initialize DataTable
+    function initDataTable() {
+        if (dataTable) {
+            dataTable.destroy();
+        }
+        dataTable = $('#profileTable').DataTable({
+            data: profiles,
+            columns: [
+                { 
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                { data: 'name' },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        const nasName = row.nas_name || 'N/A';
+                        const nasIp = row.nas_ip || 'N/A';
+                        return nasName + ' (' + nasIp + ')';
+                    }
+                },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        return row['rate-limit'] || '-';
+                    }
+                },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        return row['session-timeout'] || '-';
+                    }
+                },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        return row['idle-timeout'] || '-';
+                    }
+                },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        return row['shared-users'] || '1';
+                    }
+                },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        const id = row.id || row['.id'] || row.name;
+                        let actions = '';
+                        if (isRadiusMode) {
+                            actions = `
+                                <button class="btn btn-sm btn-primary me-1" onclick="editProfile('${id}')">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteProfile('${id}', '${row.name}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            `;
+                        } else {
+                            actions = '<span class="text-muted">Read-only</span>';
+                        }
+                        return actions;
+                    }
+                }
+            ],
+            responsive: true,
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json'
+            }
+        });
+    }
+
+    // Load profiles
+    function loadProfiles() {
+        $.get('/admin/mikrotik/hotspot-server-profiles/api', function(res) {
+            if (res.success) {
+                profiles = res.profiles || [];
+                $('#totalProfiles').text(profiles.length);
+                
+                if (dataTable) {
+                    dataTable.clear().rows.add(profiles).draw();
+                } else {
+                    initDataTable();
+                }
+            } else {
+                alert('Gagal memuat server profiles: ' + (res.message || 'Unknown error'));
+            }
+        }).fail(function(xhr) {
+            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        });
+    }
+
+    // Tambah Profile
+    $('#btnTambahProfile').click(function() {
+        $('#profileForm')[0].reset();
+        $('#profileId').val('');
+        $('#profileModalLabel').text('Tambah Server Profile Hotspot');
+        $('#profileModal').modal('show');
+    });
+
+    // Edit Profile
+    window.editProfile = function(id) {
+        const profile = profiles.find(p => (p.id || p['.id'] || p.name) == id);
+        if (!profile) {
+            alert('Profile tidak ditemukan');
+            return;
+        }
+
+        $('#profileId').val(id);
+        $('#profileName').val(profile.name || '');
+        $('#rateLimit').val(profile['rate-limit'] || '');
+        $('#sessionTimeout').val(profile['session-timeout'] || '');
+        $('#idleTimeout').val(profile['idle-timeout'] || '');
+        $('#sharedUsers').val(profile['shared-users'] || '1');
+        $('#openStatusPage').val(profile['open-status-page'] || 'http-login');
+        $('#profileComment').val(profile.comment || '');
+        
+        $('#profileModalLabel').text('Edit Server Profile Hotspot');
+        $('#profileModal').modal('show');
+    };
+
+    // Delete Profile
+    window.deleteProfile = function(id, name) {
+        if (!confirm(`Apakah Anda yakin ingin menghapus server profile "${name}"?`)) {
+            return;
+        }
+
+        $.post('/admin/mikrotik/hotspot-server-profiles/delete', { id: id }, function(res) {
+            if (res.success) {
+                alert('Server profile berhasil dihapus!');
+                loadProfiles();
+            } else {
+                alert('Gagal menghapus server profile: ' + (res.message || 'Unknown error'));
+            }
+        }).fail(function(xhr) {
+            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        });
+    };
+
+    // Submit Form
+    $('#profileForm').submit(function(e) {
+        e.preventDefault();
+        const formData = {
+            id: $('#profileId').val(),
+            name: $('#profileName').val(),
+            'rate-limit': $('#rateLimit').val(),
+            'session-timeout': $('#sessionTimeout').val(),
+            'idle-timeout': $('#idleTimeout').val(),
+            'shared-users': $('#sharedUsers').val(),
+            'open-status-page': $('#openStatusPage').val(),
+            comment: $('#profileComment').val()
+        };
+
+        const url = formData.id ? '/admin/mikrotik/hotspot-server-profiles/edit' : '/admin/mikrotik/hotspot-server-profiles/add';
+        
+        $.post(url, formData, function(res) {
+            if (res.success) {
+                alert('Server profile berhasil disimpan!');
+                $('#profileModal').modal('hide');
+                loadProfiles();
+            } else {
+                alert('Gagal menyimpan server profile: ' + (res.message || 'Unknown error'));
+            }
+        }).fail(function(xhr) {
+            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        });
+    });
+
+    // Initialize
+    loadProfiles();
+});
+</script>
+</body>
+</html>
+

@@ -211,6 +211,18 @@
                                 </select>
                             </div>
                             <div class="mb-3">
+                                <label for="voucherServerProfile" class="form-label"><i class="bi bi-server me-1"></i>Server Profile</label>
+                                <select class="form-select" id="voucherServerProfile" name="serverProfile">
+                                    <option value="">Pilih Server Profile (Opsional)</option>
+                                    <% if (typeof serverProfiles !== 'undefined' && serverProfiles && serverProfiles.length > 0) { %>
+                                        <% serverProfiles.forEach(function(serverProfile) { %>
+                                            <option value="<%= serverProfile.name %>" data-nas-id="<%= serverProfile.nas_id || '' %>"><%= serverProfile.name %><% if (serverProfile.nas_name && serverProfile.nas_name !== 'RADIUS') { %> (<%= serverProfile.nas_name %>)<% } %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                                <small class="text-muted">Server Profile Hotspot yang akan digunakan untuk voucher. Kosongkan jika menggunakan default.</small>
+                            </div>
+                            <div class="mb-3">
                                 <label for="voucherValidUntil" class="form-label"><i class="bi bi-calendar-event me-1"></i>Valid Sampai</label>
                                 <input type="date" class="form-control" id="voucherValidUntil" name="validUntil">
                                 <small class="text-muted">Kosongkan jika tidak ada batas waktu</small>

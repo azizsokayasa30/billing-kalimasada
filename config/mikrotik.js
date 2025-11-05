@@ -3764,6 +3764,313 @@ async function getHotspotProfilesRadius() {
     }
 }
 
+// ============================================
+// HOTSPOT SERVER PROFILE FUNCTIONS
+// ============================================
+
+// Fungsi untuk mendapatkan daftar Server Profile Hotspot dari Mikrotik API
+async function getHotspotServerProfiles(routerObj = null) {
+    let conn = null;
+    try {
+        if (routerObj) {
+            logger.info(`Connecting to router for server profiles: ${routerObj.name} (${routerObj.nas_ip}:${routerObj.port || 8728})`);
+            try {
+                conn = await getMikrotikConnectionForRouter(routerObj);
+            } catch (connError) {
+                logger.error(`Connection failed to ${routerObj.name}:`, connError.message);
+                return { success: false, message: `Koneksi gagal ke ${routerObj.name}: ${connError.message}`, data: [] };
+            }
+        } else {
+            logger.info('Using default Mikrotik connection for server profiles');
+            conn = await getMikrotikConnection();
+        }
+        
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal: Tidak dapat membuat koneksi', data: [] };
+        }
+        
+        logger.info('Fetching hotspot server profiles from Mikrotik...');
+        const profiles = await conn.write('/ip/hotspot/server/profile/print');
+        logger.info(`Successfully retrieved ${profiles ? profiles.length : 0} server profiles from ${routerObj ? routerObj.name : 'default'}`);
+        
+        // Parse and validate profiles, attach router info if provided
+        const validProfiles = [];
+        if (Array.isArray(profiles)) {
+            profiles.forEach((prof, idx) => {
+                if (prof && (prof.name || prof['name'])) {
+                    // Attach router info to profile for tracking
+                    if (routerObj) {
+                        prof.nas_id = routerObj.id;
+                        prof.nas_name = routerObj.name;
+                        prof.nas_ip = routerObj.nas_ip;
+                    }
+                    validProfiles.push(prof);
+                    logger.debug(`  Server Profile ${idx + 1}: ${prof.name || prof['name']}`);
+                }
+            });
+        }
+        logger.info(`Valid server profiles after parsing: ${validProfiles.length}`);
+        
+        return {
+            success: true,
+            message: `Ditemukan ${validProfiles.length} server profile hotspot`,
+            data: validProfiles
+        };
+    } catch (error) {
+        logger.error(`Error getting hotspot server profiles from ${routerObj ? routerObj.name : 'default'}: ${error.message}`);
+        return { success: false, message: `Gagal ambil server profile hotspot: ${error.message}`, data: [] };
+    }
+}
+
+// Fungsi untuk mendapatkan daftar Server Profile Hotspot dari RADIUS database
+async function getHotspotServerProfilesRadius() {
+    const conn = await getRadiusConnection();
+    try {
+        // Buat tabel jika belum ada untuk menyimpan server profiles
+        await conn.execute(`
+            CREATE TABLE IF NOT EXISTS hotspot_server_profiles (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(64) NOT NULL UNIQUE,
+                rate_limit VARCHAR(255),
+                session_timeout VARCHAR(64),
+                idle_timeout VARCHAR(64),
+                shared_users INT DEFAULT 1,
+                open_status_page VARCHAR(64) DEFAULT 'http-login',
+                http_cookie_lifetime INT DEFAULT 0,
+                split_user_domain TINYINT(1) DEFAULT 0,
+                status_autorefresh VARCHAR(64) DEFAULT 'none',
+                copy_from VARCHAR(64),
+                disabled TINYINT(1) DEFAULT 0,
+                comment TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_name (name),
+                INDEX idx_disabled (disabled)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        
+        // Ambil semua server profiles
+        const [rows] = await conn.execute(`
+            SELECT id, name, rate_limit, session_timeout, idle_timeout, shared_users,
+                   open_status_page, http_cookie_lifetime, split_user_domain,
+                   status_autorefresh, copy_from, disabled, comment,
+                   created_at, updated_at
+            FROM hotspot_server_profiles
+            WHERE disabled = 0
+            ORDER BY name
+        `);
+        
+        const profiles = rows.map(row => ({
+            '.id': row.id.toString(),
+            id: row.id,
+            name: row.name,
+            'rate-limit': row.rate_limit || '',
+            'session-timeout': row.session_timeout || '',
+            'idle-timeout': row.idle_timeout || '',
+            'shared-users': row.shared_users || 1,
+            'open-status-page': row.open_status_page || 'http-login',
+            'http-cookie-lifetime': row.http_cookie_lifetime || 0,
+            'split-user-domain': row.split_user_domain ? 'yes' : 'no',
+            'status-autorefresh': row.status_autorefresh || 'none',
+            'copy-from': row.copy_from || '',
+            disabled: row.disabled ? 'true' : 'false',
+            comment: row.comment || '',
+            nas_name: 'RADIUS',
+            nas_ip: 'RADIUS Server',
+            created_at: row.created_at,
+            updated_at: row.updated_at
+        }));
+        
+        await conn.end();
+        return {
+            success: true,
+            message: `Ditemukan ${profiles.length} server profile hotspot dari RADIUS`,
+            data: profiles
+        };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting hotspot server profiles from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal ambil server profile hotspot dari RADIUS: ${error.message}`, data: [] };
+    }
+}
+
+// Fungsi untuk menambah Server Profile Hotspot ke RADIUS
+async function addHotspotServerProfileRadius(profileData) {
+    const conn = await getRadiusConnection();
+    try {
+        const name = (profileData.name || '').trim().toLowerCase().replace(/\s+/g, '-');
+        
+        if (!name || name === '') {
+            await conn.end();
+            return { success: false, message: 'Nama server profile tidak boleh kosong' };
+        }
+        
+        // Check if name already exists
+        const [existing] = await conn.execute(`
+            SELECT COUNT(*) as count FROM hotspot_server_profiles WHERE name = ?
+        `, [name]);
+        
+        if (existing && existing.length > 0 && existing[0].count > 0) {
+            await conn.end();
+            return { success: false, message: `Server profile dengan nama "${name}" sudah ada` };
+        }
+        
+        // Insert new server profile
+        await conn.execute(`
+            INSERT INTO hotspot_server_profiles (
+                name, rate_limit, session_timeout, idle_timeout, shared_users,
+                open_status_page, http_cookie_lifetime, split_user_domain,
+                status_autorefresh, copy_from, disabled, comment
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            name,
+            profileData['rate-limit'] || null,
+            profileData['session-timeout'] || null,
+            profileData['idle-timeout'] || null,
+            parseInt(profileData['shared-users']) || 1,
+            profileData['open-status-page'] || 'http-login',
+            parseInt(profileData['http-cookie-lifetime']) || 0,
+            profileData['split-user-domain'] === 'yes' ? 1 : 0,
+            profileData['status-autorefresh'] || 'none',
+            profileData['copy-from'] || null,
+            profileData.disabled === 'true' ? 1 : 0,
+            profileData.comment || null
+        ]);
+        
+        await conn.end();
+        logger.info(`Successfully added hotspot server profile to RADIUS: ${name}`);
+        return { success: true, message: `Server profile "${name}" berhasil ditambahkan ke RADIUS` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error adding hotspot server profile to RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal menambah server profile: ${error.message}` };
+    }
+}
+
+// Fungsi untuk mengedit Server Profile Hotspot di RADIUS
+async function editHotspotServerProfileRadius(id, profileData) {
+    const conn = await getRadiusConnection();
+    try {
+        const name = (profileData.name || '').trim().toLowerCase().replace(/\s+/g, '-');
+        
+        if (!name || name === '') {
+            await conn.end();
+            return { success: false, message: 'Nama server profile tidak boleh kosong' };
+        }
+        
+        // Check if name already exists for another profile
+        const [existing] = await conn.execute(`
+            SELECT COUNT(*) as count FROM hotspot_server_profiles WHERE name = ? AND id != ?
+        `, [name, id]);
+        
+        if (existing && existing.length > 0 && existing[0].count > 0) {
+            await conn.end();
+            return { success: false, message: `Server profile dengan nama "${name}" sudah ada` };
+        }
+        
+        // Update server profile
+        await conn.execute(`
+            UPDATE hotspot_server_profiles SET
+                name = ?, rate_limit = ?, session_timeout = ?, idle_timeout = ?,
+                shared_users = ?, open_status_page = ?, http_cookie_lifetime = ?,
+                split_user_domain = ?, status_autorefresh = ?, copy_from = ?,
+                disabled = ?, comment = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `, [
+            name,
+            profileData['rate-limit'] || null,
+            profileData['session-timeout'] || null,
+            profileData['idle-timeout'] || null,
+            parseInt(profileData['shared-users']) || 1,
+            profileData['open-status-page'] || 'http-login',
+            parseInt(profileData['http-cookie-lifetime']) || 0,
+            profileData['split-user-domain'] === 'yes' ? 1 : 0,
+            profileData['status-autorefresh'] || 'none',
+            profileData['copy-from'] || null,
+            profileData.disabled === 'true' ? 1 : 0,
+            profileData.comment || null,
+            id
+        ]);
+        
+        await conn.end();
+        logger.info(`Successfully updated hotspot server profile in RADIUS: ${name}`);
+        return { success: true, message: `Server profile "${name}" berhasil diupdate` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error updating hotspot server profile in RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal update server profile: ${error.message}` };
+    }
+}
+
+// Fungsi untuk menghapus Server Profile Hotspot dari RADIUS
+async function deleteHotspotServerProfileRadius(id) {
+    const conn = await getRadiusConnection();
+    try {
+        // Soft delete (set disabled = 1) instead of hard delete
+        await conn.execute(`
+            UPDATE hotspot_server_profiles SET disabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+        `, [id]);
+        
+        await conn.end();
+        logger.info(`Successfully disabled hotspot server profile in RADIUS: ID ${id}`);
+        return { success: true, message: 'Server profile berhasil dihapus (disabled)' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error deleting hotspot server profile from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal menghapus server profile: ${error.message}` };
+    }
+}
+
+// Fungsi untuk mendapatkan detail Server Profile Hotspot dari RADIUS
+async function getHotspotServerProfileDetailRadius(id) {
+    const conn = await getRadiusConnection();
+    try {
+        const [rows] = await conn.execute(`
+            SELECT id, name, rate_limit, session_timeout, idle_timeout, shared_users,
+                   open_status_page, http_cookie_lifetime, split_user_domain,
+                   status_autorefresh, copy_from, disabled, comment,
+                   created_at, updated_at
+            FROM hotspot_server_profiles
+            WHERE id = ?
+        `, [id]);
+        
+        if (rows.length === 0) {
+            await conn.end();
+            return { success: false, message: 'Server profile tidak ditemukan', data: null };
+        }
+        
+        const row = rows[0];
+        const profile = {
+            '.id': row.id.toString(),
+            id: row.id,
+            name: row.name,
+            'rate-limit': row.rate_limit || '',
+            'session-timeout': row.session_timeout || '',
+            'idle-timeout': row.idle_timeout || '',
+            'shared-users': row.shared_users || 1,
+            'open-status-page': row.open_status_page || 'http-login',
+            'http-cookie-lifetime': row.http_cookie_lifetime || 0,
+            'split-user-domain': row.split_user_domain ? 'yes' : 'no',
+            'status-autorefresh': row.status_autorefresh || 'none',
+            'copy-from': row.copy_from || '',
+            disabled: row.disabled ? 'true' : 'false',
+            comment: row.comment || '',
+            nas_name: 'RADIUS',
+            nas_ip: 'RADIUS Server',
+            created_at: row.created_at,
+            updated_at: row.updated_at
+        };
+        
+        await conn.end();
+        return { success: true, data: profile };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting hotspot server profile detail from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal ambil detail server profile: ${error.message}`, data: null };
+    }
+}
+
 // Fungsi untuk mendapatkan daftar profile PPPoE dari RADIUS (yang digunakan oleh PPPoE users, BUKAN voucher)
 async function getPPPoEProfilesRadius() {
     const conn = await getRadiusConnection();
@@ -4746,6 +5053,12 @@ module.exports = {
     addHotspotProfile,
     editHotspotProfile,
     deleteHotspotProfile,
+    getHotspotServerProfiles,
+    getHotspotServerProfilesRadius,
+    getHotspotServerProfileDetailRadius,
+    addHotspotServerProfileRadius,
+    editHotspotServerProfileRadius,
+    deleteHotspotServerProfileRadius,
     getHotspotUsersRadius,
     getHotspotServers,
     disconnectHotspotUser,
