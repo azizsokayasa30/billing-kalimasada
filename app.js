@@ -54,6 +54,9 @@ const app = express();
 // Import route adminAuth
 const { router: adminAuthRouter, adminAuth } = require('./routes/adminAuth');
 
+// Import license route
+const licenseRouter = require('./routes/license');
+
 // Import middleware untuk access control (harus diimport sebelum digunakan)
 const { blockTechnicianAccess } = require('./middleware/technicianAccessControl');
 
@@ -104,6 +107,23 @@ app.get('/admin/test', (req, res) => {
 // POST untuk login mobile
 app.post('/admin/login/mobile', async (req, res) => {
     try {
+        // Check license status sebelum proses login
+        const { isLicenseValid, isTrialExpired } = require('./config/licenseManager');
+        const licenseValid = await isLicenseValid();
+        
+        if (!licenseValid) {
+            const trialExpired = await isTrialExpired();
+            
+            if (trialExpired) {
+                return res.render('admin/mobile-login', { 
+                    error: 'Trial period telah berakhir. Silakan aktivasi license key terlebih dahulu.',
+                    success: null,
+                    appSettings: { companyHeader: 'ISP Monitor' },
+                    licenseExpired: true
+                });
+            }
+        }
+        
         const { username, password, remember } = req.body;
         const { getSetting } = require('./config/settingsManager');
         
@@ -154,6 +174,9 @@ app.get('/admin/mobile', (req, res) => {
 
 // Gunakan route adminAuth untuk /admin
 app.use('/admin', adminAuthRouter);
+
+// Gunakan route license (harus setelah adminAuth tapi sebelum routes yang memerlukan auth)
+app.use('/admin', licenseRouter);
 
 // Import dan gunakan route adminDashboard
 const adminDashboardRouter = require('./routes/adminDashboard');
@@ -510,6 +533,18 @@ try {
                 logger.info('Interval Manager initialized with all monitoring systems');
             } catch (err) {
                 logger.error('Error initializing Interval Manager:', err);
+            }
+            
+            // Initialize License System
+            try {
+                const { initializeLicense } = require('./config/licenseManager');
+                initializeLicense().then(() => {
+                    logger.info('License system initialized');
+                }).catch((err) => {
+                    logger.error('Error initializing License system:', err);
+                });
+            } catch (err) {
+                logger.error('Error loading License Manager:', err);
             }
         }
     }).catch(err => {

@@ -35,8 +35,21 @@ function adminAuth(req, res, next) {
 }
 
 // GET: Halaman login admin
-router.get('/login', (req, res) => {
-  res.render('adminLogin', { error: null });
+router.get('/login', async (req, res) => {
+  try {
+    // Check license status untuk tampilkan warning jika trial habis
+    const { checkLicenseStatus } = require('../config/licenseManager');
+    const licenseStatus = await checkLicenseStatus();
+    
+    res.render('adminLogin', { 
+      error: null,
+      licenseExpired: licenseStatus.status === 'expired',
+      licenseStatus: licenseStatus
+    });
+  } catch (error) {
+    console.error('Error checking license status:', error);
+    res.render('adminLogin', { error: null });
+  }
 });
 
 // Test route untuk debugging
@@ -51,6 +64,30 @@ router.get('/test', (req, res) => {
 // POST: Proses login admin - Optimized
 router.post('/login', async (req, res) => {
   try {
+    // Check license status sebelum proses login
+    const { isLicenseValid, isTrialExpired } = require('../config/licenseManager');
+    const licenseValid = await isLicenseValid();
+    
+    if (!licenseValid) {
+      const trialExpired = await isTrialExpired();
+      
+      if (trialExpired) {
+        // Block login jika trial habis
+        if (req.xhr || req.headers.accept?.includes('application/json')) {
+          return res.status(403).json({
+            success: false,
+            message: 'Trial period telah berakhir. Silakan aktivasi license key untuk melanjutkan.',
+            requiresLicense: true
+          });
+        }
+        
+        return res.render('adminLogin', {
+          error: 'Trial period telah berakhir. Silakan aktivasi license key terlebih dahulu.',
+          licenseExpired: true
+        });
+      }
+    }
+    
     const { username, password } = req.body;
     const credentials = getAdminCredentials();
 

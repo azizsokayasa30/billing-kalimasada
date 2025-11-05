@@ -37,6 +37,16 @@
             <label for="password" class="form-label">Password</label>
             <input type="password" class="form-control" id="password" name="password" required>
         </div>
+        <% if (typeof licenseExpired !== 'undefined' && licenseExpired) { %>
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Trial period telah berakhir!</strong><br>
+                <small>Silakan aktivasi license key untuk melanjutkan.</small>
+            </div>
+            <a href="/admin/license" class="btn btn-warning w-100 mb-3">
+                <i class="bi bi-shield-lock me-2"></i>Aktivasi License Key
+            </a>
+        <% } %>
         <button type="submit" class="btn btn-primary w-100" id="loginBtn">
             <span class="btn-text">Login</span>
             <span class="btn-loading" style="display:none;">

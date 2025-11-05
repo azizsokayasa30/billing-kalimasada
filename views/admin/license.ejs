@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Aktivasi License - CVLMEDIA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .license-box {
+            max-width: 500px;
+            width: 100%;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+        }
+        .license-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .license-header h3 {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .license-header p {
+            color: #666;
+            font-size: 14px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .status-trial {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-expired {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+        .countdown {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .countdown strong {
+            color: #667eea;
+            font-size: 18px;
+        }
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .form-control {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14px;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .alert {
+            border-radius: 8px;
+            border: none;
+        }
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .info-box small {
+            display: block;
+            margin-top: 8px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="license-box">
+        <div class="license-header">
+            <h3><i class="bi bi-shield-lock me-2"></i>Aktivasi License</h3>
+            <p>CVLMEDIA Billing System</p>
+        </div>
+
+        <% if (typeof licenseStatus !== 'undefined' && licenseStatus) { %>
+            <% if (licenseStatus.status === 'active') { %>
+                <div class="status-badge status-active">
+                    <i class="bi bi-check-circle me-1"></i>License Aktif
+                </div>
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-2"></i>
+                    <strong>License berhasil diaktivasi!</strong><br>
+                    <small>License key: <%= licenseStatus.license_key %></small><br>
+                    <small>Aktivasi: <%= licenseStatus.activated_at ? new Date(licenseStatus.activated_at).toLocaleString('id-ID') : '-' %></small>
+                </div>
+                <div class="text-center mt-4">
+                    <a href="/admin/login" class="btn btn-primary">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Kembali ke Login
+                    </a>
+                </div>
+            <% } else if (licenseStatus.status === 'trial') { %>
+                <div class="status-badge status-trial">
+                    <i class="bi bi-clock me-1"></i>Mode Trial
+                </div>
+                <div class="countdown">
+                    <strong><%= licenseStatus.days_remaining || 0 %> hari tersisa</strong><br>
+                    <small>Trial berakhir: <%= licenseStatus.trial_end_date ? new Date(licenseStatus.trial_end_date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' %></small>
+                </div>
+                <div class="info-box">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Perhatian:</strong> Trial period akan berakhir dalam <%= licenseStatus.days_remaining || 0 %> hari. 
+                    Silakan aktivasi license key untuk melanjutkan penggunaan aplikasi setelah trial habis.
+                </div>
+            <% } else if (licenseStatus.status === 'expired') { %>
+                <div class="status-badge status-expired">
+                    <i class="bi bi-x-circle me-1"></i>Trial Habis
+                </div>
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Trial period telah berakhir!</strong><br>
+                    Silakan aktivasi license key untuk melanjutkan penggunaan aplikasi.
+                </div>
+            <% } %>
+        <% } %>
+
+        <% if (typeof error !== 'undefined' && error) { %>
+            <div class="alert alert-danger alert-dismissible fade show">
+                <i class="bi bi-exclamation-triangle me-2"></i><%= error %>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <% } %>
+
+        <% if (typeof success !== 'undefined' && success) { %>
+            <div class="alert alert-success alert-dismissible fade show">
+                <i class="bi bi-check-circle me-2"></i><%= success %>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <% } %>
+
+        <% if (!licenseStatus || licenseStatus.status !== 'active') { %>
+            <form id="licenseForm" method="POST" action="/admin/license/activate">
+                <div class="mb-3">
+                    <label for="license_key" class="form-label">
+                        <i class="bi bi-key me-1"></i>License Key
+                    </label>
+                    <input type="text" 
+                           class="form-control" 
+                           id="license_key" 
+                           name="license_key" 
+                           placeholder="CVLM-XXXX-XXXX-XXXX-XXXX"
+                           pattern="CVLM-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}"
+                           required
+                           autofocus>
+                    <small class="form-text text-muted">
+                        Format: CVLM-XXXX-XXXX-XXXX-XXXX (huruf kapital dan angka)
+                    </small>
+                </div>
+                <button type="submit" class="btn btn-primary" id="activateBtn">
+                    <i class="bi bi-shield-check me-2"></i>
+                    <span class="btn-text">Aktivasi License</span>
+                    <span class="btn-loading" style="display:none;">
+                        <span class="spinner-border spinner-border-sm me-2"></span>Memproses...
+                    </span>
+                </button>
+            </form>
+        <% } %>
+
+        <div class="text-center mt-4">
+            <a href="/admin/login" class="text-muted text-decoration-none">
+                <i class="bi bi-arrow-left me-1"></i>Kembali ke Login
+            </a>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Format license key saat input
+        $('#license_key').on('input', function() {
+            let value = $(this).val().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+            
+            // Auto insert dashes
+            if (value.length > 4 && value[4] !== '-') {
+                value = value.slice(0, 4) + '-' + value.slice(4);
+            }
+            if (value.length > 9 && value[9] !== '-') {
+                value = value.slice(0, 9) + '-' + value.slice(9);
+            }
+            if (value.length > 14 && value[14] !== '-') {
+                value = value.slice(0, 14) + '-' + value.slice(14);
+            }
+            
+            // Limit to 24 characters (CVLM-XXXX-XXXX-XXXX-XXXX)
+            if (value.length > 24) {
+                value = value.slice(0, 24);
+            }
+            
+            $(this).val(value);
+        });
+
+        // Form submission
+        $('#licenseForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            const licenseKey = $('#license_key').val().trim();
+            
+            if (!licenseKey) {
+                alert('License key tidak boleh kosong!');
+                return;
+            }
+            
+            // Validate format
+            const pattern = /^CVLM-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+            if (!pattern.test(licenseKey)) {
+                alert('Format license key tidak valid! Format: CVLM-XXXX-XXXX-XXXX-XXXX');
+                return;
+            }
+            
+            // Show loading
+            $('#activateBtn').prop('disabled', true);
+            $('#activateBtn .btn-text').hide();
+            $('#activateBtn .btn-loading').show();
+            
+            // Submit form
+            this.submit();
+        });
+    </script>
+</body>
+</html>
+

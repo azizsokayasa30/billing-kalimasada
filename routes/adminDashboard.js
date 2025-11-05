@@ -9,6 +9,7 @@ const { getMikrotikConnectionForRouter, getRadiusStatistics, getUserAuthModeAsyn
 const { getSettingsWithCache } = require('../config/settingsManager');
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const { getRadiusConfigValue } = require('../config/radiusConfig');
+const { checkLicenseStatus } = require('../config/licenseManager');
 
 // GET: Dashboard admin
 router.get('/dashboard', adminAuth, async (req, res) => {
@@ -144,6 +145,14 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     });
   }
 
+  // Check license status untuk ditampilkan di dashboard
+  let licenseStatus = null;
+  try {
+    licenseStatus = await checkLicenseStatus();
+  } catch (error) {
+    console.error('⚠️ [DASHBOARD] Error checking license status:', error);
+  }
+
   res.render('adminDashboard', {
     title: 'Dashboard Admin',
     page: 'dashboard',
@@ -156,7 +165,8 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     settings, // Sertakan settings di sini
     versionInfo: getVersionInfo(),
     versionBadge: getVersionBadge(),
-    configValidation: req.session.configValidation || null // Sertakan hasil validasi konfigurasi
+    configValidation: req.session.configValidation || null, // Sertakan hasil validasi konfigurasi
+    licenseStatus: licenseStatus // Sertakan status license
   });
 });
 

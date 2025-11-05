@@ -413,6 +413,53 @@
                 <% } %>
             <% } %>
 
+            <!-- LICENSE STATUS CARD -->
+            <% if (typeof licenseStatus !== 'undefined' && licenseStatus) { %>
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <% if (licenseStatus.status === 'active') { %>
+                        <div class="alert alert-success d-flex align-items-center mb-0">
+                            <i class="bi bi-shield-check fs-3 me-3"></i>
+                            <div class="flex-grow-1">
+                                <strong>License Aktif</strong>
+                                <div class="small">License key: <code><%= licenseStatus.license_key %></code></div>
+                                <div class="small">Aktivasi: <%= licenseStatus.activated_at ? new Date(licenseStatus.activated_at).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' %></div>
+                            </div>
+                        </div>
+                    <% } else if (licenseStatus.status === 'trial') { %>
+                        <div class="alert alert-warning d-flex align-items-center mb-0">
+                            <i class="bi bi-clock-history fs-3 me-3"></i>
+                            <div class="flex-grow-1">
+                                <strong>Mode Trial Aktif</strong>
+                                <div class="small">
+                                    <span class="badge bg-warning text-dark me-2"><%= licenseStatus.days_remaining || 0 %> hari tersisa</span>
+                                    Trial berakhir: <strong><%= licenseStatus.trial_end_date ? new Date(licenseStatus.trial_end_date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' %></strong>
+                                </div>
+                                <div class="small mt-1">
+                                    <a href="/admin/license" class="btn btn-sm btn-warning">
+                                        <i class="bi bi-shield-lock me-1"></i>Aktivasi License Key
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    <% } else if (licenseStatus.status === 'expired') { %>
+                        <div class="alert alert-danger d-flex align-items-center mb-0">
+                            <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
+                            <div class="flex-grow-1">
+                                <strong>Trial Period Telah Berakhir!</strong>
+                                <div class="small">Trial berakhir: <%= licenseStatus.trial_end_date ? new Date(licenseStatus.trial_end_date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' %></div>
+                                <div class="small mt-2">
+                                    <a href="/admin/license" class="btn btn-sm btn-danger">
+                                        <i class="bi bi-shield-lock me-1"></i>Aktivasi License Key Sekarang
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+            <% } %>
+
             <!-- MANUAL VALIDATION BUTTON -->
             <div class="row mb-3">
                 <div class="col-12">
