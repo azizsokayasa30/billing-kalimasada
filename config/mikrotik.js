@@ -3827,28 +3827,25 @@ async function getHotspotServerProfiles(routerObj = null) {
 async function getHotspotServerProfilesRadius() {
     const conn = await getRadiusConnection();
     try {
-        // Buat tabel jika belum ada untuk menyimpan server profiles
-        await conn.execute(`
-            CREATE TABLE IF NOT EXISTS hotspot_server_profiles (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(64) NOT NULL UNIQUE,
-                rate_limit VARCHAR(255),
-                session_timeout VARCHAR(64),
-                idle_timeout VARCHAR(64),
-                shared_users INT DEFAULT 1,
-                open_status_page VARCHAR(64) DEFAULT 'http-login',
-                http_cookie_lifetime INT DEFAULT 0,
-                split_user_domain TINYINT(1) DEFAULT 0,
-                status_autorefresh VARCHAR(64) DEFAULT 'none',
-                copy_from VARCHAR(64),
-                disabled TINYINT(1) DEFAULT 0,
-                comment TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_name (name),
-                INDEX idx_disabled (disabled)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        // Cek apakah tabel sudah ada terlebih dahulu
+        // Jika tidak ada, kita tidak bisa membuatnya karena user billing tidak punya CREATE permission
+        // Tabel harus dibuat dengan script SQL terpisah (setup_hotspot_server_profiles_table.sql)
+        const [tableCheck] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'hotspot_server_profiles'
         `);
+        
+        if (tableCheck.length === 0 || tableCheck[0].count === 0) {
+            await conn.end();
+            logger.warn('Tabel hotspot_server_profiles belum dibuat. Silakan jalankan: mysql -u root -p < setup_hotspot_server_profiles_table.sql');
+            return {
+                success: false,
+                message: 'Tabel hotspot_server_profiles belum dibuat. Silakan jalankan script setup: mysql -u root -p < setup_hotspot_server_profiles_table.sql',
+                data: []
+            };
+        }
         
         // Ambil semua server profiles
         const [rows] = await conn.execute(`
@@ -3899,6 +3896,22 @@ async function getHotspotServerProfilesRadius() {
 async function addHotspotServerProfileRadius(profileData) {
     const conn = await getRadiusConnection();
     try {
+        // Cek apakah tabel sudah ada
+        const [tableCheck] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'hotspot_server_profiles'
+        `);
+        
+        if (tableCheck.length === 0 || tableCheck[0].count === 0) {
+            await conn.end();
+            return {
+                success: false,
+                message: 'Tabel hotspot_server_profiles belum dibuat. Silakan jalankan script setup terlebih dahulu: mysql -u root -p < setup_hotspot_server_profiles_table.sql'
+            };
+        }
+        
         const name = (profileData.name || '').trim().toLowerCase().replace(/\s+/g, '-');
         
         if (!name || name === '') {
