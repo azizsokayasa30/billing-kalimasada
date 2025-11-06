@@ -68,12 +68,93 @@ class ConfigValidator {
 
     /**
      * Test koneksi ke GenieACS
+     * Mengambil data dari database genieacs_servers, bukan settings.json
      */
     async testGenieACSConnection() {
         try {
-            const genieacsUrl = getSetting('genieacs_url', 'http://localhost:7557');
-            const genieacsUsername = getSetting('genieacs_username', 'acs');
-            const genieacsPassword = getSetting('genieacs_password', '');
+            // Ambil semua GenieACS servers dari database
+            const { getAllGenieacsServers } = require('./genieacs');
+            const servers = await getAllGenieacsServers();
+
+            if (!servers || servers.length === 0) {
+                // Fallback ke settings.json jika tidak ada server di database
+                const genieacsUrl = getSetting('genieacs_url', 'http://localhost:7557');
+                const genieacsUsername = getSetting('genieacs_username', 'acs');
+                const genieacsPassword = getSetting('genieacs_password', '');
+
+                if (!genieacsUrl || genieacsUrl === 'http://localhost:7557') {
+                    return {
+                        success: false,
+                        error: 'Tidak ada GenieACS server yang dikonfigurasi',
+                        details: 'Silakan tambahkan GenieACS server di /admin/genieacs-servers',
+                        servers: []
+                    };
+                }
+
+                // Test dengan settings.json sebagai fallback
+                return await this.testGenieACSServer({
+                    name: 'Default (settings.json)',
+                    url: genieacsUrl,
+                    username: genieacsUsername,
+                    password: genieacsPassword
+                });
+            }
+
+            // Test koneksi ke setiap server
+            const serverResults = [];
+            let allSuccess = true;
+            let hasValidServer = false;
+
+            for (const server of servers) {
+                const result = await this.testGenieACSServer(server);
+                serverResults.push({
+                    server: server.name || server.url,
+                    serverId: server.id,
+                    ...result
+                });
+
+                if (result.success) {
+                    hasValidServer = true;
+                } else {
+                    allSuccess = false;
+                }
+            }
+
+            if (hasValidServer) {
+                return {
+                    success: true,
+                    message: `${serverResults.filter(s => s.success).length} dari ${servers.length} server GenieACS terhubung`,
+                    details: `Total ${servers.length} server dikonfigurasi`,
+                    servers: serverResults
+                };
+            } else {
+                return {
+                    success: false,
+                    error: 'Semua server GenieACS gagal koneksi',
+                    details: `${serverResults.filter(s => !s.success).length} server bermasalah`,
+                    servers: serverResults
+                };
+            }
+
+        } catch (error) {
+            logger.error(`Error testing GenieACS connections: ${error.message}`);
+            return {
+                success: false,
+                error: 'Gagal memvalidasi koneksi GenieACS',
+                details: error.message,
+                servers: []
+            };
+        }
+    }
+
+    /**
+     * Test koneksi ke satu GenieACS server
+     */
+    async testGenieACSServer(server) {
+        try {
+            const genieacsUrl = server.url;
+            const genieacsUsername = server.username;
+            const genieacsPassword = server.password;
 
             // Validasi URL format
             if (!this.isValidURL(genieacsUrl)) {
@@ -117,13 +198,13 @@ class ConfigValidator {
 
             if (error.code === 'ECONNREFUSED') {
                 errorMessage = 'GenieACS tidak dapat dijangkau';
-                errorDetails = `Server tidak merespons pada ${genieacsUrl}. Pastikan GenieACS berjalan dan dapat diakses.`;
+                errorDetails = `Server tidak merespons pada ${server.url}. Pastikan GenieACS berjalan dan dapat diakses.`;
             } else if (error.code === 'ENOTFOUND') {
                 errorMessage = 'Host GenieACS tidak ditemukan';
-                errorDetails = `Alamat IP ${genieacsUrl} tidak dapat dijangkau. Periksa koneksi jaringan.`;
+                errorDetails = `Alamat IP ${server.url} tidak dapat dijangkau. Periksa koneksi jaringan.`;
             } else if (error.code === 'ETIMEDOUT') {
                 errorMessage = 'GenieACS timeout';
-                errorDetails = `Koneksi ke ${genieacsUrl} timeout. Server mungkin lambat atau tidak aktif.`;
+                errorDetails = `Koneksi ke ${server.url} timeout. Server mungkin lambat atau tidak aktif.`;
             } else if (error.response) {
                 if (error.response.status === 401) {
                     errorMessage = 'Autentikasi GenieACS gagal';
@@ -323,7 +404,7 @@ class ConfigValidator {
         
         // Reset hasil validasi
         this.validationResults = {
-            genieacs: { isValid: false, errors: [], warnings: [] },
+            genieacs: { isValid: false, errors: [], warnings: [], serverResults: [] },
             mikrotik: { isValid: false, errors: [], warnings: [], routerResults: [] },
             overall: { isValid: false, needsAttention: false }
         };
@@ -335,10 +416,38 @@ class ConfigValidator {
         if (genieacsResult.success) {
             this.validationResults.genieacs.isValid = true;
             console.log('✅ [CONFIG_VALIDATOR] GenieACS: Konfigurasi valid');
+            if (genieacsResult.servers && genieacsResult.servers.length > 0) {
+                genieacsResult.servers.forEach(server => {
+                    if (server.success) {
+                        console.log(`   ✓ ${server.server}: ${server.message || 'Terhubung'}`);
+                    } else {
+                        console.log(`   ⚠️ ${server.server}: ${server.error || 'Gagal'}`);
+                    }
+                });
+            }
         } else {
-            this.validationResults.genieacs.errors.push(genieacsResult.error);
-            console.log(`❌ [CONFIG_VALIDATOR] GenieACS: ${genieacsResult.error}`);
+            if (genieacsResult.error) {
+                this.validationResults.genieacs.errors.push(genieacsResult.error);
+            }
+            if (genieacsResult.servers && genieacsResult.servers.length > 0) {
+                genieacsResult.servers.forEach(server => {
+                    if (!server.success) {
+                        const errorMsg = `${server.server}: ${server.error || 'Koneksi gagal'}`;
+                        if (!this.validationResults.genieacs.errors.includes(errorMsg)) {
+                            this.validationResults.genieacs.errors.push(errorMsg);
+                        }
+                        console.log(`   ❌ ${errorMsg}`);
+                    } else {
+                        console.log(`   ✓ ${server.server}: ${server.message || 'Terhubung'}`);
+                    }
+                });
+            } else {
+                console.log(`❌ [CONFIG_VALIDATOR] GenieACS: ${genieacsResult.error || 'Gagal validasi'}`);
+            }
         }
+        
+        // Simpan detail server results untuk ditampilkan di UI
+        this.validationResults.genieacs.serverResults = genieacsResult.servers || [];
 
         // Validasi Mikrotik
         console.log('🔍 [CONFIG_VALIDATOR] Memvalidasi konfigurasi Mikrotik...');
