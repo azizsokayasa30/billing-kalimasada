@@ -413,20 +413,11 @@
                 <% } %>
             <% } %>
 
-            <!-- LICENSE STATUS CARD -->
+            <!-- LICENSE STATUS CARD (Trial & Expired only - Active moved to top) -->
             <% if (typeof licenseStatus !== 'undefined' && licenseStatus) { %>
             <div class="row mb-4">
                 <div class="col-md-12">
-                    <% if (licenseStatus.status === 'active') { %>
-                        <div class="alert alert-success d-flex align-items-center mb-0">
-                            <i class="bi bi-shield-check fs-3 me-3"></i>
-                            <div class="flex-grow-1">
-                                <strong>License Aktif</strong>
-                                <div class="small">License key: <code><%= licenseStatus.license_key %></code></div>
-                                <div class="small">Aktivasi: <%= licenseStatus.activated_at ? new Date(licenseStatus.activated_at).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' %></div>
-                            </div>
-                        </div>
-                    <% } else if (licenseStatus.status === 'trial') { %>
+                    <% if (licenseStatus.status === 'trial') { %>
                         <div class="alert alert-warning d-flex align-items-center mb-0">
                             <i class="bi bi-clock-history fs-3 me-3"></i>
                             <div class="flex-grow-1">
@@ -465,16 +456,31 @@
                 <div class="col-12">
                     <div class="d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Dashboard Sistem</h5>
-                        <div>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="validateConfigBtn">
-                                <i class="bi bi-gear-fill me-1"></i>Validasi Konfigurasi
-                            </button>
-                            <a href="/admin/settings" class="btn btn-outline-success btn-sm ms-2">
-                                <i class="bi bi-sliders me-1"></i>Pengaturan Sistem
-                            </a>
-                            <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="refreshDashboardBtn">
-                                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-                            </button>
+                        <div class="d-flex align-items-center gap-3">
+                            <!-- LICENSE STATUS (GOLD) - Moved from top -->
+                            <% if (typeof licenseStatus !== 'undefined' && licenseStatus && licenseStatus.status === 'active') { %>
+                            <div class="license-badge-gold d-flex align-items-center px-3 py-2 rounded">
+                                <i class="bi bi-shield-check fs-4 me-2"></i>
+                                <div>
+                                    <strong>License Aktif</strong>
+                                    <div class="small" style="font-size: 0.75rem;">
+                                        <div>License key: <code><%= licenseStatus.license_key %></code></div>
+                                        <div>Aktivasi: <%= licenseStatus.activated_at ? new Date(licenseStatus.activated_at).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' %></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <% } %>
+                            <div>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="validateConfigBtn">
+                                    <i class="bi bi-gear-fill me-1"></i>Validasi Konfigurasi
+                                </button>
+                                <a href="/admin/settings" class="btn btn-outline-success btn-sm ms-2">
+                                    <i class="bi bi-sliders me-1"></i>Pengaturan Sistem
+                                </a>
+                                <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="refreshDashboardBtn">
+                                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
