@@ -17,11 +17,14 @@ const {
     deleteHotspotProfile,
     getHotspotProfileDetail,
     getHotspotServerProfiles,
-    getHotspotServerProfilesRadius,
-    getHotspotServerProfileDetailRadius,
-    addHotspotServerProfileRadius,
-    editHotspotServerProfileRadius,
-    deleteHotspotServerProfileRadius,
+    addHotspotServerProfileMikrotik,
+    editHotspotServerProfileMikrotik,
+    deleteHotspotServerProfileMikrotik,
+    getHotspotServers,
+    addHotspotServer,
+    editHotspotServer,
+    deleteHotspotServer,
+    getHotspotServerDetail,
     getMikrotikConnectionForRouter
 } = require('../config/mikrotik');
 const { kickPPPoEUser } = require('../config/mikrotik2');
@@ -1356,20 +1359,9 @@ router.post('/mikrotik/restart', adminAuth, async (req, res) => {
 // HOTSPOT SERVER PROFILES ROUTES
 // ============================================
 
-// GET: List Server Profile Hotspot
+// GET: List Server Hotspot dan Server Profile Hotspot (Mikrotik API Only)
 router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
   try {
-    // Check auth mode - RADIUS atau Mikrotik API
-    const { getUserAuthModeAsync } = require('../config/mikrotik');
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
-
     const sqlite3 = require('sqlite3').verbose();
     const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
     const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
@@ -1382,47 +1374,12 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
     }));
     db.close();
 
-    // Untuk mode RADIUS, ambil dari RADIUS database
-    if (userAuthMode === 'radius') {
-      try {
-        const result = await getHotspotServerProfilesRadius();
-        logger.info('RADIUS mode: Loading server profiles from RADIUS database');
-
-        if (result.success) {
-          const profiles = result.data || [];
-          const settings = getSettingsWithCache();
-          return res.render('admin/mikrotik/hotspot-server-profiles', {
-            profiles: profiles, 
-            routers: [],
-            error: null,
-            settings,
-            versionInfo: getVersionInfo(),
-            versionBadge: getVersionBadge(),
-            userAuthMode: 'radius'
-          });
-        } else {
-          throw new Error(result.message || 'Failed to get server profiles');
-        }
-      } catch (radiusError) {
-        logger.error('Error fetching server profiles from RADIUS:', radiusError);
-        const settings = getSettingsWithCache();
-        return res.render('admin/mikrotik/hotspot-server-profiles', {
-          profiles: [], 
-          routers: [],
-          error: `Gagal mengambil data server profile dari RADIUS: ${radiusError.message}`, 
-          settings,
-          versionInfo: getVersionInfo(),
-          versionBadge: getVersionBadge(),
-          userAuthMode: 'radius'
-        });
-      }
-    }
-
     // Untuk mode Mikrotik API, perlu router
     if (!routers || routers.length === 0) {
       console.warn('No routers found in database');
       const settings = getSettingsWithCache();
       return res.render('admin/mikrotik/hotspot-server-profiles', {
+        servers: [],
         profiles: [], 
         routers: [],
         error: 'Tidak ada router/NAS yang dikonfigurasi. Silakan tambahkan router terlebih dahulu di menu NAS (RADIUS).', 
@@ -1433,8 +1390,31 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
       });
     }
 
-    let combined = [];
-    let errorMessages = [];
+    // Ambil Server Hotspot dari semua router
+    let servers = [];
+    let serverErrors = [];
+    for (const r of routers) {
+      try {
+        const result = await getHotspotServers(r);
+        if (result.success && Array.isArray(result.data)) {
+          servers = servers.concat(result.data.map(server => ({
+            ...server,
+            nas_id: r.id,
+            nas_name: r.name,
+            nas_ip: r.nas_ip
+          })));
+        } else {
+          serverErrors.push(`${r.name}: ${result.message}`);
+        }
+      } catch (e) {
+        console.error(`Error getting hotspot servers from ${r.name}:`, e.message);
+        serverErrors.push(`${r.name}: ${e.message}`);
+      }
+    }
+
+    // Ambil Server Profile Hotspot dari semua router
+    let profiles = [];
+    let profileErrors = [];
     for (const r of routers) {
       try {
         const result = await getHotspotServerProfiles(r);
@@ -1446,84 +1426,86 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
               nas_name: r.name,
               nas_ip: r.nas_ip
             };
-            combined.push(profileObj);
+            profiles.push(profileObj);
           });
         } else {
-          errorMessages.push(`${r.name}: ${result.message}`);
+          // Skip error jika router tidak mendukung fitur ini (bukan error kritis)
+          const errorMsg = result.message || 'Unknown error';
+          if (errorMsg.includes('tidak mendukung') || errorMsg.includes('tidak kompatibel')) {
+            logger.warn(`${r.name}: ${errorMsg} - Fitur Server Profile Hotspot tidak tersedia`);
+            // Tidak menambahkan ke errorMessages karena ini bukan error kritis
+          } else {
+            profileErrors.push(`${r.name}: ${errorMsg}`);
+          }
         }
       } catch (e) {
         console.error(`Error getting server profiles from ${r.name}:`, e.message);
-        errorMessages.push(`${r.name}: ${e.message}`);
+        profileErrors.push(`${r.name}: ${e.message}`);
       }
     }
-    
+
+    const allErrors = [...serverErrors, ...profileErrors];
     const settings = getSettingsWithCache();
+    
+    // Sanitize data untuk memastikan JSON valid (menghilangkan undefined, null, circular references)
+    const sanitizedServers = servers.map(server => ({
+      id: server.id || server['.id'] || '',
+      name: server.name || '',
+      interface: server.interface || '',
+      profile: server.profile || '',
+      addressPool: server.addressPool || server.address || '',
+      disabled: server.disabled === true || server.disabled === 'true',
+      nas_id: server.nas_id || null,
+      nas_name: server.nas_name || '',
+      nas_ip: server.nas_ip || ''
+    }));
+    
+    const sanitizedProfiles = profiles.map(prof => ({
+      id: prof.id || prof['.id'] || '',
+      name: prof.name || '',
+      'rate-limit': prof['rate-limit'] || '',
+      'session-timeout': prof['session-timeout'] || '',
+      'idle-timeout': prof['idle-timeout'] || '',
+      'shared-users': prof['shared-users'] || '1',
+      'open-status-page': prof['open-status-page'] || 'http-login',
+      comment: prof.comment || '',
+      nas_id: prof.nas_id || null,
+      nas_name: prof.nas_name || '',
+      nas_ip: prof.nas_ip || ''
+    }));
+    
     return res.render('admin/mikrotik/hotspot-server-profiles', {
-      profiles: combined, 
+      servers: sanitizedServers,
+      profiles: sanitizedProfiles, 
       routers,
       settings,
-      error: errorMessages.length > 0 ? `Beberapa router gagal: ${errorMessages.join('; ')}` : null,
+      error: allErrors.length > 0 ? `Beberapa router gagal: ${allErrors.join('; ')}` : null,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge(),
       userAuthMode: 'mikrotik'
     });
   } catch (err) {
-    console.error('Error in server profiles GET route:', err);
-    let userAuthMode = 'mikrotik';
-    try {
-      const { getRadiusConfigValue } = require('../config/radiusConfig');
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
-    
+    console.error('Error in hotspot server/profiles GET route:', err);
     const settings = getSettingsWithCache();
     return res.render('admin/mikrotik/hotspot-server-profiles', {
+      servers: [],
       profiles: [], 
       routers: [],
-      error: `Gagal mengambil data server profile: ${err.message}`, 
+      error: `Gagal mengambil data: ${err.message}`, 
       settings,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge(),
-      userAuthMode: userAuthMode
+      userAuthMode: 'mikrotik'
     });
   }
 });
 
-// GET: API Daftar Server Profile Hotspot
+// GET: API Daftar Server Profile Hotspot (Mikrotik API Only)
 router.get('/mikrotik/hotspot-server-profiles/api', adminAuth, async (req, res) => {
   try {
     const { router_id } = req.query;
-    
-    // Check auth mode
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
 
-    // Untuk mode RADIUS, ambil dari RADIUS database
-    if (userAuthMode === 'radius') {
-      try {
-        const result = await getHotspotServerProfilesRadius();
-        logger.info('RADIUS mode: Loading server profiles from RADIUS database (API)');
-
-        if (result.success) {
-          return res.json({ success: true, profiles: result.data || [] });
-        } else {
-          throw new Error(result.message || 'Failed to get server profiles');
-        }
-      } catch (radiusError) {
-        logger.error('Error fetching server profiles from RADIUS (API):', radiusError);
-        return res.json({ success: false, profiles: [], message: `Gagal mengambil data server profile dari RADIUS: ${radiusError.message}` });
-      }
-    }
-
-    // Untuk mode Mikrotik API
+    // Untuk mode Mikrotik API, ambil dari Mikrotik router
     if (router_id) {
       const sqlite3 = require('sqlite3').verbose();
       const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
@@ -1582,7 +1564,14 @@ router.get('/mikrotik/hotspot-server-profiles/api', adminAuth, async (req, res) 
             combined.push(profileObj);
           });
         } else {
-          errorMessages.push(`${r.name}: ${result.message}`);
+          // Skip error jika router tidak mendukung fitur ini (bukan error kritis)
+          const errorMsg = result.message || 'Unknown error';
+          if (errorMsg.includes('tidak mendukung') || errorMsg.includes('tidak kompatibel')) {
+            logger.warn(`${r.name}: ${errorMsg} - Fitur Server Profile Hotspot tidak tersedia`);
+            // Tidak menambahkan ke errorMessages karena ini bukan error kritis
+          } else {
+            errorMessages.push(`${r.name}: ${errorMsg}`);
+          }
         }
       } catch (e) {
         console.error(`Error getting server profiles from ${r.name}:`, e.message);
@@ -1593,7 +1582,7 @@ router.get('/mikrotik/hotspot-server-profiles/api', adminAuth, async (req, res) 
     return res.json({ 
       success: true, 
       profiles: combined,
-      message: errorMessages.length > 0 ? `Beberapa router gagal: ${errorMessages.join('; ')}` : null
+      error: errorMessages.length > 0 ? `Beberapa router gagal: ${errorMessages.join('; ')}` : null
     });
   } catch (err) {
     console.error('Error in server profiles API route:', err);
@@ -1601,32 +1590,12 @@ router.get('/mikrotik/hotspot-server-profiles/api', adminAuth, async (req, res) 
   }
 });
 
-// POST: Tambah Server Profile Hotspot
+// POST: Tambah Server Profile Hotspot (Mikrotik API Only)
 router.post('/mikrotik/hotspot-server-profiles/add', adminAuth, async (req, res) => {
   try {
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
-
     const profileData = req.body;
-
-    // Untuk mode RADIUS, simpan ke RADIUS database
-    if (userAuthMode === 'radius') {
-      if (!profileData.name) {
-        return res.json({ success: false, message: 'Nama server profile harus diisi' });
-      }
-
-      const result = await addHotspotServerProfileRadius(profileData);
-      return res.json(result);
-    }
-
-    // Untuk mode Mikrotik API, simpan ke Mikrotik
     const { router_id } = req.body;
+    
     if (!router_id) {
       return res.json({ success: false, message: 'Router ID harus diisi' });
     }
@@ -1642,88 +1611,322 @@ router.post('/mikrotik/hotspot-server-profiles/add', adminAuth, async (req, res)
       return res.json({ success: false, message: 'Router tidak ditemukan' });
     }
 
-    // TODO: Implement addHotspotServerProfile for Mikrotik API
-    // For now, return error
-    return res.json({ success: false, message: 'Fitur tambah server profile untuk Mikrotik API belum diimplementasikan' });
+    const result = await addHotspotServerProfileMikrotik(profileData, routerObj);
+    return res.json(result);
   } catch (err) {
     console.error('Error adding server profile:', err);
     res.json({ success: false, message: err.message });
   }
 });
 
-// POST: Edit Server Profile Hotspot
+// POST: Edit Server Profile Hotspot (Mikrotik API Only)
 router.post('/mikrotik/hotspot-server-profiles/edit', adminAuth, async (req, res) => {
   try {
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
-
     const { id } = req.body;
     const profileData = req.body;
-
-    // Untuk mode RADIUS, update di RADIUS database
-    if (userAuthMode === 'radius') {
-      if (!id) {
-        return res.json({ success: false, message: 'ID server profile harus diisi' });
-      }
-
-      const result = await editHotspotServerProfileRadius(id, profileData);
-      return res.json(result);
-    }
-
-    // Untuk mode Mikrotik API, update di Mikrotik
     const { router_id } = req.body;
+    
+    if (!id) {
+      return res.json({ success: false, message: 'ID server profile harus diisi' });
+    }
+    
     if (!router_id) {
       return res.json({ success: false, message: 'Router ID harus diisi' });
     }
 
-    // TODO: Implement editHotspotServerProfile for Mikrotik API
-    return res.json({ success: false, message: 'Fitur edit server profile untuk Mikrotik API belum diimplementasikan' });
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+      db.close();
+      resolve(row || null);
+    }));
+
+    if (!routerObj) {
+      return res.json({ success: false, message: 'Router tidak ditemukan' });
+    }
+
+    const result = await editHotspotServerProfileMikrotik(id, profileData, routerObj);
+    return res.json(result);
   } catch (err) {
     console.error('Error editing server profile:', err);
     res.json({ success: false, message: err.message });
   }
 });
 
-// POST: Hapus Server Profile Hotspot
+// POST: Hapus Server Profile Hotspot (Mikrotik API Only)
 router.post('/mikrotik/hotspot-server-profiles/delete', adminAuth, async (req, res) => {
   try {
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
-
     const { id } = req.body;
-
-    // Untuk mode RADIUS, hapus dari RADIUS database
-    if (userAuthMode === 'radius') {
-      if (!id) {
-        return res.json({ success: false, message: 'ID server profile harus diisi' });
-      }
-
-      const result = await deleteHotspotServerProfileRadius(id);
-      return res.json(result);
-    }
-
-    // Untuk mode Mikrotik API, hapus dari Mikrotik
     const { router_id } = req.body;
+    
+    if (!id) {
+      return res.json({ success: false, message: 'ID server profile harus diisi' });
+    }
+    
     if (!router_id) {
       return res.json({ success: false, message: 'Router ID harus diisi' });
     }
 
-    // TODO: Implement deleteHotspotServerProfile for Mikrotik API
-    return res.json({ success: false, message: 'Fitur hapus server profile untuk Mikrotik API belum diimplementasikan' });
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+      db.close();
+      resolve(row || null);
+    }));
+
+    if (!routerObj) {
+      return res.json({ success: false, message: 'Router tidak ditemukan' });
+    }
+
+    const result = await deleteHotspotServerProfileMikrotik(id, routerObj);
+    return res.json(result);
   } catch (err) {
     console.error('Error deleting server profile:', err);
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// ============================================
+// HOTSPOT SERVER ROUTES (Mikrotik API Only)
+// ============================================
+
+// GET: API Daftar Interfaces untuk Router
+router.get('/mikrotik/interfaces/api', adminAuth, async (req, res) => {
+  try {
+    const { router_id } = req.query;
+    
+    if (!router_id) {
+      return res.json({ success: false, interfaces: [], message: 'Router ID harus diisi' });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+      db.close();
+      resolve(row || null);
+    }));
+
+    if (!routerObj) {
+      return res.json({ success: false, interfaces: [], message: 'Router tidak ditemukan' });
+    }
+
+    const { getInterfacesForRouter } = require('../config/mikrotik');
+    const result = await getInterfacesForRouter(routerObj);
+    
+    if (result.success) {
+      return res.json({ success: true, interfaces: result.data || [] });
+    } else {
+      return res.json({ success: false, interfaces: [], message: result.message });
+    }
+  } catch (err) {
+    console.error('Error in interfaces API:', err);
+    res.json({ success: false, interfaces: [], message: err.message });
+  }
+});
+
+// GET: API Daftar Address Pools untuk Router
+router.get('/mikrotik/address-pools/api', adminAuth, async (req, res) => {
+  try {
+    const { router_id } = req.query;
+    
+    if (!router_id) {
+      return res.json({ success: false, pools: [], message: 'Router ID harus diisi' });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+      db.close();
+      resolve(row || null);
+    }));
+
+    if (!routerObj) {
+      return res.json({ success: false, pools: [], message: 'Router tidak ditemukan' });
+    }
+
+    const { getAddressPoolsForRouter } = require('../config/mikrotik');
+    const result = await getAddressPoolsForRouter(routerObj);
+    
+    if (result.success) {
+      return res.json({ success: true, pools: result.data || [] });
+    } else {
+      return res.json({ success: false, pools: [], message: result.message });
+    }
+  } catch (err) {
+    console.error('Error in address pools API:', err);
+    res.json({ success: false, pools: [], message: err.message });
+  }
+});
+
+// GET: API Daftar Server Hotspot
+router.get('/mikrotik/hotspot-servers/api', adminAuth, async (req, res) => {
+  try {
+    const { router_id } = req.query;
+    
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    
+    if (router_id) {
+      const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+        db.close();
+        resolve(row || null);
+      }));
+      if (!routerObj) {
+        return res.json({ success: false, servers: [], message: 'Router tidak ditemukan' });
+      }
+
+      const result = await getHotspotServers(routerObj);
+      if (result.success) {
+        const serversWithRouter = result.data.map(server => ({
+          ...server,
+          nas_id: routerObj.id,
+          nas_name: routerObj.name,
+          nas_ip: routerObj.nas_ip
+        }));
+        return res.json({ success: true, servers: serversWithRouter });
+      } else {
+        return res.json({ success: false, servers: [], message: result.message });
+      }
+    }
+
+    // Ambil dari semua router
+    const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
+      db.close();
+      if (err) {
+        console.error('Error fetching routers:', err);
+        resolve([]);
+      } else {
+        resolve(rows || []);
+      }
+    }));
+    
+    let combined = [];
+    let errorMessages = [];
+    for (const r of routers) {
+      try {
+        const result = await getHotspotServers(r);
+        if (result.success && Array.isArray(result.data)) {
+          result.data.forEach(server => {
+            const serverObj = {
+              ...server,
+              nas_id: r.id,
+              nas_name: r.name,
+              nas_ip: r.nas_ip
+            };
+            combined.push(serverObj);
+          });
+        } else {
+          errorMessages.push(`${r.name}: ${result.message}`);
+        }
+      } catch (e) {
+        console.error(`Error getting servers from ${r.name}:`, e.message);
+        errorMessages.push(`${r.name}: ${e.message}`);
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      servers: combined,
+      error: errorMessages.length > 0 ? `Beberapa router gagal: ${errorMessages.join('; ')}` : null
+    });
+  } catch (err) {
+    console.error('Error in hotspot servers API:', err);
+    res.json({ success: false, servers: [], message: err.message });
+  }
+});
+
+// POST: Tambah Server Hotspot
+router.post('/mikrotik/hotspot-servers/add', adminAuth, async (req, res) => {
+  try {
+    const serverData = req.body;
+    const { router_id } = req.body;
+    
+    if (!router_id) {
+      return res.json({ success: false, message: 'Router ID harus diisi' });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+      db.close();
+      resolve(row || null);
+    }));
+
+    if (!routerObj) {
+      return res.json({ success: false, message: 'Router tidak ditemukan' });
+    }
+
+    const result = await addHotspotServer(serverData, routerObj);
+    return res.json(result);
+  } catch (err) {
+    console.error('Error adding hotspot server:', err);
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// POST: Edit Server Hotspot
+router.post('/mikrotik/hotspot-servers/edit', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.body;
+    const serverData = req.body;
+    const { router_id } = req.body;
+    
+    if (!id) {
+      return res.json({ success: false, message: 'ID server hotspot harus diisi' });
+    }
+    
+    if (!router_id) {
+      return res.json({ success: false, message: 'Router ID harus diisi' });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+      db.close();
+      resolve(row || null);
+    }));
+
+    if (!routerObj) {
+      return res.json({ success: false, message: 'Router tidak ditemukan' });
+    }
+
+    const result = await editHotspotServer(id, serverData, routerObj);
+    return res.json(result);
+  } catch (err) {
+    console.error('Error editing hotspot server:', err);
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// POST: Hapus Server Hotspot
+router.post('/mikrotik/hotspot-servers/delete', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.body;
+    const { router_id } = req.body;
+    
+    if (!id) {
+      return res.json({ success: false, message: 'ID server hotspot harus diisi' });
+    }
+    
+    if (!router_id) {
+      return res.json({ success: false, message: 'Router ID harus diisi' });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
+      db.close();
+      resolve(row || null);
+    }));
+
+    if (!routerObj) {
+      return res.json({ success: false, message: 'Router tidak ditemukan' });
+    }
+
+    const result = await deleteHotspotServer(id, routerObj);
+    return res.json(result);
+  } catch (err) {
+    console.error('Error deleting hotspot server:', err);
     res.json({ success: false, message: err.message });
   }
 });

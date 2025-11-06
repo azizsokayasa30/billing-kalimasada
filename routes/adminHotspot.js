@@ -552,8 +552,9 @@ router.post('/generate-vouchers', async (req, res) => {
         // Gunakan fungsi generateHotspotVouchers dengan parameter yang benar
         const count = parseInt(quantity) || parseInt(req.body.count) || 5;
         const prefix = req.body.prefix || 'wifi-'; // Default prefix
-        // Ambil serverProfile dari form jika ada, jika tidak gunakan 'all' atau server yang dipilih
-        let server = req.body.serverProfile || req.body.server || 'all';
+        // MODE HYBRID: Ambil Server Hotspot dari form (field "server")
+        // Server Profile tetap bisa digunakan untuk konfigurasi, tapi Server Hotspot adalah yang utama
+        let server = req.body.server || req.body.serverProfile || 'all';
         // Jika server kosong atau 'all', gunakan 'all'
         if (!server || server.trim() === '' || server === 'all') {
             server = 'all';
@@ -562,7 +563,7 @@ router.post('/generate-vouchers', async (req, res) => {
         const voucherPrice = price || req.body.price || '';
         const charTypeValue = charType || req.body.charType || 'alphanumeric';
         
-        logger.info(`Generating vouchers with server: ${server} (from serverProfile: ${req.body.serverProfile || 'not provided'})`);
+        logger.info(`Generating vouchers with server hotspot: ${server} (from server: ${req.body.server || 'not provided'}, serverProfile: ${req.body.serverProfile || 'not provided'})`);
         
         const result = await generateHotspotVouchers(count, prefix, profile, server, validUntil, voucherPrice, charTypeValue, routerObj);
         
@@ -706,6 +707,20 @@ router.get('/voucher', async (req, res) => {
                     }));
                 }
 
+                // MODE HYBRID: Ambil Server Hotspot dari Mikrotik API (dari semua router)
+                // Server Hotspot tidak bisa dibuat via RADIUS, hanya bisa diambil dari Mikrotik
+                let servers = [];
+                for (const router of routers) {
+                    try {
+                        const serversResult = await getHotspotServers(router);
+                        if (serversResult.success && Array.isArray(serversResult.data)) {
+                            servers = servers.concat(serversResult.data);
+                        }
+                    } catch (e) {
+                        console.error(`Error getting hotspot servers from ${router.name}:`, e.message);
+                    }
+                }
+
                 // Get active users untuk check status
                 const activeResult = await getActiveHotspotUsers();
                 const activeUsernames = activeResult.success && Array.isArray(activeResult.data)
@@ -811,9 +826,9 @@ router.get('/voucher', async (req, res) => {
                 return res.render('adminVoucher', {
                     profiles,
                     serverProfiles: serverProfiles,
-                    servers: [],
+                    servers: servers, // Server Hotspot dari Mikrotik API (mode hybrid)
                     voucherHistory,
-                    routers: [],
+                    routers: routers, // Pass routers untuk dropdown NAS selection jika diperlukan
                     success: req.query.success,
                     error: req.query.error,
                     company_header,
@@ -1074,6 +1089,8 @@ router.post('/generate-voucher', async (req, res) => {
         console.log('Auth Mode:', userAuthMode);
         console.log('Count from request:', req.body.count);
         console.log('Profile from request:', req.body.profile);
+        console.log('Server Hotspot from request:', req.body.server || 'not provided (will use "all")');
+        console.log('Server Profile from request:', req.body.serverProfile || 'not provided');
         console.log('Router ID from request:', req.body.router_id);
         console.log('Price from request:', req.body.price);
         console.log('CharType from request:', req.body.charType);
@@ -1082,7 +1099,8 @@ router.post('/generate-voucher', async (req, res) => {
         const prefix = req.body.prefix || 'wifi-';
         const profile = req.body.profile || 'default';
         const router_id = req.body.router_id || req.body.routerId;
-        const server = req.body.server || 'all';
+        // MODE HYBRID: Prioritaskan Server Hotspot dari form, fallback ke Server Profile atau 'all'
+        const server = req.body.server || req.body.serverProfile || 'all';
         const validUntil = req.body.validUntil || '';
         // Parse price dengan lebih robust: handle string, number, null, undefined, empty string
         let price = 0;
@@ -1096,10 +1114,52 @@ router.post('/generate-voucher', async (req, res) => {
         const voucherModel = req.body.voucherModel || 'standard';
         const charType = req.body.charType || 'alphanumeric';
         
-        // Untuk mode Mikrotik API, router_id diperlukan
-        // Untuk mode RADIUS, router_id tidak diperlukan
+        // MODE HYBRID: Untuk mode RADIUS, jika Server Hotspot dipilih (bukan "all"),
+        // kita perlu mendapatkan router yang memiliki server hotspot tersebut
+        // Ini penting untuk memastikan konfigurasi RADIUS benar
         let routerObj = null;
-        if (userAuthMode !== 'radius') {
+        
+        if (userAuthMode === 'radius') {
+            // Mode RADIUS: Jika Server Hotspot dipilih (bukan "all"), cari router yang memiliki server tersebut
+            if (server && server !== 'all' && server.trim() !== '') {
+                // Cari router yang memiliki server hotspot ini
+                const db = new sqlite3.Database('./data/billing.db');
+                try {
+                    // Ambil semua router dan cek server hotspot mereka
+                    const routers = await new Promise((resolve, reject) => {
+                        db.all('SELECT * FROM routers ORDER BY name', [], (err, rows) => {
+                            if (err) reject(err);
+                            else resolve(rows || []);
+                        });
+                    });
+                    
+                    // Cari router yang memiliki server hotspot dengan nama yang dipilih
+                    for (const router of routers) {
+                        try {
+                            const { getHotspotServers } = require('../config/mikrotik');
+                            const serversResult = await getHotspotServers(router);
+                            if (serversResult.success && Array.isArray(serversResult.data)) {
+                                const foundServer = serversResult.data.find(s => s.name === server);
+                                if (foundServer) {
+                                    routerObj = router;
+                                    console.log(`Found router for server hotspot "${server}": ${router.name} (${router.nas_ip})`);
+                                    break;
+                                }
+                            }
+                        } catch (e) {
+                            // Skip router yang error
+                            console.warn(`Error checking router ${router.name} for server hotspot:`, e.message);
+                        }
+                    }
+                    db.close();
+                } catch (e) {
+                    console.error('Error finding router for server hotspot:', e.message);
+                    db.close();
+                }
+            }
+            // Jika tidak ada router ditemukan atau server = "all", routerObj tetap null (default RADIUS)
+        } else {
+            // Mode Mikrotik API: router_id diperlukan
             if (!router_id) {
                 return res.status(400).json({
                     success: false,
@@ -1107,7 +1167,7 @@ router.post('/generate-voucher', async (req, res) => {
                 });
             }
             
-            // Fetch router object
+            // Fetch router object dari database
             const db = new sqlite3.Database('./data/billing.db');
             routerObj = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
@@ -1128,7 +1188,8 @@ router.post('/generate-voucher', async (req, res) => {
         console.log('Parsed values:');
         console.log('- Count:', count);
         console.log('- Profile:', profile);
-        console.log('- Router:', routerObj ? routerObj.name : 'RADIUS');
+        console.log('- Server Hotspot:', server);
+        console.log('- Router:', routerObj ? routerObj.name : 'RADIUS (default)');
         console.log('- Price:', price);
         console.log('- CharType:', charType);
         

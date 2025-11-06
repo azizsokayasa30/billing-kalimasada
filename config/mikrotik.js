@@ -1772,14 +1772,22 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         }
         
         // Add Mikrotik-Server attribute to radreply if server is provided
-        // Ini digunakan untuk menentukan server instance yang akan digunakan oleh user
-        if (server && server.trim() !== '' && server !== 'all') {
-            await conn.execute(
-                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Mikrotik-Server', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-                [username, server, server]
-            );
-            logger.info(`Added Mikrotik-Server attribute for ${username}: ${server}`);
-        }
+        // CATATAN: Atribut ini HANYA digunakan untuk mode Mikrotik API, bukan untuk mode RADIUS
+        // Di mode RADIUS, semua voucher harus bisa digunakan di semua hotspot server yang dikonfigurasi untuk RADIUS
+        // Atribut Mikrotik-Server mungkin menyebabkan masalah jika Server Hotspot tidak dikonfigurasi dengan benar untuk RADIUS
+        // Oleh karena itu, atribut ini TIDAK ditambahkan untuk mode RADIUS
+        // if (server && server.trim() !== '' && server !== 'all') {
+        //     await conn.execute(
+        //         "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Mikrotik-Server', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+        //         [username, server, server]
+        //     );
+        //     logger.info(`Added Mikrotik-Server attribute for ${username}: ${server}`);
+        // }
+        
+        // Untuk mode RADIUS, jangan tambahkan atribut Mikrotik-Server
+        // Semua voucher harus bisa digunakan di semua hotspot server yang menggunakan RADIUS
+        logger.info(`Voucher ${username} created in RADIUS mode without Mikrotik-Server attribute (server parameter: ${server || 'all'})`);
+        
         
         await conn.end();
         return { success: true, message: 'User hotspot berhasil ditambahkan ke RADIUS' };
@@ -2285,7 +2293,84 @@ async function getInterfaceTraffic(interfaceName = 'ether1') {
     }
 }
 
-// Fungsi untuk mendapatkan daftar interface
+// Fungsi untuk mendapatkan daftar interface dari router tertentu
+async function getInterfacesForRouter(routerObj = null) {
+    try {
+        let conn = null;
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal', data: [] };
+        }
+
+        const interfaces = await conn.write('/interface/print');
+        
+        if (Array.isArray(interfaces)) {
+            const interfaceList = interfaces
+                .filter(iface => iface.name && !iface.name.startsWith('<'))
+                .map(iface => ({
+                    name: iface.name,
+                    type: iface.type || '',
+                    disabled: iface.disabled === 'true',
+                    running: iface.running === 'true'
+                }));
+            
+            return {
+                success: true,
+                message: `Ditemukan ${interfaceList.length} interface`,
+                data: interfaceList
+            };
+        } else {
+            return { success: false, message: 'Gagal mendapatkan interface', data: [] };
+        }
+    } catch (error) {
+        logger.error(`Error getting interfaces: ${error.message}`);
+        return { success: false, message: `Gagal ambil data interface: ${error.message}`, data: [] };
+    }
+}
+
+// Fungsi untuk mendapatkan daftar address pool dari router tertentu
+async function getAddressPoolsForRouter(routerObj = null) {
+    try {
+        let conn = null;
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal', data: [] };
+        }
+
+        const pools = await conn.write('/ip/pool/print');
+        
+        if (Array.isArray(pools)) {
+            const poolList = pools.map(pool => ({
+                name: pool.name,
+                ranges: pool.ranges || '',
+                comment: pool.comment || ''
+            }));
+            
+            return {
+                success: true,
+                message: `Ditemukan ${poolList.length} address pool`,
+                data: poolList
+            };
+        } else {
+            return { success: false, message: 'Gagal mendapatkan address pool', data: [] };
+        }
+    } catch (error) {
+        logger.error(`Error getting address pools: ${error.message}`);
+        return { success: false, message: `Gagal ambil data address pool: ${error.message}`, data: [] };
+    }
+}
+
+// Fungsi untuk mendapatkan daftar interface (legacy, untuk backward compatibility)
 async function getInterfaces() {
     try {
         const conn = await getMikrotikConnection();
@@ -2810,8 +2895,9 @@ async function getHotspotServers(routerObj = null) {
                 id: server['.id'],
                 name: server.name,
                 interface: server.interface,
-                profile: server.profile,
-                address: server['address-pool'] || '',
+                profile: server.profile || '',
+                addressPool: server['address-pool'] || '',
+                address: server['address-pool'] || '', // Alias untuk kompatibilitas
                 disabled: server.disabled === 'true',
                 nas_id: routerObj ? routerObj.id : null,
                 nas_name: routerObj ? routerObj.name : null,
@@ -2824,6 +2910,566 @@ async function getHotspotServers(routerObj = null) {
     } catch (error) {
         logger.error(`Error getting hotspot servers: ${error.message}`);
         return { success: false, message: error.message, data: [] };
+    }
+}
+
+// Fungsi untuk menambah Server Hotspot ke Mikrotik
+async function addHotspotServer(serverData, routerObj = null) {
+    try {
+        let conn = null;
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal' };
+        }
+
+        const { name, interface: interfaceName, profile, addressPool, disabled } = serverData;
+
+        if (!name || !name.trim()) {
+            return { success: false, message: 'Nama server hotspot harus diisi' };
+        }
+
+        if (!interfaceName || !interfaceName.trim()) {
+            return { success: false, message: 'Interface harus dipilih' };
+        }
+
+        const params = [
+            '=name=' + String(name).trim(),
+            '=interface=' + String(interfaceName).trim()
+        ];
+
+        if (profile && String(profile).trim() !== '') {
+            params.push('=profile=' + String(profile).trim());
+        }
+
+        if (addressPool && String(addressPool).trim() !== '') {
+            params.push('=address-pool=' + String(addressPool).trim());
+        }
+
+        if (disabled === 'true' || disabled === true) {
+            params.push('=disabled=yes');
+        }
+
+        await conn.write('/ip/hotspot/add', params);
+
+        logger.info(`Successfully added hotspot server: ${name} on interface ${interfaceName}`);
+        return { success: true, message: `Server hotspot "${name}" berhasil ditambahkan` };
+    } catch (error) {
+        logger.error(`Error adding hotspot server: ${error.message}`);
+        return { success: false, message: `Gagal menambah server hotspot: ${error.message}` };
+    }
+}
+
+// Fungsi untuk mengedit Server Hotspot di Mikrotik
+async function editHotspotServer(serverId, serverData, routerObj = null) {
+    try {
+        let conn = null;
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal' };
+        }
+
+        const { name, interface: interfaceName, profile, addressPool, disabled } = serverData;
+
+        const params = ['=.id=' + serverId];
+
+        if (name && String(name).trim() !== '') {
+            params.push('=name=' + String(name).trim());
+        }
+
+        if (interfaceName && String(interfaceName).trim() !== '') {
+            params.push('=interface=' + String(interfaceName).trim());
+        }
+
+        if (profile !== undefined) {
+            if (profile && String(profile).trim() !== '') {
+                params.push('=profile=' + String(profile).trim());
+            } else {
+                params.push('=profile=');
+            }
+        }
+
+        if (addressPool !== undefined) {
+            if (addressPool && String(addressPool).trim() !== '') {
+                params.push('=address-pool=' + String(addressPool).trim());
+            } else {
+                params.push('=address-pool=');
+            }
+        }
+
+        if (disabled !== undefined) {
+            params.push(disabled === 'true' || disabled === true ? '=disabled=yes' : '=disabled=no');
+        }
+
+        await conn.write('/ip/hotspot/set', params);
+
+        logger.info(`Successfully updated hotspot server: ID ${serverId}`);
+        return { success: true, message: 'Server hotspot berhasil diupdate' };
+    } catch (error) {
+        logger.error(`Error editing hotspot server: ${error.message}`);
+        return { success: false, message: `Gagal update server hotspot: ${error.message}` };
+    }
+}
+
+// Fungsi untuk menghapus Server Hotspot dari Mikrotik
+async function deleteHotspotServer(serverId, routerObj = null) {
+    try {
+        let conn = null;
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal' };
+        }
+
+        await conn.write('/ip/hotspot/remove', ['=.id=' + serverId]);
+
+        logger.info(`Successfully deleted hotspot server: ID ${serverId}`);
+        return { success: true, message: 'Server hotspot berhasil dihapus' };
+    } catch (error) {
+        logger.error(`Error deleting hotspot server: ${error.message}`);
+        return { success: false, message: `Gagal menghapus server hotspot: ${error.message}` };
+    }
+}
+
+// Fungsi untuk mendapatkan detail Server Hotspot dari Mikrotik
+async function getHotspotServerDetail(serverId, routerObj = null) {
+    try {
+        let conn = null;
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal', data: null };
+        }
+
+        const result = await conn.write('/ip/hotspot/print', ['?.id=' + serverId]);
+
+        if (result && Array.isArray(result) && result.length > 0) {
+            const server = result[0];
+            return {
+                success: true,
+                data: {
+                    id: server['.id'],
+                    name: server.name,
+                    interface: server.interface,
+                    profile: server.profile || '',
+                    addressPool: server['address-pool'] || '',
+                    disabled: server.disabled === 'true',
+                    nas_id: routerObj ? routerObj.id : null,
+                    nas_name: routerObj ? routerObj.name : null,
+                    nas_ip: routerObj ? routerObj.nas_ip : null
+                }
+            };
+        } else {
+            return { success: false, message: 'Server hotspot tidak ditemukan', data: null };
+        }
+    } catch (error) {
+        logger.error(`Error getting hotspot server detail: ${error.message}`);
+        return { success: false, message: error.message, data: null };
+    }
+}
+
+// Fungsi untuk menambah Server Profile Hotspot ke Mikrotik
+async function addHotspotServerProfileMikrotik(profileData, routerObj = null) {
+    let conn = null;
+    try {
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal' };
+        }
+
+        const { name, 'hotspot-address': hotspotAddress, 'dns-name': dnsName,
+                'html-directory': htmlDirectory, 'html-directory-override': htmlDirectoryOverride,
+                'rate-limit': rateLimit, 'http-proxy': httpProxy, 'http-proxy-port': httpProxyPort,
+                'smtp-server': smtpServer, 'login-by': loginBy, 'mac-auth-mode': macAuthMode,
+                'mac-auth-password': macAuthPassword, 'http-cookie-lifetime': httpCookieLifetime,
+                'ssl-certificate': sslCertificate, 'https-redirect': httpsRedirect,
+                'split-user-domain': splitUserDomain, 'trial-uptime-limit': trialUptimeLimit,
+                'trial-uptime-reset': trialUptimeReset, 'trial-user-profile': trialUserProfile,
+                'use-radius': useRadius, 'default-domain': defaultDomain, 'location-id': locationId,
+                'location-name': locationName, 'mac-format': macFormat, 'accounting': accounting,
+                'interim-update': interimUpdate, 'nas-port-type': nasPortType,
+                disabled, comment } = profileData;
+
+        if (!name || !name.trim()) {
+            return { success: false, message: 'Nama server profile harus diisi' };
+        }
+
+        const params = ['=name=' + String(name).trim()];
+
+        // Parameter wajib untuk Server Profile di RouterOS v6.49
+        if (hotspotAddress && String(hotspotAddress).trim() !== '') {
+            params.push('=hotspot-address=' + String(hotspotAddress).trim());
+        }
+
+        if (dnsName && String(dnsName).trim() !== '') {
+            params.push('=dns-name=' + String(dnsName).trim());
+        }
+
+        // General Tab Parameters
+        if (htmlDirectory && String(htmlDirectory).trim() !== '') {
+            params.push('=html-directory=' + String(htmlDirectory).trim());
+        }
+
+        if (htmlDirectoryOverride && String(htmlDirectoryOverride).trim() !== '') {
+            params.push('=html-directory-override=' + String(htmlDirectoryOverride).trim());
+        }
+
+        if (rateLimit && String(rateLimit).trim() !== '') {
+            params.push('=rate-limit=' + String(rateLimit).trim());
+        }
+
+        if (httpProxy && String(httpProxy).trim() !== '') {
+            params.push('=http-proxy=' + String(httpProxy).trim());
+        }
+
+        if (httpProxyPort !== undefined && httpProxyPort !== null && String(httpProxyPort).trim() !== '') {
+            params.push('=http-proxy-port=' + String(httpProxyPort).trim());
+        }
+
+        if (smtpServer && String(smtpServer).trim() !== '') {
+            params.push('=smtp-server=' + String(smtpServer).trim());
+        }
+
+        // CATATAN: Parameter berikut ini TIDAK DIDUKUNG untuk Server Profile di RouterOS v6.49:
+        // - login-by (hanya untuk User Profile)
+        // - mac-auth-mode (hanya untuk User Profile)
+        // - mac-auth-password (hanya untuk User Profile)
+        // - http-cookie-lifetime (hanya untuk User Profile)
+        // - ssl-certificate (hanya untuk User Profile atau Server Hotspot)
+        // - https-redirect (hanya untuk User Profile)
+        // - split-user-domain (hanya untuk User Profile)
+        // - trial-uptime-limit (hanya untuk User Profile)
+        // - trial-uptime-reset (hanya untuk User Profile)
+        // - trial-user-profile (hanya untuk User Profile)
+        // - use-radius (hanya untuk User Profile atau Server Hotspot, bukan Server Profile)
+        // - default-domain (hanya untuk User Profile)
+        // - location-id (hanya untuk User Profile)
+        // - location-name (hanya untuk User Profile)
+        // - mac-format (hanya untuk User Profile)
+        // - accounting (hanya untuk User Profile atau Server Hotspot, bukan Server Profile)
+        // - interim-update (hanya untuk User Profile)
+        // - nas-port-type (hanya untuk User Profile)
+        // 
+        // CATATAN: Parameter Login Tab dan RADIUS Tab tidak didukung untuk Server Profile di RouterOS v6.49
+        // Hanya parameter General Tab yang didukung
+
+        // Common Parameters
+        if (comment && String(comment).trim() !== '') {
+            params.push('=comment=' + String(comment).trim());
+        }
+
+        // Untuk RouterOS v6.49, gunakan /ip/hotspot/profile/add (Server Profile)
+        // JANGAN gunakan /ip/hotspot/user/profile/add karena itu untuk User Profile, bukan Server Profile!
+        logger.info(`Attempting to add server profile "${name}" to router ${routerObj ? routerObj.name : 'default'}`);
+        logger.info(`Parameters to send: ${JSON.stringify(params)}`);
+        
+        try {
+            await conn.write('/ip/hotspot/profile/add', params);
+            logger.info(`Successfully added hotspot server profile: ${name} (using /ip/hotspot/profile/add)`);
+            
+            // Delay sebentar untuk memastikan perubahan tersimpan
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Verify profile was created by querying it
+            try {
+                const verifyProfiles = await conn.write('/ip/hotspot/profile/print', ['?name=' + String(name).trim()]);
+                if (verifyProfiles && verifyProfiles.length > 0) {
+                    logger.info(`Profile "${name}" verified successfully in Mikrotik`);
+                } else {
+                    logger.warn(`Profile "${name}" created but not found during verification`);
+                }
+            } catch (verifyError) {
+                logger.warn(`Could not verify profile after creation: ${verifyError.message}`);
+            }
+            
+            // Close connection if created for this router
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    logger.warn('Error closing connection:', closeError.message);
+                }
+            }
+            
+            return { success: true, message: `Server profile "${name}" berhasil ditambahkan` };
+        } catch (cmdError) {
+            logger.error(`Command /ip/hotspot/profile/add tidak tersedia atau gagal: ${cmdError.message}`);
+            logger.error(`Parameters that failed: ${JSON.stringify(params)}`);
+            
+            // Close connection on error
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    // Ignore
+                }
+            }
+            
+            // Berikan error message yang lebih informatif
+            let errorMsg = `Gagal menambah server profile: ${cmdError.message}`;
+            if (cmdError.message.includes('unknown parameter')) {
+                errorMsg += `. Pastikan semua parameter yang digunakan didukung oleh RouterOS v6.49. Parameter yang dikirim: ${params.join(', ')}`;
+            }
+            
+            return { 
+                success: false, 
+                message: errorMsg
+            };
+        }
+    } catch (error) {
+        logger.error(`Error adding hotspot server profile: ${error.message}`);
+        
+        // Close connection on error
+        if (routerObj && conn && typeof conn.close === 'function') {
+            try {
+                await conn.close();
+            } catch (closeError) {
+                // Ignore
+            }
+        }
+        
+        return { success: false, message: `Gagal menambah server profile: ${error.message}` };
+    }
+}
+
+// Fungsi untuk mengedit Server Profile Hotspot di Mikrotik
+async function editHotspotServerProfileMikrotik(profileId, profileData, routerObj = null) {
+    let conn = null;
+    try {
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal' };
+        }
+
+        const { name, 'hotspot-address': hotspotAddress, 'dns-name': dnsName,
+                'html-directory': htmlDirectory, 'html-directory-override': htmlDirectoryOverride,
+                'rate-limit': rateLimit, 'http-proxy': httpProxy, 'http-proxy-port': httpProxyPort,
+                'smtp-server': smtpServer, 'login-by': loginBy, 'mac-auth-mode': macAuthMode,
+                'mac-auth-password': macAuthPassword, 'http-cookie-lifetime': httpCookieLifetime,
+                'ssl-certificate': sslCertificate, 'https-redirect': httpsRedirect,
+                'split-user-domain': splitUserDomain, 'trial-uptime-limit': trialUptimeLimit,
+                'trial-uptime-reset': trialUptimeReset, 'trial-user-profile': trialUserProfile,
+                'use-radius': useRadius, 'default-domain': defaultDomain, 'location-id': locationId,
+                'location-name': locationName, 'mac-format': macFormat, 'accounting': accounting,
+                'interim-update': interimUpdate, 'nas-port-type': nasPortType,
+                disabled, comment } = profileData;
+
+        const params = ['=.id=' + profileId];
+
+        if (name && String(name).trim() !== '') {
+            params.push('=name=' + String(name).trim());
+        }
+
+        // Parameter yang didukung untuk Server Profile di RouterOS v6.49
+        // Hanya kirim jika nilainya tidak kosong
+        if (hotspotAddress !== undefined && hotspotAddress !== null && String(hotspotAddress).trim() !== '') {
+            params.push('=hotspot-address=' + String(hotspotAddress).trim());
+        }
+
+        if (dnsName !== undefined && dnsName !== null && String(dnsName).trim() !== '') {
+            params.push('=dns-name=' + String(dnsName).trim());
+        }
+
+        // General Tab Parameters - hanya kirim jika ada nilai
+        if (htmlDirectory !== undefined && htmlDirectory !== null && String(htmlDirectory).trim() !== '') {
+            params.push('=html-directory=' + String(htmlDirectory).trim());
+        }
+
+        if (htmlDirectoryOverride !== undefined && htmlDirectoryOverride !== null && String(htmlDirectoryOverride).trim() !== '') {
+            params.push('=html-directory-override=' + String(htmlDirectoryOverride).trim());
+        }
+
+        if (rateLimit !== undefined && rateLimit !== null && String(rateLimit).trim() !== '') {
+            params.push('=rate-limit=' + String(rateLimit).trim());
+        }
+
+        if (httpProxy !== undefined && httpProxy !== null && String(httpProxy).trim() !== '') {
+            params.push('=http-proxy=' + String(httpProxy).trim());
+        }
+
+        if (httpProxyPort !== undefined && httpProxyPort !== null && String(httpProxyPort).trim() !== '' && httpProxyPort !== '0') {
+            params.push('=http-proxy-port=' + String(httpProxyPort).trim());
+        }
+
+        if (smtpServer !== undefined && smtpServer !== null && String(smtpServer).trim() !== '') {
+            params.push('=smtp-server=' + String(smtpServer).trim());
+        }
+
+        // CATATAN: Parameter berikut ini MUNGKIN TIDAK DIDUKUNG untuk Server Profile di RouterOS v6.49:
+        // - login-by (hanya untuk User Profile)
+        // - mac-auth-mode (hanya untuk User Profile)
+        // - mac-auth-password (hanya untuk User Profile)
+        // - http-cookie-lifetime (hanya untuk User Profile)
+        // - ssl-certificate (hanya untuk User Profile atau Server Hotspot)
+        // - https-redirect (hanya untuk User Profile)
+        // - split-user-domain (hanya untuk User Profile)
+        // - trial-uptime-limit (hanya untuk User Profile)
+        // - trial-uptime-reset (hanya untuk User Profile)
+        // - trial-user-profile (hanya untuk User Profile)
+        // - use-radius (hanya untuk User Profile atau Server Hotspot, bukan Server Profile)
+        // - default-domain (hanya untuk User Profile)
+        // - location-id (hanya untuk User Profile)
+        // - location-name (hanya untuk User Profile)
+        // - mac-format (hanya untuk User Profile)
+        // - accounting (hanya untuk User Profile atau Server Hotspot, bukan Server Profile)
+        // - interim-update (hanya untuk User Profile)
+        // - nas-port-type (hanya untuk User Profile)
+        // 
+        // CATATAN: Parameter Login Tab dan RADIUS Tab tidak didukung untuk Server Profile di RouterOS v6.49
+        // Hanya parameter General Tab yang didukung
+
+        // Common Parameters
+        if (comment !== undefined && comment !== null && String(comment).trim() !== '') {
+            params.push('=comment=' + String(comment).trim());
+        }
+
+        // Untuk RouterOS v6.49, gunakan /ip/hotspot/profile/set (Server Profile)
+        // JANGAN gunakan /ip/hotspot/user/profile/set karena itu untuk User Profile!
+        logger.info(`Attempting to edit server profile ID ${profileId} for router ${routerObj ? routerObj.name : 'default'}`);
+        logger.info(`Parameters to send: ${JSON.stringify(params)}`);
+        
+        try {
+            await conn.write('/ip/hotspot/profile/set', params);
+            logger.info(`Successfully updated hotspot server profile: ID ${profileId} (using /ip/hotspot/profile/set)`);
+            
+            // Close connection if created for this router
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    logger.warn('Error closing connection:', closeError.message);
+                }
+            }
+            
+            return { success: true, message: 'Server profile berhasil diupdate' };
+        } catch (cmdError) {
+            logger.error(`Command /ip/hotspot/profile/set tidak tersedia atau gagal: ${cmdError.message}`);
+            logger.error(`Parameters that failed: ${JSON.stringify(params)}`);
+            
+            // Close connection on error
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    // Ignore
+                }
+            }
+            
+            // Berikan error message yang lebih informatif
+            let errorMsg = `Gagal update server profile: ${cmdError.message}`;
+            if (cmdError.message.includes('unknown parameter')) {
+                errorMsg += `. Pastikan semua parameter yang digunakan didukung oleh RouterOS v6.49. Parameter yang dikirim: ${params.join(', ')}`;
+            }
+            
+            return { 
+                success: false, 
+                message: errorMsg
+            };
+        }
+    } catch (error) {
+        logger.error(`Error editing hotspot server profile: ${error.message}`);
+        
+        // Close connection on error
+        if (routerObj && conn && typeof conn.close === 'function') {
+            try {
+                await conn.close();
+            } catch (closeError) {
+                // Ignore
+            }
+        }
+        
+        return { success: false, message: `Gagal update server profile: ${error.message}` };
+    }
+}
+
+// Fungsi untuk menghapus Server Profile Hotspot dari Mikrotik
+async function deleteHotspotServerProfileMikrotik(profileId, routerObj = null) {
+    let conn = null;
+    try {
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal' };
+        }
+
+        // Untuk RouterOS v6.49, gunakan /ip/hotspot/profile/remove (Server Profile)
+        // JANGAN gunakan /ip/hotspot/user/profile/remove karena itu untuk User Profile!
+        try {
+            await conn.write('/ip/hotspot/profile/remove', ['=.id=' + profileId]);
+            logger.info(`Successfully deleted hotspot server profile: ID ${profileId} (using /ip/hotspot/profile/remove)`);
+            
+            // Close connection if created for this router
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    logger.warn('Error closing connection:', closeError.message);
+                }
+            }
+            
+            return { success: true, message: 'Server profile berhasil dihapus' };
+        } catch (cmdError) {
+            logger.error(`Command /ip/hotspot/profile/remove tidak tersedia atau gagal: ${cmdError.message}`);
+            
+            // Close connection on error
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    // Ignore
+                }
+            }
+            
+            // JANGAN fallback ke /ip/hotspot/user/profile karena itu bukan Server Profile!
+            return { 
+                success: false, 
+                message: `Gagal menghapus server profile: Command /ip/hotspot/profile/remove tidak tersedia. Pastikan RouterOS versi 6.49 atau lebih baru. Error: ${cmdError.message}` 
+            };
+        }
+    } catch (error) {
+        logger.error(`Error deleting hotspot server profile: ${error.message}`);
+        
+        // Close connection on error
+        if (routerObj && conn && typeof conn.close === 'function') {
+            try {
+                await conn.close();
+            } catch (closeError) {
+                // Ignore
+            }
+        }
+        
+        return { success: false, message: `Gagal menghapus server profile: ${error.message}` };
     }
 }
 
@@ -3805,34 +4451,110 @@ async function getHotspotServerProfiles(routerObj = null) {
         }
         
         logger.info('Fetching hotspot server profiles from Mikrotik...');
-        const profiles = await conn.write('/ip/hotspot/server/profile/print');
-        logger.info(`Successfully retrieved ${profiles ? profiles.length : 0} server profiles from ${routerObj ? routerObj.name : 'default'}`);
-        
-        // Parse and validate profiles, attach router info if provided
-        const validProfiles = [];
-        if (Array.isArray(profiles)) {
-            profiles.forEach((prof, idx) => {
-                if (prof && (prof.name || prof['name'])) {
-                    // Attach router info to profile for tracking
-                    if (routerObj) {
-                        prof.nas_id = routerObj.id;
-                        prof.nas_name = routerObj.name;
-                        prof.nas_ip = routerObj.nas_ip;
+        try {
+            // Gunakan /ip/hotspot/profile/print untuk Server Profile
+            // JANGAN gunakan /ip/hotspot/user/profile/print karena itu untuk User Profile!
+            let profiles = null;
+            try {
+                profiles = await conn.write('/ip/hotspot/profile/print');
+                logger.info(`Command /ip/hotspot/profile/print berhasil, mendapatkan ${profiles ? profiles.length : 0} profiles`);
+            } catch (cmdError) {
+                logger.error(`Command /ip/hotspot/profile/print tidak tersedia: ${cmdError.message}`);
+                // JANGAN fallback ke /ip/hotspot/user/profile karena itu bukan Server Profile!
+                throw cmdError;
+            }
+            
+            if (!profiles) {
+                return { success: false, message: 'Tidak ada data profile yang ditemukan', data: [] };
+            }
+            
+            logger.info(`Successfully retrieved ${profiles ? profiles.length : 0} server profiles from ${routerObj ? routerObj.name : 'default'}`);
+            
+            // Parse and validate profiles, attach router info if provided
+            const validProfiles = [];
+            if (Array.isArray(profiles)) {
+                profiles.forEach((prof, idx) => {
+                    if (prof && (prof.name || prof['name'])) {
+                        // Normalize profile data - INCLUDE SEMUA FIELD yang diperlukan untuk form
+                        const normalizedProfile = {
+                            id: prof['.id'] || prof.id || '',
+                            name: prof.name || prof['name'] || '',
+                            'hotspot-address': prof['hotspot-address'] || prof['hotspot-address'] || '',
+                            'dns-name': prof['dns-name'] || prof['dns-name'] || '',
+                            'html-directory': prof['html-directory'] || prof['html-directory'] || '',
+                            'html-directory-override': prof['html-directory-override'] || prof['html-directory-override'] || '',
+                            'rate-limit': prof['rate-limit'] || prof['rate-limit'] || '',
+                            'http-proxy': prof['http-proxy'] || prof['http-proxy'] || '',
+                            'http-proxy-port': prof['http-proxy-port'] || prof['http-proxy-port'] || '',
+                            'smtp-server': prof['smtp-server'] || prof['smtp-server'] || '',
+                            'session-timeout': prof['session-timeout'] || '',
+                            'idle-timeout': prof['idle-timeout'] || '',
+                            'shared-users': prof['shared-users'] || '1',
+                            'open-status-page': prof['open-status-page'] || '',
+                            comment: prof.comment || '',
+                            disabled: prof.disabled === 'true' || prof.disabled === true
+                        };
+                        
+                        // Attach router info to profile for tracking
+                        if (routerObj) {
+                            normalizedProfile.nas_id = routerObj.id;
+                            normalizedProfile.nas_name = routerObj.name;
+                            normalizedProfile.nas_ip = routerObj.nas_ip;
+                        }
+                        
+                        validProfiles.push(normalizedProfile);
+                        logger.debug(`  Server Profile ${idx + 1}: ${normalizedProfile.name} (hotspot-address: ${normalizedProfile['hotspot-address']}, dns-name: ${normalizedProfile['dns-name']})`);
                     }
-                    validProfiles.push(prof);
-                    logger.debug(`  Server Profile ${idx + 1}: ${prof.name || prof['name']}`);
+                });
+            }
+            logger.info(`Valid server profiles after parsing: ${validProfiles.length}`);
+            
+            // Close connection if created for this router
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    logger.warn('Error closing connection:', closeError.message);
                 }
-            });
+            }
+            
+            return {
+                success: true,
+                message: `Ditemukan ${validProfiles.length} server profile hotspot`,
+                data: validProfiles
+            };
+        } catch (cmdError) {
+            // Jika command tidak tersedia, kemungkinan router tidak mendukung hotspot server profile
+            // Atau versi RouterOS tidak mendukung fitur ini
+            logger.error(`Command tidak tersedia di router ${routerObj ? routerObj.name : 'default'}: ${cmdError.message}`);
+            
+            // Close connection on error
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    // Ignore
+                }
+            }
+            
+            return { 
+                success: false, 
+                message: `Router tidak mendukung fitur Server Profile Hotspot atau versi RouterOS tidak kompatibel: ${cmdError.message}`, 
+                data: [] 
+            };
         }
-        logger.info(`Valid server profiles after parsing: ${validProfiles.length}`);
-        
-        return {
-            success: true,
-            message: `Ditemukan ${validProfiles.length} server profile hotspot`,
-            data: validProfiles
-        };
     } catch (error) {
         logger.error(`Error getting hotspot server profiles from ${routerObj ? routerObj.name : 'default'}: ${error.message}`);
+        
+        // Close connection on error
+        if (routerObj && conn && typeof conn.close === 'function') {
+            try {
+                await conn.close();
+            } catch (closeError) {
+                // Ignore
+            }
+        }
+        
         return { success: false, message: `Gagal ambil server profile hotspot: ${error.message}`, data: [] };
     }
 }
@@ -5058,6 +5780,8 @@ module.exports = {
     setPPPoEProfile,
     monitorPPPoEConnections,
     getInterfaces,
+    getInterfacesForRouter,
+    getAddressPoolsForRouter,
     getInterfaceDetail,
     setInterfaceStatus,
     getIPAddresses,
@@ -5087,8 +5811,15 @@ module.exports = {
     addHotspotServerProfileRadius,
     editHotspotServerProfileRadius,
     deleteHotspotServerProfileRadius,
+    addHotspotServerProfileMikrotik,
+    editHotspotServerProfileMikrotik,
+    deleteHotspotServerProfileMikrotik,
     getHotspotUsersRadius,
     getHotspotServers,
+    addHotspotServer,
+    editHotspotServer,
+    deleteHotspotServer,
+    getHotspotServerDetail,
     disconnectHotspotUser,
     generateHotspotVouchers,
     getInterfaceTraffic,

@@ -1,9 +1,9 @@
-<!-- Halaman Server Profile Hotspot -->
+<!-- Halaman Server Hotspot dan Server Profile Hotspot -->
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Server Profile Hotspot - Admin</title>
+    <title>Server Hotspot & Server Profile Hotspot - Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -24,6 +24,14 @@
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
         }
+        .nav-tabs .nav-link {
+            color: #495057;
+            font-weight: 500;
+        }
+        .nav-tabs .nav-link.active {
+            color: #0d6efd;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -36,16 +44,7 @@
             <button class="hamburger d-block d-md-none mb-3" id="hamburgerBtn" aria-label="Menu"><i class="bi bi-list"></i></button>
 
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h3><i class="bi bi-server me-2"></i>Server Profile Hotspot</h3>
-                <% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
-                    <button class="btn btn-primary" id="btnTambahProfile">
-                        <i class="bi bi-plus-circle"></i> Tambah Server Profile
-                    </button>
-                <% } else { %>
-                    <div class="alert alert-info mb-0">
-                        <i class="bi bi-info-circle"></i> Mode Mikrotik API: Server Profile dikelola langsung di Mikrotik Router
-                    </div>
-                <% } %>
+                <h3><i class="bi bi-hdd-network me-2"></i>Server Hotspot & Server Profile Hotspot</h3>
             </div>
 
             <% if (error) { %>
@@ -57,45 +56,108 @@
 
             <!-- Statistik -->
             <div class="row mb-4">
-                <div class="col-md-6 mb-3">
+                <div class="col-md-4 mb-3">
                     <div class="card bg-primary text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Total Server Hotspot</h5>
+                            <h3 id="totalServers">0</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card bg-success text-white">
                         <div class="card-body">
                             <h5 class="card-title">Total Server Profile</h5>
                             <h3 id="totalProfiles">0</h3>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6 mb-3">
+                <div class="col-md-4 mb-3">
                     <div class="card bg-info text-white">
                         <div class="card-body">
                             <h5 class="card-title">Mode</h5>
-                            <h3><%= typeof userAuthMode !== 'undefined' && userAuthMode === 'radius' ? 'RADIUS' : 'Mikrotik API' %></h3>
+                            <h3>Mikrotik API</h3>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Tabel Server Profile -->
-            <div class="card">
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover" id="profileTable">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>No</th>
-                                    <th>Nama Profile</th>
-                                    <th>NAS</th>
-                                    <th>Rate Limit</th>
-                                    <th>Session Timeout</th>
-                                    <th>Idle Timeout</th>
-                                    <th>Shared Users</th>
-                                    <th>Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody id="profileTableBody">
-                                <!-- Data akan diisi via JavaScript -->
-                            </tbody>
-                        </table>
+            <!-- Tabs -->
+            <ul class="nav nav-tabs mb-4" id="hotspotTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="servers-tab" data-bs-toggle="tab" data-bs-target="#servers" type="button" role="tab">
+                        <i class="bi bi-hdd-network me-1"></i>Server Hotspot
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="profiles-tab" data-bs-toggle="tab" data-bs-target="#profiles" type="button" role="tab">
+                        <i class="bi bi-server me-1"></i>Server Profile Hotspot
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="hotspotTabContent">
+                <!-- Tab Server Hotspot -->
+                <div class="tab-pane fade show active" id="servers" role="tabpanel">
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-hdd-network me-2"></i>Daftar Server Hotspot</h5>
+                            <button class="btn btn-light btn-sm" id="btnTambahServer">
+                                <i class="bi bi-plus-circle"></i> Tambah Server Hotspot
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="serverTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>No</th>
+                                            <th>Nama Server</th>
+                                            <th>NAS</th>
+                                            <th>Interface</th>
+                                            <th>Profile</th>
+                                            <th>Address Pool</th>
+                                            <th>Status</th>
+                                            <th>Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="serverTableBody">
+                                        <!-- Data akan diisi via JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Server Profile Hotspot -->
+                <div class="tab-pane fade" id="profiles" role="tabpanel">
+                    <div class="card mb-4">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-server me-2"></i>Daftar Server Profile Hotspot</h5>
+                            <button class="btn btn-light btn-sm" id="btnTambahProfile">
+                                <i class="bi bi-plus-circle"></i> Tambah Server Profile
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="profileTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>No</th>
+                                            <th>Nama Profile</th>
+                                            <th>NAS</th>
+                                            <th>Hotspot Address</th>
+                                            <th>DNS Name</th>
+                                            <th>Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="profileTableBody">
+                                        <!-- Data akan diisi via JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -103,71 +165,71 @@
     </div>
 </div>
 
-<!-- Modal Tambah/Edit Server Profile -->
-<% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
-<div class="modal fade" id="profileModal" tabindex="-1" aria-labelledby="profileModalLabel" aria-hidden="true">
+<!-- Modal Tambah/Edit Server Hotspot -->
+<div class="modal fade" id="serverModal" tabindex="-1" aria-labelledby="serverModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <form id="profileForm">
+        <form id="serverForm">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="profileModalLabel">Tambah Server Profile Hotspot</h5>
+                    <h5 class="modal-title" id="serverModalLabel">Tambah Server Hotspot</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" id="profileId" name="id">
-                    
-                    <div class="alert alert-info mb-3">
-                        <i class="bi bi-info-circle"></i> Mode RADIUS aktif - Server Profile akan disimpan ke database RADIUS
-                    </div>
+                    <input type="hidden" id="serverId" name="id">
+                    <input type="hidden" id="serverRouterId" name="router_id">
                     
                     <div class="mb-3">
-                        <label for="profileName" class="form-label">Nama Server Profile *</label>
-                        <input type="text" class="form-control" id="profileName" name="name" required>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="rateLimit" class="form-label">Rate Limit</label>
-                                <input type="text" class="form-control" id="rateLimit" name="rate-limit" placeholder="contoh: 1M/1M">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="sessionTimeout" class="form-label">Session Timeout</label>
-                                <input type="text" class="form-control" id="sessionTimeout" name="session-timeout" placeholder="contoh: 1h">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="idleTimeout" class="form-label">Idle Timeout</label>
-                                <input type="text" class="form-control" id="idleTimeout" name="idle-timeout" placeholder="contoh: 30m">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="sharedUsers" class="form-label">Shared Users</label>
-                                <input type="number" class="form-control" id="sharedUsers" name="shared-users" value="1" min="1">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="openStatusPage" class="form-label">Open Status Page</label>
-                                <select class="form-select" id="openStatusPage" name="open-status-page">
-                                    <option value="http-login">http-login</option>
-                                    <option value="https-login">https-login</option>
-                                    <option value="none">none</option>
-                                </select>
-                            </div>
-                        </div>
+                        <label for="serverRouterSelect" class="form-label">NAS (Router) *</label>
+                        <select class="form-select" id="serverRouterSelect" name="router_id" required>
+                            <option value="">Pilih Router</option>
+                            <% if (routers && routers.length > 0) { %>
+                                <% routers.forEach(function(router) { %>
+                                    <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                <% }); %>
+                            <% } %>
+                        </select>
                     </div>
 
                     <div class="mb-3">
-                        <label for="profileComment" class="form-label">Komentar</label>
-                        <input type="text" class="form-control" id="profileComment" name="comment">
+                        <label for="serverName" class="form-label">Nama Server Hotspot *</label>
+                        <input type="text" class="form-control" id="serverName" name="name" required>
+                        <small class="text-muted">Nama server hotspot yang akan dibuat di Mikrotik</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="serverInterface" class="form-label">Interface *</label>
+                        <select class="form-select" id="serverInterface" name="interface" required>
+                            <option value="">Pilih Interface</option>
+                            <!-- Akan diisi via JavaScript -->
+                        </select>
+                        <small class="text-muted">Interface Mikrotik yang akan digunakan untuk hotspot</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="serverProfile" class="form-label">Server Profile</label>
+                        <select class="form-select" id="serverProfile" name="profile">
+                            <option value="">Pilih Profile (Opsional)</option>
+                            <!-- Akan diisi via JavaScript -->
+                        </select>
+                        <small class="text-muted">Server Profile Hotspot yang akan digunakan</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="serverAddressPool" class="form-label">Address Pool</label>
+                        <select class="form-select" id="serverAddressPool" name="addressPool">
+                            <option value="">Pilih Address Pool (Opsional)</option>
+                            <!-- Akan diisi via JavaScript -->
+                        </select>
+                        <small class="text-muted">IP Address Pool untuk hotspot (opsional)</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="serverDisabled" name="disabled">
+                            <label class="form-check-label" for="serverDisabled">
+                                Disabled (Nonaktifkan server)
+                            </label>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -178,7 +240,120 @@
         </form>
     </div>
 </div>
-<% } %>
+
+<!-- Modal Tambah/Edit Server Profile Hotspot -->
+<div class="modal fade" id="profileModal" tabindex="-1" aria-labelledby="profileModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <form id="profileForm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="profileModalLabel">Tambah Server Profile Hotspot</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="profileId" name="id">
+                    <input type="hidden" id="profileRouterId" name="router_id">
+                    
+                    <div class="mb-3">
+                        <label for="profileRouterSelect" class="form-label">NAS (Router) *</label>
+                        <select class="form-select" id="profileRouterSelect" name="router_id" required>
+                            <option value="">Pilih Router</option>
+                            <% if (routers && routers.length > 0) { %>
+                                <% routers.forEach(function(router) { %>
+                                    <option value="<%= router.id %>"><%= router.name %> (<%= router.nas_ip %>)</option>
+                                <% }); %>
+                            <% } %>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="profileName" class="form-label">Nama Server Profile *</label>
+                        <input type="text" class="form-control" id="profileName" name="name" required>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="hotspotAddress" class="form-label">Hotspot Address *</label>
+                                <input type="text" class="form-control" id="hotspotAddress" name="hotspot-address" placeholder="contoh: 192.168.88.1" required>
+                                <small class="text-muted">Alamat IP untuk hotspot server</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="dnsName" class="form-label">DNS Name *</label>
+                                <input type="text" class="form-control" id="dnsName" name="dns-name" placeholder="contoh: hotspot.local" required>
+                                <small class="text-muted">Nama DNS untuk hotspot server</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab Content - Tanpa tab navigation karena hanya satu tab -->
+                    <div class="tab-content" id="profileTabContent">
+                        <!-- General Tab -->
+                        <div class="tab-pane fade show active" id="general" role="tabpanel">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="htmlDirectory" class="form-label">HTML Directory</label>
+                                        <input type="text" class="form-control" id="htmlDirectory" name="html-directory" placeholder="contoh: flash/hotspot">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="htmlDirectoryOverride" class="form-label">HTML Directory Override</label>
+                                        <input type="text" class="form-control" id="htmlDirectoryOverride" name="html-directory-override" placeholder="opsional">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="rateLimitRxTx" class="form-label">Rate Limit (rx/tx)</label>
+                                        <input type="text" class="form-control" id="rateLimitRxTx" name="rate-limit-rx-tx" placeholder="contoh: 1M/1M">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="httpProxy" class="form-label">HTTP Proxy</label>
+                                        <input type="text" class="form-control" id="httpProxy" name="http-proxy" placeholder="opsional">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="httpProxyPort" class="form-label">HTTP Proxy Port</label>
+                                        <input type="number" class="form-control" id="httpProxyPort" name="http-proxy-port" placeholder="0" min="0">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="smtpServer" class="form-label">SMTP Server</label>
+                                        <input type="text" class="form-control" id="smtpServer" name="smtp-server" placeholder="opsional">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <div class="mb-3">
+                                <label for="profileComment" class="form-label">Komentar</label>
+                                <input type="text" class="form-control" id="profileComment" name="comment">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Scripts -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -186,18 +361,110 @@
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
+<script type="application/json" id="servers-data"><%- JSON.stringify(servers || []) %></script>
+<script type="application/json" id="profiles-data"><%- JSON.stringify(profiles || []) %></script>
+<script type="application/json" id="routers-data"><%- JSON.stringify(routers || []) %></script>
+
 <script>
 $(function() {
+    // Initialize dengan data dari server-side jika ada
+    // Pastikan data selalu berupa array yang valid
+    let servers = [];
     let profiles = [];
-    let dataTable;
-    const isRadiusMode = <%= (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') ? 'true' : 'false' %>;
+    let routers = [];
+    let serverDataTable;
+    let profileDataTable;
+    
+    try {
+        // Ambil data dari JSON script tags
+        const serversDataEl = document.getElementById('servers-data');
+        const profilesDataEl = document.getElementById('profiles-data');
+        const routersDataEl = document.getElementById('routers-data');
+        
+        routers = routersDataEl ? JSON.parse(routersDataEl.textContent) : [];
+        const serversData = serversDataEl ? JSON.parse(serversDataEl.textContent) : [];
+        const profilesData = profilesDataEl ? JSON.parse(profilesDataEl.textContent) : [];
+        
+        servers = Array.isArray(serversData) ? serversData : [];
+        profiles = Array.isArray(profilesData) ? profilesData : [];
+        
+        console.log('Initial servers from server:', servers);
+        console.log('Initial profiles from server:', profiles);
+        console.log('Initial routers from server:', routers);
+    } catch (e) {
+        console.error('Error parsing initial data:', e);
+        servers = [];
+        profiles = [];
+        routers = [];
+    }
 
-    // Initialize DataTable
-    function initDataTable() {
-        if (dataTable) {
-            dataTable.destroy();
+    // Initialize DataTables
+    function initServerTable() {
+        if (serverDataTable) {
+            serverDataTable.destroy();
         }
-        dataTable = $('#profileTable').DataTable({
+        serverDataTable = $('#serverTable').DataTable({
+            data: servers,
+            columns: [
+                { 
+                    data: null,
+                    render: function(data, type, row, meta) {
+                        return meta.row + 1;
+                    }
+                },
+                { data: 'name' },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        const nasName = row.nas_name || 'N/A';
+                        const nasIp = row.nas_ip || 'N/A';
+                        return nasName + ' (' + nasIp + ')';
+                    }
+                },
+                { data: 'interface' },
+                { data: 'profile' },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        return row.addressPool || row.address || '-';
+                    }
+                },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        return row.disabled ? '<span class="badge bg-danger">Disabled</span>' : '<span class="badge bg-success">Active</span>';
+                    }
+                },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        const id = row.id || row['.id'];
+                        const nasId = row.nas_id || '';
+                        const name = (row.name || '').replace(/'/g, "\\'");
+                        return `
+                            <button class="btn btn-sm btn-primary me-1" onclick="editServer('${id}', '${nasId}')">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteServer('${id}', '${nasId}', '${name}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        `;
+                    }
+                }
+            ],
+            responsive: true,
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json'
+            }
+        });
+        $('#totalServers').text(servers.length);
+    }
+
+    function initProfileTable() {
+        if (profileDataTable) {
+            profileDataTable.destroy();
+        }
+        profileDataTable = $('#profileTable').DataTable({
             data: profiles,
             columns: [
                 { 
@@ -218,45 +485,29 @@ $(function() {
                 { 
                     data: null,
                     render: function(data, type, row) {
-                        return row['rate-limit'] || '-';
+                        return row['hotspot-address'] || '-';
                     }
                 },
                 { 
                     data: null,
                     render: function(data, type, row) {
-                        return row['session-timeout'] || '-';
+                        return row['dns-name'] || '-';
                     }
                 },
                 { 
                     data: null,
                     render: function(data, type, row) {
-                        return row['idle-timeout'] || '-';
-                    }
-                },
-                { 
-                    data: null,
-                    render: function(data, type, row) {
-                        return row['shared-users'] || '1';
-                    }
-                },
-                { 
-                    data: null,
-                    render: function(data, type, row) {
-                        const id = row.id || row['.id'] || row.name;
-                        let actions = '';
-                        if (isRadiusMode) {
-                            actions = `
-                                <button class="btn btn-sm btn-primary me-1" onclick="editProfile('${id}')">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteProfile('${id}', '${row.name}')">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            `;
-                        } else {
-                            actions = '<span class="text-muted">Read-only</span>';
-                        }
-                        return actions;
+                        const id = String(row.id || row['.id'] || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        const nasId = String(row.nas_id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        const name = String(row.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        return `
+                            <button class="btn btn-sm btn-primary me-1" onclick="editProfile('${id}', '${nasId}')">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteProfile('${id}', '${nasId}', '${name}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        `;
                     }
                 }
             ],
@@ -265,64 +516,411 @@ $(function() {
                 url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json'
             }
         });
+        $('#totalProfiles').text(profiles.length);
+    }
+
+    // Load servers
+    function loadServers() {
+        console.log('Loading servers...');
+        $.get('/admin/mikrotik/hotspot-servers/api', function(res) {
+            console.log('Servers response:', res);
+            if (res.success) {
+                servers = res.servers || [];
+                console.log('Loaded servers:', servers);
+                $('#totalServers').text(servers.length);
+                
+                if (serverDataTable) {
+                    serverDataTable.clear().rows.add(servers).draw();
+                } else {
+                    initServerTable();
+                }
+            } else {
+                console.error('Failed to load servers:', res.message);
+                alert('Gagal memuat server hotspot: ' + (res.message || 'Unknown error'));
+            }
+        }).fail(function(xhr) {
+            console.error('Error loading servers:', xhr);
+            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        });
     }
 
     // Load profiles
     function loadProfiles() {
+        console.log('Loading profiles...');
         $.get('/admin/mikrotik/hotspot-server-profiles/api', function(res) {
+            console.log('Profiles response:', res);
             if (res.success) {
                 profiles = res.profiles || [];
+                console.log('Loaded profiles:', profiles);
+                console.log('Total profiles loaded:', profiles.length);
                 $('#totalProfiles').text(profiles.length);
                 
-                if (dataTable) {
-                    dataTable.clear().rows.add(profiles).draw();
+                if (profileDataTable) {
+                    profileDataTable.clear().rows.add(profiles).draw();
                 } else {
-                    initDataTable();
+                    initProfileTable();
                 }
             } else {
+                console.error('Failed to load profiles:', res.message);
                 alert('Gagal memuat server profiles: ' + (res.message || 'Unknown error'));
+            }
+        }).fail(function(xhr) {
+            console.error('Error loading profiles:', xhr);
+            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        });
+    }
+
+    // Tambah Server
+    $('#btnTambahServer').click(function() {
+        $('#serverForm')[0].reset();
+        $('#serverId').val('');
+        $('#serverRouterId').val('');
+        $('#serverRouterSelect').val('');
+        $('#serverModalLabel').text('Tambah Server Hotspot');
+        $('#serverModal').modal('show');
+    });
+
+    // Edit Server
+    window.editServer = function(id, nasId) {
+        const server = servers.find(s => (s.id || s['.id']) == id && s.nas_id == nasId);
+        if (!server) {
+            alert('Server tidak ditemukan');
+            return;
+        }
+
+        console.log('Editing server:', server);
+
+        $('#serverId').val(id);
+        $('#serverRouterId').val(server.nas_id);
+        $('#serverRouterSelect').val(server.nas_id);
+        $('#serverName').val(server.name || '');
+        
+        // Store current values untuk select setelah dropdown di-load
+        $('#serverInterface').data('current-value', server.interface || '');
+        $('#serverAddressPool').data('current-value', server.addressPool || '');
+        $('#serverProfile').data('current-value', server.profile || '');
+        
+        console.log('Current values set:', {
+            interface: server.interface,
+            addressPool: server.addressPool,
+            profile: server.profile
+        });
+        
+        // Trigger change untuk load dropdowns
+        $('#serverRouterSelect').trigger('change');
+        
+        // Set nilai setelah dropdown di-load (dengan delay lebih lama untuk memastikan AJAX selesai)
+        setTimeout(function() {
+            if (server.interface) {
+                $('#serverInterface').val(server.interface);
+                console.log('Set interface value:', server.interface);
+            }
+            if (server.addressPool) {
+                $('#serverAddressPool').val(server.addressPool);
+                console.log('Set addressPool value:', server.addressPool);
+            }
+            if (server.profile) {
+                $('#serverProfile').val(server.profile);
+                console.log('Set profile value:', server.profile);
+            }
+        }, 1000);
+        
+        $('#serverDisabled').prop('checked', server.disabled === true || server.disabled === 'true');
+        
+        $('#serverModalLabel').text('Edit Server Hotspot');
+        $('#serverModal').modal('show');
+    };
+
+    // Delete Server
+    window.deleteServer = function(id, nasId, name) {
+        if (!confirm(`Apakah Anda yakin ingin menghapus server hotspot "${name}"?`)) {
+            return;
+        }
+
+        $.post('/admin/mikrotik/hotspot-servers/delete', { id: id, router_id: nasId }, function(res) {
+            if (res.success) {
+                alert('Server hotspot berhasil dihapus!');
+                loadServers();
+            } else {
+                alert('Gagal menghapus server hotspot: ' + (res.message || 'Unknown error'));
             }
         }).fail(function(xhr) {
             alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
         });
-    }
+    };
+
+    // Submit Server Form
+    $('#serverForm').submit(function(e) {
+        e.preventDefault();
+        const formData = {
+            id: $('#serverId').val(),
+            router_id: $('#serverRouterSelect').val(),
+            name: $('#serverName').val(),
+            interface: $('#serverInterface').val(),
+            profile: $('#serverProfile').val(),
+            addressPool: $('#serverAddressPool').val(),
+            disabled: $('#serverDisabled').prop('checked') ? 'true' : 'false'
+        };
+
+        const url = formData.id ? '/admin/mikrotik/hotspot-servers/edit' : '/admin/mikrotik/hotspot-servers/add';
+        
+        $.post(url, formData, function(res) {
+            if (res.success) {
+                alert('Server hotspot berhasil disimpan!');
+                $('#serverModal').modal('hide');
+                loadServers();
+            } else {
+                alert('Gagal menyimpan server hotspot: ' + (res.message || 'Unknown error'));
+            }
+        }).fail(function(xhr) {
+            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        });
+    });
+
+    // Load interfaces, address pools, and server profiles when router is selected for server form
+    $('#serverRouterSelect').change(function() {
+        const routerId = $(this).val();
+        console.log('Router selected:', routerId);
+        
+        if (routerId) {
+            // Reset dropdowns dengan loading state
+            $('#serverInterface').html('<option value="">Memuat interface...</option>');
+            $('#serverAddressPool').html('<option value="">Memuat address pool...</option>');
+            $('#serverProfile').html('<option value="">Memuat server profile...</option>');
+            
+            // Load interfaces
+            console.log('Loading interfaces for router:', routerId);
+            $.get('/admin/mikrotik/interfaces/api', { router_id: routerId }, function(res) {
+                console.log('Interfaces response:', res);
+                if (res.success && Array.isArray(res.interfaces)) {
+                    let options = '<option value="">Pilih Interface</option>';
+                    res.interfaces.forEach(iface => {
+                        const selected = $('#serverInterface').data('current-value') === iface.name ? 'selected' : '';
+                        options += `<option value="${iface.name}" ${selected}>${iface.name} (${iface.type || 'N/A'})</option>`;
+                    });
+                    $('#serverInterface').html(options);
+                    // Set value setelah loading jika ada current-value
+                    const currentValue = $('#serverInterface').data('current-value');
+                    if (currentValue) {
+                        $('#serverInterface').val(currentValue);
+                        $('#serverInterface').removeData('current-value');
+                    }
+                    console.log('Interfaces loaded:', res.interfaces.length);
+                } else {
+                    $('#serverInterface').html('<option value="">Gagal memuat interface: ' + (res.message || 'Unknown error') + '</option>');
+                    console.error('Failed to load interfaces:', res.message);
+                }
+            }).fail(function(xhr) {
+                console.error('Error loading interfaces:', xhr);
+                $('#serverInterface').html('<option value="">Error memuat interface</option>');
+            });
+
+            // Load address pools
+            console.log('Loading address pools for router:', routerId);
+            $.get('/admin/mikrotik/address-pools/api', { router_id: routerId }, function(res) {
+                console.log('Address pools response:', res);
+                if (res.success && Array.isArray(res.pools)) {
+                    let options = '<option value="">Pilih Address Pool (Opsional)</option>';
+                    res.pools.forEach(pool => {
+                        const selected = $('#serverAddressPool').data('current-value') === pool.name ? 'selected' : '';
+                        const ranges = pool.ranges ? ` (${pool.ranges})` : '';
+                        options += `<option value="${pool.name}" ${selected}>${pool.name}${ranges}</option>`;
+                    });
+                    $('#serverAddressPool').html(options);
+                    // Set value setelah loading jika ada current-value
+                    const currentValue = $('#serverAddressPool').data('current-value');
+                    if (currentValue) {
+                        $('#serverAddressPool').val(currentValue);
+                        $('#serverAddressPool').removeData('current-value');
+                    }
+                    console.log('Address pools loaded:', res.pools.length);
+                } else {
+                    $('#serverAddressPool').html('<option value="">Gagal memuat address pool: ' + (res.message || 'Unknown error') + '</option>');
+                    console.error('Failed to load address pools:', res.message);
+                }
+            }).fail(function(xhr) {
+                console.error('Error loading address pools:', xhr);
+                $('#serverAddressPool').html('<option value="">Error memuat address pool</option>');
+            });
+
+            // Load server profiles
+            console.log('Loading server profiles for router:', routerId);
+            $.get('/admin/mikrotik/hotspot-server-profiles/api', { router_id: routerId }, function(res) {
+                console.log('Server profiles response:', res);
+                if (res.success && Array.isArray(res.profiles)) {
+                    let options = '<option value="">Pilih Profile (Opsional)</option>';
+                    res.profiles.forEach(prof => {
+                        const selected = $('#serverProfile').data('current-value') === prof.name ? 'selected' : '';
+                        options += `<option value="${prof.name}" ${selected}>${prof.name}</option>`;
+                    });
+                    $('#serverProfile').html(options);
+                    // Set value setelah loading jika ada current-value
+                    const currentValue = $('#serverProfile').data('current-value');
+                    if (currentValue) {
+                        $('#serverProfile').val(currentValue);
+                        $('#serverProfile').removeData('current-value');
+                    }
+                    console.log('Server profiles loaded:', res.profiles.length);
+                } else {
+                    $('#serverProfile').html('<option value="">Gagal memuat server profile: ' + (res.message || 'Unknown error') + '</option>');
+                    console.error('Failed to load server profiles:', res.message);
+                }
+            }).fail(function(xhr) {
+                console.error('Error loading server profiles:', xhr);
+                $('#serverProfile').html('<option value="">Error memuat server profile</option>');
+            });
+        } else {
+            // Reset dropdowns jika router tidak dipilih
+            $('#serverInterface').html('<option value="">Pilih Interface</option>');
+            $('#serverAddressPool').html('<option value="">Pilih Address Pool (Opsional)</option>');
+            $('#serverProfile').html('<option value="">Pilih Profile (Opsional)</option>');
+        }
+    });
 
     // Tambah Profile
     $('#btnTambahProfile').click(function() {
         $('#profileForm')[0].reset();
         $('#profileId').val('');
+        $('#profileRouterId').val('');
+        $('#profileRouterSelect').val('');
+        $('#hotspotAddress').val('');
+        $('#dnsName').val('');
+        
+        // Pastikan dropdown NAS terisi dengan routers yang benar
+        if (routers && routers.length > 0) {
+            let options = '<option value="">Pilih Router</option>';
+            routers.forEach(function(router) {
+                options += `<option value="${router.id}">${router.name} (${router.nas_ip})</option>`;
+            });
+            $('#profileRouterSelect').html(options);
+        }
+        
         $('#profileModalLabel').text('Tambah Server Profile Hotspot');
         $('#profileModal').modal('show');
     });
 
     // Edit Profile
-    window.editProfile = function(id) {
-        const profile = profiles.find(p => (p.id || p['.id'] || p.name) == id);
+    window.editProfile = function(id, nasId) {
+        console.log('Attempting to edit profile with id:', id, 'nasId:', nasId);
+        console.log('Current profiles array:', profiles);
+        console.log('Current profiles length:', profiles.length);
+        console.log('Available routers:', routers);
+        
+        // Cari profile dengan beberapa cara untuk memastikan menemukan yang benar
+        let profile = null;
+        
+        // Coba cari dengan id dan nas_id yang tepat
+        profile = profiles.find(p => {
+            const pId = p.id || p['.id'] || '';
+            const pNasId = p.nas_id || '';
+            return String(pId) === String(id) && String(pNasId) === String(nasId);
+        });
+        
+        // Jika tidak ditemukan, coba cari hanya dengan id (mungkin nas_id berbeda)
         if (!profile) {
-            alert('Profile tidak ditemukan');
+            console.log('Profile not found with exact match, trying with id only...');
+            profile = profiles.find(p => {
+                const pId = p.id || p['.id'] || '';
+                return String(pId) === String(id);
+            });
+        }
+        
+        // Jika masih tidak ditemukan, coba cari dengan string comparison yang lebih fleksibel
+        if (!profile) {
+            console.log('Profile not found with id match, trying flexible search...');
+            profile = profiles.find(p => {
+                const pId = String(p.id || p['.id'] || '').toLowerCase();
+                const searchId = String(id || '').toLowerCase();
+                return pId === searchId || pId.includes(searchId) || searchId.includes(pId);
+            });
+        }
+        
+        if (!profile) {
+            console.error('Profile not found!', {
+                searchedId: id,
+                searchedNasId: nasId,
+                availableProfiles: profiles.map(p => ({
+                    id: p.id || p['.id'],
+                    nas_id: p.nas_id,
+                    name: p.name
+                }))
+            });
+            alert('Profile tidak ditemukan. Silakan refresh halaman dan coba lagi.');
             return;
         }
 
+        console.log('Profile found:', profile);
+        console.log('Profile nas_id:', profile.nas_id);
+        console.log('Profile nas_name:', profile.nas_name);
+
+        // Gunakan nasId dari parameter jika profile.nas_id tidak ada
+        const finalNasId = profile.nas_id || nasId || '';
+        console.log('Final nas_id to use:', finalNasId);
+
         $('#profileId').val(id);
+        $('#profileRouterId').val(finalNasId);
+        
+        // Pastikan dropdown NAS terisi dengan routers yang benar
+        if (routers && routers.length > 0) {
+            let options = '<option value="">Pilih Router</option>';
+            routers.forEach(function(router) {
+                // Gunakan comparison yang lebih fleksibel
+                const routerIdStr = String(router.id || '');
+                const nasIdStr = String(finalNasId || '');
+                const selected = (routerIdStr === nasIdStr || router.name === profile.nas_name) ? 'selected' : '';
+                options += `<option value="${router.id}" ${selected}>${router.name} (${router.nas_ip})</option>`;
+            });
+            $('#profileRouterSelect').html(options);
+            console.log('Router dropdown populated with', routers.length, 'routers');
+        } else {
+            console.warn('No routers available!');
+        }
+        
+        // Set nilai setelah dropdown di-set
+        $('#profileRouterSelect').val(finalNasId);
+        console.log('Set router select value to:', finalNasId);
+        
+        // Set form fields dengan data dari profile - SEMUA field harus di-populate
         $('#profileName').val(profile.name || '');
-        $('#rateLimit').val(profile['rate-limit'] || '');
-        $('#sessionTimeout').val(profile['session-timeout'] || '');
-        $('#idleTimeout').val(profile['idle-timeout'] || '');
-        $('#sharedUsers').val(profile['shared-users'] || '1');
-        $('#openStatusPage').val(profile['open-status-page'] || 'http-login');
+        $('#hotspotAddress').val(profile['hotspot-address'] || '');
+        $('#dnsName').val(profile['dns-name'] || '');
+        
+        // General Tab - populate semua field
+        $('#htmlDirectory').val(profile['html-directory'] || '');
+        $('#htmlDirectoryOverride').val(profile['html-directory-override'] || '');
+        $('#rateLimitRxTx').val(profile['rate-limit'] || '');
+        $('#httpProxy').val(profile['http-proxy'] || '');
+        $('#httpProxyPort').val(profile['http-proxy-port'] || '0');
+        $('#smtpServer').val(profile['smtp-server'] || '');
+        
+        // Comment
         $('#profileComment').val(profile.comment || '');
+        
+        console.log('Form values set:', {
+            routerId: finalNasId,
+            name: profile.name,
+            hotspotAddress: profile['hotspot-address'],
+            dnsName: profile['dns-name'],
+            htmlDirectory: profile['html-directory'],
+            htmlDirectoryOverride: profile['html-directory-override'],
+            rateLimit: profile['rate-limit'],
+            httpProxy: profile['http-proxy'],
+            httpProxyPort: profile['http-proxy-port'],
+            smtpServer: profile['smtp-server'],
+            comment: profile.comment
+        });
         
         $('#profileModalLabel').text('Edit Server Profile Hotspot');
         $('#profileModal').modal('show');
     };
 
     // Delete Profile
-    window.deleteProfile = function(id, name) {
+    window.deleteProfile = function(id, nasId, name) {
         if (!confirm(`Apakah Anda yakin ingin menghapus server profile "${name}"?`)) {
             return;
         }
 
-        $.post('/admin/mikrotik/hotspot-server-profiles/delete', { id: id }, function(res) {
+        $.post('/admin/mikrotik/hotspot-server-profiles/delete', { id: id, router_id: nasId }, function(res) {
             if (res.success) {
                 alert('Server profile berhasil dihapus!');
                 loadProfiles();
@@ -334,39 +932,70 @@ $(function() {
         });
     };
 
-    // Submit Form
+    // Submit Profile Form
     $('#profileForm').submit(function(e) {
         e.preventDefault();
+        
+        const routerId = $('#profileRouterSelect').val();
+        const profileId = $('#profileId').val();
+        
+        console.log('Submitting profile form...');
+        console.log('Router ID:', routerId);
+        console.log('Profile ID:', profileId);
+        
+        if (!routerId || routerId === '') {
+            alert('NAS (Router) harus dipilih!');
+            return;
+        }
+        
         const formData = {
-            id: $('#profileId').val(),
+            id: profileId,
+            router_id: routerId,
             name: $('#profileName').val(),
-            'rate-limit': $('#rateLimit').val(),
-            'session-timeout': $('#sessionTimeout').val(),
-            'idle-timeout': $('#idleTimeout').val(),
-            'shared-users': $('#sharedUsers').val(),
-            'open-status-page': $('#openStatusPage').val(),
+            'hotspot-address': $('#hotspotAddress').val(),
+            'dns-name': $('#dnsName').val(),
+            // General Tab
+            'html-directory': $('#htmlDirectory').val(),
+            'html-directory-override': $('#htmlDirectoryOverride').val(),
+            'rate-limit': $('#rateLimitRxTx').val(),
+            'http-proxy': $('#httpProxy').val(),
+            'http-proxy-port': $('#httpProxyPort').val(),
+            'smtp-server': $('#smtpServer').val(),
+            // Common
             comment: $('#profileComment').val()
         };
+
+        console.log('Form data to submit:', formData);
 
         const url = formData.id ? '/admin/mikrotik/hotspot-server-profiles/edit' : '/admin/mikrotik/hotspot-server-profiles/add';
         
         $.post(url, formData, function(res) {
+            console.log('Server response:', res);
             if (res.success) {
                 alert('Server profile berhasil disimpan!');
                 $('#profileModal').modal('hide');
-                loadProfiles();
+                // Tunggu sebentar sebelum reload untuk memastikan perubahan sudah tersimpan di Mikrotik
+                setTimeout(function() {
+                    console.log('Reloading profiles after successful save...');
+                    loadProfiles();
+                }, 500);
             } else {
                 alert('Gagal menyimpan server profile: ' + (res.message || 'Unknown error'));
             }
         }).fail(function(xhr) {
+            console.error('Error submitting form:', xhr);
             alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
         });
     });
 
-    // Initialize
+    // Initialize dengan data dari server-side terlebih dahulu
+    initServerTable();
+    initProfileTable();
+    
+    // Kemudian refresh dari API untuk mendapatkan data terbaru
+    loadServers();
     loadProfiles();
 });
 </script>
 </body>
 </html>
-
