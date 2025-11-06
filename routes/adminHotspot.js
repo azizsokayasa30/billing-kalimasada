@@ -255,6 +255,9 @@ router.get('/', async (req, res) => {
                 });
             } catch (radiusError) {
                 console.error('Error fetching hotspot data from RADIUS:', radiusError);
+                const settings = getSettingsWithCache();
+                const company_header = settings.company_header || 'Voucher Hotspot';
+                const adminKontak = settings['admins.0'] || '-';
                 db.close();
                 return res.render('adminHotspot', {
                     users: [],
@@ -264,7 +267,9 @@ router.get('/', async (req, res) => {
                     voucherOnlineSettings: {},
                     success: null,
                     error: `Gagal mengambil data dari RADIUS: ${radiusError.message}`,
-                    settings: getSettingsWithCache(),
+                    company_header,
+                    adminKontak,
+                    settings,
                     versionInfo: getVersionInfo(),
                     versionBadge: getVersionBadge(),
                     userAuthMode: 'radius'
@@ -360,13 +365,23 @@ router.get('/', async (req, res) => {
         });
     } catch (error) {
         console.error('Error in hotspot GET route:', error);
+        const settings = getSettingsWithCache();
+        const company_header = settings.company_header || 'Voucher Hotspot';
+        const adminKontak = settings['admins.0'] || '-';
         res.render('adminHotspot', { 
             users: [], 
             profiles: [], 
             allUsers: [], 
             routers: [],
+            voucherOnlineSettings: {},
             success: null, 
-            error: 'Gagal mengambil data user hotspot: ' + error.message 
+            error: 'Gagal mengambil data user hotspot: ' + error.message,
+            company_header,
+            adminKontak,
+            settings,
+            versionInfo: getVersionInfo(),
+            versionBadge: getVersionBadge(),
+            userAuthMode: 'mikrotik'
         });
     }
 });
