@@ -92,12 +92,24 @@ class ConfigValidator {
                 }
 
                 // Test dengan settings.json sebagai fallback
-                return await this.testGenieACSServer({
+                const fallbackResult = await this.testGenieACSServer({
                     name: 'Default (settings.json)',
                     url: genieacsUrl,
                     username: genieacsUsername,
                     password: genieacsPassword
                 });
+                
+                return {
+                    success: fallbackResult.success,
+                    error: fallbackResult.error || null,
+                    message: fallbackResult.message || null,
+                    details: fallbackResult.details || null,
+                    servers: [{
+                        server: 'Default (settings.json)',
+                        serverId: null,
+                        ...fallbackResult
+                    }]
+                };
             }
 
             // Test koneksi ke setiap server
