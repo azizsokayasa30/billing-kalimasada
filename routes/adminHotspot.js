@@ -855,6 +855,9 @@ router.get('/voucher', async (req, res) => {
                 });
             } catch (radiusError) {
                 console.error('Error fetching voucher data from RADIUS:', radiusError);
+                const settings = getSettingsWithCache();
+                const company_header = settings.company_header || 'Voucher Hotspot';
+                const adminKontak = settings['footer_info'] || '-';
                 db.close();
                 return res.render('adminVoucher', {
                     profiles: [],
@@ -864,7 +867,9 @@ router.get('/voucher', async (req, res) => {
                     routers: [],
                     success: null,
                     error: `Gagal mengambil data dari RADIUS: ${radiusError.message}`,
-                    settings: getSettingsWithCache(),
+                    company_header,
+                    adminKontak,
+                    settings,
                     versionInfo: getVersionInfo(),
                     versionBadge: getVersionBadge(),
                     userAuthMode: 'radius'
@@ -1072,6 +1077,9 @@ router.get('/voucher', async (req, res) => {
         });
     } catch (error) {
         console.error('Error rendering voucher page:', error);
+        const settings = getSettingsWithCache();
+        const company_header = settings.company_header || 'Voucher Hotspot';
+        const adminKontak = settings['footer_info'] || '-';
         res.render('adminVoucher', {
             profiles: [],
             serverProfiles: [],
@@ -1080,9 +1088,12 @@ router.get('/voucher', async (req, res) => {
             routers: [],
             success: null,
             error: 'Gagal memuat halaman voucher: ' + error.message,
-            settings: getSettingsWithCache(),
+            company_header,
+            adminKontak,
+            settings,
             versionInfo: getVersionInfo(),
-            versionBadge: getVersionBadge()
+            versionBadge: getVersionBadge(),
+            userAuthMode: 'mikrotik'
         });
     }
 });
