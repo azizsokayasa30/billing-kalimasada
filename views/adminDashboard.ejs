@@ -10,6 +10,51 @@
     <style>
         body { background: #f5f6fa; }
         
+        /* License Badge Gold Styling */
+        .license-badge-gold {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            border: 2px solid #FFD700;
+            box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+            color: #000;
+            font-weight: 600;
+        }
+        
+        .license-badge-gold strong {
+            color: #000 !important;
+            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.3);
+        }
+        
+        .license-badge-gold .small {
+            color: #000 !important;
+        }
+        
+        .license-badge-gold code {
+            color: #000 !important;
+            background: rgba(255, 255, 255, 0.3) !important;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .license-badge-gold i {
+            color: #000 !important;
+            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Responsive license badge */
+        @media (max-width: 767.98px) {
+            .license-badge-gold {
+                font-size: 0.85rem;
+                padding: 0.5rem !important;
+            }
+            
+            .license-badge-gold .small {
+                font-size: 0.7rem !important;
+            }
+            
+            .license-badge-gold i {
+                font-size: 1.2rem !important;
+            }
+        }
+        
         /* Desktop: When sidebar collapsed, ensure main content is full width */
         @media (min-width: 768px) {
             body:has(.sidebar.collapsed) .main-content {
