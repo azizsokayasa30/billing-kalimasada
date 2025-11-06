@@ -506,13 +506,7 @@
                             <% if (typeof licenseStatus !== 'undefined' && licenseStatus && licenseStatus.status === 'active') { %>
                             <div class="license-badge-gold d-flex align-items-center px-3 py-2 rounded">
                                 <i class="bi bi-shield-check fs-4 me-2"></i>
-                                <div>
-                                    <strong>License Aktif</strong>
-                                    <div class="small" style="font-size: 0.75rem;">
-                                        <div>License key: <code><%= licenseStatus.license_key %></code></div>
-                                        <div>Aktivasi: <%= licenseStatus.activated_at ? new Date(licenseStatus.activated_at).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' %></div>
-                                    </div>
-                                </div>
+                                <strong>License Aktif</strong>
                             </div>
                             <% } %>
                             <div>
