@@ -11,6 +11,7 @@ class AgentManager {
     }
 
     createTables() {
+        const self = this;
         const tables = [
             // Tabel Agent
             `CREATE TABLE IF NOT EXISTS agents (
@@ -120,16 +121,37 @@ class AgentManager {
             )`
         ];
 
-        tables.forEach(table => {
-            this.db.run(table, (err) => {
-                if (err) {
-                    logger.error('Error creating agent table:', err);
-                }
+        // Gunakan serialize dan Promise untuk memastikan semua tabel dibuat sebelum membuat index
+        this.db.serialize(() => {
+            // Buat Promise untuk setiap tabel
+            const createTablePromises = tables.map((table, index) => {
+                return new Promise((resolve, reject) => {
+                    this.db.run(table, (err) => {
+                        if (err) {
+                            logger.error(`Error creating agent table ${index + 1}:`, err);
+                            reject(err);
+                        } else {
+                            resolve();
+                        }
+                    });
+                });
             });
-        });
 
-        // Create indexes
-        this.createIndexes();
+            // Tunggu semua tabel selesai dibuat, kemudian buat index
+            Promise.all(createTablePromises)
+                .then(() => {
+                    // Semua tabel sudah dibuat, sekarang buat index
+                    self.createIndexes();
+                })
+                .catch((error) => {
+                    logger.error('Error creating agent tables:', error);
+                    // Tetap coba buat index meskipun ada error pada tabel tertentu
+                    // karena CREATE TABLE IF NOT EXISTS sudah menangani tabel yang sudah ada
+                    setTimeout(() => {
+                        self.createIndexes();
+                    }, 200);
+                });
+        });
     }
 
     createIndexes() {
