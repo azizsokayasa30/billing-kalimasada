@@ -9,7 +9,7 @@ const logger = require('./logger');
 class ConfigValidator {
     constructor() {
         this.validationResults = {
-            genieacs: { isValid: false, errors: [], warnings: [] },
+            genieacs: { isValid: false, errors: [], warnings: [], serverResults: [] },
             mikrotik: { isValid: false, errors: [], warnings: [], routerResults: [] },
             overall: { isValid: false, needsAttention: false }
         };
