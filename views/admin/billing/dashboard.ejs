@@ -40,18 +40,6 @@
                         <a href="/admin/billing/invoices-by-type" class="btn btn-info me-2">
                             <i class="bx bx-receipt"></i> Invoice by Type
                         </a>
-                        <button id="cleanupVoucherBtn" class="btn btn-danger me-2" onclick="cleanupVouchers()">
-                            <i class="bx bx-trash"></i> Hapus Voucher Expired
-                        </button>
-                        <button id="updateVoucherInvoicesBtn" class="btn btn-success me-2" onclick="updateVoucherInvoices()">
-                            <i class="bx bx-refresh"></i> Update Invoice Voucher
-                        </button>
-                        <button id="createMissingInvoiceBtn" class="btn btn-info me-2" onclick="createMissingVoucherInvoices()">
-                            <i class="bx bx-plus-circle"></i> Buat Invoice Voucher
-                        </button>
-                        <button id="cleanupOrphanInvoicesBtn" class="btn btn-danger me-2" onclick="cleanupOrphanVoucherInvoices()">
-                            <i class="bx bx-x-circle"></i> Hapus Invoice Gantung
-                        </button>
                         <button id="cleanupDataBtn" class="btn btn-warning me-2" onclick="cleanupData()">
                             <i class="bx bx-refresh"></i> Perbaiki Data
                         </button>
@@ -71,19 +59,6 @@
                             </a></li>
                             <li><a class="dropdown-item" href="/admin/billing/invoices-by-type">
                                 <i class="bx bx-receipt"></i> Invoice by Type
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-danger" href="#" onclick="cleanupVouchers(); return false;">
-                                <i class="bx bx-trash"></i> Hapus Voucher Expired
-                            </a></li>
-                            <li><a class="dropdown-item text-success" href="#" onclick="updateVoucherInvoices(); return false;">
-                                <i class="bx bx-refresh"></i> Update Invoice Voucher
-                            </a></li>
-                            <li><a class="dropdown-item text-info" href="#" onclick="createMissingVoucherInvoices(); return false;">
-                                <i class="bx bx-plus-circle"></i> Buat Invoice Voucher
-                            </a></li>
-                            <li><a class="dropdown-item text-danger" href="#" onclick="cleanupOrphanVoucherInvoices(); return false;">
-                                <i class="bx bx-x-circle"></i> Hapus Invoice Gantung
                             </a></li>
                             <li><a class="dropdown-item text-warning" href="#" onclick="cleanupData(); return false;">
                                 <i class="bx bx-refresh"></i> Perbaiki Data
