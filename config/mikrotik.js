@@ -4589,6 +4589,126 @@ async function deleteHotspotProfileMetadata(conn, groupname) {
     return true;
 }
 
+async function ensurePPPoEProfilesMetadataTable(conn) {
+    try {
+        const [tableCheck] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'pppoe_profiles'
+        `);
+
+        if (!tableCheck || tableCheck.length === 0 || tableCheck[0].count === 0) {
+            logger.warn('Tabel pppoe_profiles belum dibuat. Jalankan: mysql -u root -p < setup_pppoe_profiles_table.sql');
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        logger.error(`Error checking pppoe_profiles table: ${error.message}`);
+        return false;
+    }
+}
+
+async function getPPPoEProfilesMetadata(conn, groupnames = []) {
+    if (!groupnames || groupnames.length === 0) return {};
+    const exists = await ensurePPPoEProfilesMetadataTable(conn);
+    if (!exists) return {};
+
+    const placeholders = groupnames.map(() => '?').join(',');
+    const [rows] = await conn.execute(`
+        SELECT groupname, display_name, comment, rate_limit,
+               local_address, remote_address, dns_server,
+               parent_queue, address_list,
+               bridge_learning, use_mpls, use_compression,
+               use_encryption, only_one, change_tcp_mss, use_upnp
+        FROM pppoe_profiles
+        WHERE groupname IN (${placeholders})
+    `, groupnames);
+
+    const map = {};
+    rows.forEach(row => {
+        map[row.groupname] = row;
+    });
+    return map;
+}
+
+async function getPPPoEProfileMetadata(conn, groupname) {
+    if (!groupname) return null;
+    const exists = await ensurePPPoEProfilesMetadataTable(conn);
+    if (!exists) return null;
+
+    const [rows] = await conn.execute(`
+        SELECT groupname, display_name, comment, rate_limit,
+               local_address, remote_address, dns_server,
+               parent_queue, address_list,
+               bridge_learning, use_mpls, use_compression,
+               use_encryption, only_one, change_tcp_mss, use_upnp
+        FROM pppoe_profiles
+        WHERE groupname = ?
+        LIMIT 1
+    `, [groupname]);
+
+    return rows && rows.length > 0 ? rows[0] : null;
+}
+
+async function savePPPoEProfileMetadata(conn, metadata) {
+    const exists = await ensurePPPoEProfilesMetadataTable(conn);
+    if (!exists) return false;
+
+    await conn.execute(`
+        INSERT INTO pppoe_profiles (
+            groupname, display_name, comment, rate_limit,
+            local_address, remote_address, dns_server,
+            parent_queue, address_list,
+            bridge_learning, use_mpls, use_compression,
+            use_encryption, only_one, change_tcp_mss, use_upnp
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            display_name = VALUES(display_name),
+            comment = VALUES(comment),
+            rate_limit = VALUES(rate_limit),
+            local_address = VALUES(local_address),
+            remote_address = VALUES(remote_address),
+            dns_server = VALUES(dns_server),
+            parent_queue = VALUES(parent_queue),
+            address_list = VALUES(address_list),
+            bridge_learning = VALUES(bridge_learning),
+            use_mpls = VALUES(use_mpls),
+            use_compression = VALUES(use_compression),
+            use_encryption = VALUES(use_encryption),
+            only_one = VALUES(only_one),
+            change_tcp_mss = VALUES(change_tcp_mss),
+            use_upnp = VALUES(use_upnp)
+    `, [
+        metadata.groupname,
+        metadata.displayName,
+        metadata.comment,
+        metadata.rateLimit,
+        metadata.localAddress,
+        metadata.remoteAddress,
+        metadata.dnsServer,
+        metadata.parentQueue,
+        metadata.addressList,
+        metadata.bridgeLearning,
+        metadata.useMpls,
+        metadata.useCompression,
+        metadata.useEncryption,
+        metadata.onlyOne,
+        metadata.changeTcpMss,
+        metadata.useUpnp
+    ]);
+
+    return true;
+}
+
+async function deletePPPoEProfileMetadata(conn, groupname) {
+    const exists = await ensurePPPoEProfilesMetadataTable(conn);
+    if (!exists) return false;
+    await conn.execute('DELETE FROM pppoe_profiles WHERE groupname = ?', [groupname]);
+    return true;
+}
+
 // Fungsi untuk mendapatkan detail profile hotspot (RADIUS)
 async function getHotspotProfileDetailRadius(groupname) {
     const conn = await getRadiusConnection();
@@ -5217,9 +5337,13 @@ async function getPPPoEProfilesRadius() {
         
         const [groupRows] = await conn.execute(query, params);
         
+        const groupnames = groupRows.map(row => row.groupname);
+        const metadataMap = await getPPPoEProfilesMetadata(conn, groupnames);
+
         const profiles = [];
         for (const row of groupRows) {
             const groupname = row.groupname;
+            const meta = metadataMap[groupname] || null;
             
             // Get all attributes for this group
             const [attrRows] = await conn.execute(`
@@ -5231,15 +5355,29 @@ async function getPPPoEProfilesRadius() {
             
             // Build profile object
             const profile = {
-                name: groupname,
+                name: meta?.display_name || groupname,
                 '.id': groupname, // Use groupname as ID for RADIUS
                 groupname: groupname,
                 'rate-limit': null,
                 'session-timeout': null,
                 'idle-timeout': null,
                 'simultaneous-use': null,
+                comment: meta?.comment || '',
+                'local-address': meta?.local_address || '',
+                'remote-address': meta?.remote_address || '',
+                'dns-server': meta?.dns_server || '',
+                'parent-queue': meta?.parent_queue || '',
+                'address-list': meta?.address_list || '',
+                'bridge-learning': meta?.bridge_learning || 'default',
+                'use-mpls': meta?.use_mpls || 'default',
+                'use-compression': meta?.use_compression || 'default',
+                'use-encryption': meta?.use_encryption || 'default',
+                'only-one': meta?.only_one || 'default',
+                'change-tcp-mss': meta?.change_tcp_mss || 'default',
+                'use-upnp': meta?.use_upnp || 'default',
                 nas_name: 'RADIUS',
-                nas_ip: 'RADIUS Server'
+                nas_ip: 'RADIUS Server',
+                is_radius: true
             };
             
             // Parse attributes
@@ -5254,6 +5392,10 @@ async function getPPPoEProfilesRadius() {
                     profile['simultaneous-use'] = attr.value;
                 }
             });
+            
+            if (meta && !profile['rate-limit'] && meta.rate_limit) {
+                profile['rate-limit'] = meta.rate_limit;
+            }
             
             profiles.push(profile);
         }
@@ -5302,6 +5444,12 @@ async function addPPPoEProfileRadius(profileData) {
             return { success: false, message: `Profile dengan nama "${groupname}" sudah ada di database RADIUS` };
         }
         
+        const sanitize = (value) => {
+            if (value === undefined || value === null) return null;
+            const trimmed = String(value).trim();
+            return trimmed === '' ? null : trimmed;
+        };
+
         // Build rate-limit string
         let rateLimitStr = '';
         if (profileData['rate-limit']) {
@@ -5368,6 +5516,25 @@ async function addPPPoEProfileRadius(profileData) {
             `, [groupname, idleTimeout.toString()]);
         }
         
+        await savePPPoEProfileMetadata(conn, {
+            groupname,
+            displayName: sanitize(profileData.name) || groupname,
+            comment: sanitize(profileData.comment),
+            rateLimit: sanitize(profileData['rate-limit'] || profileData.rateLimit),
+            localAddress: sanitize(profileData['local-address']),
+            remoteAddress: sanitize(profileData['remote-address']),
+            dnsServer: sanitize(profileData['dns-server']),
+            parentQueue: sanitize(profileData['parent-queue']),
+            addressList: sanitize(profileData['address-list']),
+            bridgeLearning: sanitize(profileData['bridge-learning']) || 'default',
+            useMpls: sanitize(profileData['use-mpls']) || 'default',
+            useCompression: sanitize(profileData['use-compression']) || 'default',
+            useEncryption: sanitize(profileData['use-encryption']) || 'default',
+            onlyOne: sanitize(profileData['only-one']) || 'default',
+            changeTcpMss: sanitize(profileData['change-tcp-mss']) || 'default',
+            useUpnp: sanitize(profileData['use-upnp']) || 'default'
+        });
+        
         await conn.end();
         logger.info(`✅ Profile RADIUS berhasil ditambahkan: ${groupname}`);
         return { success: true, message: `Profile ${groupname} berhasil ditambahkan ke RADIUS` };
@@ -5382,6 +5549,12 @@ async function addPPPoEProfileRadius(profileData) {
 async function editPPPoEProfileRadius(profileData) {
     const conn = await getRadiusConnection();
     try {
+        const sanitize = (value) => {
+            if (value === undefined || value === null) return null;
+            const trimmed = String(value).trim();
+            return trimmed === '' ? null : trimmed;
+        };
+
         // Old groupname (dari id atau groupname)
         const oldGroupname = profileData.groupname || profileData.id || profileData.name;
         
@@ -5465,6 +5638,8 @@ async function editPPPoEProfileRadius(profileData) {
             // 3. Delete old groupname
             await conn.execute(`DELETE FROM radgroupreply WHERE groupname = ?`, [oldGroupname]);
             await conn.execute(`DELETE FROM radgroupcheck WHERE groupname = ?`, [oldGroupname]);
+
+            await deletePPPoEProfileMetadata(conn, oldGroupname);
         }
         
         // Gunakan groupname yang baru untuk update attributes
@@ -5545,6 +5720,25 @@ async function editPPPoEProfileRadius(profileData) {
                 VALUES (?, 'Simultaneous-Use', ':=', ?)
             `, [groupnameToUpdate, profileData['simultaneous-use']]);
         }
+
+        await savePPPoEProfileMetadata(conn, {
+            groupname: groupnameToUpdate,
+            displayName: sanitize(profileData.name) || groupnameToUpdate,
+            comment: sanitize(profileData.comment),
+            rateLimit: rateLimitStr ? rateLimitStr.trim() : sanitize(profileData['rate-limit'] || profileData.rateLimit),
+            localAddress: sanitize(profileData['local-address']),
+            remoteAddress: sanitize(profileData['remote-address']),
+            dnsServer: sanitize(profileData['dns-server']),
+            parentQueue: sanitize(profileData['parent-queue']),
+            addressList: sanitize(profileData['address-list']),
+            bridgeLearning: sanitize(profileData['bridge-learning']) || 'default',
+            useMpls: sanitize(profileData['use-mpls']) || 'default',
+            useCompression: sanitize(profileData['use-compression']) || 'default',
+            useEncryption: sanitize(profileData['use-encryption']) || 'default',
+            onlyOne: sanitize(profileData['only-one']) || 'default',
+            changeTcpMss: sanitize(profileData['change-tcp-mss']) || 'default',
+            useUpnp: sanitize(profileData['use-upnp']) || 'default'
+        });
         
         await conn.end();
         const finalGroupname = (newGroupname && newGroupname !== oldGroupname && newGroupname !== '') ? newGroupname : oldGroupname;
@@ -5590,6 +5784,8 @@ async function deletePPPoEProfileRadius(groupname) {
             WHERE groupname = ?
         `, [groupname]);
         
+        await deletePPPoEProfileMetadata(conn, groupname);
+
         await conn.end();
         logger.info(`✅ Profile RADIUS berhasil dihapus: ${groupname}`);
         return { success: true, message: `Profile ${groupname} berhasil dihapus dari RADIUS` };
@@ -5623,21 +5819,36 @@ async function getPPPoEProfileDetailRadius(groupname) {
             WHERE groupname = ?
             ORDER BY attribute
         `, [groupname]);
+
+        const metadata = await getPPPoEProfileMetadata(conn, groupname);
         
-        if (attrRows.length === 0 && checkRows.length === 0) {
+        if (attrRows.length === 0 && checkRows.length === 0 && !metadata) {
             await conn.end();
             return { success: false, message: 'Profile tidak ditemukan', data: null };
         }
         
         // Build profile object
         const profile = {
-            name: groupname,
+            name: metadata?.display_name || groupname,
             '.id': groupname,
             groupname: groupname,
             'rate-limit': null,
             'session-timeout': null,
             'idle-timeout': null,
-            'simultaneous-use': null
+            'simultaneous-use': null,
+            comment: metadata?.comment || '',
+            'local-address': metadata?.local_address || '',
+            'remote-address': metadata?.remote_address || '',
+            'dns-server': metadata?.dns_server || '',
+            'parent-queue': metadata?.parent_queue || '',
+            'address-list': metadata?.address_list || '',
+            'bridge-learning': metadata?.bridge_learning || 'default',
+            'use-mpls': metadata?.use_mpls || 'default',
+            'use-compression': metadata?.use_compression || 'default',
+            'use-encryption': metadata?.use_encryption || 'default',
+            'only-one': metadata?.only_one || 'default',
+            'change-tcp-mss': metadata?.change_tcp_mss || 'default',
+            'use-upnp': metadata?.use_upnp || 'default'
         };
         
         // Parse attributes
@@ -5652,6 +5863,10 @@ async function getPPPoEProfileDetailRadius(groupname) {
                 profile['simultaneous-use'] = attr.value;
             }
         });
+
+        if (!profile['rate-limit'] && metadata?.rate_limit) {
+            profile['rate-limit'] = metadata.rate_limit;
+        }
         
         await conn.end();
         return {
