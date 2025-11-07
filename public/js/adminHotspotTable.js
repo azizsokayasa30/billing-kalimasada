@@ -16,14 +16,14 @@ $(function() {
     dom: '<"d-flex justify-content-between align-items-center mb-3"<"d-flex align-items-center"l><"d-flex"f><"ms-3"#statusFilterContainer>>rtip',
     order: [[6, 'desc'], [0, 'asc']], // Status dulu, lalu No
     columnDefs: [
-      { targets: 6, orderDataType: 'status-aktif', width: '10%', className: 'text-center' },
-      { targets: -1, orderable: false, width: '18%', className: 'text-center' },
-      { targets: 0, width: '5%', className: 'text-center' },
-      { targets: 1, width: '18%', className: 'fw-bold text-start' },
-      { targets: 2, width: '15%', className: 'text-center' },
-      { targets: 3, width: '15%', className: 'text-center' },
-      { targets: 4, width: '15%', className: 'text-center' },
-      { targets: 5, width: '18%', className: 'text-center' }
+      { targets: 6, orderDataType: 'status-aktif', width: '8%', className: 'text-center text-nowrap' },
+      { targets: -1, orderable: false, width: '18%', className: 'text-center text-nowrap' },
+      { targets: 0, width: '5%', className: 'text-center text-nowrap' },
+      { targets: 1, width: '15%', className: 'text-nowrap' },
+      { targets: 2, width: '12%', className: 'text-nowrap' },
+      { targets: 3, width: '12%', className: 'text-nowrap' },
+      { targets: 4, width: '12%', className: 'text-nowrap' },
+      { targets: 5, width: '18%', className: 'text-nowrap' }
     ],
     language: {
       url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json',
@@ -61,6 +61,7 @@ $(function() {
   $('#hotspotTable_filter input').on('input', function() {
     // Tunggu sejenak agar search diterapkan
     setTimeout(function() {
+      hotspotTable.order([6, 'desc'], [0, 'asc']).draw();
       hotspotTable.order([6, 'desc'], [0, 'asc']).draw();
     }, 100);
   });

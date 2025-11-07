@@ -645,8 +645,8 @@
                                     <thead class="table-light">
                                         <tr>
                                             <th>No</th>
-                                            <th>Username</th>
                                             <th>Tanggal</th>
+                                            <th>Username</th>
                                             <th>Password</th>
                                             <th>Profile</th>
                                             <th>NAS Status</th>
@@ -657,11 +657,11 @@
                                     <tbody>
                                         <% allUsers.forEach(function(user, i) { %>
                                         <tr>
-                                            <td><%= i+1 %></td>
-                                            <td><%= user.name %></td>
-                                            <td><%= user.created_at ? user.created_at : '-' %></td>
-                                            <td><%= user.password ? user.password : '-' %></td>
-                                            <td><%= user.profile %></td>
+                                            <td class="text-center"><%= i+1 %></td>
+                                            <td class="text-nowrap"><%= user.created_at ? user.created_at : '-' %></td>
+                                            <td class="fw-bold text-nowrap"><%= user.name %></td>
+                                            <td class="text-nowrap"><%= user.password ? user.password : '-' %></td>
+                                            <td class="text-nowrap"><%= user.profile %></td>
                                             <td><%= user.nas_name || 'N/A' %> (<%= user.nas_ip || 'N/A' %>)</td>
                                             <td><%= users && users.find(u => (u.user || u.name) === user.name) ? 'Aktif' : 'Offline' %></td>
                                             <td>
