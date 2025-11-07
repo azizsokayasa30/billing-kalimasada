@@ -2848,6 +2848,12 @@ async function getHotspotProfiles(routerObj = null) {
 // Fungsi untuk mendapatkan detail profile hotspot
 async function getHotspotProfileDetail(id, routerObj = null) {
     try {
+        // Determine auth mode terlebih dahulu
+        const mode = await getUserAuthModeAsync();
+        if (mode === 'radius' || (typeof id === 'string' && id && !id.startsWith('*'))) {
+            return await getHotspotProfileDetailRadius(id);
+        }
+
         let conn = null;
         if (routerObj) {
             conn = await getMikrotikConnectionForRouter(routerObj);
@@ -4424,6 +4430,144 @@ async function getHotspotProfilesRadius() {
     }
 }
 
+// Fungsi untuk mendapatkan detail profile hotspot (RADIUS)
+async function getHotspotProfileDetailRadius(groupname) {
+    const conn = await getRadiusConnection();
+    try {
+        if (!groupname) {
+            await conn.end();
+            return { success: false, message: 'Nama profile tidak boleh kosong', data: null };
+        }
+
+        const [replyRows] = await conn.execute(`
+            SELECT attribute, value
+            FROM radgroupreply
+            WHERE groupname = ?
+            ORDER BY attribute
+        `, [groupname]);
+
+        const [checkRows] = await conn.execute(`
+            SELECT attribute, value
+            FROM radgroupcheck
+            WHERE groupname = ?
+            ORDER BY attribute
+        `, [groupname]);
+
+        if ((!replyRows || replyRows.length === 0) && (!checkRows || checkRows.length === 0)) {
+            await conn.end();
+            return { success: false, message: 'Profile tidak ditemukan', data: null };
+        }
+
+        const profile = {
+            name: groupname,
+            '.id': groupname,
+            groupname,
+            comment: null,
+            disabled: false,
+            rateLimit: null,
+            sessionTimeout: null,
+            idleTimeout: null,
+            sharedUsers: null,
+            rateLimitUnit: null,
+            sessionTimeoutUnit: null,
+            idleTimeoutUnit: null,
+            localAddress: null,
+            remoteAddress: null,
+            dnsServer: null,
+            parentQueue: null,
+            addressList: null
+        };
+
+        const parseTimeoutValue = (value) => {
+            if (!value) return { raw: null, unit: null };
+            const match = String(value).match(/^(\d+)([a-zA-Z]*)$/);
+            if (match) {
+                return {
+                    raw: match[1],
+                    unit: match[2] || null
+                };
+            }
+            return { raw: value, unit: null };
+        };
+
+        const parseRateLimit = (value) => {
+            if (!value) return { raw: null, unit: null };
+            const parts = String(value).split('/');
+            if (parts.length >= 1) {
+                const match = parts[0].match(/^(\d+)([kKmMgG]?)$/);
+                if (match) {
+                    return {
+                        raw: match[1],
+                        unit: match[2] ? match[2].toUpperCase() : null
+                    };
+                }
+            }
+            return { raw: value, unit: null };
+        };
+
+        [...replyRows, ...checkRows].forEach(attr => {
+            switch (attr.attribute) {
+                case 'MikroTik-Rate-Limit':
+                case 'Mikrotik-Rate-Limit': {
+                    const parsed = parseRateLimit(attr.value);
+                    profile.rateLimit = parsed.raw;
+                    profile.rateLimitUnit = parsed.unit;
+                    profile['rate-limit'] = attr.value;
+                    break;
+                }
+                case 'Session-Timeout': {
+                    const parsed = parseTimeoutValue(attr.value);
+                    profile.sessionTimeout = parsed.raw;
+                    profile.sessionTimeoutUnit = parsed.unit;
+                    profile['session-timeout'] = attr.value;
+                    break;
+                }
+                case 'Idle-Timeout': {
+                    const parsed = parseTimeoutValue(attr.value);
+                    profile.idleTimeout = parsed.raw;
+                    profile.idleTimeoutUnit = parsed.unit;
+                    profile['idle-timeout'] = attr.value;
+                    break;
+                }
+                case 'Mikrotik-Shared-Users':
+                case 'MikroTik-Shared-Users': {
+                    profile.sharedUsers = attr.value;
+                    profile['shared-users'] = attr.value;
+                    break;
+                }
+                case 'Simultaneous-Use': {
+                    profile.sharedUsers = attr.value;
+                    profile['shared-users'] = attr.value;
+                    break;
+                }
+                case 'Mikrotik-Address-List':
+                case 'MikroTik-Address-List': {
+                    profile.addressList = attr.value;
+                    break;
+                }
+                case 'Mikrotik-Rate-Limit-Comment':
+                case 'Comment': {
+                    profile.comment = attr.value;
+                    break;
+                }
+                default:
+                    break;
+            }
+        });
+
+        await conn.end();
+        return {
+            success: true,
+            message: 'Detail profile berhasil diambil',
+            data: profile
+        };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting hotspot profile detail from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal ambil detail profile: ${error.message}`, data: null };
+    }
+}
+
 // ============================================
 // HOTSPOT SERVER PROFILE FUNCTIONS
 // ============================================
@@ -5802,6 +5946,7 @@ module.exports = {
     getHotspotProfiles,
     getHotspotProfilesRadius,
     getHotspotProfileDetail,
+    getHotspotProfileDetailRadius,
     addHotspotProfile,
     editHotspotProfile,
     deleteHotspotProfile,
