@@ -4351,10 +4351,8 @@ async function getHotspotProfilesRadius() {
         
         logger.info(`Found ${voucherUsernames.length} voucher usernames for hotspot profile filtering`);
         
-        // Jika tidak ada voucher, return empty (atau bisa juga return semua profil yang memiliki Session-Timeout)
         let groupnames = [];
         if (voucherUsernames.length > 0) {
-            // Ambil groupname yang digunakan oleh voucher users
             const placeholders = voucherUsernames.map(() => '?').join(',');
             const [groupRows] = await conn.execute(`
                 SELECT DISTINCT groupname
@@ -4365,7 +4363,6 @@ async function getHotspotProfilesRadius() {
             groupnames = groupRows.map(row => row.groupname);
         }
         
-        // Juga ambil profil yang memiliki Session-Timeout (karena hotspot voucher biasanya punya Session-Timeout)
         const [sessionTimeoutRows] = await conn.execute(`
             SELECT DISTINCT groupname
             FROM radgroupreply
@@ -4373,50 +4370,90 @@ async function getHotspotProfilesRadius() {
             AND groupname IS NOT NULL AND groupname != ''
         `);
         
-        // Gabungkan kedua list (unique)
         const allGroupnames = [...new Set([...groupnames, ...sessionTimeoutRows.map(r => r.groupname)])];
-        
         logger.info(`Found ${allGroupnames.length} hotspot groupnames (${groupnames.length} from vouchers, ${sessionTimeoutRows.length} with Session-Timeout)`);
-        
+
+        const metadataMap = await getHotspotProfilesMetadata(conn, allGroupnames);
+
         const profiles = [];
-        for (const groupname of allGroupnames) {
-            // Get all attributes for this group
-            const [attrRows] = await conn.execute(`
+        for (const rawGroupname of allGroupnames) {
+            const groupname = rawGroupname;
+
+            const [replyRows] = await conn.execute(`
                 SELECT attribute, value
                 FROM radgroupreply
                 WHERE groupname = ?
                 ORDER BY attribute
             `, [groupname]);
-            
-            // Build profile object
+
+            const [checkRows] = await conn.execute(`
+                SELECT attribute, value
+                FROM radgroupcheck
+                WHERE groupname = ?
+                ORDER BY attribute
+            `, [groupname]);
+
+            const meta = metadataMap[groupname] || null;
+
             const profile = {
-                name: groupname,
-                '.id': groupname, // Use groupname as ID for RADIUS
+                name: meta?.display_name || groupname,
+                '.id': groupname,
                 groupname: groupname,
                 'rate-limit': null,
                 'session-timeout': null,
                 'idle-timeout': null,
                 'shared-users': null,
+                comment: meta?.comment || '',
+                localAddress: meta?.local_address || '',
+                remoteAddress: meta?.remote_address || '',
+                dnsServer: meta?.dns_server || '',
+                parentQueue: meta?.parent_queue || '',
+                addressList: meta?.address_list || '',
                 nas_name: 'RADIUS',
-                nas_ip: 'RADIUS Server'
+                nas_ip: 'RADIUS Server',
+                is_radius: true
             };
-            
-            // Parse attributes
-            attrRows.forEach(attr => {
+
+            [...replyRows, ...checkRows].forEach(attr => {
                 if (attr.attribute === 'MikroTik-Rate-Limit' || attr.attribute === 'Mikrotik-Rate-Limit') {
                     profile['rate-limit'] = attr.value;
                 } else if (attr.attribute === 'Session-Timeout') {
                     profile['session-timeout'] = attr.value;
                 } else if (attr.attribute === 'Idle-Timeout') {
                     profile['idle-timeout'] = attr.value;
-                } else if (attr.attribute === 'Mikrotik-Shared-Users') {
+                } else if (attr.attribute === 'Mikrotik-Shared-Users' || attr.attribute === 'MikroTik-Shared-Users' || attr.attribute === 'Simultaneous-Use') {
                     profile['shared-users'] = attr.value;
                 }
             });
-            
+
+            if (meta) {
+                const rateUnit = meta.rate_limit_unit ? meta.rate_limit_unit.toUpperCase() : '';
+                if (!profile['rate-limit'] && meta.rate_limit_value && rateUnit) {
+                    profile['rate-limit'] = `${meta.rate_limit_value}${rateUnit}/${meta.rate_limit_value}${rateUnit}`;
+                }
+
+                const sessionUnit = meta.session_timeout_unit ? meta.session_timeout_unit.toLowerCase() : '';
+                if (meta.session_timeout_value && sessionUnit) {
+                    profile['session-timeout'] = `${meta.session_timeout_value}${sessionUnit}`;
+                }
+
+                const idleUnit = meta.idle_timeout_unit ? meta.idle_timeout_unit.toLowerCase() : '';
+                if (meta.idle_timeout_value && idleUnit) {
+                    profile['idle-timeout'] = `${meta.idle_timeout_value}${idleUnit}`;
+                }
+
+                if (meta.shared_users) {
+                    profile['shared-users'] = meta.shared_users;
+                }
+            }
+
+            if (profile['shared-users'] !== null && profile['shared-users'] !== undefined) {
+                profile.sharedUsers = profile['shared-users'];
+            }
+
             profiles.push(profile);
         }
-        
+
         await conn.end();
         return {
             success: true,
@@ -4430,6 +4467,128 @@ async function getHotspotProfilesRadius() {
     }
 }
 
+async function ensureHotspotProfilesMetadataTable(conn) {
+    try {
+        const [tableCheck] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'hotspot_profiles'
+        `);
+
+        if (!tableCheck || tableCheck.length === 0 || tableCheck[0].count === 0) {
+            logger.warn('Tabel hotspot_profiles belum dibuat. Jalankan: mysql -u root -p < setup_hotspot_profiles_table.sql');
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        logger.error(`Error checking hotspot_profiles table: ${error.message}`);
+        return false;
+    }
+}
+
+async function getHotspotProfilesMetadata(conn, groupnames = []) {
+    if (!groupnames || groupnames.length === 0) return {};
+    const exists = await ensureHotspotProfilesMetadataTable(conn);
+    if (!exists) return {};
+
+    const placeholders = groupnames.map(() => '?').join(',');
+    const [rows] = await conn.execute(`
+        SELECT groupname, display_name, comment, rate_limit_value, rate_limit_unit,
+               burst_limit_value, burst_limit_unit, session_timeout_value, session_timeout_unit,
+               idle_timeout_value, idle_timeout_unit, shared_users, local_address, remote_address,
+               dns_server, parent_queue, address_list
+        FROM hotspot_profiles
+        WHERE groupname IN (${placeholders})
+    `, groupnames);
+
+    const map = {};
+    rows.forEach(row => {
+        map[row.groupname] = row;
+    });
+    return map;
+}
+
+async function getHotspotProfileMetadata(conn, groupname) {
+    if (!groupname) return null;
+    const exists = await ensureHotspotProfilesMetadataTable(conn);
+    if (!exists) return null;
+
+    const [rows] = await conn.execute(`
+        SELECT groupname, display_name, comment, rate_limit_value, rate_limit_unit,
+               burst_limit_value, burst_limit_unit, session_timeout_value, session_timeout_unit,
+               idle_timeout_value, idle_timeout_unit, shared_users, local_address, remote_address,
+               dns_server, parent_queue, address_list
+        FROM hotspot_profiles
+        WHERE groupname = ?
+        LIMIT 1
+    `, [groupname]);
+
+    return rows && rows.length > 0 ? rows[0] : null;
+}
+
+async function saveHotspotProfileMetadata(conn, metadata) {
+    const exists = await ensureHotspotProfilesMetadataTable(conn);
+    if (!exists) return false;
+
+    await conn.execute(`
+        INSERT INTO hotspot_profiles (
+            groupname, display_name, comment,
+            rate_limit_value, rate_limit_unit,
+            burst_limit_value, burst_limit_unit,
+            session_timeout_value, session_timeout_unit,
+            idle_timeout_value, idle_timeout_unit,
+            shared_users, local_address, remote_address,
+            dns_server, parent_queue, address_list
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            display_name = VALUES(display_name),
+            comment = VALUES(comment),
+            rate_limit_value = VALUES(rate_limit_value),
+            rate_limit_unit = VALUES(rate_limit_unit),
+            burst_limit_value = VALUES(burst_limit_value),
+            burst_limit_unit = VALUES(burst_limit_unit),
+            session_timeout_value = VALUES(session_timeout_value),
+            session_timeout_unit = VALUES(session_timeout_unit),
+            idle_timeout_value = VALUES(idle_timeout_value),
+            idle_timeout_unit = VALUES(idle_timeout_unit),
+            shared_users = VALUES(shared_users),
+            local_address = VALUES(local_address),
+            remote_address = VALUES(remote_address),
+            dns_server = VALUES(dns_server),
+            parent_queue = VALUES(parent_queue),
+            address_list = VALUES(address_list)
+    `, [
+        metadata.groupname,
+        metadata.displayName,
+        metadata.comment,
+        metadata.rateLimitValue,
+        metadata.rateLimitUnit,
+        metadata.burstLimitValue,
+        metadata.burstLimitUnit,
+        metadata.sessionTimeoutValue,
+        metadata.sessionTimeoutUnit,
+        metadata.idleTimeoutValue,
+        metadata.idleTimeoutUnit,
+        metadata.sharedUsers,
+        metadata.localAddress,
+        metadata.remoteAddress,
+        metadata.dnsServer,
+        metadata.parentQueue,
+        metadata.addressList
+    ]);
+
+    return true;
+}
+
+async function deleteHotspotProfileMetadata(conn, groupname) {
+    const exists = await ensureHotspotProfilesMetadataTable(conn);
+    if (!exists) return false;
+    await conn.execute('DELETE FROM hotspot_profiles WHERE groupname = ?', [groupname]);
+    return true;
+}
+
 // Fungsi untuk mendapatkan detail profile hotspot (RADIUS)
 async function getHotspotProfileDetailRadius(groupname) {
     const conn = await getRadiusConnection();
@@ -4439,43 +4598,54 @@ async function getHotspotProfileDetailRadius(groupname) {
             return { success: false, message: 'Nama profile tidak boleh kosong', data: null };
         }
 
+        const normalizedGroupname = String(groupname).trim();
+
         const [replyRows] = await conn.execute(`
             SELECT attribute, value
             FROM radgroupreply
             WHERE groupname = ?
             ORDER BY attribute
-        `, [groupname]);
+        `, [normalizedGroupname]);
 
         const [checkRows] = await conn.execute(`
             SELECT attribute, value
             FROM radgroupcheck
             WHERE groupname = ?
             ORDER BY attribute
-        `, [groupname]);
+        `, [normalizedGroupname]);
 
-        if ((!replyRows || replyRows.length === 0) && (!checkRows || checkRows.length === 0)) {
+        const metadata = await getHotspotProfileMetadata(conn, normalizedGroupname);
+
+        if ((!replyRows || replyRows.length === 0) && (!checkRows || checkRows.length === 0) && !metadata) {
             await conn.end();
             return { success: false, message: 'Profile tidak ditemukan', data: null };
         }
 
         const profile = {
-            name: groupname,
-            '.id': groupname,
-            groupname,
-            comment: null,
+            name: metadata?.display_name || normalizedGroupname,
+            '.id': normalizedGroupname,
+            groupname: normalizedGroupname,
+            comment: metadata?.comment || '',
             disabled: false,
             rateLimit: null,
             sessionTimeout: null,
             idleTimeout: null,
-            sharedUsers: null,
+            sharedUsers: metadata?.shared_users || null,
             rateLimitUnit: null,
             sessionTimeoutUnit: null,
             idleTimeoutUnit: null,
-            localAddress: null,
-            remoteAddress: null,
-            dnsServer: null,
-            parentQueue: null,
-            addressList: null
+            localAddress: metadata?.local_address || '',
+            remoteAddress: metadata?.remote_address || '',
+            dnsServer: metadata?.dns_server || '',
+            parentQueue: metadata?.parent_queue || '',
+            addressList: metadata?.address_list || '',
+            nas_name: 'RADIUS',
+            nas_ip: 'RADIUS Server',
+            is_radius: true,
+            'rate-limit': null,
+            'session-timeout': null,
+            'idle-timeout': null,
+            'shared-users': metadata?.shared_users || null
         };
 
         const parseTimeoutValue = (value) => {
@@ -4509,10 +4679,10 @@ async function getHotspotProfileDetailRadius(groupname) {
             switch (attr.attribute) {
                 case 'MikroTik-Rate-Limit':
                 case 'Mikrotik-Rate-Limit': {
+                    profile['rate-limit'] = attr.value;
                     const parsed = parseRateLimit(attr.value);
                     profile.rateLimit = parsed.raw;
                     profile.rateLimitUnit = parsed.unit;
-                    profile['rate-limit'] = attr.value;
                     break;
                 }
                 case 'Session-Timeout': {
@@ -4530,11 +4700,7 @@ async function getHotspotProfileDetailRadius(groupname) {
                     break;
                 }
                 case 'Mikrotik-Shared-Users':
-                case 'MikroTik-Shared-Users': {
-                    profile.sharedUsers = attr.value;
-                    profile['shared-users'] = attr.value;
-                    break;
-                }
+                case 'MikroTik-Shared-Users':
                 case 'Simultaneous-Use': {
                     profile.sharedUsers = attr.value;
                     profile['shared-users'] = attr.value;
@@ -4554,6 +4720,39 @@ async function getHotspotProfileDetailRadius(groupname) {
                     break;
             }
         });
+
+        if (metadata) {
+            const sessionUnit = metadata.session_timeout_unit ? metadata.session_timeout_unit.toLowerCase() : '';
+            if (metadata.session_timeout_value && sessionUnit) {
+                const formatted = `${metadata.session_timeout_value}${sessionUnit}`;
+                profile.sessionTimeout = metadata.session_timeout_value;
+                profile.sessionTimeoutUnit = sessionUnit;
+                profile['session-timeout'] = formatted;
+            }
+
+            const idleUnit = metadata.idle_timeout_unit ? metadata.idle_timeout_unit.toLowerCase() : '';
+            if (metadata.idle_timeout_value && idleUnit) {
+                const formatted = `${metadata.idle_timeout_value}${idleUnit}`;
+                profile.idleTimeout = metadata.idle_timeout_value;
+                profile.idleTimeoutUnit = idleUnit;
+                profile['idle-timeout'] = formatted;
+            }
+
+            const rateUnit = metadata.rate_limit_unit ? metadata.rate_limit_unit.toUpperCase() : '';
+            if (metadata.rate_limit_value && rateUnit) {
+                const formatted = `${metadata.rate_limit_value}${rateUnit}/${metadata.rate_limit_value}${rateUnit}`;
+                if (!profile['rate-limit']) {
+                    profile['rate-limit'] = formatted;
+                }
+                profile.rateLimit = metadata.rate_limit_value;
+                profile.rateLimitUnit = rateUnit;
+            }
+
+            if (metadata.shared_users) {
+                profile.sharedUsers = metadata.shared_users;
+                profile['shared-users'] = metadata.shared_users;
+            }
+        }
 
         await conn.end();
         return {
@@ -5947,6 +6146,8 @@ module.exports = {
     getHotspotProfilesRadius,
     getHotspotProfileDetail,
     getHotspotProfileDetailRadius,
+    saveHotspotProfileMetadata,
+    deleteHotspotProfileMetadata,
     addHotspotProfile,
     editHotspotProfile,
     deleteHotspotProfile,

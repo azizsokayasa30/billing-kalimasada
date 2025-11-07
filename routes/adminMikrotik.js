@@ -16,6 +16,8 @@ const {
     editHotspotProfile,
     deleteHotspotProfile,
     getHotspotProfileDetail,
+    saveHotspotProfileMetadata,
+    deleteHotspotProfileMetadata,
     getHotspotServerProfiles,
     addHotspotServerProfileMikrotik,
     editHotspotServerProfileMikrotik,
@@ -949,7 +951,7 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
       // Fallback
     }
 
-    const { router_id, id, name, rateLimit, rateLimitUnit, burstLimit, burstLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, sharedUsers, comment } = req.body;
+    const { router_id, id, name, rateLimit, rateLimitUnit, burstLimit, burstLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, sharedUsers, comment, localAddress, remoteAddress, dnsServer, parentQueue, addressList } = req.body;
 
     // Untuk mode RADIUS, simpan ke RADIUS database
     if (userAuthMode === 'radius') {
@@ -958,21 +960,37 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
       }
 
       try {
-        const { getRadiusConnection, syncPackageLimitsToRadius } = require('../config/mikrotik');
+        const { getRadiusConnection } = require('../config/mikrotik');
         const conn = await getRadiusConnection();
         const groupname = name.toLowerCase().replace(/\s+/g, '_');
 
         // Build rate limit string dengan burst limit (jika ada)
+        const sanitize = (value) => {
+          if (value === undefined || value === null) return null;
+          const trimmed = String(value).trim();
+          return trimmed === '' ? null : trimmed;
+        };
+
+        const normalizedRateValue = sanitize(rateLimit);
+        const normalizedRateUnit = sanitize(rateLimitUnit) ? sanitize(rateLimitUnit).toUpperCase() : null;
+        const normalizedBurstValue = sanitize(burstLimit);
+        const normalizedBurstUnit = sanitize(burstLimitUnit) ? sanitize(burstLimitUnit).toUpperCase() : null;
+        const normalizedSessionValue = sanitize(sessionTimeout);
+        const normalizedSessionUnit = sanitize(sessionTimeoutUnit) ? sanitize(sessionTimeoutUnit).toLowerCase() : null;
+        const normalizedIdleValue = sanitize(idleTimeout);
+        const normalizedIdleUnit = sanitize(idleTimeoutUnit) ? sanitize(idleTimeoutUnit).toLowerCase() : null;
+        const normalizedSharedUsers = sanitize(sharedUsers);
+
         let rateLimitStr = '';
-        if (rateLimit && rateLimitUnit) {
-          const download = `${rateLimit}${rateLimitUnit.toUpperCase()}`;
-          const upload = `${rateLimit}${rateLimitUnit.toUpperCase()}`;
+        if (normalizedRateValue && normalizedRateUnit) {
+          const download = `${normalizedRateValue}${normalizedRateUnit}`;
+          const upload = `${normalizedRateValue}${normalizedRateUnit}`;
           rateLimitStr = `${download}/${upload}`;
           
           // Tambahkan burst limit jika ada
-          if (burstLimit && burstLimitUnit) {
-            const burstDownload = `${burstLimit}${burstLimitUnit.toUpperCase()}`;
-            const burstUpload = `${burstLimit}${burstLimitUnit.toUpperCase()}`;
+          if (normalizedBurstValue && normalizedBurstUnit) {
+            const burstDownload = `${normalizedBurstValue}${normalizedBurstUnit}`;
+            const burstUpload = `${normalizedBurstValue}${normalizedBurstUnit}`;
             rateLimitStr += `:${burstDownload}/${burstUpload}`;
           }
         }
@@ -986,8 +1004,8 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
         }
 
         // Session timeout - konversi ke detik untuk RADIUS
-        if (sessionTimeout && sessionTimeoutUnit) {
-          const timeoutValue = convertToSeconds(sessionTimeout, sessionTimeoutUnit);
+        if (normalizedSessionValue && normalizedSessionUnit) {
+          const timeoutValue = convertToSeconds(normalizedSessionValue, normalizedSessionUnit);
           if (timeoutValue > 0) {
             await conn.execute(
               "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
@@ -997,8 +1015,8 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
         }
 
         // Idle timeout - konversi ke detik untuk RADIUS
-        if (idleTimeout && idleTimeoutUnit) {
-          const timeoutValue = convertToSeconds(idleTimeout, idleTimeoutUnit);
+        if (normalizedIdleValue && normalizedIdleUnit) {
+          const timeoutValue = convertToSeconds(normalizedIdleValue, normalizedIdleUnit);
           if (timeoutValue > 0) {
             await conn.execute(
               "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Idle-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
@@ -1006,6 +1024,39 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
             );
           }
         }
+
+        // Shared users (Simultaneous-Use & Mikrotik-Shared-Users)
+        const sharedUsersValid = normalizedSharedUsers && !isNaN(parseInt(normalizedSharedUsers)) && parseInt(normalizedSharedUsers) > 0;
+        if (sharedUsersValid) {
+          await conn.execute(
+            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Simultaneous-Use', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            [groupname, normalizedSharedUsers, normalizedSharedUsers]
+          );
+          await conn.execute(
+            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Shared-Users', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            [groupname, normalizedSharedUsers, normalizedSharedUsers]
+          );
+        }
+
+        await saveHotspotProfileMetadata(conn, {
+          groupname,
+          displayName: sanitize(name) || groupname,
+          comment: sanitize(comment),
+          rateLimitValue: normalizedRateValue,
+          rateLimitUnit: normalizedRateUnit,
+          burstLimitValue: normalizedBurstValue,
+          burstLimitUnit: normalizedBurstUnit,
+          sessionTimeoutValue: normalizedSessionValue,
+          sessionTimeoutUnit: normalizedSessionUnit,
+          idleTimeoutValue: normalizedIdleValue,
+          idleTimeoutUnit: normalizedIdleUnit,
+          sharedUsers: sharedUsersValid ? normalizedSharedUsers : null,
+          localAddress: sanitize(localAddress),
+          remoteAddress: sanitize(remoteAddress),
+          dnsServer: sanitize(dnsServer),
+          parentQueue: sanitize(parentQueue),
+          addressList: sanitize(addressList)
+        });
 
         await conn.end();
         return res.json({ success: true, message: 'Profile hotspot berhasil ditambahkan ke RADIUS' });
@@ -1067,7 +1118,7 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
       // Fallback
     }
 
-    const { router_id, id, name, rateLimit, rateLimitUnit, burstLimit, burstLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, sharedUsers, comment } = req.body;
+    const { router_id, id, name, rateLimit, rateLimitUnit, burstLimit, burstLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, sharedUsers, comment, localAddress, remoteAddress, dnsServer, parentQueue, addressList } = req.body;
 
     // Untuk mode RADIUS, update di RADIUS database
     if (userAuthMode === 'radius') {
@@ -1082,16 +1133,32 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
         const groupname = (id || name).toLowerCase().replace(/\s+/g, '_');
 
         // Build rate limit string dengan burst limit (jika ada)
+        const sanitize = (value) => {
+          if (value === undefined || value === null) return null;
+          const trimmed = String(value).trim();
+          return trimmed === '' ? null : trimmed;
+        };
+
+        const normalizedRateValue = sanitize(rateLimit);
+        const normalizedRateUnit = sanitize(rateLimitUnit) ? sanitize(rateLimitUnit).toUpperCase() : null;
+        const normalizedBurstValue = sanitize(burstLimit);
+        const normalizedBurstUnit = sanitize(burstLimitUnit) ? sanitize(burstLimitUnit).toUpperCase() : null;
+        const normalizedSessionValue = sanitize(sessionTimeout);
+        const normalizedSessionUnit = sanitize(sessionTimeoutUnit) ? sanitize(sessionTimeoutUnit).toLowerCase() : null;
+        const normalizedIdleValue = sanitize(idleTimeout);
+        const normalizedIdleUnit = sanitize(idleTimeoutUnit) ? sanitize(idleTimeoutUnit).toLowerCase() : null;
+        const normalizedSharedUsers = sanitize(sharedUsers);
+
         let rateLimitStr = '';
-        if (rateLimit && rateLimitUnit) {
-          const download = `${rateLimit}${rateLimitUnit.toUpperCase()}`;
-          const upload = `${rateLimit}${rateLimitUnit.toUpperCase()}`;
+        if (normalizedRateValue && normalizedRateUnit) {
+          const download = `${normalizedRateValue}${normalizedRateUnit}`;
+          const upload = `${normalizedRateValue}${normalizedRateUnit}`;
           rateLimitStr = `${download}/${upload}`;
           
           // Tambahkan burst limit jika ada
-          if (burstLimit && burstLimitUnit) {
-            const burstDownload = `${burstLimit}${burstLimitUnit.toUpperCase()}`;
-            const burstUpload = `${burstLimit}${burstLimitUnit.toUpperCase()}`;
+          if (normalizedBurstValue && normalizedBurstUnit) {
+            const burstDownload = `${normalizedBurstValue}${normalizedBurstUnit}`;
+            const burstUpload = `${normalizedBurstValue}${normalizedBurstUnit}`;
             rateLimitStr += `:${burstDownload}/${burstUpload}`;
           }
         }
@@ -1109,8 +1176,8 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
         }
 
         // Session timeout - konversi ke detik untuk RADIUS
-        if (sessionTimeout && sessionTimeoutUnit) {
-          const timeoutValue = convertToSeconds(sessionTimeout, sessionTimeoutUnit);
+        if (normalizedSessionValue && normalizedSessionUnit) {
+          const timeoutValue = convertToSeconds(normalizedSessionValue, normalizedSessionUnit);
           if (timeoutValue > 0) {
             await conn.execute(
               "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
@@ -1125,8 +1192,8 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
         }
 
         // Idle timeout - konversi ke detik untuk RADIUS
-        if (idleTimeout && idleTimeoutUnit) {
-          const timeoutValue = convertToSeconds(idleTimeout, idleTimeoutUnit);
+        if (normalizedIdleValue && normalizedIdleUnit) {
+          const timeoutValue = convertToSeconds(normalizedIdleValue, normalizedIdleUnit);
           if (timeoutValue > 0) {
             await conn.execute(
               "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Idle-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
@@ -1139,6 +1206,43 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
             [groupname]
           );
         }
+
+        const sharedUsersValid = normalizedSharedUsers && !isNaN(parseInt(normalizedSharedUsers)) && parseInt(normalizedSharedUsers) > 0;
+        if (sharedUsersValid) {
+          await conn.execute(
+            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Simultaneous-Use', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            [groupname, normalizedSharedUsers, normalizedSharedUsers]
+          );
+          await conn.execute(
+            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Shared-Users', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            [groupname, normalizedSharedUsers, normalizedSharedUsers]
+          );
+        } else {
+          await conn.execute(
+            "DELETE FROM radgroupreply WHERE groupname = ? AND attribute IN ('Simultaneous-Use', 'Mikrotik-Shared-Users', 'MikroTik-Shared-Users')",
+            [groupname]
+          );
+        }
+
+        await saveHotspotProfileMetadata(conn, {
+          groupname,
+          displayName: sanitize(name) || groupname,
+          comment: sanitize(comment),
+          rateLimitValue: normalizedRateValue,
+          rateLimitUnit: normalizedRateUnit,
+          burstLimitValue: normalizedBurstValue,
+          burstLimitUnit: normalizedBurstUnit,
+          sessionTimeoutValue: normalizedSessionValue,
+          sessionTimeoutUnit: normalizedSessionUnit,
+          idleTimeoutValue: normalizedIdleValue,
+          idleTimeoutUnit: normalizedIdleUnit,
+          sharedUsers: sharedUsersValid ? normalizedSharedUsers : null,
+          localAddress: sanitize(localAddress),
+          remoteAddress: sanitize(remoteAddress),
+          dnsServer: sanitize(dnsServer),
+          parentQueue: sanitize(parentQueue),
+          addressList: sanitize(addressList)
+        });
 
         await conn.end();
         return res.json({ success: true, message: 'Profile hotspot berhasil diupdate di RADIUS' });
@@ -1225,6 +1329,8 @@ router.post('/mikrotik/hotspot-profiles/delete', adminAuth, async (req, res) => 
         // Hapus juga dari radusergroup jika ada user yang assign ke group ini
         // (Opsional: bisa juga tidak dihapus jika ingin user tetap ada tapi tanpa profile)
         // await conn.execute("DELETE FROM radusergroup WHERE groupname = ?", [groupname]);
+
+        await deleteHotspotProfileMetadata(conn, groupname);
 
         await conn.end();
         return res.json({ success: true, message: 'Profile hotspot berhasil dihapus dari RADIUS' });
