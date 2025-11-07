@@ -1,41 +1,73 @@
 const express = require('express');
 const fs = require('fs');
+const fsPromises = fs.promises;
 const path = require('path');
 const router = express.Router();
 const multer = require('multer');
-const { getSettingsWithCache, deleteSetting } = require('../config/settingsManager')
+const { getSettingsWithCache, deleteSetting } = require('../config/settingsManager');
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const logger = require('../config/logger');
 const { spawn } = require('child_process');
 
 // Konfigurasi penyimpanan file
+const imageFileFilter = function (req, file, cb) {
+    if (file.mimetype.startsWith('image/') || file.originalname.toLowerCase().endsWith('.svg')) {
+        cb(null, true);
+    } else {
+        cb(new Error('Hanya file gambar yang diizinkan'), false);
+    }
+};
+
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, path.join(__dirname, '../public/img'));
     },
     filename: function (req, file, cb) {
-        // Selalu gunakan nama 'logo' dengan ekstensi file asli
         const ext = path.extname(file.originalname).toLowerCase();
         cb(null, 'logo' + ext);
     }
 });
 
-const upload = multer({ 
+const upload = multer({
     storage: storage,
     limits: {
-        fileSize: 2 * 1024 * 1024 // 2MB
+        fileSize: 2 * 1024 * 1024
     },
-    fileFilter: function (req, file, cb) {
-        // Hanya izinkan file gambar dan SVG
-        if (file.mimetype.startsWith('image/') || file.originalname.toLowerCase().endsWith('.svg')) {
-            cb(null, true);
-        } else {
-            cb(new Error('Hanya file gambar yang diizinkan'), false);
-        }
+    fileFilter: imageFileFilter
+});
+
+const billingQrStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, path.join(__dirname, '../public/img'));
+    },
+    filename: function (req, file, cb) {
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, 'billing-qr' + ext);
     }
 });
 
+const billingQrUpload = multer({
+    storage: billingQrStorage,
+    limits: {
+        fileSize: 2 * 1024 * 1024
+    },
+    fileFilter: imageFileFilter
+});
+
 const settingsPath = path.join(__dirname, '../settings.json');
+const PAYMENT_GATEWAY_KEY_PREFIX = 'payment_gateway';
+
+function removePaymentGatewayEntries(target) {
+    if (!target || typeof target !== 'object') {
+        return;
+    }
+
+    Object.keys(target).forEach((key) => {
+        if (key === PAYMENT_GATEWAY_KEY_PREFIX || key.startsWith(`${PAYMENT_GATEWAY_KEY_PREFIX}.`)) {
+            delete target[key];
+        }
+    });
+}
 
 // GET: Render halaman Setting
 router.get('/', (req, res) => {
@@ -48,10 +80,12 @@ router.get('/data', (req, res) => {
     try {
         const settings = { ...getSettingsWithCache() };
 
+        // Hapus legacy payment gateway entries agar tidak tampil lagi di UI ini
         if (settings.payment_gateway) {
             delete settings.payment_gateway;
             deleteSetting('payment_gateway');
         }
+        removePaymentGatewayEntries(settings);
 
         res.json(settings);
     } catch (error) {
@@ -59,24 +93,35 @@ router.get('/data', (req, res) => {
     }
 });
 
-// GET: Securely serve Donation QR image from config with fallback to public
-router.get('/donation-qr', (req, res) => {
+// GET: Serve billing QR image (used for WhatsApp notifications)
+router.get('/billing-qr', (req, res) => {
     try {
-        const configPath = path.join(__dirname, '../config/qr-donasi.jpg');
-        const publicPath = path.join(__dirname, '../public/img/qr-donasi.jpg');
-        const filePath = fs.existsSync(configPath) ? configPath : publicPath;
+        const settings = getSettingsWithCache();
+        const candidates = [];
 
-        if (!fs.existsSync(filePath)) {
+        if (settings && settings.billing_qr_filename) {
+            candidates.push(path.join(__dirname, '../public/img', settings.billing_qr_filename));
+        }
+
+        candidates.push(
+            path.join(__dirname, '../public/img/tagihan.jpg'),
+            path.join(__dirname, '../public/img/tagihan.png'),
+            path.join(__dirname, '../public/img/invoice.jpg'),
+            path.join(__dirname, '../public/img/invoice.png'),
+            path.join(__dirname, '../public/img/logo.png')
+        );
+
+        const existingPath = candidates.find((filePath) => filePath && fs.existsSync(filePath));
+
+        if (!existingPath) {
             return res.status(404).send('QR image not found');
         }
 
-        // Simple content-type based on extension (jpg)
-        res.setHeader('Cache-Control', 'no-cache');
-        res.type('jpg');
-        fs.createReadStream(filePath).pipe(res);
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.sendFile(existingPath);
     } catch (e) {
-        logger.error('Error serving donation QR:', e);
-        res.status(500).send('Failed to load QR image');
+        logger.error('Error serving billing QR:', e);
+        res.status(500).send('Failed to load billing QR image');
     }
 });
 
@@ -106,8 +151,13 @@ router.post('/save', async (req, res) => {
             };
         }
 
+        // Pastikan legacy payment gateway keys dibersihkan dari data lama maupun input baru
+        removePaymentGatewayEntries(oldSettings);
+        removePaymentGatewayEntries(newSettings);
+
         // Merge: field baru overwrite field lama, field lama yang tidak ada di form tetap dipertahankan
         const mergedSettings = { ...oldSettings, ...newSettings };
+        removePaymentGatewayEntries(mergedSettings);
         
         // Pastikan user_auth_mode selalu ada
         if (!('user_auth_mode' in mergedSettings)) {
@@ -117,6 +167,9 @@ router.post('/save', async (req, res) => {
         // Validasi dan sanitasi data sebelum simpan
         const sanitizedSettings = {};
         for (const [key, value] of Object.entries(mergedSettings)) {
+            if (key === PAYMENT_GATEWAY_KEY_PREFIX || key.startsWith(`${PAYMENT_GATEWAY_KEY_PREFIX}.`)) {
+                continue;
+            }
             // Skip field yang tidak valid
             if (key === null || key === undefined || key === '') {
                 continue;
@@ -137,41 +190,41 @@ router.post('/save', async (req, res) => {
         }
 
         // Tulis ke file dengan error handling yang proper
-        fs.writeFile(settingsPath, JSON.stringify(sanitizedSettings, null, 2), 'utf8', (err) => {
-            if (err) {
-                console.error('Error menyimpan settings.json:', err);
-                return res.status(500).json({ 
-                    success: false,
-                    message: 'Gagal menyimpan pengaturan'
-                });
-            }
-
-            // Log perubahan setting
-            const missing = [];
-            if (!sanitizedSettings.server_port) missing.push('server_port');
-            if (!sanitizedSettings.server_host) missing.push('server_host');
-
-            // Hot-reload payment gateways so changes apply without restart
-            let reloadInfo = null;
-            try {
-                const billingManager = require('../config/billing');
-                reloadInfo = await billingManager.reloadPaymentGateway();
-            } catch (e) {
-                logger.warn('Gagal reload payment gateway setelah simpan settings:', e.message);
-            }
-
-            // Clear hasil validasi konfigurasi lama dari session
-            // Ini akan memaksa validasi ulang saat admin kembali ke dashboard
-            if (req.session.configValidation) {
-                console.log('🔄 [SETTINGS] Clearing old config validation results...');
-                delete req.session.configValidation;
-            }
-
-            res.json({ 
-                success: true, 
-                message: 'Pengaturan berhasil disimpan! Hasil validasi konfigurasi akan di-update saat kembali ke dashboard.',
-                missingFields: missing 
+        try {
+            await fsPromises.writeFile(settingsPath, JSON.stringify(sanitizedSettings, null, 2), 'utf8');
+        } catch (err) {
+            console.error('Error menyimpan settings.json:', err);
+            return res.status(500).json({ 
+                success: false,
+                message: 'Gagal menyimpan pengaturan'
             });
+        }
+
+        // Log perubahan setting
+        const missing = [];
+        if (!sanitizedSettings.server_port) missing.push('server_port');
+        if (!sanitizedSettings.server_host) missing.push('server_host');
+
+        // Hot-reload payment gateways so changes apply tanpa restart
+        let reloadInfo = null;
+        try {
+            const billingManager = require('../config/billing');
+            reloadInfo = await billingManager.reloadPaymentGateway();
+        } catch (e) {
+            logger.warn('Gagal reload payment gateway setelah simpan settings:', e.message);
+        }
+
+        // Clear hasil validasi konfigurasi lama dari session
+        // Ini akan memaksa validasi ulang saat admin kembali ke dashboard
+        if (req.session.configValidation) {
+            console.log('🔄 [SETTINGS] Clearing old config validation results...');
+            delete req.session.configValidation;
+        }
+
+        res.json({ 
+            success: true, 
+            message: 'Pengaturan berhasil disimpan! Hasil validasi konfigurasi akan di-update saat kembali ke dashboard.',
+            missingFields: missing 
         });
 
     } catch (error) {
@@ -384,6 +437,78 @@ router.post('/upload-logo', upload.single('logo'), (req, res) => {
         res.status(500).json({ 
             success: false, 
             error: 'Terjadi kesalahan saat mengupload logo: ' + error.message 
+        });
+    }
+});
+
+// POST: Upload Billing QR for notifications
+router.post('/upload-billing-qr', billingQrUpload.single('billingQr'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'Tidak ada file yang diupload'
+            });
+        }
+
+        const filename = req.file.filename;
+        const filePath = req.file.path;
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(500).json({
+                success: false,
+                error: 'File gagal disimpan'
+            });
+        }
+
+        let settings = {};
+
+        try {
+            settings = getSettingsWithCache();
+        } catch (err) {
+            logger.error('Gagal membaca settings.json:', err);
+            return res.status(500).json({
+                success: false,
+                error: 'Gagal membaca pengaturan'
+            });
+        }
+
+        if (settings.billing_qr_filename && settings.billing_qr_filename !== filename) {
+            const oldQrPath = path.join(__dirname, '../public/img', settings.billing_qr_filename);
+            if (fs.existsSync(oldQrPath)) {
+                try {
+                    fs.unlinkSync(oldQrPath);
+                    console.log('QR penagihan lama dihapus:', oldQrPath);
+                } catch (err) {
+                    logger.warn('Gagal menghapus QR penagihan lama:', err.message);
+                }
+            }
+        }
+
+        settings.billing_qr_filename = filename;
+
+        try {
+            fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+            console.log('Settings.json diupdate dengan billing QR baru:', filename);
+        } catch (err) {
+            logger.error('Gagal menyimpan settings.json:', err);
+            return res.status(500).json({
+                success: false,
+                error: 'Gagal menyimpan pengaturan'
+            });
+        }
+
+        res.json({
+            success: true,
+            filename: filename,
+            message: 'QR penagihan berhasil diupload dan disimpan'
+        });
+
+    } catch (error) {
+        logger.error('Error saat upload billing QR:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Terjadi kesalahan saat mengupload QR: ' + error.message
         });
     }
 });

@@ -308,24 +308,30 @@ Balas dengan: *BANTU* atau *HELP*
 
     // Helper method to get invoice image path with fallback handling
     getInvoiceImagePath() {
-        const imagePaths = [
+        const customFilename = getSetting('billing_qr_filename', null);
+
+        const imagePaths = [];
+
+        if (customFilename) {
+            imagePaths.push(path.resolve(__dirname, '../public/img', customFilename));
+        }
+
+        imagePaths.push(
             path.resolve(__dirname, '../public/img/tagihan.jpg'),
-            path.resolve(__dirname, '../public/img/tagihan.png'), 
+            path.resolve(__dirname, '../public/img/tagihan.png'),
             path.resolve(__dirname, '../public/img/invoice.jpg'),
             path.resolve(__dirname, '../public/img/invoice.png'),
             path.resolve(__dirname, '../public/img/logo.png')
-        ];
+        );
         
-        // Check each path and return the first one that exists
         for (const imagePath of imagePaths) {
-            if (fs.existsSync(imagePath)) {
+            if (imagePath && fs.existsSync(imagePath)) {
                 logger.info(`📸 Using invoice image: ${imagePath}`);
                 return imagePath;
             }
         }
-        
-        // Log if no image found (will send text-only)
-        logger.warn(`⚠️ No invoice image found, will send text-only notification`);
+
+        logger.warn('⚠️ No invoice image found, will send text-only notification');
         return null;
     }
 
