@@ -1,12 +1,33 @@
-const fs = require('fs');
 const crypto = require('crypto');
 const { getSetting } = require('./settingsManager');
+const { getPaymentGatewayConfig, DEFAULT_CONFIG } = require('./paymentGatewayConfig');
 
 class PaymentGatewayManager {
 
     constructor() {
-        this.settings = this.loadSettings();
+        this.settings = { payment_gateway: DEFAULT_CONFIG };
         this.gateways = {};
+        this.activeGateway = DEFAULT_CONFIG.active;
+        this.initialized = false;
+        this.initPromise = this.loadSettingsAndInitialize();
+    }
+
+    async loadSettingsAndInitialize() {
+        try {
+            const config = await getPaymentGatewayConfig();
+            this.settings = { payment_gateway: config };
+        } catch (error) {
+            console.error('[PAYMENT_GATEWAY] Failed to load config, using defaults:', error.message);
+            this.settings = { payment_gateway: DEFAULT_CONFIG };
+        }
+
+        this.initializeGateways();
+        this.activeGateway = this.settings.payment_gateway ? this.settings.payment_gateway.active : null;
+        this.initialized = true;
+        return { active: this.activeGateway, initialized: Object.keys(this.gateways) };
+    }
+
+    initializeGateways() {
         
         // Only initialize enabled gateways
         if (this.settings.payment_gateway && this.settings.payment_gateway.midtrans && this.settings.payment_gateway.midtrans.enabled) {
@@ -41,13 +62,18 @@ class PaymentGatewayManager {
         this.activeGateway = this.settings.payment_gateway ? this.settings.payment_gateway.active : null;
     }
 
-    loadSettings() {
+    async ensureInitialized() {
+        if (this.initialized) return;
+        if (!this.initPromise) {
+            this.initPromise = this.loadSettingsAndInitialize();
+        }
         try {
-            const { getSettingsWithCache } = require('./settingsManager');
-            return getSettingsWithCache();
+            await this.initPromise;
         } catch (error) {
-            console.error('Error loading settings:', error);
-            return {};
+            console.error('[PAYMENT_GATEWAY] Initialization error:', error.message);
+            this.settings = { payment_gateway: DEFAULT_CONFIG };
+            this.initializeGateways();
+            this.initialized = true;
         }
     }
 
@@ -56,46 +82,14 @@ class PaymentGatewayManager {
     }
 
     // Reload settings and reinitialize gateways without server restart
-    reload() {
-        try {
-            this.settings = this.loadSettings();
-        } catch (_) {
-            this.settings = {};
-        }
-
-        // Reset gateways
-        this.gateways = {};
-
-        // Reinitialize enabled gateways
-        if (this.settings.payment_gateway && this.settings.payment_gateway.midtrans && this.settings.payment_gateway.midtrans.enabled) {
-            try {
-                this.gateways.midtrans = new MidtransGateway(this.settings.payment_gateway.midtrans);
-            } catch (error) {
-                console.error('Failed to initialize Midtrans gateway on reload:', error);
-            }
-        }
-
-        if (this.settings.payment_gateway && this.settings.payment_gateway.xendit && this.settings.payment_gateway.xendit.enabled) {
-            try {
-                this.gateways.xendit = new XenditGateway(this.settings.payment_gateway.xendit);
-            } catch (error) {
-                console.error('Failed to initialize Xendit gateway on reload:', error);
-            }
-        }
-
-        if (this.settings.payment_gateway && this.settings.payment_gateway.tripay && this.settings.payment_gateway.tripay.enabled) {
-            try {
-                this.gateways.tripay = new TripayGateway(this.settings.payment_gateway.tripay);
-            } catch (error) {
-                console.error('Failed to initialize Tripay gateway on reload:', error);
-            }
-        }
-
-        this.activeGateway = this.settings.payment_gateway ? this.settings.payment_gateway.active : null;
-        return { active: this.activeGateway, initialized: Object.keys(this.gateways) };
+    async reload() {
+        this.initialized = false;
+        this.initPromise = this.loadSettingsAndInitialize();
+        return this.initPromise;
     }
 
     async createPayment(invoice, gateway = null) {
+        await this.ensureInitialized();
         const selectedGateway = gateway || this.activeGateway;
         
         if (!selectedGateway) {
@@ -123,6 +117,7 @@ class PaymentGatewayManager {
     }
 
     async createPaymentWithMethod(invoice, gateway = null, method = null, paymentType = 'invoice') {
+        await this.ensureInitialized();
         const selectedGateway = gateway || this.activeGateway;
         
         if (!selectedGateway) {
@@ -164,6 +159,7 @@ class PaymentGatewayManager {
     }
 
     async handleWebhook(payload, gateway) {
+        await this.ensureInitialized();
         if (!this.gateways[gateway]) {
             throw new Error(`Gateway ${gateway} is not initialized or not available`);
         }
@@ -204,7 +200,8 @@ class PaymentGatewayManager {
         }
     }
 
-    getGatewayStatus() {
+    async getGatewayStatus() {
+        await this.ensureInitialized();
         const status = {};
         
         // Check all configured gateways
@@ -238,6 +235,7 @@ class PaymentGatewayManager {
     }
 
     async getAvailablePaymentMethods() {
+        await this.ensureInitialized();
         const methods = [];
         
         // Check each enabled gateway and get their available methods

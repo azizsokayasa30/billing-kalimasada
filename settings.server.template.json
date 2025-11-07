@@ -55,29 +55,6 @@
   "contact_email": "alijayanet@gmail.com",
   "contact_address": "Jl. Pantai Tanjungpura Desa Ujunggebang",
   "contact_whatsapp": "0813-6888-8498",
-  "payment_gateway": {
-    "active": "midtrans",
-    "midtrans": {
-      "enabled": true,
-      "production": false,
-      "server_key": "SB-Mid-server-XXXXXXXXXXXXXXXXXXXXXXXX",
-      "client_key": "SB-Mid-client-XXXXXXXXXXXXXXXXXXXXXXXX",
-      "merchant_id": "G123456789"
-    },
-    "xendit": {
-      "enabled": false,
-      "production": false,
-      "api_key": "xnd_public_development_XXXXXXXXXXXXXXXXXXXXXXXX",
-      "callback_token": "your_callback_token_here"
-    },
-    "tripay": {
-      "enabled": true,
-      "production": false,
-      "api_key": "your_tripay_api_key_here",
-      "private_key": "your_tripay_private_key_here",
-      "merchant_code": "your_merchant_code_here"
-    }
-  },
   "auto_suspension_enabled": true,
   "suspension_grace_period_days": "1",
   "isolir_profile": "isolir",

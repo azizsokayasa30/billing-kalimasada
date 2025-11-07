@@ -13,10 +13,10 @@ class BillingManager {
         this.initDatabase();
     }
 
-    // Hot-reload payment gateway configuration from settings.json
-    reloadPaymentGateway() {
+    // Hot-reload payment gateway configuration
+    async reloadPaymentGateway() {
         try {
-            const result = this.paymentGateway.reload();
+            const result = await this.paymentGateway.reload();
             return result;
         } catch (e) {
             try { logger.error('[BILLING] Failed to reload payment gateways:', e.message); } catch (_) {}

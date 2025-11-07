@@ -6,6 +6,7 @@ const billingManager = require('../config/billing');
 const logger = require('../config/logger');
 const serviceSuspension = require('../config/serviceSuspension');
 const { getSetting, getSettingsWithCache, setSetting, clearSettingsCache } = require('../config/settingsManager');
+const { getPaymentGatewayConfig, setActivePaymentGateway, updatePaymentGatewayConfig: updatePaymentGatewayConfigStore } = require('../config/paymentGatewayConfig');
 const { exec } = require('child_process');
 const multer = require('multer');
 const upload = multer();
@@ -1587,207 +1588,6 @@ router.get('/export/financial-report.xlsx', async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 });
-
-// Update active gateway (JSON API used by page)
-router.post('/payment-settings/active-gateway', async (req, res) => {
-    try {
-        const { activeGateway } = req.body || {};
-        if (!activeGateway || !['midtrans', 'xendit', 'tripay'].includes(activeGateway)) {
-            return res.status(400).json({ success: false, message: 'activeGateway tidak valid' });
-        }
-        const all = getSettingsWithCache();
-        const pg = all.payment_gateway || {};
-        pg.active = activeGateway;
-        const ok = setSetting('payment_gateway', pg);
-        if (!ok) throw new Error('Gagal menyimpan settings.json');
-        try { billingManager.reloadPaymentGateway(); } catch (_) {}
-        return res.json({ success: true, message: 'Gateway aktif diperbarui', active: activeGateway });
-    } catch (error) {
-        logger.error('Error updating active gateway:', error);
-        return res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Save per-gateway settings (JSON API)
-router.post('/payment-settings/:gateway', async (req, res) => {
-    try {
-        const gateway = String(req.params.gateway || '').toLowerCase();
-        if (!['midtrans', 'xendit', 'tripay'].includes(gateway)) {
-            return res.status(400).json({ success: false, message: 'Gateway tidak dikenali' });
-        }
-
-        const toBool = (v, def=false) => {
-            if (typeof v === 'boolean') return v;
-            if (v === 'on' || v === 'true' || v === '1') return true;
-            if (v === 'off' || v === 'false' || v === '0') return false;
-            return def;
-        };
-
-        const all = getSettingsWithCache();
-        const pg = all.payment_gateway || {};
-
-        if (gateway === 'midtrans') {
-            if (req.body.base_url !== undefined && !isValidOptionalHttpUrl(req.body.base_url)) {
-                return res.status(400).json({ success: false, message: 'Midtrans base_url harus diawali http:// atau https://' });
-            }
-            pg.midtrans = {
-                ...(pg.midtrans || {}),
-                enabled: toBool(req.body.enabled, pg.midtrans?.enabled ?? true),
-                production: toBool(req.body.production, pg.midtrans?.production ?? false),
-                server_key: req.body.server_key !== undefined ? req.body.server_key : (pg.midtrans?.server_key || ''),
-                client_key: req.body.client_key !== undefined ? req.body.client_key : (pg.midtrans?.client_key || ''),
-                merchant_id: req.body.merchant_id !== undefined ? req.body.merchant_id : (pg.midtrans?.merchant_id || ''),
-                base_url: req.body.base_url !== undefined ? String(req.body.base_url || '').trim() : (pg.midtrans?.base_url || '')
-            };
-        } else if (gateway === 'xendit') {
-            if (req.body.base_url !== undefined && !isValidOptionalHttpUrl(req.body.base_url)) {
-                return res.status(400).json({ success: false, message: 'Xendit base_url harus diawali http:// atau https://' });
-            }
-            pg.xendit = {
-                ...(pg.xendit || {}),
-                enabled: toBool(req.body.enabled, pg.xendit?.enabled ?? false),
-                production: toBool(req.body.production, pg.xendit?.production ?? false),
-                api_key: req.body.api_key !== undefined ? req.body.api_key : (pg.xendit?.api_key || ''),
-                callback_token: req.body.callback_token !== undefined ? req.body.callback_token : (pg.xendit?.callback_token || ''),
-                base_url: req.body.base_url !== undefined ? String(req.body.base_url || '').trim() : (pg.xendit?.base_url || '')
-            };
-        } else if (gateway === 'tripay') {
-            if (req.body.base_url !== undefined && !isValidOptionalHttpUrl(req.body.base_url)) {
-                return res.status(400).json({ success: false, message: 'Tripay base_url harus diawali http:// atau https://' });
-            }
-            pg.tripay = {
-                ...(pg.tripay || {}),
-                enabled: toBool(req.body.enabled, pg.tripay?.enabled ?? false),
-                production: toBool(req.body.production, pg.tripay?.production ?? false),
-                api_key: req.body.api_key !== undefined ? req.body.api_key : (pg.tripay?.api_key || ''),
-                private_key: req.body.private_key !== undefined ? req.body.private_key : (pg.tripay?.private_key || ''),
-                merchant_code: req.body.merchant_code !== undefined ? req.body.merchant_code : (pg.tripay?.merchant_code || ''),
-                base_url: req.body.base_url !== undefined ? String(req.body.base_url || '').trim() : (pg.tripay?.base_url || pg.base_url || '')
-                // Method is now selected by customer, removed from admin settings
-            };
-        }
-
-        all.payment_gateway = pg;
-        const ok = setSetting('payment_gateway', pg);
-        if (!ok) throw new Error('Gagal menyimpan settings.json');
-        try { billingManager.reloadPaymentGateway(); } catch (_) {}
-        return res.json({ success: true, message: 'Konfigurasi disimpan', gateway });
-    } catch (error) {
-        logger.error('Error saving per-gateway settings:', error);
-        return res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Test gateway connectivity (basic status)
-router.post('/payment-settings/test/:gateway', async (req, res) => {
-    try {
-        const gateway = String(req.params.gateway || '').toLowerCase();
-        const status = await billingManager.getGatewayStatus();
-        if (!status[gateway]) {
-            return res.status(400).json({ success: false, message: 'Gateway tidak dikenali' });
-        }
-        return res.json({ success: true, message: 'Status dibaca', data: status[gateway] });
-    } catch (error) {
-        logger.error('Error testing gateway:', error);
-        return res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// Payment Settings (Midtrans & Xendit)
-router.get('/payment-settings', getAppSettings, async (req, res) => {
-    try {
-        const settings = getSettingsWithCache();
-        const pg = settings.payment_gateway || {};
-        const mid = pg.midtrans || {};
-        const xe = pg.xendit || {};
-        const saved = req.query.saved === '1';
-
-        // Get current gateway status
-        let gatewayStatus = {};
-        try { gatewayStatus = await billingManager.getGatewayStatus(); } catch (_) {}
-
-        res.render('admin/billing/payment-settings', {
-            title: 'Payment Gateway Settings',
-            appSettings: req.appSettings,
-            settings,
-            pg,
-            mid,
-            xe,
-            gatewayStatus,
-            saved
-        });
-    } catch (error) {
-        logger.error('Error loading payment settings page:', error);
-        res.status(500).render('error', {
-            message: 'Error loading payment settings page',
-            error: error.message,
-            appSettings: req.appSettings
-        });
-    }
-});
-
-router.post('/payment-settings', async (req, res) => {
-    try {
-        const all = getSettingsWithCache();
-        const pg = all.payment_gateway || {};
-        pg.active = req.body.active || pg.active || 'midtrans';
-
-        // Normalize booleans
-        const toBool = (v, def=false) => {
-            if (typeof v === 'boolean') return v;
-            if (v === 'on' || v === 'true' || v === '1') return true;
-            if (v === 'off' || v === 'false' || v === '0') return false;
-            return def;
-        };
-
-        // Validate base_url inputs from combined form (if present)
-        if (req.body.midtrans_base_url !== undefined && !isValidOptionalHttpUrl(req.body.midtrans_base_url)) {
-            return res.status(400).render('error', { message: 'Midtrans base_url harus diawali http:// atau https://', error: '', appSettings: req.appSettings });
-        }
-        if (req.body.xendit_base_url !== undefined && !isValidOptionalHttpUrl(req.body.xendit_base_url)) {
-            return res.status(400).render('error', { message: 'Xendit base_url harus diawali http:// atau https://', error: '', appSettings: req.appSettings });
-        }
-
-        // Midtrans
-        pg.midtrans = {
-            ...(pg.midtrans || {}),
-            enabled: toBool(req.body.midtrans_enabled, pg.midtrans?.enabled ?? true),
-            production: toBool(req.body.midtrans_production, pg.midtrans?.production ?? false),
-            server_key: req.body.midtrans_server_key !== undefined ? req.body.midtrans_server_key : (pg.midtrans?.server_key || ''),
-            client_key: req.body.midtrans_client_key !== undefined ? req.body.midtrans_client_key : (pg.midtrans?.client_key || ''),
-            merchant_id: req.body.midtrans_merchant_id !== undefined ? req.body.midtrans_merchant_id : (pg.midtrans?.merchant_id || ''),
-            base_url: req.body.midtrans_base_url !== undefined ? String(req.body.midtrans_base_url || '').trim() : (pg.midtrans?.base_url || '')
-        };
-
-        // Xendit
-        pg.xendit = {
-            ...(pg.xendit || {}),
-            enabled: toBool(req.body.xendit_enabled, pg.xendit?.enabled ?? false),
-            production: toBool(req.body.xendit_production, pg.xendit?.production ?? false),
-            api_key: req.body.xendit_api_key !== undefined ? req.body.xendit_api_key : (pg.xendit?.api_key || ''),
-            callback_token: req.body.xendit_callback_token !== undefined ? req.body.xendit_callback_token : (pg.xendit?.callback_token || ''),
-            base_url: req.body.xendit_base_url !== undefined ? String(req.body.xendit_base_url || '').trim() : (pg.xendit?.base_url || '')
-        };
-
-        // Persist back as a whole object
-        all.payment_gateway = pg;
-        const ok = setSetting('payment_gateway', pg);
-        if (!ok) throw new Error('Failed to write settings.json');
-
-        // Hot-reload gateways without restarting the server
-        try { billingManager.reloadPaymentGateway(); } catch (_) {}
-
-        // Redirect back with success
-        return res.redirect('/admin/billing/payment-settings?saved=1');
-    } catch (error) {
-        logger.error('Error saving payment settings:', error);
-        return res.status(500).render('error', {
-            message: 'Error saving payment settings',
-            error: error.message
-        });
-    }
-});
-
 // Customers list for live table updates
 router.get('/customers/list', async (req, res) => {
     try {
@@ -5621,11 +5421,18 @@ ${footerInfo}`;
 // Payment Settings Routes
 router.get('/payment-settings', getAppSettings, async (req, res) => {
     try {
+        const paymentConfig = await getPaymentGatewayConfig();
         const settings = getSettingsWithCache();
+        settings.payment_gateway = paymentConfig;
         res.render('admin/billing/payment-settings', {
             title: 'Payment Gateway Settings',
             settings: settings,
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            pg: paymentConfig,
+            mid: paymentConfig.midtrans,
+            xe: paymentConfig.xendit,
+            gatewayStatus: await billingManager.getGatewayStatus(),
+            saved: req.query.saved === '1'
         });
     } catch (error) {
         logger.error('Error loading payment settings:', error);
@@ -5641,17 +5448,13 @@ router.get('/payment-settings', getAppSettings, async (req, res) => {
 router.post('/payment-settings/active-gateway', async (req, res) => {
     try {
         const { activeGateway } = req.body;
-        const settings = getSettingsWithCache();
-        
-        settings.payment_gateway.active = activeGateway;
-        // Persist to settings.json via settingsManager
-        setSetting('payment_gateway', settings.payment_gateway);
-        // Hot-reload gateways
-        const reloadInfo = billingManager.reloadPaymentGateway();
-        
+        const updatedConfig = await setActivePaymentGateway(activeGateway);
+        const reloadInfo = await billingManager.reloadPaymentGateway();
+
         res.json({
             success: true,
             message: 'Active gateway updated successfully',
+            config: updatedConfig,
             reload: reloadInfo
         });
     } catch (error) {
@@ -5668,30 +5471,15 @@ router.post('/payment-settings/active-gateway', async (req, res) => {
 router.post('/payment-settings/:gateway', async (req, res) => {
     try {
         const { gateway } = req.params;
-        const config = req.body;
-        const settings = getSettingsWithCache();
-        
-        if (!settings.payment_gateway[gateway]) {
-            return res.status(400).json({
-                success: false,
-                message: `Gateway ${gateway} not found`
-            });
-        }
-        
-        // Update gateway configuration
-        settings.payment_gateway[gateway] = {
-            ...settings.payment_gateway[gateway],
-            ...config
-        };
-        
-        // Persist to settings.json via settingsManager
-        setSetting('payment_gateway', settings.payment_gateway);
-        // Hot-reload gateways
-        const reloadInfo = billingManager.reloadPaymentGateway();
-        
+        const config = req.body || {};
+
+        const updatedGateway = await updatePaymentGatewayConfigStore(gateway, config);
+        const reloadInfo = await billingManager.reloadPaymentGateway();
+
         res.json({
             success: true,
             message: `${gateway} configuration updated successfully`,
+            gateway: updatedGateway,
             reload: reloadInfo
         });
     } catch (error) {
@@ -6047,133 +5835,6 @@ router.get('/payment-monitor', getAppSettings, async (req, res) => {
             message: 'Error loading payment monitor',
             error: error.message,
             appSettings: req.appSettings
-        });
-    }
-});
-
-// Payment Settings Routes
-router.get('/payment-settings', getAppSettings, async (req, res) => {
-    try {
-        const settings = getSettingsWithCache();
-        res.render('admin/billing/payment-settings', {
-            title: 'Payment Gateway Settings',
-            settings: settings,
-            appSettings: req.appSettings
-        });
-    } catch (error) {
-        logger.error('Error loading payment settings:', error);
-        res.status(500).render('error', { 
-            message: 'Error loading payment settings',
-            error: error.message,
-            appSettings: req.appSettings
-        });
-    }
-});
-
-// Update active gateway
-router.post('/payment-settings/active-gateway', async (req, res) => {
-    try {
-        const { activeGateway } = req.body;
-        const settings = getSettingsWithCache();
-        
-        settings.payment_gateway.active = activeGateway;
-        // Persist to settings.json via settingsManager
-        setSetting('payment_gateway', settings.payment_gateway);
-        // Hot-reload gateways
-        const reloadInfo = billingManager.reloadPaymentGateway();
-        
-        res.json({
-            success: true,
-            message: 'Active gateway updated successfully',
-            reload: reloadInfo
-        });
-    } catch (error) {
-        logger.error('Error updating active gateway:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error updating active gateway',
-            error: error.message
-        });
-    }
-});
-
-// Update gateway configuration
-router.post('/payment-settings/:gateway', async (req, res) => {
-    try {
-        const { gateway } = req.params;
-        const config = req.body;
-        const settings = getSettingsWithCache();
-        
-        if (!settings.payment_gateway[gateway]) {
-            return res.status(400).json({
-                success: false,
-                message: `Gateway ${gateway} not found`
-            });
-        }
-        
-        // Update gateway configuration
-        settings.payment_gateway[gateway] = {
-            ...settings.payment_gateway[gateway],
-            ...config
-        };
-        
-        // Persist to settings.json via settingsManager
-        setSetting('payment_gateway', settings.payment_gateway);
-        // Hot-reload gateways
-        const reloadInfo = billingManager.reloadPaymentGateway();
-        
-        res.json({
-            success: true,
-            message: `${gateway} configuration updated successfully`,
-            reload: reloadInfo
-        });
-    } catch (error) {
-        logger.error(`Error updating ${req.params.gateway} configuration:`, error);
-        res.status(500).json({
-            success: false,
-            message: `Error updating ${req.params.gateway} configuration`,
-            error: error.message
-        });
-    }
-});
-
-// Test gateway connection
-router.post('/payment-settings/test/:gateway', async (req, res) => {
-    try {
-        const { gateway } = req.params;
-        const PaymentGatewayManager = require('../config/paymentGateway');
-        const paymentManager = new PaymentGatewayManager();
-        
-        // Test the gateway by trying to create a test payment
-        const testInvoice = {
-            invoice_number: 'TEST-001',
-            amount: 10000,
-            package_name: 'Test Package',
-            customer_name: 'Test Customer',
-            customer_phone: '08123456789',
-            customer_email: 'test@example.com'
-        };
-        
-        // Guard: Tripay minimum amount validation to avoid gateway rejection
-        if (gateway === 'tripay' && Number(testInvoice.amount) < 10000) {
-            return res.status(400).json({
-                success: false,
-                message: 'Minimal nominal Tripay adalah Rp 10.000'
-            });
-        }
-        
-        const result = await paymentManager.createPayment(testInvoice, gateway);
-        
-        res.json({
-            success: true,
-            message: `${gateway} connection test successful`,
-            data: result
-        });
-    } catch (error) {
-        logger.error(`Error testing ${req.params.gateway} connection:`, error);
-        res.status(500).json({
-            success: false,
-            message: `${req.params.gateway} connection test failed: ${error.message}`
         });
     }
 });

@@ -69,6 +69,27 @@ function setSetting(key, value) {
   }
 }
 
+function deleteSetting(key) {
+    try {
+        const settings = getSettingsWithCache();
+        if (!(key in settings)) {
+            return false;
+        }
+
+        delete settings[key];
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+
+        // Invalidate cache setelah write
+        settingsCache = settings;
+        lastModified = fs.statSync(settingsPath).mtime.getTime();
+        cacheExpiry = Date.now() + CACHE_TTL;
+
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 // Clear cache function untuk debugging/maintenance
 function clearSettingsCache() {
   settingsCache = null;
@@ -81,6 +102,7 @@ module.exports = {
   getSetting, 
   setSetting, 
   clearSettingsCache,
+  deleteSetting,
   getPerformanceStats: () => performanceMonitor.getStats(),
   getPerformanceReport: () => performanceMonitor.getPerformanceReport(),
   getQuickStats: () => performanceMonitor.getQuickStats()

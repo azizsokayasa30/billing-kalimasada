@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 const multer = require('multer');
-const { getSettingsWithCache } = require('../config/settingsManager')
+const { getSettingsWithCache, deleteSetting } = require('../config/settingsManager')
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const logger = require('../config/logger');
 const { spawn } = require('child_process');
@@ -45,23 +45,18 @@ router.get('/', (req, res) => {
 
 // GET: Ambil semua setting
 router.get('/data', (req, res) => {
-    fs.readFile(settingsPath, 'utf8', (err, data) => {
-        if (err) return res.status(500).json({ error: 'Gagal membaca settings.json' });
-        try {
-            const json = JSON.parse(data);
-            // Ensure Tripay base_url field exists so it appears in the admin form
-            try {
-                json.payment_gateway = json.payment_gateway || {};
-                json.payment_gateway.tripay = json.payment_gateway.tripay || {};
-                if (typeof json.payment_gateway.tripay.base_url === 'undefined') {
-                    json.payment_gateway.tripay.base_url = '';
-                }
-            } catch (_) {}
-            res.json(json);
-        } catch (e) {
-            res.status(500).json({ error: 'Format settings.json tidak valid' });
+    try {
+        const settings = { ...getSettingsWithCache() };
+
+        if (settings.payment_gateway) {
+            delete settings.payment_gateway;
+            deleteSetting('payment_gateway');
         }
-    });
+
+        res.json(settings);
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal membaca settings.json' });
+    }
 });
 
 // GET: Securely serve Donation QR image from config with fallback to public
@@ -86,7 +81,7 @@ router.get('/donation-qr', (req, res) => {
 });
 
 // POST: Simpan perubahan setting
-router.post('/save', (req, res) => {
+router.post('/save', async (req, res) => {
     try {
         const newSettings = req.body;
         
@@ -160,7 +155,7 @@ router.post('/save', (req, res) => {
             let reloadInfo = null;
             try {
                 const billingManager = require('../config/billing');
-                reloadInfo = billingManager.reloadPaymentGateway();
+                reloadInfo = await billingManager.reloadPaymentGateway();
             } catch (e) {
                 logger.warn('Gagal reload payment gateway setelah simpan settings:', e.message);
             }
