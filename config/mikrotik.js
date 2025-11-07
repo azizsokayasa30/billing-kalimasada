@@ -786,7 +786,6 @@ async function editPPPoEUserRadius({ oldUsername, username, password, profile = 
         throw error;
     }
 }
-
 // Fungsi untuk sync package limits ke Mikrotik PPPoE profile
 async function syncPackageLimitsToMikrotik({ profile_name, upload_limit, download_limit, burst_limit_upload, burst_limit_download, burst_threshold, burst_time }, routerObj = null) {
     try {
@@ -1508,7 +1507,6 @@ async function getResourceInfoForRouter(routerObj = null) {
         return { success: false, message: `Gagal ambil resource router: ${error.message}`, data: null };
     }
 }
-
 async function getResourceInfo() {
     // Ambil traffic interface utama (default ether1)
     const interfaceName = getSetting('main_interface', 'ether1');
@@ -1772,21 +1770,17 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         }
         
         // Add Mikrotik-Server attribute to radreply if server is provided
-        // CATATAN: Atribut ini HANYA digunakan untuk mode Mikrotik API, bukan untuk mode RADIUS
-        // Di mode RADIUS, semua voucher harus bisa digunakan di semua hotspot server yang dikonfigurasi untuk RADIUS
-        // Atribut Mikrotik-Server mungkin menyebabkan masalah jika Server Hotspot tidak dikonfigurasi dengan benar untuk RADIUS
-        // Oleh karena itu, atribut ini TIDAK ditambahkan untuk mode RADIUS
-        // if (server && server.trim() !== '' && server !== 'all') {
-        //     await conn.execute(
-        //         "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Mikrotik-Server', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-        //         [username, server, server]
-        //     );
-        //     logger.info(`Added Mikrotik-Server attribute for ${username}: ${server}`);
-        // }
+        // Mengaktifkan kembali logika ini agar voucher dapat dibatasi ke server hotspot tertentu.
+        // Pastikan server hotspot yang dipilih sudah dikonfigurasi benar di semua NAS.
+        if (server && server.trim() !== '' && server !== 'all') {
+            await conn.execute(
+                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Mikrotik-Server', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [username, server, server]
+            );
+            logger.info(`Added Mikrotik-Server attribute for ${username}: ${server}`);
+        }
         
-        // Untuk mode RADIUS, jangan tambahkan atribut Mikrotik-Server
-        // Semua voucher harus bisa digunakan di semua hotspot server yang menggunakan RADIUS
-        logger.info(`Voucher ${username} created in RADIUS mode without Mikrotik-Server attribute (server parameter: ${server || 'all'})`);
+        logger.info(`Voucher ${username} created in RADIUS mode ${server && server.trim() !== '' && server !== 'all' ? `with Mikrotik-Server=${server}` : 'without specific Mikrotik-Server'} (server parameter: ${server || 'all'})`);
         
         
         await conn.end();
@@ -1833,6 +1827,9 @@ async function addHotspotUser(username, password, profile, comment = null, custo
     if (mode === 'radius') {
         let result = { success: false, message: 'Unknown error' };
         try {
+            if (server && typeof server === 'string') {
+                server = server.trim();
+            }
             result = await addHotspotUserRadius(username, password, profile, comment, server);
         } catch (radiusError) {
             logger.error(`Error in addHotspotUserRadius for ${username}: ${radiusError.message}`);
@@ -2292,7 +2289,6 @@ async function getInterfaceTraffic(interfaceName = 'ether1') {
         return { rx: 0, tx: 0 };
     }
 }
-
 // Fungsi untuk mendapatkan daftar interface dari router tertentu
 async function getInterfacesForRouter(routerObj = null) {
     try {
@@ -3090,7 +3086,6 @@ async function getHotspotServerDetail(serverId, routerObj = null) {
         return { success: false, message: error.message, data: null };
     }
 }
-
 // Fungsi untuk menambah Server Profile Hotspot ke Mikrotik
 async function addHotspotServerProfileMikrotik(profileData, routerObj = null) {
     let conn = null;
@@ -3820,7 +3815,6 @@ async function addHotspotProfile(profileData, routerObj = null) {
         return { success: false, message: `Gagal menambah profile: ${error.message}` };
     }
 }
-
 // Fungsi untuk edit profile hotspot
 async function editHotspotProfile(profileData, routerObj = null) {
     try {
@@ -4370,8 +4364,27 @@ async function getHotspotProfilesRadius() {
             AND groupname IS NOT NULL AND groupname != ''
         `);
         
-        const allGroupnames = [...new Set([...groupnames, ...sessionTimeoutRows.map(r => r.groupname)])];
-        logger.info(`Found ${allGroupnames.length} hotspot groupnames (${groupnames.length} from vouchers, ${sessionTimeoutRows.length} with Session-Timeout)`);
+        let metadataGroupnames = [];
+        try {
+            if (await ensureHotspotProfilesMetadataTable(conn)) {
+                const [metadataRows] = await conn.execute(`
+                    SELECT groupname
+                    FROM hotspot_profiles
+                    WHERE groupname IS NOT NULL AND groupname != ''
+                `);
+                metadataGroupnames = metadataRows.map(row => row.groupname);
+            }
+        } catch (metaErr) {
+            logger.warn(`Failed to load hotspot profile metadata groupnames: ${metaErr.message}`);
+        }
+
+        const allGroupnames = [...new Set([
+            ...groupnames,
+            ...sessionTimeoutRows.map(r => r.groupname),
+            ...metadataGroupnames
+        ])];
+
+        logger.info(`Found ${allGroupnames.length} hotspot groupnames (${groupnames.length} from vouchers, ${sessionTimeoutRows.length} with Session-Timeout, ${metadataGroupnames.length} from metadata)`);
 
         const metadataMap = await getHotspotProfilesMetadata(conn, allGroupnames);
 
@@ -4588,7 +4601,6 @@ async function deleteHotspotProfileMetadata(conn, groupname) {
     await conn.execute('DELETE FROM hotspot_profiles WHERE groupname = ?', [groupname]);
     return true;
 }
-
 async function ensurePPPoEProfilesMetadataTable(conn) {
     try {
         const [tableCheck] = await conn.execute(`
@@ -5282,7 +5294,6 @@ async function getHotspotServerProfileDetailRadius(id) {
         return { success: false, message: `Gagal ambil detail server profile: ${error.message}`, data: null };
     }
 }
-
 // Fungsi untuk mendapatkan daftar profile PPPoE dari RADIUS (yang digunakan oleh PPPoE users, BUKAN voucher)
 async function getPPPoEProfilesRadius() {
     const conn = await getRadiusConnection();
@@ -5336,13 +5347,30 @@ async function getPPPoEProfilesRadius() {
         query += ` ORDER BY groupname ASC`;
         
         const [groupRows] = await conn.execute(query, params);
-        
+
         const groupnames = groupRows.map(row => row.groupname);
-        const metadataMap = await getPPPoEProfilesMetadata(conn, groupnames);
+
+        // Jangan tampilkan profile yang dibuat untuk hotspot. Profile hotspot disimpan
+        // di tabel metadata `hotspot_profiles`, jadi gunakan itu sebagai penanda.
+        const hotspotMetadataMap = await getHotspotProfilesMetadata(conn, groupnames);
+
+        const filteredGroupnames = groupnames.filter(name => {
+            if (hotspotMetadataMap[name]) {
+                logger.debug(`Skipping hotspot profile "${name}" from PPPoE profile list`);
+                return false;
+            }
+            return true;
+        });
+
+        const metadataMap = await getPPPoEProfilesMetadata(conn, filteredGroupnames);
 
         const profiles = [];
         for (const row of groupRows) {
             const groupname = row.groupname;
+
+            if (hotspotMetadataMap[groupname]) {
+                continue;
+            }
             const meta = metadataMap[groupname] || null;
             
             // Get all attributes for this group
@@ -6003,7 +6031,6 @@ async function deletePPPoEProfile(id, routerObj = null) {
         return { success: false, message: error.message };
     }
 }
-
 // Fungsi untuk generate hotspot vouchers
 async function generateHotspotVouchers(count, prefix, profile, server, validUntil, price, charType = 'alphanumeric', routerObj = null) {
     try {
