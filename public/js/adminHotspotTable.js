@@ -14,15 +14,16 @@ $(function() {
     lengthMenu: [10, 25, 50, 100],
     responsive: true,
     dom: '<"d-flex justify-content-between align-items-center mb-3"<"d-flex align-items-center"l><"d-flex"f><"ms-3"#statusFilterContainer>>rtip',
-    order: [[4, 'desc'], [0, 'asc']], // Status dulu, lalu No
+    order: [[6, 'desc'], [0, 'asc']], // Status dulu, lalu No
     columnDefs: [
-      { targets: 4, orderDataType: 'status-aktif' },
-      { targets: -1, orderable: false, width: '20%', className: 'text-center' },
+      { targets: 6, orderDataType: 'status-aktif', width: '10%', className: 'text-center' },
+      { targets: -1, orderable: false, width: '18%', className: 'text-center' },
       { targets: 0, width: '5%', className: 'text-center' },
-      { targets: 1, width: '20%', className: 'fw-bold text-start' },
-      { targets: 2, width: '20%', className: 'text-center' },
+      { targets: 1, width: '18%', className: 'fw-bold text-start' },
+      { targets: 2, width: '15%', className: 'text-center' },
       { targets: 3, width: '15%', className: 'text-center' },
-      { targets: 4, width: '10%', className: 'text-center' }
+      { targets: 4, width: '15%', className: 'text-center' },
+      { targets: 5, width: '18%', className: 'text-center' }
     ],
     language: {
       url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json',
@@ -47,20 +48,20 @@ $(function() {
   statusFilter.on('change', function() {
     const val = $(this).val();
     if (val) {
-      hotspotTable.column(4).search('^' + val + '$', true, false).draw();
+      hotspotTable.column(6).search('^' + val + '$', true, false).draw();
     } else {
-      hotspotTable.column(4).search('', true, false).draw();
+      hotspotTable.column(6).search('', true, false).draw();
     }
     updateActiveUserCount();
     // Selalu urutkan status Aktif di atas
-    hotspotTable.order([4, 'desc'], [0, 'asc']).draw();
+    hotspotTable.order([6, 'desc'], [0, 'asc']).draw();
   });
 
   // Pastikan urutan status selalu prioritas saat search
   $('#hotspotTable_filter input').on('input', function() {
     // Tunggu sejenak agar search diterapkan
     setTimeout(function() {
-      hotspotTable.order([4, 'desc'], [0, 'asc']).draw();
+      hotspotTable.order([6, 'desc'], [0, 'asc']).draw();
     }, 100);
   });
 
@@ -69,7 +70,7 @@ $(function() {
     let count = 0;
     hotspotTable.rows({ search: 'applied' }).every(function() {
       const data = this.data();
-      if (data[4] && data[4].toLowerCase() === 'aktif') count++;
+      if (data[6] && data[6].toLowerCase() === 'aktif') count++;
     });
     $('#activeUserCount').text(count);
   }

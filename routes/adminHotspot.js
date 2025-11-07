@@ -330,6 +330,7 @@ router.get('/', async (req, res) => {
                     name: u.name || '',
                     password: u.password || '',
                     profile: u.profile || '',
+                    created_at: u['last-logged-in'] || u['last-logged-out'] || u['last-seen'] || null,
                     nas_id: router.id,
                     nas_name: router.name,
                     nas_ip: router.nas_ip

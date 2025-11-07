@@ -1657,16 +1657,47 @@ async function getHotspotUsersRadius() {
         const dbPath = require('path').join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
         
-        const voucherUsernames = await new Promise((resolve, reject) => {
-            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+        const voucherMetadataRows = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT username, MAX(created_at) as created_at, MAX(price) as price, MAX(status) as status
+                FROM voucher_revenue
+                GROUP BY username
+            `, [], (err, rows) => {
                 if (err) {
-                    logger.warn(`Error getting voucher usernames for hotspot: ${err.message}`);
+                    logger.warn(`Error getting voucher metadata for hotspot: ${err.message}`);
                     resolve([]);
                 } else {
-                    resolve(rows.map(r => r.username));
+                    resolve(rows || []);
                 }
             });
         });
+
+        let voucherUsernames = [];
+        const voucherMetadata = {};
+
+        if (voucherMetadataRows.length > 0) {
+            voucherUsernames = voucherMetadataRows.map(row => row.username);
+            voucherMetadataRows.forEach(row => {
+                if (row.username) {
+                    voucherMetadata[row.username] = {
+                        created_at: row.created_at || null,
+                        price: row.price,
+                        status: row.status
+                    };
+                }
+            });
+        } else {
+            voucherUsernames = await new Promise((resolve, reject) => {
+                db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                    if (err) {
+                        logger.warn(`Error getting voucher usernames for hotspot: ${err.message}`);
+                        resolve([]);
+                    } else {
+                        resolve(rows.map(r => r.username));
+                    }
+                });
+            });
+        }
         db.close();
         
         logger.info(`Found ${voucherUsernames.length} voucher usernames to include`);
@@ -1685,6 +1716,7 @@ async function getHotspotUsersRadius() {
         const placeholders = voucherUsernames.map(() => '?').join(',');
         const [userRows] = await conn.execute(`
             SELECT DISTINCT c.username, 
+                   c.value as password,
                    (SELECT groupname FROM radusergroup WHERE username = c.username LIMIT 1) as profile,
                    (SELECT value FROM radreply WHERE username = c.username AND attribute = 'Reply-Message' LIMIT 1) as comment
             FROM radcheck c
@@ -1700,9 +1732,10 @@ async function getHotspotUsersRadius() {
             success: true,
             data: userRows.map(row => ({
                 name: row.username,
-                password: '', // Password tidak dikembalikan untuk security
+                password: row.password || '',
                 profile: row.profile || 'default',
                 comment: row.comment || '',
+                created_at: (voucherMetadata[row.username] && voucherMetadata[row.username].created_at) || null,
                 nas_name: 'RADIUS',
                 nas_ip: 'RADIUS'
             }))
