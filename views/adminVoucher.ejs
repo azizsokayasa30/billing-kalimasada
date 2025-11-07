@@ -683,14 +683,17 @@
                                                                 });
                                                             }
                                                         } catch(e) {
-                                                            dateDisplay = '-';
+                                                            dateDisplay = voucher.createdAt;
+                                                        }
+                                                        if (dateDisplay === '-' && typeof voucher.createdAt === 'string') {
+                                                            dateDisplay = voucher.createdAt;
                                                         }
                                                     }
                                                 %>
                                                 <%= dateDisplay %>
                                             </td>
-                                            <td><%= voucher.username %></td>
-                                            <td><%= voucher.password %></td>
+                                            <td class="fw-bold"><%= voucher.username %></td>
+                                            <td><%= voucher.password || '-' %></td>
                                             <td><%= voucher.profile %></td>
                                             <td>
                                                 <%= voucher.nas_name || 'N/A' %> (<%= voucher.nas_ip || 'N/A' %>)

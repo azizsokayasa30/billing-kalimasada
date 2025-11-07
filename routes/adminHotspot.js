@@ -818,14 +818,17 @@ router.get('/voucher', async (req, res) => {
                         return isVoucherPattern;
                     })
                     .map(user => {
-                        // Ambil created_at dari invoice jika ada, jika tidak gunakan null (akan di-handle di frontend)
+                        // Ambil created_at dari invoice jika ada, jika tidak gunakan metadata voucher
                         const invoiceDate = invoiceDates[user.name] || null;
+                        const voucherCreatedAt = user.created_at || user.createdAt || null;
+                        const passwordValue = user.password || user.passwordValue || user.name || '';
+
                         return {
                             username: user.name || '',
-                            password: '', // Password tidak dikembalikan untuk security
+                            password: passwordValue,
                             profile: user.profile || 'default',
                             server: 'all',
-                            createdAt: invoiceDate || null, // Simpan sebagai string, bukan Date object
+                            createdAt: invoiceDate || voucherCreatedAt || null,
                             active: activeUsernames.includes(user.name),
                             comment: user.comment || '',
                             nas_id: null,
