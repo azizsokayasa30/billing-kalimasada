@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- PWA Meta Tags -->
-    <meta name="description" content="Dashboard agent untuk sistem billing GEMBOK-BILL">
+    <% const metaSettings = (typeof appSettings !== 'undefined' && appSettings) || {}; %>
+    <% const metaCompanyName = metaSettings.company_name || metaSettings.company_header || metaSettings.app_name || 'CVLmedia'; %>
+    <meta name="description" content="Dashboard agent untuk sistem billing <%= metaCompanyName %>">
     <meta name="theme-color" content="#667eea">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -19,7 +21,7 @@
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
-    <title>Login Agent - <%= appSettings.company_name || 'Gembok Bill' %></title>
+    <title>Login Agent - <%= (typeof appSettings !== 'undefined' && appSettings && (appSettings.company_name || appSettings.company_header || appSettings.app_name)) || 'CVLmedia' %></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="/css/agent-pwa.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -91,20 +93,37 @@
             justify-content: center;
             margin: 0 auto 1rem;
             font-size: 2rem;
+            overflow: hidden;
+        }
+        .agent-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <% 
+            const hasSettings = typeof appSettings !== 'undefined' && appSettings;
+            const companyName = hasSettings && (appSettings.company_name || appSettings.company_header || appSettings.app_name || 'CVLmedia') || 'CVLmedia';
+            const logoFromSettings = hasSettings && appSettings.company_logo ? appSettings.company_logo : null;
+            const logoFromFile = hasSettings && appSettings.logo_filename ? `/img/${appSettings.logo_filename}` : null;
+            const logoUrl = logoFromSettings || logoFromFile;
+        %>
         <div class="row justify-content-center">
             <div class="col-md-6 col-lg-5">
                 <div class="card login-card">
                     <div class="login-header">
                         <div class="agent-icon">
-                            <i class="fas fa-user-tie"></i>
+                            <% if (logoUrl) { %>
+                                <img src="<%= logoUrl %>" alt="<%= companyName %>">
+                            <% } else { %>
+                                <i class="fas fa-user-tie"></i>
+                            <% } %>
                         </div>
                         <h3 class="mb-0">Agent Voucher dan Pembayaran</h3>
-                        <p class="mb-0 opacity-75"><%= appSettings.company_header || 'GEMBOK-BILL' %></p>
+                        <p class="mb-0 opacity-75"><%= companyName %></p>
                     </div>
                     
                     <div class="card-body p-4">
@@ -162,7 +181,7 @@
                         <div class="text-center mt-4">
                             <small class="text-muted">
                                 <i class="fas fa-shield-alt me-1"></i>
-                                Sistem Agent - <%= appSettings.company_name || 'Gembok Bill' %>
+                                Sistem Agent - <%= companyName %>
                             </small>
                         </div>
                         
