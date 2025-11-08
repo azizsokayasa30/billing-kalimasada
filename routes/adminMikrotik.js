@@ -1032,10 +1032,6 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
             "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Simultaneous-Use', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
             [groupname, normalizedSharedUsers, normalizedSharedUsers]
           );
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Shared-Users', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, normalizedSharedUsers, normalizedSharedUsers]
-          );
         }
 
         await saveHotspotProfileMetadata(conn, {
@@ -1211,10 +1207,6 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
         if (sharedUsersValid) {
           await conn.execute(
             "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Simultaneous-Use', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, normalizedSharedUsers, normalizedSharedUsers]
-          );
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Shared-Users', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
             [groupname, normalizedSharedUsers, normalizedSharedUsers]
           );
         } else {

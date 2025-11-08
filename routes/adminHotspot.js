@@ -575,13 +575,47 @@ router.post('/generate-vouchers', async (req, res) => {
         if (!server || server.trim() === '' || server === 'all') {
             server = 'all';
         }
+
+        const serverMetadata = {
+            name: server,
+            nasId: req.body.serverNasId ? parseInt(req.body.serverNasId, 10) : null,
+            nasName: req.body.serverNasName || '',
+            nasIp: req.body.serverNasIp || '',
+            nasIdentifier: req.body.serverNasIdentifier || '',
+            interface: req.body.serverInterface || ''
+        };
+
+        // Jika router belum ditentukan tapi metadata menyediakan nasId, ambil dari database
+        if (!routerObj && serverMetadata.nasId) {
+            const db = new sqlite3.Database('./data/billing.db');
+            routerObj = await new Promise((resolve, reject) => {
+                db.get('SELECT * FROM routers WHERE id=?', [serverMetadata.nasId], (err, row) => {
+                    db.close();
+                    if (err) reject(err);
+                    else resolve(row || null);
+                });
+            });
+            if (routerObj) {
+                if (!serverMetadata.nasName) serverMetadata.nasName = routerObj.name || '';
+                if (!serverMetadata.nasIp) serverMetadata.nasIp = routerObj.nas_ip || '';
+                if (!serverMetadata.nasIdentifier) serverMetadata.nasIdentifier = routerObj.nas_identifier || '';
+            }
+        }
+
+        // Pastikan metadata memiliki identifier utama bila routerObj tersedia
+        if (routerObj) {
+            if (!serverMetadata.nasIdentifier) serverMetadata.nasIdentifier = routerObj.nas_identifier || '';
+            if (!serverMetadata.nasIp) serverMetadata.nasIp = routerObj.nas_ip || '';
+            if (!serverMetadata.nasName) serverMetadata.nasName = routerObj.name || '';
+        }
+ 
         const validUntil = req.body.validUntil || '';
         const voucherPrice = price || req.body.price || '';
         const charTypeValue = charType || req.body.charType || 'alphanumeric';
         
         logger.info(`Generating vouchers with server hotspot: ${server} (from server: ${req.body.server || 'not provided'}, serverProfile: ${req.body.serverProfile || 'not provided'})`);
         
-        const result = await generateHotspotVouchers(count, prefix, profile, server, validUntil, voucherPrice, charTypeValue, routerObj);
+        const result = await generateHotspotVouchers(count, prefix, profile, serverMetadata, validUntil, voucherPrice, charTypeValue, routerObj);
         
         if (result.success) {
             res.json({ 
@@ -1224,7 +1258,22 @@ router.post('/generate-voucher', async (req, res) => {
         console.log('- CharType:', charType);
         
         // Gunakan fungsi generateHotspotVouchers yang sudah diimport di atas
-        const result = await generateHotspotVouchers(count, prefix, profile, server, validUntil, price, charType, routerObj);
+        const serverMetadata = {
+            name: server,
+            nasId: req.body.serverNasId ? parseInt(req.body.serverNasId, 10) : null,
+            nasName: req.body.serverNasName || '',
+            nasIp: req.body.serverNasIp || '',
+            nasIdentifier: req.body.serverNasIdentifier || '',
+            interface: req.body.serverInterface || ''
+        };
+
+        if (routerObj) {
+            if (!serverMetadata.nasName) serverMetadata.nasName = routerObj.name || '';
+            if (!serverMetadata.nasIp) serverMetadata.nasIp = routerObj.nas_ip || '';
+            if (!serverMetadata.nasIdentifier) serverMetadata.nasIdentifier = routerObj.nas_identifier || '';
+        }
+
+        const result = await generateHotspotVouchers(count, prefix, profile, serverMetadata, validUntil, price, charType, routerObj);
         
         if (!result.success) {
             throw new Error(result.message || 'Gagal generate voucher');

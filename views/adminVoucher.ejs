@@ -205,7 +205,14 @@
                                     <option value="all">Semua Server</option>
                                     <% if (servers && servers.length > 0) { %>
                                         <% servers.forEach(function(server) { %>
-                                            <option value="<%= server.name %>"><%= server.name %><% if (server.nas_name && server.nas_name !== 'RADIUS') { %> (<%= server.nas_name %>)<% } %></option>
+                                            <option value="<%= server.name %>"
+                                                data-nas-id="<%= server.nas_id || '' %>"
+                                                data-nas-name="<%= server.nas_name || '' %>"
+                                                data-nas-ip="<%= server.nas_ip || '' %>"
+                                                data-nas-identifier="<%= server.nas_identifier || '' %>"
+                                                data-interface="<%= server.interface || '' %>">
+                                                <%= server.name %><% if (server.nas_name && server.nas_name !== 'RADIUS') { %> (<%= server.nas_name %>)<% } %>
+                                            </option>
                                         <% }); %>
                                     <% } %>
                                 </select>
@@ -1005,8 +1012,22 @@
                 data[key] = value;
             }
             
-            // Pastikan harga dikirim dengan benar (parse sebagai number)
-            const priceInput = document.getElementById('voucherPrice');
+            // Sertakan metadata server hotspot yang dipilih (jika ada)
+            const serverSelect = document.getElementById('voucherServer');
+            if (serverSelect && serverSelect.options.length > 0) {
+                const selectedOption = serverSelect.options[serverSelect.selectedIndex];
+                if (selectedOption) {
+                    data.server = selectedOption.value || 'all';
+                    data.serverNasId = selectedOption.dataset.nasId || '';
+                    data.serverNasName = selectedOption.dataset.nasName || '';
+                    data.serverNasIp = selectedOption.dataset.nasIp || '';
+                    data.serverNasIdentifier = selectedOption.dataset.nasIdentifier || '';
+                    data.serverInterface = selectedOption.dataset.interface || '';
+                }
+            }
+             
+             // Pastikan harga dikirim dengan benar (parse sebagai number)
+             const priceInput = document.getElementById('voucherPrice');
             if (priceInput && priceInput.value && priceInput.value.trim() !== '') {
                 const priceValue = parseFloat(priceInput.value);
                 if (!isNaN(priceValue)) {
