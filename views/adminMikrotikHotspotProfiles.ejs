@@ -195,6 +195,8 @@
                                     <th>Rate Limit</th>
                                     <th>Session Timeout</th>
                                     <th>Idle Timeout</th>
+                                    <th>Limit Uptime</th>
+                                    <th>Validity</th>
                                     <th>Status</th>
                                     <th>Aksi</th>
                                 </tr>
@@ -319,6 +321,36 @@
                                     </select>
                                 </div>
                                 <small class="form-text text-muted">S=detik, m=menit, h=jam, d=hari</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="limitUptime" class="form-label">Limit Uptime (Total Waktu)</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="limitUptime" name="limitUptime" placeholder="0">
+                                    <select class="form-select" id="limitUptimeUnit" name="limitUptimeUnit" style="max-width: 80px;">
+                                        <option value="s">S</option>
+                                        <option value="m">m</option>
+                                        <option value="h">h</option>
+                                        <option value="d">d</option>
+                                    </select>
+                                </div>
+                                <small class="form-text text-muted">Batasi total akumulasi pemakaian. Kosongkan jika tidak dibatasi.</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="validity" class="form-label">Validity (Sejak Login Pertama)</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="validity" name="validity" placeholder="0">
+                                    <select class="form-select" id="validityUnit" name="validityUnit" style="max-width: 80px;">
+                                        <option value="s">S</option>
+                                        <option value="m">m</option>
+                                        <option value="h">h</option>
+                                        <option value="d">d</option>
+                                    </select>
+                                </div>
+                                <small class="form-text text-muted">Masa aktif setelah login pertama. Kosongkan jika tidak dibatasi.</small>
                             </div>
                         </div>
                     </div>
@@ -506,6 +538,28 @@ $(function() {
                     }
                 },
                 { 
+                    data: null,
+                    render: function(data, type, row) {
+                        // Try different possible field names for limit uptime
+                        const limitUptime = row['limit-uptime'] || row.limitUptimeString || row.limitUptime || row.limitUptimeValue || null;
+                        if (limitUptime && limitUptime !== '0' && limitUptime !== '') {
+                            return limitUptime;
+                        }
+                        return '-';
+                    }
+                },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        // Try different possible field names for validity
+                        const validity = row['validity-period'] || row.validityString || row.validity || row.validityValue || null;
+                        if (validity && validity !== '0' && validity !== '') {
+                            return validity;
+                        }
+                        return '-';
+                    }
+                },
+                { 
                     "data": null, // Prevent error if 'disabled' is not in data
                     "width": "10%",
                     "render": function(data, type, row) {
@@ -618,7 +672,7 @@ $(function() {
 
     $('#filterStatus').on('change', function() {
         const status = $(this).val();
-        dataTable.column(5).search(status === 'active' ? 'Aktif' : status === 'inactive' ? 'Tidak Aktif' : '').draw();
+        dataTable.column(8).search(status === 'active' ? 'Aktif' : status === 'inactive' ? 'Tidak Aktif' : '').draw();
     });
 
     $('#filterType').on('change', function() {
@@ -696,6 +750,8 @@ $(function() {
     function resetForm() {
         $('#profileForm')[0].reset();
         $('#profileId').val('');
+        $('#limitUptimeUnit').val('h');
+        $('#validityUnit').val('d');
     }
 
     function fillForm(profile) {
@@ -776,6 +832,43 @@ $(function() {
             $('#idleTimeoutUnit').val('m');
         }
         
+        // Limit uptime total
+        if (profile.limitUptimeValue && profile.limitUptimeUnit) {
+            $('#limitUptime').val(profile.limitUptimeValue);
+            $('#limitUptimeUnit').val(profile.limitUptimeUnit);
+        } else if (profile['limit-uptime']) {
+            const match = String(profile['limit-uptime']).match(/^(\d+)([smhdSMHD])$/);
+            if (match) {
+                $('#limitUptime').val(match[1]);
+                $('#limitUptimeUnit').val(match[2].toLowerCase());
+            } else {
+                $('#limitUptime').val('');
+                $('#limitUptimeUnit').val('h');
+            }
+        } else {
+            $('#limitUptime').val('');
+            $('#limitUptimeUnit').val('h');
+        }
+        
+        // Validity sejak login pertama
+        if (profile.validityValue && profile.validityUnit) {
+            $('#validity').val(profile.validityValue);
+            $('#validityUnit').val(profile.validityUnit);
+        } else if (profile.validityString || profile['validity-period']) {
+            const validityRaw = profile.validityString || profile['validity-period'];
+            const match = String(validityRaw).match(/^(\d+)([smhdSMHD])$/);
+            if (match) {
+                $('#validity').val(match[1]);
+                $('#validityUnit').val(match[2].toLowerCase());
+            } else {
+                $('#validity').val('');
+                $('#validityUnit').val('d');
+            }
+        } else {
+            $('#validity').val('');
+            $('#validityUnit').val('d');
+        }
+        
         // Handle address fields
         $('#localAddress').val(profile['local-address'] || profile.localAddress || '');
         $('#remoteAddress').val(profile['remote-address'] || profile.remoteAddress || '');
@@ -800,6 +893,10 @@ $(function() {
             sessionTimeoutUnit: $('#sessionTimeoutUnit').val(),
             idleTimeout: $('#idleTimeout').val(),
             idleTimeoutUnit: $('#idleTimeoutUnit').val(),
+            limitUptime: $('#limitUptime').val(),
+            limitUptimeUnit: $('#limitUptimeUnit').val(),
+            validity: $('#validity').val(),
+            validityUnit: $('#validityUnit').val(),
             localAddress: $('#localAddress').val(),
             remoteAddress: $('#remoteAddress').val(),
             dnsServer: $('#dnsServer').val(),
@@ -829,6 +926,8 @@ $(function() {
         console.log('Rate Limit:', formData.rateLimit, formData.rateLimitUnit);
         console.log('Session Timeout:', formData.sessionTimeout, formData.sessionTimeoutUnit);
         console.log('Idle Timeout:', formData.idleTimeout, formData.idleTimeoutUnit);
+        console.log('Limit Uptime:', formData.limitUptime, formData.limitUptimeUnit);
+        console.log('Validity:', formData.validity, formData.validityUnit);
 
         const url = formData.id ? '/admin/mikrotik/hotspot-profiles/edit' : '/admin/mikrotik/hotspot-profiles/add';
         
@@ -891,6 +990,8 @@ $(function() {
                                 <tr><td>Rate Limit</td><td>: ${profile.rateLimit ? profile.rateLimit + (profile.rateLimitUnit || '') : '-'}</td></tr>
                                 <tr><td>Session Timeout</td><td>: ${profile.sessionTimeout ? profile.sessionTimeout + (profile.sessionTimeoutUnit || '') : '-'}</td></tr>
                                 <tr><td>Idle Timeout</td><td>: ${profile.idleTimeout ? profile.idleTimeout + (profile.idleTimeoutUnit || '') : '-'}</td></tr>
+                                <tr><td>Limit Uptime</td><td>: ${profile.limitUptimeValue ? profile.limitUptimeValue + (profile.limitUptimeUnit || '') : (profile['limit-uptime'] || '-')}</td></tr>
+                                <tr><td>Validity</td><td>: ${profile.validityValue ? profile.validityValue + (profile.validityUnit || '') : (profile.validityString || profile['validity-period'] || '-')}</td></tr>
                             </table>
                         </div>
                     </div>

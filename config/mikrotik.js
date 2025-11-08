@@ -786,6 +786,53 @@ async function editPPPoEUserRadius({ oldUsername, username, password, profile = 
         throw error;
     }
 }
+function durationToSeconds(value, unit) {
+    const numeric = parseInt(value, 10);
+    if (isNaN(numeric) || numeric <= 0) {
+        return null;
+    }
+    const normalizedUnit = typeof unit === 'string' ? unit.toLowerCase() : 's';
+    switch (normalizedUnit) {
+        case 'd':
+            return numeric * 86400;
+        case 'h':
+            return numeric * 3600;
+        case 'm':
+            return numeric * 60;
+        case 's':
+        default:
+            return numeric;
+    }
+}
+function formatSecondsToDuration(secondsInput) {
+    const seconds = parseInt(secondsInput, 10);
+    if (isNaN(seconds) || seconds <= 0) {
+        return null;
+    }
+    const units = [
+        { unit: 'd', factor: 86400 },
+        { unit: 'h', factor: 3600 },
+        { unit: 'm', factor: 60 },
+        { unit: 's', factor: 1 }
+    ];
+    for (const { unit, factor } of units) {
+        if (seconds % factor === 0) {
+            const value = seconds / factor;
+            return {
+                value,
+                unit,
+                string: `${value}${unit}`,
+                seconds
+            };
+        }
+    }
+    return {
+        value: seconds,
+        unit: 's',
+        string: `${seconds}s`,
+        seconds
+    };
+}
 // Fungsi untuk sync package limits ke Mikrotik PPPoE profile
 async function syncPackageLimitsToMikrotik({ profile_name, upload_limit, download_limit, burst_limit_upload, burst_limit_download, burst_threshold, burst_time }, routerObj = null) {
     try {
@@ -3617,7 +3664,11 @@ async function addHotspotProfile(profileData, routerObj = null) {
             dnsServer,
             parentQueue,
             addressList,
-            sharedUsers
+            sharedUsers,
+            limitUptimeValue,
+            limitUptimeUnit,
+            validityValue,
+            validityUnit
         } = profileData;
         
         if (!name || !name.trim()) {
@@ -3694,6 +3745,22 @@ async function addHotspotProfile(profileData, routerObj = null) {
             const sharedUsersValue = parseInt(String(sharedUsers).trim());
             if (!isNaN(sharedUsersValue) && sharedUsersValue > 0) {
                 params.push('=shared-users=' + sharedUsersValue);
+            }
+        }
+        
+        // Limit uptime: valid field - only if value is valid positive integer
+        if (limitUptimeValue !== undefined && limitUptimeValue !== null && String(limitUptimeValue).trim() !== '' && String(limitUptimeValue).trim() !== '0') {
+            const limitUptimeValueValue = parseInt(String(limitUptimeValue).trim());
+            if (!isNaN(limitUptimeValueValue) && limitUptimeValueValue > 0) {
+                params.push('=limit-uptime=' + limitUptimeValueValue);
+            }
+        }
+        
+        // Validity: valid field - only if value is valid positive integer
+        if (validityValue !== undefined && validityValue !== null && String(validityValue).trim() !== '' && String(validityValue).trim() !== '0') {
+            const validityValueValue = parseInt(String(validityValue).trim());
+            if (!isNaN(validityValueValue) && validityValueValue > 0) {
+                params.push('=validity=' + validityValueValue);
             }
         }
         
@@ -3833,6 +3900,32 @@ async function addHotspotProfile(profileData, routerObj = null) {
                         }
                     }
                     
+                    // Update limit-uptime
+                    if (limitUptimeValue !== undefined && limitUptimeValue !== null && String(limitUptimeValue).trim() !== '' && String(limitUptimeValue).trim() !== '0') {
+                        const limitUptimeValueValue = parseInt(String(limitUptimeValue).trim());
+                        if (!isNaN(limitUptimeValueValue) && limitUptimeValueValue > 0) {
+                            try {
+                                await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + profileId, '=limit-uptime=' + limitUptimeValueValue]);
+                                logger.info(`✓ Limit uptime updated: ${limitUptimeValueValue}`);
+                            } catch (e) {
+                                logger.warn(`✗ Failed to update limit uptime: ${e.message}`);
+                            }
+                        }
+                    }
+                    
+                    // Update validity
+                    if (validityValue !== undefined && validityValue !== null && String(validityValue).trim() !== '' && String(validityValue).trim() !== '0') {
+                        const validityValueValue = parseInt(String(validityValue).trim());
+                        if (!isNaN(validityValueValue) && validityValueValue > 0) {
+                            try {
+                                await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + profileId, '=validity=' + validityValueValue]);
+                                logger.info(`✓ Validity updated: ${validityValueValue}`);
+                            } catch (e) {
+                                logger.warn(`✗ Failed to update validity: ${e.message}`);
+                            }
+                        }
+                    }
+                    
                     logger.info('✓ Successfully added and updated profile');
                     
                     // Close connection if created for this request
@@ -3916,7 +4009,11 @@ async function editHotspotProfile(profileData, routerObj = null) {
             dnsServer,
             parentQueue,
             addressList,
-            sharedUsers
+            sharedUsers,
+            limitUptimeValue,
+            limitUptimeUnit,
+            validityValue,
+            validityUnit
         } = profileData;
         
         const params = [
@@ -4000,6 +4097,22 @@ async function editHotspotProfile(profileData, routerObj = null) {
             const sharedUsersValue = parseInt(String(sharedUsers).trim());
             if (!isNaN(sharedUsersValue) && sharedUsersValue > 0) {
                 params.push('=shared-users=' + sharedUsersValue);
+            }
+        }
+        
+        // Limit uptime: valid field - only if value is valid positive integer
+        if (limitUptimeValue !== undefined && limitUptimeValue !== null && String(limitUptimeValue).trim() !== '' && String(limitUptimeValue).trim() !== '0') {
+            const limitUptimeValueValue = parseInt(String(limitUptimeValue).trim());
+            if (!isNaN(limitUptimeValueValue) && limitUptimeValueValue > 0) {
+                params.push('=limit-uptime=' + limitUptimeValueValue);
+            }
+        }
+        
+        // Validity: valid field - only if value is valid positive integer
+        if (validityValue !== undefined && validityValue !== null && String(validityValue).trim() !== '' && String(validityValue).trim() !== '0') {
+            const validityValueValue = parseInt(String(validityValue).trim());
+            if (!isNaN(validityValueValue) && validityValueValue > 0) {
+                params.push('=validity=' + validityValueValue);
             }
         }
         
@@ -4127,6 +4240,32 @@ async function editHotspotProfile(profileData, routerObj = null) {
                                 logger.info(`✓ Shared users updated: ${sharedUsersValue}`);
                             } catch (e) {
                                 logger.warn(`✗ Failed to update shared users: ${e.message}`);
+                            }
+                        }
+                    }
+                    
+                    // Update limit-uptime
+                    if (limitUptimeValue !== undefined && limitUptimeValue !== null && String(limitUptimeValue).trim() !== '' && String(limitUptimeValue).trim() !== '0') {
+                        const limitUptimeValueValue = parseInt(String(limitUptimeValue).trim());
+                        if (!isNaN(limitUptimeValueValue) && limitUptimeValueValue > 0) {
+                            try {
+                                await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + id, '=limit-uptime=' + limitUptimeValueValue]);
+                                logger.info(`✓ Limit uptime updated: ${limitUptimeValueValue}`);
+                            } catch (e) {
+                                logger.warn(`✗ Failed to update limit uptime: ${e.message}`);
+                            }
+                        }
+                    }
+                    
+                    // Update validity
+                    if (validityValue !== undefined && validityValue !== null && String(validityValue).trim() !== '' && String(validityValue).trim() !== '0') {
+                        const validityValueValue = parseInt(String(validityValue).trim());
+                        if (!isNaN(validityValueValue) && validityValueValue > 0) {
+                            try {
+                                await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + id, '=validity=' + validityValueValue]);
+                                logger.info(`✓ Validity updated: ${validityValueValue}`);
+                            } catch (e) {
+                                logger.warn(`✗ Failed to update validity: ${e.message}`);
                             }
                         }
                     }
@@ -4274,7 +4413,6 @@ async function getRouterIdentity() {
         return { success: false, message: `Gagal ambil identity router: ${error.message}`, data: null };
     }
 }
-
 // Fungsi untuk set identity router
 async function setRouterIdentity(name) {
     try {
@@ -4486,7 +4624,15 @@ async function getHotspotProfilesRadius() {
                 'rate-limit': null,
                 'session-timeout': null,
                 'idle-timeout': null,
-                'shared-users': null,
+                'limit-uptime': null,
+                'shared-users': meta?.shared_users || null,
+                limitUptimeValue: meta?.limit_uptime_value || null,
+                limitUptimeUnit: meta?.limit_uptime_unit || null,
+                limitUptimeSeconds: null,
+                validityValue: meta?.validity_value || null,
+                validityUnit: meta?.validity_unit || null,
+                validitySeconds: null,
+                validityString: null,
                 comment: meta?.comment || '',
                 localAddress: meta?.local_address || '',
                 remoteAddress: meta?.remote_address || '',
@@ -4499,40 +4645,113 @@ async function getHotspotProfilesRadius() {
             };
 
             [...replyRows, ...checkRows].forEach(attr => {
-                if (attr.attribute === 'MikroTik-Rate-Limit' || attr.attribute === 'Mikrotik-Rate-Limit') {
-                    profile['rate-limit'] = attr.value;
-                } else if (attr.attribute === 'Session-Timeout') {
-                    profile['session-timeout'] = attr.value;
-                } else if (attr.attribute === 'Idle-Timeout') {
-                    profile['idle-timeout'] = attr.value;
-                } else if (attr.attribute === 'Mikrotik-Shared-Users' || attr.attribute === 'MikroTik-Shared-Users' || attr.attribute === 'Simultaneous-Use') {
-                    profile['shared-users'] = attr.value;
+                switch (attr.attribute) {
+                    case 'MikroTik-Rate-Limit':
+                    case 'Mikrotik-Rate-Limit':
+                        profile['rate-limit'] = attr.value;
+                        break;
+                    case 'Session-Timeout': {
+                        const formatted = formatSecondsToDuration(attr.value);
+                        if (formatted) {
+                            profile.sessionTimeout = formatted.value;
+                            profile.sessionTimeoutUnit = formatted.unit;
+                            profile['session-timeout'] = formatted.string;
+                        } else {
+                            const parsed = parseTimeoutValue(attr.value);
+                            profile.sessionTimeout = parsed.raw;
+                            profile.sessionTimeoutUnit = parsed.unit;
+                            profile['session-timeout'] = attr.value;
+                        }
+                        break;
+                    }
+                    case 'Max-All-Session': {
+                        const formatted = formatSecondsToDuration(attr.value);
+                        if (formatted) {
+                            profile.limitUptimeSeconds = formatted.seconds;
+                            profile.limitUptimeValue = formatted.value;
+                            profile.limitUptimeUnit = formatted.unit;
+                            profile['limit-uptime'] = formatted.string;
+                        }
+                        break;
+                    }
+                    case 'Idle-Timeout': {
+                        const formatted = formatSecondsToDuration(attr.value);
+                        if (formatted) {
+                            profile.idleTimeout = formatted.value;
+                            profile.idleTimeoutUnit = formatted.unit;
+                            profile['idle-timeout'] = formatted.string;
+                        } else {
+                            const parsed = parseTimeoutValue(attr.value);
+                            profile.idleTimeout = parsed.raw;
+                            profile.idleTimeoutUnit = parsed.unit;
+                            profile['idle-timeout'] = attr.value;
+                        }
+                        break;
+                    }
+                    case 'Expire-After': {
+                        const formatted = formatSecondsToDuration(attr.value);
+                        if (formatted) {
+                            profile.validitySeconds = formatted.seconds;
+                            profile.validityValue = formatted.value;
+                            profile.validityUnit = formatted.unit;
+                            profile.validityString = formatted.string;
+                        }
+                        break;
+                    }
+                    case 'Mikrotik-Shared-Users':
+                    case 'MikroTik-Shared-Users':
+                    case 'Simultaneous-Use':
+                        profile['shared-users'] = attr.value;
+                        break;
                 }
             });
 
             if (meta) {
                 const rateUnit = meta.rate_limit_unit ? meta.rate_limit_unit.toUpperCase() : '';
-                if (!profile['rate-limit'] && meta.rate_limit_value && rateUnit) {
-                    profile['rate-limit'] = `${meta.rate_limit_value}${rateUnit}/${meta.rate_limit_value}${rateUnit}`;
-                }
-
-                const sessionUnit = meta.session_timeout_unit ? meta.session_timeout_unit.toLowerCase() : '';
-                if (meta.session_timeout_value && sessionUnit) {
-                    profile['session-timeout'] = `${meta.session_timeout_value}${sessionUnit}`;
-                }
-
-                const idleUnit = meta.idle_timeout_unit ? meta.idle_timeout_unit.toLowerCase() : '';
-                if (meta.idle_timeout_value && idleUnit) {
-                    profile['idle-timeout'] = `${meta.idle_timeout_value}${idleUnit}`;
+                if (meta.rate_limit_value && rateUnit) {
+                    const formatted = `${meta.rate_limit_value}${rateUnit}/${meta.rate_limit_value}${rateUnit}`;
+                    if (!profile['rate-limit']) {
+                        profile['rate-limit'] = formatted;
+                    }
+                    profile.rateLimit = meta.rate_limit_value;
+                    profile.rateLimitUnit = rateUnit;
                 }
 
                 if (meta.shared_users) {
+                    profile.sharedUsers = meta.shared_users;
                     profile['shared-users'] = meta.shared_users;
+                }
+
+                const limitUnit = meta.limit_uptime_unit ? meta.limit_uptime_unit.toLowerCase() : '';
+                if (meta.limit_uptime_value && limitUnit) {
+                    const formatted = `${meta.limit_uptime_value}${limitUnit}`;
+                    profile.limitUptimeValue = meta.limit_uptime_value;
+                    profile.limitUptimeUnit = limitUnit;
+                    profile['limit-uptime'] = formatted;
+                    const seconds = durationToSeconds(meta.limit_uptime_value, limitUnit);
+                    if (seconds) {
+                        profile.limitUptimeSeconds = seconds;
+                    }
+                }
+
+                const validityUnit = meta.validity_unit ? meta.validity_unit.toLowerCase() : '';
+                if (meta.validity_value && validityUnit) {
+                    const formatted = `${meta.validity_value}${validityUnit}`;
+                    profile.validityValue = meta.validity_value;
+                    profile.validityUnit = validityUnit;
+                    profile.validityString = formatted;
+                    const seconds = durationToSeconds(meta.validity_value, validityUnit);
+                    if (seconds) {
+                        profile.validitySeconds = seconds;
+                    }
                 }
             }
 
-            if (profile['shared-users'] !== null && profile['shared-users'] !== undefined) {
-                profile.sharedUsers = profile['shared-users'];
+            if (profile['limit-uptime']) {
+                profile.limitUptimeString = profile['limit-uptime'];
+            }
+            if (profile.validityString) {
+                profile['validity-period'] = profile.validityString;
             }
 
             profiles.push(profile);
@@ -4568,6 +4787,375 @@ async function getHotspotProfilesRadius() {
     }
 }
 
+// ============================================
+// HOTSPOT SERVER PROFILE FUNCTIONS
+// ============================================
+
+async function getHotspotServerProfiles(routerObj = null) {
+    let conn = null;
+    try {
+        if (routerObj) {
+            logger.info(`Connecting to router for server profiles: ${routerObj.name} (${routerObj.nas_ip}:${routerObj.port || 8728})`);
+            try {
+                conn = await getMikrotikConnectionForRouter(routerObj);
+            } catch (connError) {
+                logger.error(`Connection failed to ${routerObj.name}:`, connError.message);
+                return { success: false, message: `Koneksi gagal ke ${routerObj.name}: ${connError.message}`, data: [] };
+            }
+        } else {
+            logger.info('Using default Mikrotik connection for server profiles');
+            conn = await getMikrotikConnection();
+        }
+        
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal: Tidak dapat membuat koneksi', data: [] };
+        }
+        
+        logger.info('Fetching hotspot server profiles from Mikrotik...');
+        try {
+            let profiles = null;
+            try {
+                profiles = await conn.write('/ip/hotspot/profile/print');
+                logger.info(`Command /ip/hotspot/profile/print berhasil, mendapatkan ${profiles ? profiles.length : 0} profiles`);
+            } catch (cmdError) {
+                logger.error(`Command /ip/hotspot/profile/print tidak tersedia: ${cmdError.message}`);
+                throw cmdError;
+            }
+            
+            if (!profiles) {
+                return { success: false, message: 'Tidak ada data profile yang ditemukan', data: [] };
+            }
+            
+            logger.info(`Successfully retrieved ${profiles ? profiles.length : 0} server profiles from ${routerObj ? routerObj.name : 'default'}`);
+            
+            const validProfiles = [];
+            if (Array.isArray(profiles)) {
+                profiles.forEach((prof, idx) => {
+                    if (prof && (prof.name || prof['name'])) {
+                        const normalizedProfile = {
+                            id: prof['.id'] || prof.id || '',
+                            name: prof.name || prof['name'] || '',
+                            'hotspot-address': prof['hotspot-address'] || prof['hotspot-address'] || '',
+                            'dns-name': prof['dns-name'] || prof['dns-name'] || '',
+                            'html-directory': prof['html-directory'] || prof['html-directory'] || '',
+                            'html-directory-override': prof['html-directory-override'] || prof['html-directory-override'] || '',
+                            'rate-limit': prof['rate-limit'] || prof['rate-limit'] || '',
+                            'http-proxy': prof['http-proxy'] || prof['http-proxy'] || '',
+                            'http-proxy-port': prof['http-proxy-port'] || prof['http-proxy-port'] || '',
+                            'smtp-server': prof['smtp-server'] || prof['smtp-server'] || '',
+                            'session-timeout': prof['session-timeout'] || '',
+                            'idle-timeout': prof['idle-timeout'] || '',
+                            'shared-users': prof['shared-users'] || '1',
+                            'open-status-page': prof['open-status-page'] || '',
+                            comment: prof.comment || '',
+                            disabled: prof.disabled === 'true' || prof.disabled === true
+                        };
+                        
+                        if (routerObj) {
+                            normalizedProfile.nas_id = routerObj.id;
+                            normalizedProfile.nas_name = routerObj.name;
+                            normalizedProfile.nas_ip = routerObj.nas_ip;
+                        }
+                        
+                        validProfiles.push(normalizedProfile);
+                        logger.debug(`  Server Profile ${idx + 1}: ${normalizedProfile.name} (hotspot-address: ${normalizedProfile['hotspot-address']}, dns-name: ${normalizedProfile['dns-name']})`);
+                    }
+                });
+            }
+            logger.info(`Valid server profiles after parsing: ${validProfiles.length}`);
+            
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    logger.warn('Error closing connection:', closeError.message);
+                }
+            }
+            
+            return {
+                success: true,
+                message: `Ditemukan ${validProfiles.length} server profile hotspot`,
+                data: validProfiles
+            };
+        } catch (cmdError) {
+            logger.error(`Command tidak tersedia di router ${routerObj ? routerObj.name : 'default'}: ${cmdError.message}`);
+            
+            if (routerObj && conn && typeof conn.close === 'function') {
+                try {
+                    await conn.close();
+                } catch (closeError) {
+                    // Ignore
+                }
+            }
+            
+            return { 
+                success: false, 
+                message: `Router tidak mendukung fitur Server Profile Hotspot atau versi RouterOS tidak kompatibel: ${cmdError.message}`, 
+                data: [] 
+            };
+        }
+    } catch (error) {
+        logger.error(`Error getting hotspot server profiles from ${routerObj ? routerObj.name : 'default'}: ${error.message}`);
+        
+        if (routerObj && conn && typeof conn.close === 'function') {
+            try {
+                await conn.close();
+            } catch (closeError) {
+                // Ignore
+            }
+        }
+        
+        return { success: false, message: `Gagal ambil server profile hotspot: ${error.message}`, data: [] };
+    }
+}
+
+async function getHotspotServerProfilesRadius() {
+    const conn = await getRadiusConnection();
+    try {
+        const [tableCheck] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'hotspot_server_profiles'
+        `);
+        
+        if (tableCheck.length === 0 || tableCheck[0].count === 0) {
+            await conn.end();
+            logger.warn('Tabel hotspot_server_profiles belum dibuat. Silakan jalankan: mysql -u root -p < setup_hotspot_server_profiles_table.sql');
+            return {
+                success: false,
+                message: 'Tabel hotspot_server_profiles belum dibuat. Silakan jalankan script setup: mysql -u root -p < setup_hotspot_server_profiles_table.sql',
+                data: []
+            };
+        }
+        
+        const [rows] = await conn.execute(`
+            SELECT id, name, rate_limit, session_timeout, idle_timeout, shared_users,
+                   open_status_page, http_cookie_lifetime, split_user_domain,
+                   status_autorefresh, copy_from, disabled, comment,
+                   created_at, updated_at
+            FROM hotspot_server_profiles
+            WHERE disabled = 0
+            ORDER BY name
+        `);
+        
+        const profiles = rows.map(row => ({
+            '.id': row.id.toString(),
+            id: row.id,
+            name: row.name,
+            'rate-limit': row.rate_limit || '',
+            'session-timeout': row.session_timeout || '',
+            'idle-timeout': row.idle_timeout || '',
+            'shared-users': row.shared_users || 1,
+            'open-status-page': row.open_status_page || 'http-login',
+            'http-cookie-lifetime': row.http_cookie_lifetime || 0,
+            'split-user-domain': row.split_user_domain ? 'yes' : 'no',
+            'status-autorefresh': row.status_autorefresh || 'none',
+            'copy-from': row.copy_from || '',
+            disabled: row.disabled ? 'true' : 'false',
+            comment: row.comment || '',
+            nas_name: 'RADIUS',
+            nas_ip: 'RADIUS Server',
+            created_at: row.created_at,
+            updated_at: row.updated_at
+        }));
+        
+        await conn.end();
+        return {
+            success: true,
+            message: `Ditemukan ${profiles.length} server profile hotspot dari RADIUS`,
+            data: profiles
+        };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting hotspot server profiles from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal ambil server profile hotspot dari RADIUS: ${error.message}`, data: [] };
+    }
+}
+
+async function addHotspotServerProfileRadius(profileData) {
+    const conn = await getRadiusConnection();
+    try {
+        const [tableCheck] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'hotspot_server_profiles'
+        `);
+        
+        if (tableCheck.length === 0 || tableCheck[0].count === 0) {
+            await conn.end();
+            return {
+                success: false,
+                message: 'Tabel hotspot_server_profiles belum dibuat. Silakan jalankan script setup terlebih dahulu: mysql -u root -p < setup_hotspot_server_profiles_table.sql'
+            };
+        }
+        
+        const name = (profileData.name || '').trim().toLowerCase().replace(/\s+/g, '-');
+        
+        if (!name || name === '') {
+            await conn.end();
+            return { success: false, message: 'Nama server profile tidak boleh kosong' };
+        }
+        
+        const [existing] = await conn.execute(`
+            SELECT COUNT(*) as count FROM hotspot_server_profiles WHERE name = ?
+        `, [name]);
+        
+        if (existing && existing.length > 0 && existing[0].count > 0) {
+            await conn.end();
+            return { success: false, message: `Server profile dengan nama \"${name}\" sudah ada` };
+        }
+        
+        await conn.execute(`
+            INSERT INTO hotspot_server_profiles (
+                name, rate_limit, session_timeout, idle_timeout, shared_users,
+                open_status_page, http_cookie_lifetime, split_user_domain,
+                status_autorefresh, copy_from, disabled, comment
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            name,
+            profileData['rate-limit'] || null,
+            profileData['session-timeout'] || null,
+            profileData['idle-timeout'] || null,
+            parseInt(profileData['shared-users']) || 1,
+            profileData['open-status-page'] || 'http-login',
+            parseInt(profileData['http-cookie-lifetime']) || 0,
+            profileData['split-user-domain'] === 'yes' ? 1 : 0,
+            profileData['status-autorefresh'] || 'none',
+            profileData['copy-from'] || null,
+            profileData.disabled === 'true' ? 1 : 0,
+            profileData.comment || null
+        ]);
+        
+        await conn.end();
+        logger.info(`Successfully added hotspot server profile to RADIUS: ${name}`);
+        return { success: true, message: `Server profile \"${name}\" berhasil ditambahkan ke RADIUS` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error adding hotspot server profile to RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal menambah server profile: ${error.message}` };
+    }
+}
+
+async function editHotspotServerProfileRadius(id, profileData) {
+    const conn = await getRadiusConnection();
+    try {
+        const name = (profileData.name || '').trim().toLowerCase().replace(/\s+/g, '-');
+        
+        if (!name || name === '') {
+            await conn.end();
+            return { success: false, message: 'Nama server profile tidak boleh kosong' };
+        }
+        
+        const [existing] = await conn.execute(`
+            SELECT COUNT(*) as count FROM hotspot_server_profiles WHERE name = ? AND id != ?
+        `, [name, id]);
+        
+        if (existing && existing.length > 0 && existing[0].count > 0) {
+            await conn.end();
+            return { success: false, message: `Server profile dengan nama \"${name}\" sudah ada` };
+        }
+        
+        await conn.execute(`
+            UPDATE hotspot_server_profiles SET
+                name = ?, rate_limit = ?, session_timeout = ?, idle_timeout = ?,
+                shared_users = ?, open_status_page = ?, http_cookie_lifetime = ?,
+                split_user_domain = ?, status_autorefresh = ?, copy_from = ?,
+                disabled = ?, comment = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `, [
+            name,
+            profileData['rate-limit'] || null,
+            profileData['session-timeout'] || null,
+            profileData['idle-timeout'] || null,
+            parseInt(profileData['shared-users']) || 1,
+            profileData['open-status-page'] || 'http-login',
+            parseInt(profileData['http-cookie-lifetime']) || 0,
+            profileData['split-user-domain'] === 'yes' ? 1 : 0,
+            profileData['status-autorefresh'] || 'none',
+            profileData['copy-from'] || null,
+            profileData.disabled === 'true' ? 1 : 0,
+            profileData.comment || null,
+            id
+        ]);
+        
+        await conn.end();
+        logger.info(`Successfully updated hotspot server profile in RADIUS: ${name}`);
+        return { success: true, message: `Server profile \"${name}\" berhasil diupdate` };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error updating hotspot server profile in RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal update server profile: ${error.message}` };
+    }
+}
+
+async function deleteHotspotServerProfileRadius(id) {
+    const conn = await getRadiusConnection();
+    try {
+        await conn.execute(`
+            UPDATE hotspot_server_profiles SET disabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+        `, [id]);
+        
+        await conn.end();
+        logger.info(`Successfully disabled hotspot server profile in RADIUS: ID ${id}`);
+        return { success: true, message: 'Server profile berhasil dihapus (disabled)' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error deleting hotspot server profile from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal menghapus server profile: ${error.message}` };
+    }
+}
+
+async function getHotspotServerProfileDetailRadius(id) {
+    const conn = await getRadiusConnection();
+    try {
+        const [rows] = await conn.execute(`
+            SELECT id, name, rate_limit, session_timeout, idle_timeout, shared_users,
+                   open_status_page, http_cookie_lifetime, split_user_domain,
+                   status_autorefresh, copy_from, disabled, comment,
+                   created_at, updated_at
+            FROM hotspot_server_profiles
+            WHERE id = ?
+        `, [id]);
+        
+        if (rows.length === 0) {
+            await conn.end();
+            return { success: false, message: 'Server profile tidak ditemukan', data: null };
+        }
+        
+        const row = rows[0];
+        const profile = {
+            '.id': row.id.toString(),
+            id: row.id,
+            name: row.name,
+            'rate-limit': row.rate_limit || '',
+            'session-timeout': row.session_timeout || '',
+            'idle-timeout': row.idle_timeout || '',
+            'shared-users': row.shared_users || 1,
+            'open-status-page': row.open_status_page || 'http-login',
+            'http-cookie-lifetime': row.http_cookie_lifetime || 0,
+            'split-user-domain': row.split_user_domain ? 'yes' : 'no',
+            'status-autorefresh': row.status_autorefresh || 'none',
+            'copy-from': row.copy_from || '',
+            disabled: row.disabled ? 'true' : 'false',
+            comment: row.comment || '',
+            nas_name: 'RADIUS',
+            nas_ip: 'RADIUS Server',
+            created_at: row.created_at,
+            updated_at: row.updated_at
+        };
+        
+        await conn.end();
+        return { success: true, data: profile };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting hotspot server profile detail from RADIUS: ${error.message}`);
+        return { success: false, message: `Gagal ambil detail server profile: ${error.message}`, data: null };
+    }
+}
+
 async function ensureHotspotProfilesMetadataTable(conn) {
     try {
         const [tableCheck] = await conn.execute(`
@@ -4598,7 +5186,8 @@ async function getHotspotProfilesMetadata(conn, groupnames = []) {
     const [rows] = await conn.execute(`
         SELECT groupname, display_name, comment, rate_limit_value, rate_limit_unit,
                burst_limit_value, burst_limit_unit, session_timeout_value, session_timeout_unit,
-               idle_timeout_value, idle_timeout_unit, shared_users, local_address, remote_address,
+               idle_timeout_value, idle_timeout_unit, limit_uptime_value, limit_uptime_unit,
+               validity_value, validity_unit, shared_users, local_address, remote_address,
                dns_server, parent_queue, address_list
         FROM hotspot_profiles
         WHERE groupname IN (${placeholders})
@@ -4610,7 +5199,6 @@ async function getHotspotProfilesMetadata(conn, groupnames = []) {
     });
     return map;
 }
-
 async function getHotspotProfileMetadata(conn, groupname) {
     if (!groupname) return null;
     const exists = await ensureHotspotProfilesMetadataTable(conn);
@@ -4619,7 +5207,8 @@ async function getHotspotProfileMetadata(conn, groupname) {
     const [rows] = await conn.execute(`
         SELECT groupname, display_name, comment, rate_limit_value, rate_limit_unit,
                burst_limit_value, burst_limit_unit, session_timeout_value, session_timeout_unit,
-               idle_timeout_value, idle_timeout_unit, shared_users, local_address, remote_address,
+               idle_timeout_value, idle_timeout_unit, limit_uptime_value, limit_uptime_unit,
+               validity_value, validity_unit, shared_users, local_address, remote_address,
                dns_server, parent_queue, address_list
         FROM hotspot_profiles
         WHERE groupname = ?
@@ -4640,9 +5229,11 @@ async function saveHotspotProfileMetadata(conn, metadata) {
             burst_limit_value, burst_limit_unit,
             session_timeout_value, session_timeout_unit,
             idle_timeout_value, idle_timeout_unit,
+            limit_uptime_value, limit_uptime_unit,
+            validity_value, validity_unit,
             shared_users, local_address, remote_address,
             dns_server, parent_queue, address_list
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             display_name = VALUES(display_name),
             comment = VALUES(comment),
@@ -4654,6 +5245,10 @@ async function saveHotspotProfileMetadata(conn, metadata) {
             session_timeout_unit = VALUES(session_timeout_unit),
             idle_timeout_value = VALUES(idle_timeout_value),
             idle_timeout_unit = VALUES(idle_timeout_unit),
+            limit_uptime_value = VALUES(limit_uptime_value),
+            limit_uptime_unit = VALUES(limit_uptime_unit),
+            validity_value = VALUES(validity_value),
+            validity_unit = VALUES(validity_unit),
             shared_users = VALUES(shared_users),
             local_address = VALUES(local_address),
             remote_address = VALUES(remote_address),
@@ -4672,6 +5267,10 @@ async function saveHotspotProfileMetadata(conn, metadata) {
         metadata.sessionTimeoutUnit,
         metadata.idleTimeoutValue,
         metadata.idleTimeoutUnit,
+        metadata.limitUptimeValue,
+        metadata.limitUptimeUnit,
+        metadata.validityValue,
+        metadata.validityUnit,
         metadata.sharedUsers,
         metadata.localAddress,
         metadata.remoteAddress,
@@ -4808,7 +5407,6 @@ async function deletePPPoEProfileMetadata(conn, groupname) {
     await conn.execute('DELETE FROM pppoe_profiles WHERE groupname = ?', [groupname]);
     return true;
 }
-
 // Fungsi untuk mendapatkan detail profile hotspot (RADIUS)
 async function getHotspotProfileDetailRadius(groupname) {
     const conn = await getRadiusConnection();
@@ -4850,7 +5448,15 @@ async function getHotspotProfileDetailRadius(groupname) {
             rateLimit: null,
             sessionTimeout: null,
             idleTimeout: null,
-            sharedUsers: metadata?.shared_users || null,
+            'limit-uptime': null,
+            'shared-users': metadata?.shared_users || null,
+            limitUptimeValue: metadata?.limit_uptime_value || null,
+            limitUptimeUnit: metadata?.limit_uptime_unit || null,
+            limitUptimeSeconds: null,
+            validityValue: metadata?.validity_value || null,
+            validityUnit: metadata?.validity_unit || null,
+            validitySeconds: null,
+            validityString: null,
             rateLimitUnit: null,
             sessionTimeoutUnit: null,
             idleTimeoutUnit: null,
@@ -4864,8 +5470,7 @@ async function getHotspotProfileDetailRadius(groupname) {
             is_radius: true,
             'rate-limit': null,
             'session-timeout': null,
-            'idle-timeout': null,
-            'shared-users': metadata?.shared_users || null
+            'idle-timeout': null
         };
 
         const parseTimeoutValue = (value) => {
@@ -4906,23 +5511,56 @@ async function getHotspotProfileDetailRadius(groupname) {
                     break;
                 }
                 case 'Session-Timeout': {
-                    const parsed = parseTimeoutValue(attr.value);
-                    profile.sessionTimeout = parsed.raw;
-                    profile.sessionTimeoutUnit = parsed.unit;
-                    profile['session-timeout'] = attr.value;
+                    const formatted = formatSecondsToDuration(attr.value);
+                    if (formatted) {
+                        profile.sessionTimeout = formatted.value;
+                        profile.sessionTimeoutUnit = formatted.unit;
+                        profile['session-timeout'] = formatted.string;
+                    } else {
+                        const parsed = parseTimeoutValue(attr.value);
+                        profile.sessionTimeout = parsed.raw;
+                        profile.sessionTimeoutUnit = parsed.unit;
+                        profile['session-timeout'] = attr.value;
+                    }
+                    break;
+                }
+                case 'Max-All-Session': {
+                    const formatted = formatSecondsToDuration(attr.value);
+                    if (formatted) {
+                        profile.limitUptimeSeconds = formatted.seconds;
+                        profile.limitUptimeValue = formatted.value;
+                        profile.limitUptimeUnit = formatted.unit;
+                        profile['limit-uptime'] = formatted.string;
+                    }
                     break;
                 }
                 case 'Idle-Timeout': {
-                    const parsed = parseTimeoutValue(attr.value);
-                    profile.idleTimeout = parsed.raw;
-                    profile.idleTimeoutUnit = parsed.unit;
-                    profile['idle-timeout'] = attr.value;
+                    const formatted = formatSecondsToDuration(attr.value);
+                    if (formatted) {
+                        profile.idleTimeout = formatted.value;
+                        profile.idleTimeoutUnit = formatted.unit;
+                        profile['idle-timeout'] = formatted.string;
+                    } else {
+                        const parsed = parseTimeoutValue(attr.value);
+                        profile.idleTimeout = parsed.raw;
+                        profile.idleTimeoutUnit = parsed.unit;
+                        profile['idle-timeout'] = attr.value;
+                    }
+                    break;
+                }
+                case 'Expire-After': {
+                    const formatted = formatSecondsToDuration(attr.value);
+                    if (formatted) {
+                        profile.validitySeconds = formatted.seconds;
+                        profile.validityValue = formatted.value;
+                        profile.validityUnit = formatted.unit;
+                        profile.validityString = formatted.string;
+                    }
                     break;
                 }
                 case 'Mikrotik-Shared-Users':
                 case 'MikroTik-Shared-Users':
                 case 'Simultaneous-Use': {
-                    profile.sharedUsers = attr.value;
                     profile['shared-users'] = attr.value;
                     break;
                 }
@@ -4972,6 +5610,37 @@ async function getHotspotProfileDetailRadius(groupname) {
                 profile.sharedUsers = metadata.shared_users;
                 profile['shared-users'] = metadata.shared_users;
             }
+
+            const limitUnit = metadata.limit_uptime_unit ? metadata.limit_uptime_unit.toLowerCase() : '';
+            if (metadata.limit_uptime_value && limitUnit) {
+                const formatted = `${metadata.limit_uptime_value}${limitUnit}`;
+                profile.limitUptimeValue = metadata.limit_uptime_value;
+                profile.limitUptimeUnit = limitUnit;
+                profile['limit-uptime'] = formatted;
+                const seconds = durationToSeconds(metadata.limit_uptime_value, limitUnit);
+                if (seconds) {
+                    profile.limitUptimeSeconds = seconds;
+                }
+            }
+
+            const validityUnit = metadata.validity_unit ? metadata.validity_unit.toLowerCase() : '';
+            if (metadata.validity_value && validityUnit) {
+                const formatted = `${metadata.validity_value}${validityUnit}`;
+                profile.validityValue = metadata.validity_value;
+                profile.validityUnit = validityUnit;
+                profile.validityString = formatted;
+                const seconds = durationToSeconds(metadata.validity_value, validityUnit);
+                if (seconds) {
+                    profile.validitySeconds = seconds;
+                }
+            }
+        }
+
+        if (profile['limit-uptime']) {
+            profile.limitUptimeString = profile['limit-uptime'];
+        }
+        if (profile.validityString) {
+            profile['validity-period'] = profile.validityString;
         }
 
         await conn.end();
@@ -4984,401 +5653,6 @@ async function getHotspotProfileDetailRadius(groupname) {
         await conn.end();
         logger.error(`Error getting hotspot profile detail from RADIUS: ${error.message}`);
         return { success: false, message: `Gagal ambil detail profile: ${error.message}`, data: null };
-    }
-}
-
-// ============================================
-// HOTSPOT SERVER PROFILE FUNCTIONS
-// ============================================
-
-// Fungsi untuk mendapatkan daftar Server Profile Hotspot dari Mikrotik API
-async function getHotspotServerProfiles(routerObj = null) {
-    let conn = null;
-    try {
-        if (routerObj) {
-            logger.info(`Connecting to router for server profiles: ${routerObj.name} (${routerObj.nas_ip}:${routerObj.port || 8728})`);
-            try {
-                conn = await getMikrotikConnectionForRouter(routerObj);
-            } catch (connError) {
-                logger.error(`Connection failed to ${routerObj.name}:`, connError.message);
-                return { success: false, message: `Koneksi gagal ke ${routerObj.name}: ${connError.message}`, data: [] };
-            }
-        } else {
-            logger.info('Using default Mikrotik connection for server profiles');
-            conn = await getMikrotikConnection();
-        }
-        
-        if (!conn) {
-            logger.error('No Mikrotik connection available');
-            return { success: false, message: 'Koneksi ke Mikrotik gagal: Tidak dapat membuat koneksi', data: [] };
-        }
-        
-        logger.info('Fetching hotspot server profiles from Mikrotik...');
-        try {
-            // Gunakan /ip/hotspot/profile/print untuk Server Profile
-            // JANGAN gunakan /ip/hotspot/user/profile/print karena itu untuk User Profile!
-            let profiles = null;
-            try {
-                profiles = await conn.write('/ip/hotspot/profile/print');
-                logger.info(`Command /ip/hotspot/profile/print berhasil, mendapatkan ${profiles ? profiles.length : 0} profiles`);
-            } catch (cmdError) {
-                logger.error(`Command /ip/hotspot/profile/print tidak tersedia: ${cmdError.message}`);
-                // JANGAN fallback ke /ip/hotspot/user/profile karena itu bukan Server Profile!
-                throw cmdError;
-            }
-            
-            if (!profiles) {
-                return { success: false, message: 'Tidak ada data profile yang ditemukan', data: [] };
-            }
-            
-            logger.info(`Successfully retrieved ${profiles ? profiles.length : 0} server profiles from ${routerObj ? routerObj.name : 'default'}`);
-            
-            // Parse and validate profiles, attach router info if provided
-            const validProfiles = [];
-            if (Array.isArray(profiles)) {
-                profiles.forEach((prof, idx) => {
-                    if (prof && (prof.name || prof['name'])) {
-                        // Normalize profile data - INCLUDE SEMUA FIELD yang diperlukan untuk form
-                        const normalizedProfile = {
-                            id: prof['.id'] || prof.id || '',
-                            name: prof.name || prof['name'] || '',
-                            'hotspot-address': prof['hotspot-address'] || prof['hotspot-address'] || '',
-                            'dns-name': prof['dns-name'] || prof['dns-name'] || '',
-                            'html-directory': prof['html-directory'] || prof['html-directory'] || '',
-                            'html-directory-override': prof['html-directory-override'] || prof['html-directory-override'] || '',
-                            'rate-limit': prof['rate-limit'] || prof['rate-limit'] || '',
-                            'http-proxy': prof['http-proxy'] || prof['http-proxy'] || '',
-                            'http-proxy-port': prof['http-proxy-port'] || prof['http-proxy-port'] || '',
-                            'smtp-server': prof['smtp-server'] || prof['smtp-server'] || '',
-                            'session-timeout': prof['session-timeout'] || '',
-                            'idle-timeout': prof['idle-timeout'] || '',
-                            'shared-users': prof['shared-users'] || '1',
-                            'open-status-page': prof['open-status-page'] || '',
-                            comment: prof.comment || '',
-                            disabled: prof.disabled === 'true' || prof.disabled === true
-                        };
-                        
-                        // Attach router info to profile for tracking
-                        if (routerObj) {
-                            normalizedProfile.nas_id = routerObj.id;
-                            normalizedProfile.nas_name = routerObj.name;
-                            normalizedProfile.nas_ip = routerObj.nas_ip;
-                        }
-                        
-                        validProfiles.push(normalizedProfile);
-                        logger.debug(`  Server Profile ${idx + 1}: ${normalizedProfile.name} (hotspot-address: ${normalizedProfile['hotspot-address']}, dns-name: ${normalizedProfile['dns-name']})`);
-                    }
-                });
-            }
-            logger.info(`Valid server profiles after parsing: ${validProfiles.length}`);
-            
-            // Close connection if created for this router
-            if (routerObj && conn && typeof conn.close === 'function') {
-                try {
-                    await conn.close();
-                } catch (closeError) {
-                    logger.warn('Error closing connection:', closeError.message);
-                }
-            }
-            
-            return {
-                success: true,
-                message: `Ditemukan ${validProfiles.length} server profile hotspot`,
-                data: validProfiles
-            };
-        } catch (cmdError) {
-            // Jika command tidak tersedia, kemungkinan router tidak mendukung hotspot server profile
-            // Atau versi RouterOS tidak mendukung fitur ini
-            logger.error(`Command tidak tersedia di router ${routerObj ? routerObj.name : 'default'}: ${cmdError.message}`);
-            
-            // Close connection on error
-            if (routerObj && conn && typeof conn.close === 'function') {
-                try {
-                    await conn.close();
-                } catch (closeError) {
-                    // Ignore
-                }
-            }
-            
-            return { 
-                success: false, 
-                message: `Router tidak mendukung fitur Server Profile Hotspot atau versi RouterOS tidak kompatibel: ${cmdError.message}`, 
-                data: [] 
-            };
-        }
-    } catch (error) {
-        logger.error(`Error getting hotspot server profiles from ${routerObj ? routerObj.name : 'default'}: ${error.message}`);
-        
-        // Close connection on error
-        if (routerObj && conn && typeof conn.close === 'function') {
-            try {
-                await conn.close();
-            } catch (closeError) {
-                // Ignore
-            }
-        }
-        
-        return { success: false, message: `Gagal ambil server profile hotspot: ${error.message}`, data: [] };
-    }
-}
-// Fungsi untuk mendapatkan daftar Server Profile Hotspot dari RADIUS database
-async function getHotspotServerProfilesRadius() {
-    const conn = await getRadiusConnection();
-    try {
-        // Cek apakah tabel sudah ada terlebih dahulu
-        // Jika tidak ada, kita tidak bisa membuatnya karena user billing tidak punya CREATE permission
-        // Tabel harus dibuat dengan script SQL terpisah (setup_hotspot_server_profiles_table.sql)
-        const [tableCheck] = await conn.execute(`
-            SELECT COUNT(*) as count
-            FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-            AND table_name = 'hotspot_server_profiles'
-        `);
-        
-        if (tableCheck.length === 0 || tableCheck[0].count === 0) {
-            await conn.end();
-            logger.warn('Tabel hotspot_server_profiles belum dibuat. Silakan jalankan: mysql -u root -p < setup_hotspot_server_profiles_table.sql');
-            return {
-                success: false,
-                message: 'Tabel hotspot_server_profiles belum dibuat. Silakan jalankan script setup: mysql -u root -p < setup_hotspot_server_profiles_table.sql',
-                data: []
-            };
-        }
-        
-        // Ambil semua server profiles
-        const [rows] = await conn.execute(`
-            SELECT id, name, rate_limit, session_timeout, idle_timeout, shared_users,
-                   open_status_page, http_cookie_lifetime, split_user_domain,
-                   status_autorefresh, copy_from, disabled, comment,
-                   created_at, updated_at
-            FROM hotspot_server_profiles
-            WHERE disabled = 0
-            ORDER BY name
-        `);
-        
-        const profiles = rows.map(row => ({
-            '.id': row.id.toString(),
-            id: row.id,
-            name: row.name,
-            'rate-limit': row.rate_limit || '',
-            'session-timeout': row.session_timeout || '',
-            'idle-timeout': row.idle_timeout || '',
-            'shared-users': row.shared_users || 1,
-            'open-status-page': row.open_status_page || 'http-login',
-            'http-cookie-lifetime': row.http_cookie_lifetime || 0,
-            'split-user-domain': row.split_user_domain ? 'yes' : 'no',
-            'status-autorefresh': row.status_autorefresh || 'none',
-            'copy-from': row.copy_from || '',
-            disabled: row.disabled ? 'true' : 'false',
-            comment: row.comment || '',
-            nas_name: 'RADIUS',
-            nas_ip: 'RADIUS Server',
-            created_at: row.created_at,
-            updated_at: row.updated_at
-        }));
-        
-        await conn.end();
-        return {
-            success: true,
-            message: `Ditemukan ${profiles.length} server profile hotspot dari RADIUS`,
-            data: profiles
-        };
-    } catch (error) {
-        await conn.end();
-        logger.error(`Error getting hotspot server profiles from RADIUS: ${error.message}`);
-        return { success: false, message: `Gagal ambil server profile hotspot dari RADIUS: ${error.message}`, data: [] };
-    }
-}
-
-// Fungsi untuk menambah Server Profile Hotspot ke RADIUS
-async function addHotspotServerProfileRadius(profileData) {
-    const conn = await getRadiusConnection();
-    try {
-        // Cek apakah tabel sudah ada
-        const [tableCheck] = await conn.execute(`
-            SELECT COUNT(*) as count
-            FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-            AND table_name = 'hotspot_server_profiles'
-        `);
-        
-        if (tableCheck.length === 0 || tableCheck[0].count === 0) {
-            await conn.end();
-            return {
-                success: false,
-                message: 'Tabel hotspot_server_profiles belum dibuat. Silakan jalankan script setup terlebih dahulu: mysql -u root -p < setup_hotspot_server_profiles_table.sql'
-            };
-        }
-        
-        const name = (profileData.name || '').trim().toLowerCase().replace(/\s+/g, '-');
-        
-        if (!name || name === '') {
-            await conn.end();
-            return { success: false, message: 'Nama server profile tidak boleh kosong' };
-        }
-        
-        // Check if name already exists
-        const [existing] = await conn.execute(`
-            SELECT COUNT(*) as count FROM hotspot_server_profiles WHERE name = ?
-        `, [name]);
-        
-        if (existing && existing.length > 0 && existing[0].count > 0) {
-            await conn.end();
-            return { success: false, message: `Server profile dengan nama "${name}" sudah ada` };
-        }
-        
-        // Insert new server profile
-        await conn.execute(`
-            INSERT INTO hotspot_server_profiles (
-                name, rate_limit, session_timeout, idle_timeout, shared_users,
-                open_status_page, http_cookie_lifetime, split_user_domain,
-                status_autorefresh, copy_from, disabled, comment
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-            name,
-            profileData['rate-limit'] || null,
-            profileData['session-timeout'] || null,
-            profileData['idle-timeout'] || null,
-            parseInt(profileData['shared-users']) || 1,
-            profileData['open-status-page'] || 'http-login',
-            parseInt(profileData['http-cookie-lifetime']) || 0,
-            profileData['split-user-domain'] === 'yes' ? 1 : 0,
-            profileData['status-autorefresh'] || 'none',
-            profileData['copy-from'] || null,
-            profileData.disabled === 'true' ? 1 : 0,
-            profileData.comment || null
-        ]);
-        
-        await conn.end();
-        logger.info(`Successfully added hotspot server profile to RADIUS: ${name}`);
-        return { success: true, message: `Server profile "${name}" berhasil ditambahkan ke RADIUS` };
-    } catch (error) {
-        await conn.end();
-        logger.error(`Error adding hotspot server profile to RADIUS: ${error.message}`);
-        return { success: false, message: `Gagal menambah server profile: ${error.message}` };
-    }
-}
-
-// Fungsi untuk mengedit Server Profile Hotspot di RADIUS
-async function editHotspotServerProfileRadius(id, profileData) {
-    const conn = await getRadiusConnection();
-    try {
-        const name = (profileData.name || '').trim().toLowerCase().replace(/\s+/g, '-');
-        
-        if (!name || name === '') {
-            await conn.end();
-            return { success: false, message: 'Nama server profile tidak boleh kosong' };
-        }
-        
-        // Check if name already exists for another profile
-        const [existing] = await conn.execute(`
-            SELECT COUNT(*) as count FROM hotspot_server_profiles WHERE name = ? AND id != ?
-        `, [name, id]);
-        
-        if (existing && existing.length > 0 && existing[0].count > 0) {
-            await conn.end();
-            return { success: false, message: `Server profile dengan nama "${name}" sudah ada` };
-        }
-        
-        // Update server profile
-        await conn.execute(`
-            UPDATE hotspot_server_profiles SET
-                name = ?, rate_limit = ?, session_timeout = ?, idle_timeout = ?,
-                shared_users = ?, open_status_page = ?, http_cookie_lifetime = ?,
-                split_user_domain = ?, status_autorefresh = ?, copy_from = ?,
-                disabled = ?, comment = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `, [
-            name,
-            profileData['rate-limit'] || null,
-            profileData['session-timeout'] || null,
-            profileData['idle-timeout'] || null,
-            parseInt(profileData['shared-users']) || 1,
-            profileData['open-status-page'] || 'http-login',
-            parseInt(profileData['http-cookie-lifetime']) || 0,
-            profileData['split-user-domain'] === 'yes' ? 1 : 0,
-            profileData['status-autorefresh'] || 'none',
-            profileData['copy-from'] || null,
-            profileData.disabled === 'true' ? 1 : 0,
-            profileData.comment || null,
-            id
-        ]);
-        
-        await conn.end();
-        logger.info(`Successfully updated hotspot server profile in RADIUS: ${name}`);
-        return { success: true, message: `Server profile "${name}" berhasil diupdate` };
-    } catch (error) {
-        await conn.end();
-        logger.error(`Error updating hotspot server profile in RADIUS: ${error.message}`);
-        return { success: false, message: `Gagal update server profile: ${error.message}` };
-    }
-}
-
-// Fungsi untuk menghapus Server Profile Hotspot dari RADIUS
-async function deleteHotspotServerProfileRadius(id) {
-    const conn = await getRadiusConnection();
-    try {
-        // Soft delete (set disabled = 1) instead of hard delete
-        await conn.execute(`
-            UPDATE hotspot_server_profiles SET disabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-        `, [id]);
-        
-        await conn.end();
-        logger.info(`Successfully disabled hotspot server profile in RADIUS: ID ${id}`);
-        return { success: true, message: 'Server profile berhasil dihapus (disabled)' };
-    } catch (error) {
-        await conn.end();
-        logger.error(`Error deleting hotspot server profile from RADIUS: ${error.message}`);
-        return { success: false, message: `Gagal menghapus server profile: ${error.message}` };
-    }
-}
-
-// Fungsi untuk mendapatkan detail Server Profile Hotspot dari RADIUS
-async function getHotspotServerProfileDetailRadius(id) {
-    const conn = await getRadiusConnection();
-    try {
-        const [rows] = await conn.execute(`
-            SELECT id, name, rate_limit, session_timeout, idle_timeout, shared_users,
-                   open_status_page, http_cookie_lifetime, split_user_domain,
-                   status_autorefresh, copy_from, disabled, comment,
-                   created_at, updated_at
-            FROM hotspot_server_profiles
-            WHERE id = ?
-        `, [id]);
-        
-        if (rows.length === 0) {
-            await conn.end();
-            return { success: false, message: 'Server profile tidak ditemukan', data: null };
-        }
-        
-        const row = rows[0];
-        const profile = {
-            '.id': row.id.toString(),
-            id: row.id,
-            name: row.name,
-            'rate-limit': row.rate_limit || '',
-            'session-timeout': row.session_timeout || '',
-            'idle-timeout': row.idle_timeout || '',
-            'shared-users': row.shared_users || 1,
-            'open-status-page': row.open_status_page || 'http-login',
-            'http-cookie-lifetime': row.http_cookie_lifetime || 0,
-            'split-user-domain': row.split_user_domain ? 'yes' : 'no',
-            'status-autorefresh': row.status_autorefresh || 'none',
-            'copy-from': row.copy_from || '',
-            disabled: row.disabled ? 'true' : 'false',
-            comment: row.comment || '',
-            nas_name: 'RADIUS',
-            nas_ip: 'RADIUS Server',
-            created_at: row.created_at,
-            updated_at: row.updated_at
-        };
-        
-        await conn.end();
-        return { success: true, data: profile };
-    } catch (error) {
-        await conn.end();
-        logger.error(`Error getting hotspot server profile detail from RADIUS: ${error.message}`);
-        return { success: false, message: `Gagal ambil detail server profile: ${error.message}`, data: null };
     }
 }
 // Fungsi untuk mendapatkan daftar profile PPPoE dari RADIUS (yang digunakan oleh PPPoE users, BUKAN voucher)
@@ -5476,35 +5750,86 @@ async function getPPPoEProfilesRadius() {
                 'rate-limit': null,
                 'session-timeout': null,
                 'idle-timeout': null,
-                'simultaneous-use': null,
+                'limit-uptime': null,
+                'shared-users': null,
                 comment: meta?.comment || '',
-                'local-address': meta?.local_address || '',
-                'remote-address': meta?.remote_address || '',
-                'dns-server': meta?.dns_server || '',
-                'parent-queue': meta?.parent_queue || '',
-                'address-list': meta?.address_list || '',
-                'bridge-learning': meta?.bridge_learning || 'default',
-                'use-mpls': meta?.use_mpls || 'default',
-                'use-compression': meta?.use_compression || 'default',
-                'use-encryption': meta?.use_encryption || 'default',
-                'only-one': meta?.only_one || 'default',
-                'change-tcp-mss': meta?.change_tcp_mss || 'default',
-                'use-upnp': meta?.use_upnp || 'default',
+                localAddress: meta?.local_address || '',
+                remoteAddress: meta?.remote_address || '',
+                dnsServer: meta?.dns_server || '',
+                parentQueue: meta?.parent_queue || '',
+                addressList: meta?.address_list || '',
                 nas_name: 'RADIUS',
                 nas_ip: 'RADIUS Server',
-                is_radius: true
+                is_radius: true,
+                limitUptimeValue: meta?.limit_uptime_value || null,
+                limitUptimeUnit: meta?.limit_uptime_unit || null,
+                limitUptimeSeconds: null,
+                validityValue: meta?.validity_value || null,
+                validityUnit: meta?.validity_unit || null,
+                validitySeconds: null,
+                validityString: null
             };
             
             // Parse attributes
             attrRows.forEach(attr => {
-                if (attr.attribute === 'MikroTik-Rate-Limit' || attr.attribute === 'Mikrotik-Rate-Limit') {
-                    profile['rate-limit'] = attr.value;
-                } else if (attr.attribute === 'Session-Timeout') {
-                    profile['session-timeout'] = attr.value;
-                } else if (attr.attribute === 'Idle-Timeout') {
-                    profile['idle-timeout'] = attr.value;
-                } else if (attr.attribute === 'Simultaneous-Use') {
-                    profile['simultaneous-use'] = attr.value;
+                switch (attr.attribute) {
+                    case 'MikroTik-Rate-Limit':
+                    case 'Mikrotik-Rate-Limit':
+                        profile['rate-limit'] = attr.value;
+                        break;
+                    case 'Session-Timeout': {
+                        const formatted = formatSecondsToDuration(attr.value);
+                        if (formatted) {
+                            profile.sessionTimeout = formatted.value;
+                            profile.sessionTimeoutUnit = formatted.unit;
+                            profile['session-timeout'] = formatted.string;
+                        } else {
+                            const parsed = parseTimeoutValue(attr.value);
+                            profile.sessionTimeout = parsed.raw;
+                            profile.sessionTimeoutUnit = parsed.unit;
+                            profile['session-timeout'] = attr.value;
+                        }
+                        break;
+                    }
+                    case 'Max-All-Session': {
+                        const formatted = formatSecondsToDuration(attr.value);
+                        if (formatted) {
+                            profile.limitUptimeSeconds = formatted.seconds;
+                            profile.limitUptimeValue = formatted.value;
+                            profile.limitUptimeUnit = formatted.unit;
+                            profile['limit-uptime'] = formatted.string;
+                        }
+                        break;
+                    }
+                    case 'Idle-Timeout': {
+                        const formatted = formatSecondsToDuration(attr.value);
+                        if (formatted) {
+                            profile.idleTimeout = formatted.value;
+                            profile.idleTimeoutUnit = formatted.unit;
+                            profile['idle-timeout'] = formatted.string;
+                        } else {
+                            const parsed = parseTimeoutValue(attr.value);
+                            profile.idleTimeout = parsed.raw;
+                            profile.idleTimeoutUnit = parsed.unit;
+                            profile['idle-timeout'] = attr.value;
+                        }
+                        break;
+                    }
+                    case 'Expire-After': {
+                        const formatted = formatSecondsToDuration(attr.value);
+                        if (formatted) {
+                            profile.validitySeconds = formatted.seconds;
+                            profile.validityValue = formatted.value;
+                            profile.validityUnit = formatted.unit;
+                            profile.validityString = formatted.string;
+                        }
+                        break;
+                    }
+                    case 'Mikrotik-Shared-Users':
+                    case 'MikroTik-Shared-Users':
+                    case 'Simultaneous-Use':
+                        profile['shared-users'] = attr.value;
+                        break;
                 }
             });
             
@@ -5512,6 +5837,13 @@ async function getPPPoEProfilesRadius() {
                 profile['rate-limit'] = meta.rate_limit;
             }
             
+            if (profile['limit-uptime']) {
+                profile.limitUptimeString = profile['limit-uptime'];
+            }
+            if (profile.validityString) {
+                profile['validity-period'] = profile.validityString;
+            }
+
             profiles.push(profile);
         }
         
@@ -5527,7 +5859,6 @@ async function getPPPoEProfilesRadius() {
         return { success: false, message: `Gagal ambil data profile PPPoE dari RADIUS: ${error.message}`, data: [] };
     }
 }
-
 // Fungsi untuk menambah profile PPPoE ke RADIUS (radgroupreply)
 async function addPPPoEProfileRadius(profileData) {
     const conn = await getRadiusConnection();
@@ -5659,7 +5990,6 @@ async function addPPPoEProfileRadius(profileData) {
         return { success: false, message: `Gagal menambahkan profile ke RADIUS: ${error.message}` };
     }
 }
-
 // Fungsi untuk edit profile PPPoE di RADIUS (radgroupreply)
 async function editPPPoEProfileRadius(profileData) {
     const conn = await getRadiusConnection();
@@ -5865,7 +6195,6 @@ async function editPPPoEProfileRadius(profileData) {
         return { success: false, message: `Gagal mengupdate profile di RADIUS: ${error.message}` };
     }
 }
-
 // Fungsi untuk hapus profile PPPoE dari RADIUS (radgroupreply)
 async function deletePPPoEProfileRadius(groupname) {
     const conn = await getRadiusConnection();
@@ -5949,37 +6278,130 @@ async function getPPPoEProfileDetailRadius(groupname) {
             'rate-limit': null,
             'session-timeout': null,
             'idle-timeout': null,
-            'simultaneous-use': null,
+            'limit-uptime': null,
+            'shared-users': metadata?.shared_users || null,
+            limitUptimeValue: metadata?.limit_uptime_value || null,
+            limitUptimeUnit: metadata?.limit_uptime_unit || null,
+            limitUptimeSeconds: null,
+            validityValue: metadata?.validity_value || null,
+            validityUnit: metadata?.validity_unit || null,
+            validitySeconds: null,
+            validityString: null,
             comment: metadata?.comment || '',
-            'local-address': metadata?.local_address || '',
-            'remote-address': metadata?.remote_address || '',
-            'dns-server': metadata?.dns_server || '',
-            'parent-queue': metadata?.parent_queue || '',
-            'address-list': metadata?.address_list || '',
-            'bridge-learning': metadata?.bridge_learning || 'default',
-            'use-mpls': metadata?.use_mpls || 'default',
-            'use-compression': metadata?.use_compression || 'default',
-            'use-encryption': metadata?.use_encryption || 'default',
-            'only-one': metadata?.only_one || 'default',
-            'change-tcp-mss': metadata?.change_tcp_mss || 'default',
-            'use-upnp': metadata?.use_upnp || 'default'
+            localAddress: metadata?.local_address || '',
+            remoteAddress: metadata?.remote_address || '',
+            dnsServer: metadata?.dns_server || '',
+            parentQueue: metadata?.parent_queue || '',
+            addressList: metadata?.address_list || '',
+            nas_name: 'RADIUS',
+            nas_ip: 'RADIUS Server',
+            is_radius: true
         };
         
         // Parse attributes
         [...attrRows, ...checkRows].forEach(attr => {
-            if (attr.attribute === 'MikroTik-Rate-Limit' || attr.attribute === 'Mikrotik-Rate-Limit') {
-                profile['rate-limit'] = attr.value;
-            } else if (attr.attribute === 'Session-Timeout') {
-                profile['session-timeout'] = attr.value;
-            } else if (attr.attribute === 'Idle-Timeout') {
-                profile['idle-timeout'] = attr.value;
-            } else if (attr.attribute === 'Simultaneous-Use') {
-                profile['simultaneous-use'] = attr.value;
+            switch (attr.attribute) {
+                case 'MikroTik-Rate-Limit':
+                case 'Mikrotik-Rate-Limit':
+                    profile['rate-limit'] = attr.value;
+                    break;
+                case 'Session-Timeout': {
+                    const formatted = formatSecondsToDuration(attr.value);
+                    if (formatted) {
+                        profile.sessionTimeout = formatted.value;
+                        profile.sessionTimeoutUnit = formatted.unit;
+                        profile['session-timeout'] = formatted.string;
+                    } else {
+                        const parsed = parseTimeoutValue(attr.value);
+                        profile.sessionTimeout = parsed.raw;
+                        profile.sessionTimeoutUnit = parsed.unit;
+                        profile['session-timeout'] = attr.value;
+                    }
+                    break;
+                }
+                case 'Max-All-Session': {
+                    const formatted = formatSecondsToDuration(attr.value);
+                    if (formatted) {
+                        profile.limitUptimeSeconds = formatted.seconds;
+                        profile.limitUptimeValue = formatted.value;
+                        profile.limitUptimeUnit = formatted.unit;
+                        profile['limit-uptime'] = formatted.string;
+                    }
+                    break;
+                }
+                case 'Idle-Timeout': {
+                    const formatted = formatSecondsToDuration(attr.value);
+                    if (formatted) {
+                        profile.idleTimeout = formatted.value;
+                        profile.idleTimeoutUnit = formatted.unit;
+                        profile['idle-timeout'] = formatted.string;
+                    } else {
+                        const parsed = parseTimeoutValue(attr.value);
+                        profile.idleTimeout = parsed.raw;
+                        profile.idleTimeoutUnit = parsed.unit;
+                        profile['idle-timeout'] = attr.value;
+                    }
+                    break;
+                }
+                case 'Expire-After': {
+                    const formatted = formatSecondsToDuration(attr.value);
+                    if (formatted) {
+                        profile.validitySeconds = formatted.seconds;
+                        profile.validityValue = formatted.value;
+                        profile.validityUnit = formatted.unit;
+                        profile.validityString = formatted.string;
+                    }
+                    break;
+                }
+                case 'Mikrotik-Shared-Users':
+                case 'MikroTik-Shared-Users':
+                case 'Simultaneous-Use':
+                    profile['shared-users'] = attr.value;
+                    break;
             }
         });
 
         if (!profile['rate-limit'] && metadata?.rate_limit) {
             profile['rate-limit'] = metadata.rate_limit;
+        }
+        
+        const idleUnit = metadata.idle_timeout_unit ? metadata.idle_timeout_unit.toLowerCase() : '';
+        if (metadata.idle_timeout_value && idleUnit) {
+            const formatted = `${metadata.idle_timeout_value}${idleUnit}`;
+            profile.idleTimeout = metadata.idle_timeout_value;
+            profile.idleTimeoutUnit = idleUnit;
+            profile['idle-timeout'] = formatted;
+        }
+
+        const limitUnit = metadata.limit_uptime_unit ? metadata.limit_uptime_unit.toLowerCase() : '';
+        if (metadata.limit_uptime_value && limitUnit) {
+            const formatted = `${metadata.limit_uptime_value}${limitUnit}`;
+            profile.limitUptimeValue = metadata.limit_uptime_value;
+            profile.limitUptimeUnit = limitUnit;
+            profile['limit-uptime'] = formatted;
+            const seconds = durationToSeconds(metadata.limit_uptime_value, limitUnit);
+            if (seconds) {
+                profile.limitUptimeSeconds = seconds;
+            }
+        }
+
+        const validityUnit = metadata.validity_unit ? metadata.validity_unit.toLowerCase() : '';
+        if (metadata.validity_value && validityUnit) {
+            const formatted = `${metadata.validity_value}${validityUnit}`;
+            profile.validityValue = metadata.validity_value;
+            profile.validityUnit = validityUnit;
+            profile.validityString = formatted;
+            const seconds = durationToSeconds(metadata.validity_value, validityUnit);
+            if (seconds) {
+                profile.validitySeconds = seconds;
+            }
+        }
+        
+        if (profile['limit-uptime']) {
+            profile.limitUptimeString = profile['limit-uptime'];
+        }
+        if (profile.validityString) {
+            profile['validity-period'] = profile.validityString;
         }
         
         await conn.end();
@@ -6041,7 +6463,6 @@ async function addPPPoEProfile(profileData, routerObj = null) {
         return { success: false, message: error.message };
     }
 }
-
 // Fungsi untuk edit profile PPPoE
 async function editPPPoEProfile(profileData, routerObj = null) {
     try {
@@ -6326,7 +6747,6 @@ async function getVoucherGenerationSettings() {
         return {};
     }
 }
-
 // Fungsi untuk test generate voucher (tanpa menyimpan ke Mikrotik)
 async function generateTestVoucher(settings) {
     try {
@@ -6439,7 +6859,6 @@ fs.watchFile(settingsPath, { interval: 2000 }, (curr, prev) => {
         logger.error('Gagal cek perubahan konfigurasi Mikrotik:', e.message);
     }
 });
-
 // Export all functions
 module.exports = {
     setSock,
@@ -6523,5 +6942,7 @@ module.exports = {
     unsuspendUserRadius,
     syncPackageLimitsToRadius,
     syncPackageLimitsToMikrotik,
-    buildMikrotikRateLimit
+    buildMikrotikRateLimit,
+    formatSecondsToDuration,
+    durationToSeconds
 };
