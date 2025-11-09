@@ -23,17 +23,17 @@ router.get('/api/list', (req, res) => {
 // Get hotspot profiles from Mikrotik
 router.get('/api/hotspot-profiles', async (req, res) => {
     try {
-        const result = await MikrotikAPI.getHotspotProfiles();
+        const result = await MikrotikAPI.getHotspotProfilesRadius();
         
         if (result.success && result.data) {
-            // Transform data to match expected format
             const profiles = result.data.map(profile => ({
-                name: profile.name || profile['.id'],
-                timeLimit: profile['session-timeout'] || 'Unlimited',
-                id: profile['.id']
+                name: profile.name || profile.groupname,
+                timeLimit: profile['session-timeout'] || profile.sessionTimeout || 'Unlimited',
+                rateLimit: profile['rate-limit'] || profile.rateLimit || '',
+                id: profile.groupname || profile.name
             }));
             
-            res.json({ success: true, profiles: profiles });
+            res.json({ success: true, profiles });
         } else {
             res.json({ success: false, message: result.message || 'Gagal mengambil daftar profile hotspot', profiles: [] });
         }

@@ -1795,9 +1795,17 @@ async function getHotspotUsersRadius() {
 }
 
 // Fungsi untuk menambah user hotspot ke RADIUS
-async function addHotspotUserRadius(username, password, profile, comment = null, server = null, serverMetadata = null) {
+async function addHotspotUserRadius(username, password, profile, comment = null, server = null, serverMetadata = null, limits = null) {
     const conn = await getRadiusConnection();
     try {
+        const limitOptions = limits && typeof limits === 'object' ? limits : {};
+        const uptimeSeconds = limitOptions.uptimeSeconds && !isNaN(parseInt(limitOptions.uptimeSeconds, 10)) && parseInt(limitOptions.uptimeSeconds, 10) > 0
+            ? parseInt(limitOptions.uptimeSeconds, 10)
+            : null;
+        const validitySeconds = limitOptions.validitySeconds && !isNaN(parseInt(limitOptions.validitySeconds, 10)) && parseInt(limitOptions.validitySeconds, 10) > 0
+            ? parseInt(limitOptions.validitySeconds, 10)
+            : null;
+
         // Insert password ke radcheck
         await conn.execute(
             "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
@@ -1867,11 +1875,11 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
 
         // Bersihkan binding lama di radcheck (kondisi) dan radreply (reply)
         await conn.execute(
-            "DELETE FROM radcheck WHERE username = ? AND attribute IN ('NAS-Identifier', 'NAS-IP-Address', 'Mikrotik-Host', 'NAS-Port-Id', 'Called-Station-Id')",
+            "DELETE FROM radcheck WHERE username = ? AND attribute IN ('NAS-Identifier', 'NAS-IP-Address', 'Mikrotik-Host', 'NAS-Port-Id', 'Called-Station-Id', 'Max-All-Session', 'Expire-After')",
             [username]
         );
         await conn.execute(
-            "DELETE FROM radreply WHERE username = ? AND attribute = 'Mikrotik-Server'",
+            "DELETE FROM radreply WHERE username = ? AND attribute IN ('Mikrotik-Server', 'Session-Timeout')",
             [username]
         );
 
@@ -1898,7 +1906,34 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
             logger.info(`Voucher ${username} created without specific Mikrotik server binding (server parameter: ${sanitizedServer || 'all'})`);
         }
 
-        logger.info(`Voucher ${username} created in RADIUS mode ${!isGlobalServer ? `with Mikrotik-Server=${sanitizedServer}` : 'without specific Mikrotik-Server'} (original server parameter: ${server || 'all'})`);
+        if (uptimeSeconds) {
+            await conn.execute(
+                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Max-All-Session', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [username, uptimeSeconds.toString(), uptimeSeconds.toString()]
+            );
+            logger.info(`Voucher ${username} uptime limit set to ${uptimeSeconds} seconds`);
+
+            await conn.execute(
+                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [username, uptimeSeconds.toString(), uptimeSeconds.toString()]
+            );
+            logger.info(`Voucher ${username} session timeout set to ${uptimeSeconds} seconds`);
+        } else {
+            await conn.execute(
+                "DELETE FROM radreply WHERE username = ? AND attribute = 'Session-Timeout'",
+                [username]
+            );
+        }
+
+        if (validitySeconds) {
+            await conn.execute(
+                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Expire-After', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [username, validitySeconds.toString(), validitySeconds.toString()]
+            );
+            logger.info(`Voucher ${username} validity set to ${validitySeconds} seconds`);
+        }
+
+        logger.info(`Voucher ${username} created in RADIUS mode ${!isGlobalServer ? `with Mikrotik-Server=${sanitizedServer}` : 'without specific Mikrotik-Server'} (original server parameter: ${server || 'all'})${uptimeSeconds ? `, uptime limit=${uptimeSeconds}s` : ''}${validitySeconds ? `, validity=${validitySeconds}s` : ''}`);
         
         await conn.end();
         return { success: true, message: 'User hotspot berhasil ditambahkan ke RADIUS' };
@@ -1938,9 +1973,16 @@ async function getActiveHotspotUsers(routerObj = null) {
 }
 
 // Fungsi untuk menambahkan user hotspot
-async function addHotspotUser(username, password, profile, comment = null, customer = null, routerObj = null, price = null, server = null, serverMetadata = null) {
+async function addHotspotUser(username, password, profile, comment = null, customer = null, routerObj = null, price = null, server = null, serverMetadata = null, limits = null) {
     let conn = null;
     const mode = await getUserAuthModeAsync();
+    const limitOptions = limits && typeof limits === 'object' ? limits : {};
+    const uptimeSeconds = limitOptions.uptimeSeconds && !isNaN(parseInt(limitOptions.uptimeSeconds, 10)) && parseInt(limitOptions.uptimeSeconds, 10) > 0
+        ? parseInt(limitOptions.uptimeSeconds, 10)
+        : null;
+    const validitySeconds = limitOptions.validitySeconds && !isNaN(parseInt(limitOptions.validitySeconds, 10)) && parseInt(limitOptions.validitySeconds, 10) > 0
+        ? parseInt(limitOptions.validitySeconds, 10)
+        : null;
     if (mode === 'radius') {
         let result = { success: false, message: 'Unknown error' };
         try {
@@ -1952,7 +1994,7 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                 server = server.trim();
                 if (!serverInfo.name) serverInfo.name = server;
             }
-            result = await addHotspotUserRadius(username, password, profile, comment, server, serverInfo);
+            result = await addHotspotUserRadius(username, password, profile, comment, server, serverInfo, limits);
         } catch (radiusError) {
             logger.error(`Error in addHotspotUserRadius for ${username}: ${radiusError.message}`);
             // Tetap lanjutkan untuk membuat invoice, karena mungkin user sudah dibuat sebagian
@@ -2079,6 +2121,24 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                 params.push('=server=' + server);
             }
             await conn.write('/ip/hotspot/user/add', params);
+
+            if (uptimeSeconds || validitySeconds) {
+                try {
+                    const users = await conn.write('/ip/hotspot/user/print', ['?name=' + username]);
+                    if (users && users.length > 0) {
+                        const userId = users[0]['.id'];
+                        if (uptimeSeconds) {
+                            await conn.write('/ip/hotspot/user/set', ['=.id=' + userId, '=limit-uptime=' + uptimeSeconds + 's']);
+                        }
+                        if (validitySeconds) {
+                            const validityInfo = `[validity:${validitySeconds}s]`;
+                            await conn.write('/ip/hotspot/user/set', ['=.id=' + userId, '=comment=' + validityInfo]);
+                        }
+                    }
+                } catch (limitErr) {
+                    logger.warn(`Failed to apply per-user limits in Mikrotik mode for ${username}: ${limitErr.message}`);
+                }
+            }
             return { success: true, message: 'User hotspot berhasil ditambahkan' };
     }
 }
@@ -5156,6 +5216,8 @@ async function getHotspotServerProfileDetailRadius(id) {
     }
 }
 
+let hotspotProfilesColumnsCache = null;
+
 async function ensureHotspotProfilesMetadataTable(conn) {
     try {
         const [tableCheck] = await conn.execute(`
@@ -5170,9 +5232,58 @@ async function ensureHotspotProfilesMetadataTable(conn) {
             return false;
         }
 
+        // Pastikan kolom-kolom terbaru tersedia (untuk kompatibilitas versi lama)
+        const requiredColumns = [
+            { name: 'rate_limit_value', definition: 'VARCHAR(32)' },
+            { name: 'rate_limit_unit', definition: 'VARCHAR(10)' },
+            { name: 'burst_limit_value', definition: 'VARCHAR(32)' },
+            { name: 'burst_limit_unit', definition: 'VARCHAR(10)' },
+            { name: 'session_timeout_value', definition: 'INT DEFAULT NULL' },
+            { name: 'session_timeout_unit', definition: 'VARCHAR(10)' },
+            { name: 'idle_timeout_value', definition: 'INT DEFAULT NULL' },
+            { name: 'idle_timeout_unit', definition: 'VARCHAR(10)' },
+            { name: 'limit_uptime_value', definition: 'INT DEFAULT NULL' },
+            { name: 'limit_uptime_unit', definition: 'VARCHAR(10)' },
+            { name: 'validity_value', definition: 'INT DEFAULT NULL' },
+            { name: 'validity_unit', definition: 'VARCHAR(10)' },
+            { name: 'shared_users', definition: 'INT DEFAULT 1' },
+            { name: 'local_address', definition: 'VARCHAR(64)' },
+            { name: 'remote_address', definition: 'VARCHAR(64)' },
+            { name: 'dns_server', definition: 'VARCHAR(255)' },
+            { name: 'parent_queue', definition: 'VARCHAR(64)' },
+            { name: 'address_list', definition: 'VARCHAR(64)' }
+        ];
+
+        const [columnRows] = await conn.execute(`
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'hotspot_profiles'
+        `);
+
+        const existingColumns = new Set(
+            (columnRows || []).map(row => String(row.COLUMN_NAME).toLowerCase())
+        );
+        hotspotProfilesColumnsCache = existingColumns;
+
+        for (const col of requiredColumns) {
+            if (!existingColumns.has(col.name.toLowerCase())) {
+                try {
+                    await conn.execute(`ALTER TABLE hotspot_profiles ADD COLUMN ${col.name} ${col.definition}`);
+                    logger.info(`Menambahkan kolom hotspot_profiles.${col.name} untuk kompatibilitas`);
+                    existingColumns.add(col.name.toLowerCase());
+                    hotspotProfilesColumnsCache = existingColumns;
+                } catch (alterError) {
+                    logger.warn(`Gagal menambahkan kolom hotspot_profiles.${col.name}: ${alterError.message}`);
+                }
+            }
+        }
+
+        hotspotProfilesColumnsCache = existingColumns;
         return true;
     } catch (error) {
         logger.error(`Error checking hotspot_profiles table: ${error.message}`);
+        hotspotProfilesColumnsCache = null;
         return false;
     }
 }
@@ -5182,20 +5293,60 @@ async function getHotspotProfilesMetadata(conn, groupnames = []) {
     const exists = await ensureHotspotProfilesMetadataTable(conn);
     if (!exists) return {};
 
+    const columnsSet = hotspotProfilesColumnsCache;
+    let selectColumns = [];
+
+    const addColumn = (columnName, required = false) => {
+        if (
+            required ||
+            !columnsSet ||
+            columnsSet.size === 0 ||
+            columnsSet.has(columnName.toLowerCase())
+        ) {
+            selectColumns.push(columnName);
+        }
+    };
+
+    addColumn('groupname', true);
+    addColumn('display_name');
+    addColumn('comment');
+    addColumn('rate_limit_value');
+    addColumn('rate_limit_unit');
+    addColumn('burst_limit_value');
+    addColumn('burst_limit_unit');
+    addColumn('session_timeout_value');
+    addColumn('session_timeout_unit');
+    addColumn('idle_timeout_value');
+    addColumn('idle_timeout_unit');
+    addColumn('limit_uptime_value');
+    addColumn('limit_uptime_unit');
+    addColumn('validity_value');
+    addColumn('validity_unit');
+    addColumn('shared_users');
+    addColumn('local_address');
+    addColumn('remote_address');
+    addColumn('dns_server');
+    addColumn('parent_queue');
+    addColumn('address_list');
+
+    if (selectColumns.length === 0) {
+        selectColumns = ['groupname'];
+    }
+
     const placeholders = groupnames.map(() => '?').join(',');
-    const [rows] = await conn.execute(`
-        SELECT groupname, display_name, comment, rate_limit_value, rate_limit_unit,
-               burst_limit_value, burst_limit_unit, session_timeout_value, session_timeout_unit,
-               idle_timeout_value, idle_timeout_unit, limit_uptime_value, limit_uptime_unit,
-               validity_value, validity_unit, shared_users, local_address, remote_address,
-               dns_server, parent_queue, address_list
+    const sql = `
+        SELECT ${selectColumns.join(', ')}
         FROM hotspot_profiles
         WHERE groupname IN (${placeholders})
-    `, groupnames);
+    `;
+    const [rows] = await conn.execute(sql, groupnames);
 
     const map = {};
     rows.forEach(row => {
-        map[row.groupname] = row;
+        const key = row.groupname || row.GROUPNAME || null;
+        if (key) {
+            map[key] = row;
+        }
     });
     return map;
 }
@@ -5204,16 +5355,53 @@ async function getHotspotProfileMetadata(conn, groupname) {
     const exists = await ensureHotspotProfilesMetadataTable(conn);
     if (!exists) return null;
 
-    const [rows] = await conn.execute(`
-        SELECT groupname, display_name, comment, rate_limit_value, rate_limit_unit,
-               burst_limit_value, burst_limit_unit, session_timeout_value, session_timeout_unit,
-               idle_timeout_value, idle_timeout_unit, limit_uptime_value, limit_uptime_unit,
-               validity_value, validity_unit, shared_users, local_address, remote_address,
-               dns_server, parent_queue, address_list
+    const columnsSet = hotspotProfilesColumnsCache;
+    let selectColumns = [];
+
+    const addColumn = (columnName, required = false) => {
+        if (
+            required ||
+            !columnsSet ||
+            columnsSet.size === 0 ||
+            columnsSet.has(columnName.toLowerCase())
+        ) {
+            selectColumns.push(columnName);
+        }
+    };
+
+    addColumn('groupname', true);
+    addColumn('display_name');
+    addColumn('comment');
+    addColumn('rate_limit_value');
+    addColumn('rate_limit_unit');
+    addColumn('burst_limit_value');
+    addColumn('burst_limit_unit');
+    addColumn('session_timeout_value');
+    addColumn('session_timeout_unit');
+    addColumn('idle_timeout_value');
+    addColumn('idle_timeout_unit');
+    addColumn('limit_uptime_value');
+    addColumn('limit_uptime_unit');
+    addColumn('validity_value');
+    addColumn('validity_unit');
+    addColumn('shared_users');
+    addColumn('local_address');
+    addColumn('remote_address');
+    addColumn('dns_server');
+    addColumn('parent_queue');
+    addColumn('address_list');
+
+    if (selectColumns.length === 0) {
+        selectColumns = ['groupname'];
+    }
+
+    const sql = `
+        SELECT ${selectColumns.join(', ')}
         FROM hotspot_profiles
         WHERE groupname = ?
         LIMIT 1
-    `, [groupname]);
+    `;
+    const [rows] = await conn.execute(sql, [groupname]);
 
     return rows && rows.length > 0 ? rows[0] : null;
 }
@@ -5222,62 +5410,66 @@ async function saveHotspotProfileMetadata(conn, metadata) {
     const exists = await ensureHotspotProfilesMetadataTable(conn);
     if (!exists) return false;
 
-    await conn.execute(`
-        INSERT INTO hotspot_profiles (
-            groupname, display_name, comment,
-            rate_limit_value, rate_limit_unit,
-            burst_limit_value, burst_limit_unit,
-            session_timeout_value, session_timeout_unit,
-            idle_timeout_value, idle_timeout_unit,
-            limit_uptime_value, limit_uptime_unit,
-            validity_value, validity_unit,
-            shared_users, local_address, remote_address,
-            dns_server, parent_queue, address_list
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            display_name = VALUES(display_name),
-            comment = VALUES(comment),
-            rate_limit_value = VALUES(rate_limit_value),
-            rate_limit_unit = VALUES(rate_limit_unit),
-            burst_limit_value = VALUES(burst_limit_value),
-            burst_limit_unit = VALUES(burst_limit_unit),
-            session_timeout_value = VALUES(session_timeout_value),
-            session_timeout_unit = VALUES(session_timeout_unit),
-            idle_timeout_value = VALUES(idle_timeout_value),
-            idle_timeout_unit = VALUES(idle_timeout_unit),
-            limit_uptime_value = VALUES(limit_uptime_value),
-            limit_uptime_unit = VALUES(limit_uptime_unit),
-            validity_value = VALUES(validity_value),
-            validity_unit = VALUES(validity_unit),
-            shared_users = VALUES(shared_users),
-            local_address = VALUES(local_address),
-            remote_address = VALUES(remote_address),
-            dns_server = VALUES(dns_server),
-            parent_queue = VALUES(parent_queue),
-            address_list = VALUES(address_list)
-    `, [
-        metadata.groupname,
-        metadata.displayName,
-        metadata.comment,
-        metadata.rateLimitValue,
-        metadata.rateLimitUnit,
-        metadata.burstLimitValue,
-        metadata.burstLimitUnit,
-        metadata.sessionTimeoutValue,
-        metadata.sessionTimeoutUnit,
-        metadata.idleTimeoutValue,
-        metadata.idleTimeoutUnit,
-        metadata.limitUptimeValue,
-        metadata.limitUptimeUnit,
-        metadata.validityValue,
-        metadata.validityUnit,
-        metadata.sharedUsers,
-        metadata.localAddress,
-        metadata.remoteAddress,
-        metadata.dnsServer,
-        metadata.parentQueue,
-        metadata.addressList
-    ]);
+    const columnsSet = hotspotProfilesColumnsCache;
+    const insertColumns = [];
+    const placeholders = [];
+    const values = [];
+    const updateClauses = [];
+
+    const addColumn = (columnName, value, options = {}) => {
+        const { required = false, includeInUpdate = true } = options;
+        if (
+            required ||
+            !columnsSet ||
+            columnsSet.size === 0 ||
+            columnsSet.has(columnName.toLowerCase())
+        ) {
+            insertColumns.push(columnName);
+            placeholders.push('?');
+            values.push(value !== undefined ? value : null);
+            if (includeInUpdate) {
+                updateClauses.push(`${columnName} = VALUES(${columnName})`);
+            }
+        }
+    };
+
+    addColumn('groupname', metadata.groupname, { required: true, includeInUpdate: false });
+    addColumn('display_name', metadata.displayName || metadata.groupname);
+    addColumn('comment', metadata.comment || null);
+    addColumn('rate_limit_value', metadata.rateLimitValue);
+    addColumn('rate_limit_unit', metadata.rateLimitUnit);
+    addColumn('burst_limit_value', metadata.burstLimitValue);
+    addColumn('burst_limit_unit', metadata.burstLimitUnit);
+    addColumn('session_timeout_value', metadata.sessionTimeoutValue);
+    addColumn('session_timeout_unit', metadata.sessionTimeoutUnit);
+    addColumn('idle_timeout_value', metadata.idleTimeoutValue);
+    addColumn('idle_timeout_unit', metadata.idleTimeoutUnit);
+    addColumn('limit_uptime_value', metadata.limitUptimeValue);
+    addColumn('limit_uptime_unit', metadata.limitUptimeUnit);
+    addColumn('validity_value', metadata.validityValue);
+    addColumn('validity_unit', metadata.validityUnit);
+    addColumn('shared_users', metadata.sharedUsers);
+    addColumn('local_address', metadata.localAddress);
+    addColumn('remote_address', metadata.remoteAddress);
+    addColumn('dns_server', metadata.dnsServer);
+    addColumn('parent_queue', metadata.parentQueue);
+    addColumn('address_list', metadata.addressList);
+
+    if (insertColumns.length === 0) {
+        return false;
+    }
+
+    if (updateClauses.length === 0) {
+        updateClauses.push('groupname = VALUES(groupname)');
+    }
+
+    const sql = `
+        INSERT INTO hotspot_profiles (${insertColumns.join(', ')})
+        VALUES (${placeholders.join(', ')})
+        ON DUPLICATE KEY UPDATE ${updateClauses.join(', ')}
+    `;
+
+    await conn.execute(sql, values);
 
     return true;
 }
@@ -6539,7 +6731,7 @@ async function deletePPPoEProfile(id, routerObj = null) {
     }
 }
 // Fungsi untuk generate hotspot vouchers
-async function generateHotspotVouchers(count, prefix, profile, server, validUntil, price, charType = 'alphanumeric', routerObj = null) {
+async function generateHotspotVouchers(count, prefix, profile, server, limits = {}, price, charType = 'alphanumeric', routerObj = null) {
     try {
         // Check auth mode - RADIUS atau Mikrotik API
         const mode = await getUserAuthModeAsync();
@@ -6611,6 +6803,14 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
             return str;
         }
         
+        const limitOptions = limits && typeof limits === 'object' ? limits : {};
+        const validitySeconds = limitOptions.validitySeconds && !isNaN(parseInt(limitOptions.validitySeconds, 10)) && parseInt(limitOptions.validitySeconds, 10) > 0
+            ? parseInt(limitOptions.validitySeconds, 10)
+            : null;
+        const uptimeSeconds = limitOptions.uptimeSeconds && !isNaN(parseInt(limitOptions.uptimeSeconds, 10)) && parseInt(limitOptions.uptimeSeconds, 10) > 0
+            ? parseInt(limitOptions.uptimeSeconds, 10)
+            : null;
+
         const vouchers = [];
         
         // Log untuk debugging
@@ -6641,7 +6841,18 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                 // Pass finalPrice ke addHotspotUser untuk menyimpan ke voucher_revenue (TANPA membuat invoice)
                 // Invoice hanya untuk pelanggan PPPoE, bukan untuk voucher
                 // Pass server parameter untuk menentukan server instance (jika dipilih)
-                const addResult = await addHotspotUser(username, password, profile, 'voucher', null, routerObj, finalPrice, serverName, serverMetadata);
+                const addResult = await addHotspotUser(
+                    username,
+                    password,
+                    profile,
+                    'voucher',
+                    null,
+                    routerObj,
+                    finalPrice,
+                    serverName,
+                    serverMetadata,
+                    { validitySeconds, uptimeSeconds }
+                );
                 
                 // Voucher revenue record sudah dibuat di dalam addHotspotUser untuk mode RADIUS
                 // Untuk mode Mikrotik API, simpan ke voucher_revenue di bawah ini jika belum dibuat
@@ -6692,7 +6903,9 @@ async function generateHotspotVouchers(count, prefix, profile, server, validUnti
                     createdAt: new Date(),
                     price: finalPrice, // Tambahkan harga ke data voucher
                     account_type: accountType, // Tambahkan tipe akun
-                    voucher_record_id: voucherRecordId // Tambahkan voucher revenue record ID jika ada
+                    voucher_record_id: voucherRecordId, // Tambahkan voucher revenue record ID jika ada
+                    validitySeconds,
+                    uptimeSeconds
                 });
                 
                 logger.info(`${accountType === 'voucher' ? 'Voucher' : 'Member'} created: ${username} (password: ${password}) on ${isRadiusMode ? 'RADIUS' : (routerObj ? routerObj.name : 'default')}${voucherRecordId ? ` - Voucher Revenue Record: ${voucherRecordId} (Amount: Rp ${finalPrice})` : ' - NO VOUCHER RECORD CREATED!'}`);

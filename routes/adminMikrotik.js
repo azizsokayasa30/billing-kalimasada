@@ -1067,38 +1067,6 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
           addressList: sanitize(addressList)
         });
 
-        // Limit uptime (total durasi pemakaian kumulatif)
-        if (normalizedLimitUptimeValue && normalizedLimitUptimeUnit) {
-          const limitSeconds = convertToSeconds(normalizedLimitUptimeValue, normalizedLimitUptimeUnit);
-          if (limitSeconds > 0) {
-            await conn.execute(
-              "INSERT INTO radgroupcheck (groupname, attribute, op, value) VALUES (?, 'Max-All-Session', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-              [groupname, limitSeconds.toString(), limitSeconds.toString()]
-            );
-          }
-        } else {
-          await conn.execute(
-            "DELETE FROM radgroupcheck WHERE groupname = ? AND attribute = 'Max-All-Session'",
-            [groupname]
-          );
-        }
-
-        // Validity (masa aktif sejak login pertama)
-        if (normalizedValidityValue && normalizedValidityUnit) {
-          const validitySeconds = convertToSeconds(normalizedValidityValue, normalizedValidityUnit);
-          if (validitySeconds > 0) {
-            await conn.execute(
-              "INSERT INTO radgroupcheck (groupname, attribute, op, value) VALUES (?, 'Expire-After', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-              [groupname, validitySeconds.toString(), validitySeconds.toString()]
-            );
-          }
-        } else {
-          await conn.execute(
-            "DELETE FROM radgroupcheck WHERE groupname = ? AND attribute = 'Expire-After'",
-            [groupname]
-          );
-        }
-
         await conn.end();
         return res.json({ success: true, message: 'Profile hotspot berhasil ditambahkan ke RADIUS' });
       } catch (radiusError) {
@@ -1289,38 +1257,6 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
           addressList: sanitize(addressList)
         });
 
-        // Limit uptime (total durasi pemakaian kumulatif)
-        if (normalizedLimitUptimeValue && normalizedLimitUptimeUnit) {
-          const limitSeconds = convertToSeconds(normalizedLimitUptimeValue, normalizedLimitUptimeUnit);
-          if (limitSeconds > 0) {
-            await conn.execute(
-              "INSERT INTO radgroupcheck (groupname, attribute, op, value) VALUES (?, 'Max-All-Session', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-              [groupname, limitSeconds.toString(), limitSeconds.toString()]
-            );
-          }
-        } else {
-          await conn.execute(
-            "DELETE FROM radgroupcheck WHERE groupname = ? AND attribute = 'Max-All-Session'",
-            [groupname]
-          );
-        }
-
-        // Validity (masa aktif sejak login pertama)
-        if (normalizedValidityValue && normalizedValidityUnit) {
-          const validitySeconds = convertToSeconds(normalizedValidityValue, normalizedValidityUnit);
-          if (validitySeconds > 0) {
-            await conn.execute(
-              "INSERT INTO radgroupcheck (groupname, attribute, op, value) VALUES (?, 'Expire-After', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-              [groupname, validitySeconds.toString(), validitySeconds.toString()]
-            );
-          }
-        } else {
-          await conn.execute(
-            "DELETE FROM radgroupcheck WHERE groupname = ? AND attribute = 'Expire-After'",
-            [groupname]
-          );
-        }
-
         await conn.end();
         return res.json({ success: true, message: 'Profile hotspot berhasil diupdate di RADIUS' });
       } catch (radiusError) {
@@ -1391,13 +1327,21 @@ router.post('/mikrotik/hotspot-profiles/delete', adminAuth, async (req, res) => 
         return res.json({ success: false, message: 'ID atau nama profile tidak ditemukan' });
       }
 
+      let conn;
       try {
         const { getRadiusConnection } = require('../config/mikrotik');
-        const conn = await getRadiusConnection();
-        // Gunakan id (yang adalah name) atau name sebagai groupname
-        const groupname = (id || name).toLowerCase().replace(/\s+/g, '_');
+        conn = await getRadiusConnection();
 
-        // Hapus semua attributes untuk groupname ini dari radgroupreply
+        const rawIdentifier = id || name;
+        const groupname = typeof rawIdentifier === 'string'
+          ? rawIdentifier.trim().toLowerCase().replace(/\s+/g, '_')
+          : '';
+
+        if (!groupname) {
+          return res.json({ success: false, message: 'Nama profile tidak valid' });
+        }
+
+        // Hapus semua attributes untuk groupname ini dari radgroupreply & radgroupcheck
         await conn.execute(
           "DELETE FROM radgroupreply WHERE groupname = ?",
           [groupname]
@@ -1407,17 +1351,26 @@ router.post('/mikrotik/hotspot-profiles/delete', adminAuth, async (req, res) => 
           [groupname]
         );
 
-        // Hapus juga dari radusergroup jika ada user yang assign ke group ini
-        // (Opsional: bisa juga tidak dihapus jika ingin user tetap ada tapi tanpa profile)
-        // await conn.execute("DELETE FROM radusergroup WHERE groupname = ?", [groupname]);
+        // Bersihkan assignment user yang masih menunjuk ke profile ini
+        await conn.execute(
+          "DELETE FROM radusergroup WHERE groupname = ?",
+          [groupname]
+        );
 
         await deleteHotspotProfileMetadata(conn, groupname);
 
-        await conn.end();
         return res.json({ success: true, message: 'Profile hotspot berhasil dihapus dari RADIUS' });
       } catch (radiusError) {
         console.error('Error deleting hotspot profile from RADIUS:', radiusError);
         return res.json({ success: false, message: `Gagal hapus profile dari RADIUS: ${radiusError.message}` });
+      } finally {
+        if (conn) {
+          try {
+            await conn.end();
+          } catch (closeError) {
+            logger.warn(`Gagal menutup koneksi RADIUS setelah hapus profile: ${closeError.message}`);
+          }
+        }
       }
     }
 

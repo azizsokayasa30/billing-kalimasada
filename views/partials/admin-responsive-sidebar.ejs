@@ -97,11 +97,17 @@
     <a href="/admin/mikrotik/hotspot-server-profiles" class="<%= typeof page !== 'undefined' && page === 'hotspot-server-profiles' ? 'active' : '' %>">
         <i class="bi bi-server"></i> Server Profile Hotspot
     </a>
-    <a href="/admin/hotspot" class="<%= typeof page !== 'undefined' && page === 'hotspot' ? 'active' : '' %>">
+    <div class="sidebar-label">
         <i class="bi bi-wifi"></i> Hotspot
+    </div>
+    <a href="/admin/hotspot/voucher" class="<%= typeof page !== 'undefined' && page === 'hotspot-settings' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
+        <i class="bi bi-sliders"></i> Setting Voucher Online
     </a>
-    <a href="/admin/hotspot/voucher" class="<%= typeof page !== 'undefined' && page === 'voucher' ? 'active' : '' %>">
-        <i class="bi bi-ticket-perforated"></i> Voucher Hotspot
+    <a href="/admin/hotspot" class="<%= typeof page !== 'undefined' && page === 'hotspot-master' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
+        <i class="bi bi-collection"></i> Master Data Voucher
+    </a>
+    <a href="/admin/hotspot/users" class="<%= typeof page !== 'undefined' && page === 'hotspot-users' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
+        <i class="bi bi-people"></i> Daftar User Hotspot
     </a>
     <a href="/admin/trouble" class="<%= typeof page !== 'undefined' && page === 'trouble' ? 'active' : '' %>">
         <i class="bi bi-exclamation-triangle"></i> Trouble Report
@@ -168,6 +174,15 @@
 
 <style>
 /* Mobile Top Navbar */
+.sidebar-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(255,255,255,0.7);
+    padding: 8px 24px 4px 24px;
+}
+
 .mobile-navbar {
     background: #3498DB;
     position: fixed;

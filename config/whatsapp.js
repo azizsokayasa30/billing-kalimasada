@@ -196,6 +196,18 @@ let whatsappStatus = {
     status: 'disconnected'
 };
 
+function resetWhatsAppSessionDirectory(sessionDir) {
+    try {
+        if (fs.existsSync(sessionDir)) {
+            fs.rmSync(sessionDir, { recursive: true, force: true });
+            console.warn(`🧹 Direktori sesi WhatsApp dibersihkan: ${sessionDir}`);
+        }
+        fs.mkdirSync(sessionDir, { recursive: true });
+    } catch (error) {
+        console.error(`Gagal mengatur ulang direktori sesi WhatsApp (${sessionDir}):`, error);
+    }
+}
+
 // Fungsi untuk set instance sock
 function setSock(sockInstance) {
     sock = sockInstance;
@@ -392,7 +404,7 @@ async function connectToWhatsApp() {
 
 
         // Tangani update koneksi
-        sock.ev.on('connection.update', (update) => {
+        sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
             
             // Log update koneksi
@@ -476,9 +488,38 @@ async function connectToWhatsApp() {
                 }
             } else if (connection === 'close') {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-                
-                console.log(`Koneksi WhatsApp terputus. Mencoba koneksi ulang: ${shouldReconnect}`);
+                const rawMessage = lastDisconnect?.error?.output?.payload?.message || lastDisconnect?.error?.message || '';
+                const errorMessage = String(rawMessage).toLowerCase();
+                let shouldReconnect = true;
+
+                if (statusCode === DisconnectReason.loggedOut) {
+                    console.warn('⚠️ WhatsApp ter-logout dari server. Menghapus sesi untuk meminta QR baru.');
+                    resetWhatsAppSessionDirectory(sessionDir);
+                    qrCodeDisplayed = false;
+                } else if (
+                    statusCode === DisconnectReason.connectionReplaced ||
+                    errorMessage.includes('conflict')
+                ) {
+                    console.warn('⚠️ Terdeteksi konflik sesi WhatsApp (connection replaced). Membersihkan kredensial dan mencoba ulang.');
+                    resetWhatsAppSessionDirectory(sessionDir);
+                    qrCodeDisplayed = false;
+                } else if (statusCode === DisconnectReason.badSession) {
+                    console.warn('⚠️ WhatsApp melaporkan bad session. Menghapus sesi dan melakukan login ulang.');
+                    resetWhatsAppSessionDirectory(sessionDir);
+                    qrCodeDisplayed = false;
+                } else if (statusCode === DisconnectReason.restartRequired || errorMessage.includes('restart required')) {
+                    console.warn('🔁 WhatsApp meminta restart koneksi. Akan mencoba koneksi ulang menggunakan sesi yang ada.');
+                } else if (statusCode === DisconnectReason.multideviceMismatch) {
+                    console.warn('⚠️ Multidevice mismatch terdeteksi. Menghapus sesi agar dapat login ulang.');
+                    resetWhatsAppSessionDirectory(sessionDir);
+                    qrCodeDisplayed = false;
+                } else if (statusCode === DisconnectReason.forbidden) {
+                    console.error('⛔ Akses WhatsApp ditolak. Menghapus sesi dan mencoba ulang.');
+                    resetWhatsAppSessionDirectory(sessionDir);
+                    qrCodeDisplayed = false;
+                }
+
+                console.log(`Koneksi WhatsApp terputus (code: ${statusCode ?? 'unknown'}, reason: ${rawMessage || 'n/a'}). Mencoba koneksi ulang: ${shouldReconnect}`);
                 
                 // Update status global
                 global.whatsappStatus = {
@@ -486,14 +527,16 @@ async function connectToWhatsApp() {
                     qrCode: null,
                     phoneNumber: null,
                     connectedSince: null,
-                    status: 'disconnected'
+                    status: 'disconnected',
+                    reason: rawMessage || 'connection_closed'
                 };
                 
                 // Reconnect jika bukan karena logout
                 if (shouldReconnect) {
+                    const reconnectDelay = Number(getSetting('reconnect_interval', 5000)) || 5000;
                     setTimeout(() => {
                         connectToWhatsApp();
-                    }, getSetting('reconnect_interval', 5000));
+                    }, reconnectDelay);
                 }
             }
         });

@@ -295,10 +295,16 @@
                     select.innerHTML = '<option value="">Pilih Profile Hotspot...</option>';
                     
                     if (data.success && data.profiles && Array.isArray(data.profiles)) {
-                        data.profiles.forEach(profile => {
+                        // Sort profiles alphabetically for consistent ordering
+                        data.profiles
+                            .filter(profile => profile && profile.name)
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .forEach(profile => {
                             const option = document.createElement('option');
                             option.value = profile.name;
-                            option.textContent = `${profile.name} (${profile.timeLimit || 'Unlimited'})`;
+                            const timeInfo = profile.timeLimit || profile.sessionTimeout || profile['session-timeout'] || 'Unlimited';
+                            const rateInfo = profile.rateLimit || profile['rate-limit'] ? ` - ${profile.rateLimit || profile['rate-limit']}` : '';
+                            option.textContent = `${profile.name} (${timeInfo}${rateInfo})`;
                             select.appendChild(option);
                         });
                     } else {

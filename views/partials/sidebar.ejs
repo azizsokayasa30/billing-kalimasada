@@ -23,14 +23,24 @@
     <li>
       
     </li>
-    <li>
-      <a href="/admin/hotspot" class="nav-link <%= page === 'hotspot' ? 'active' : 'link-dark' %>">
+    <li class="nav-item mt-2">
+      <span class="nav-link text-uppercase text-muted small" style="cursor: default;">
         <i class="bi bi-wifi"></i> Hotspot
+      </span>
+    </li>
+    <li>
+      <a href="/admin/hotspot/voucher" class="nav-link ps-4 <%= page === 'hotspot-settings' ? 'active' : 'link-dark' %>">
+        <i class="bi bi-sliders"></i> Setting Voucher Online
       </a>
     </li>
     <li>
-      <a href="/admin/hotspot/voucher" class="nav-link <%= page === 'voucher' ? 'active' : 'link-dark' %>">
-        <i class="bi bi-ticket-perforated"></i> Voucher Hotspot
+      <a href="/admin/hotspot" class="nav-link ps-4 <%= page === 'hotspot-master' ? 'active' : 'link-dark' %>">
+        <i class="bi bi-collection"></i> Master Data Voucher
+      </a>
+    </li>
+    <li>
+      <a href="/admin/hotspot/users" class="nav-link ps-4 <%= page === 'hotspot-users' ? 'active' : 'link-dark' %>">
+        <i class="bi bi-people"></i> Daftar User Hotspot
       </a>
     </li>
     <li>

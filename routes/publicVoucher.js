@@ -927,8 +927,8 @@ async function generateHotspotVouchersWithRetry(purchaseData, maxRetries = 3) {
                 prefix,
                 purchaseData.profile || 'default',
                 'all',
-                '',
-                '',
+                {},
+                purchaseData.price || 0,
                 'alphanumeric'
             );
             
@@ -954,7 +954,7 @@ async function generateHotspotVouchersWithRetry(purchaseData, maxRetries = 3) {
 
 async function generateHotspotVouchers(count, prefix, profile, comment, limitUptime, limitBytes, passwordType) {
     const { generateHotspotVouchers } = require('../config/mikrotik');
-    return await generateHotspotVouchers(count, prefix, profile, comment, limitUptime, limitBytes, passwordType);
+    return await generateHotspotVouchers(count, prefix, profile, comment, {}, 0, passwordType);
 }
 
 async function sendVoucherWithRetry(phone, message, maxRetries = 3) {

@@ -122,7 +122,7 @@
 <div class="container-fluid">
     <div class="row">
         <!-- Include Responsive Admin Sidebar -->
-        <%- include('partials/admin-responsive-sidebar', { page: 'voucher', settings: settings }) %>
+        <%- include('partials/admin-responsive-sidebar', { page: 'hotspot-settings', settings: settings }) %>
         <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
         <nav class="navbar navbar-expand-lg mb-4">
             <div class="container-fluid">
@@ -219,9 +219,30 @@
                                 <small class="text-muted">Server Hotspot yang akan digunakan untuk voucher. Data diambil dari Mikrotik via API (mode hybrid).</small>
                             </div>
                             <div class="mb-3">
-                                <label for="voucherValidUntil" class="form-label"><i class="bi bi-calendar-event me-1"></i>Valid Sampai</label>
-                                <input type="date" class="form-control" id="voucherValidUntil" name="validUntil">
-                                <small class="text-muted">Kosongkan jika tidak ada batas waktu</small>
+                                <label for="voucherValidityValue" class="form-label"><i class="bi bi-hourglass-split me-1"></i>Masa Aktif (Validity)</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="voucherValidityValue" name="validityValue" min="0" placeholder="Contoh: 1">
+                                    <select class="form-select" id="voucherValidityUnit" name="validityUnit">
+                                        <option value="d" selected>Hari</option>
+                                        <option value="h">Jam</option>
+                                        <option value="m">Menit</option>
+                                        <option value="s">Detik</option>
+                                    </select>
+                                </div>
+                                <small class="text-muted">Kosongkan nilai jika tidak dibatasi. Validity dihitung sejak login pertama.</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="voucherUptimeValue" class="form-label"><i class="bi bi-stopwatch me-1"></i>Batas Uptime Total</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="voucherUptimeValue" name="uptimeValue" min="0" placeholder="Contoh: 2">
+                                    <select class="form-select" id="voucherUptimeUnit" name="uptimeUnit">
+                                        <option value="m" selected>Menit</option>
+                                        <option value="h">Jam</option>
+                                        <option value="d">Hari</option>
+                                        <option value="s">Detik</option>
+                                    </select>
+                                </div>
+                                <small class="text-muted">Kosongkan nilai jika tidak dibatasi. Total uptime dijumlahkan dari setiap sesi.</small>
                             </div>
                             <div class="mb-3">
                                 <label for="voucherPrice" class="form-label"><i class="bi bi-cash me-1"></i>Harga (Rp)</label>
@@ -751,6 +772,26 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
+        function formatDurationLabel(seconds) {
+            if (!seconds || isNaN(seconds) || seconds <= 0) return null;
+            const units = [
+                { label: 'hari', value: 86400 },
+                { label: 'jam', value: 3600 },
+                { label: 'menit', value: 60 },
+                { label: 'detik', value: 1 }
+            ];
+            let remaining = seconds;
+            const parts = [];
+            for (const unit of units) {
+                if (remaining >= unit.value) {
+                    const count = Math.floor(remaining / unit.value);
+                    remaining %= unit.value;
+                    parts.push(`${count} ${unit.label}`);
+                }
+                if (parts.length >= 2) break;
+            }
+            return parts.length > 0 ? parts.join(' ') : `${seconds} detik`;
+        }
         // Load history voucher untuk print ulang
         loadReprintVoucherHistory();
         
@@ -1038,6 +1079,35 @@
             } else {
                 data.price = 0; // Jika kosong, set ke 0
             }
+
+            // Validity & uptime parsing
+            if (data.validityValue) {
+                const validityValue = parseInt(data.validityValue, 10);
+                if (!isNaN(validityValue) && validityValue > 0) {
+                    data.validityValue = validityValue;
+                    data.validityUnit = data.validityUnit || 'd';
+                } else {
+                    delete data.validityValue;
+                    delete data.validityUnit;
+                }
+            } else {
+                delete data.validityValue;
+                delete data.validityUnit;
+            }
+
+            if (data.uptimeValue) {
+                const uptimeValue = parseInt(data.uptimeValue, 10);
+                if (!isNaN(uptimeValue) && uptimeValue > 0) {
+                    data.uptimeValue = uptimeValue;
+                    data.uptimeUnit = data.uptimeUnit || 'm';
+                } else {
+                    delete data.uptimeValue;
+                    delete data.uptimeUnit;
+                }
+            } else {
+                delete data.uptimeValue;
+                delete data.uptimeUnit;
+            }
             
             // Validasi data yang diperlukan
             if (!data.count || data.count < 1) {
@@ -1090,7 +1160,10 @@
                         vouchers: result.vouchers,
                         server: result.server,
                         profile: result.profile,
-                        validUntil: result.validUntil,
+                        validityText: result.validityText || formatDurationLabel(result.validitySeconds),
+                        validitySeconds: result.validitySeconds || null,
+                        uptimeText: result.uptimeText || formatDurationLabel(result.uptimeSeconds),
+                        uptimeSeconds: result.uptimeSeconds || null,
                         price: result.price,
                         model: result.voucherModel || 'standard',
                         namaHotspot: result.namaHotspot,
@@ -1113,7 +1186,11 @@
                         price: result.price,
                         namaHotspot: result.namaHotspot,
                         adminKontak: result.adminKontak,
-                        count: result.vouchers.length
+                        count: result.vouchers.length,
+                        validityText: result.validityText || null,
+                        validitySeconds: result.validitySeconds || null,
+                        uptimeText: result.uptimeText || null,
+                        uptimeSeconds: result.uptimeSeconds || null
                     };
                     voucherHistory.unshift(newVoucherSet); // Tambah ke awal array
                     
@@ -1128,6 +1205,33 @@
                     const printBtn = document.getElementById('printVouchersBtn');
                     printBtn.style.display = 'block';
                     printBtn.classList.add('animate__animated', 'animate__bounceIn');
+
+                    const voucherRows = result.vouchers.map((v, index) => {
+                        const validityText = result.validityText || formatDurationLabel(v.validitySeconds);
+                        const uptimeText = result.uptimeText || formatDurationLabel(v.uptimeSeconds);
+                        const voucherPayload = {
+                            ...v,
+                            price: v.price ?? result.price ?? null,
+                            validityText: validityText || null,
+                            uptimeText: uptimeText || null,
+                            validitySeconds: v.validitySeconds ?? result.validitySeconds ?? null,
+                            uptimeSeconds: v.uptimeSeconds ?? result.uptimeSeconds ?? null,
+                            profile: v.profile || result.profile
+                        };
+                        return `
+                            <tr class="animate__animated animate__fadeInUp" style="animation-delay: ${index * 0.1}s">
+                                <td><code>${v.username}</code></td>
+                                <td><code>${v.password}</code></td>
+                                <td><span class="badge bg-info">${v.profile}</span></td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary print-single-voucher" 
+                                        data-voucher='${JSON.stringify(voucherPayload)}' title="Cetak voucher ini">
+                                        <i class="bi bi-printer"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
 
                     let resultHTML = `
                         <div class="card animate__animated animate__fadeIn">
@@ -1150,25 +1254,18 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            ${result.vouchers.map((v, index) => `
-                                                <tr class="animate__animated animate__fadeInUp" style="animation-delay: ${index * 0.1}s">
-                                                    <td><code>${v.username}</code></td>
-                                                    <td><code>${v.password}</code></td>
-                                                    <td><span class="badge bg-info">${v.profile}</span></td>
-                                                    <td>
-                                                        <button class="btn btn-sm btn-outline-primary print-single-voucher" 
-                                                            data-voucher='${JSON.stringify(v)}' title="Cetak voucher ini">
-                                                            <i class="bi bi-printer"></i>
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            `).join('')}
+                                            ${voucherRows}
                                         </tbody>
                                     </table>
                                 </div>
                                 <div class="alert alert-success mt-3">
                                     <i class="bi bi-info-circle me-2"></i>
                                     Voucher berhasil dibuat dan siap digunakan. Preview print akan terbuka otomatis.
+                                    ${result.validityText || result.uptimeText ? `
+                                    <div class="mt-2">
+                                        ${result.validityText ? `<span class="badge bg-secondary me-2"><i class="bi bi-hourglass-split me-1"></i>Validity: ${result.validityText}</span>` : ''}
+                                        ${result.uptimeText ? `<span class="badge bg-dark"><i class="bi bi-stopwatch me-1"></i>Uptime: ${result.uptimeText}</span>` : ''}
+                                    </div>` : ''}
                                 </div>
                             </div>
                         </div>`;
@@ -1335,6 +1432,9 @@
             
             const backgroundStyle = config.background ? `style="background: ${config.background};"` : '';
             
+            const validityLabel = voucher.validityText || formatDurationLabel(voucher.validitySeconds);
+            const uptimeLabel = voucher.uptimeText || formatDurationLabel(voucher.uptimeSeconds);
+
             return `
                 <div class="voucher-card voucher-${model}" ${backgroundStyle}>
                     <div class="voucher-header" style="background: ${config.headerBg};">
@@ -1342,7 +1442,11 @@
                     </div>
                     ${formattedPrice ? `<div class="voucher-price" style="color: ${config.priceColor};">${formattedPrice}</div>` : ''}
                     <div class="voucher-username">${voucher.username}</div>
-                    <div class="voucher-info">Profile: ${voucher.profile || 'default'}</div>
+                    <div class="voucher-info">
+                        <div>Profile: ${voucher.profile || 'default'}</div>
+                        ${validityLabel ? `<div>Validity: ${validityLabel}</div>` : ''}
+                        ${uptimeLabel ? `<div>Uptime Limit: ${uptimeLabel}</div>` : ''}
+                    </div>
                     <div class="voucher-footer">${adminKontak || 'Hubungi Admin'}</div>
                 </div>
             `;
@@ -1591,6 +1695,9 @@
             const settings = JSON.parse(localStorage.getItem('voucherSettings') || '{}');
             const namaHotspot = settings.namaHotspot || 'VOUCHER HOTSPOT';
             const adminKontak = settings.adminKontak || 'Hubungi Admin';
+            const validityLabel = voucherData.validityText || formatDurationLabel(voucherData.validitySeconds);
+            const uptimeLabel = voucherData.uptimeText || formatDurationLabel(voucherData.uptimeSeconds);
+            const voucherPrice = voucherData.price ?? (window.voucherData ? window.voucherData.price : null);
             
             // Buat konten print untuk single voucher dengan preview
             const printContent = `
@@ -1717,9 +1824,13 @@
                     </div>
                     <div class="voucher-card">
                         <div class="voucher-header">${namaHotspot}</div>
-                        ${voucherData.price ? `<div class="voucher-price">${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(voucherData.price)}</div>` : ''}
+                        ${voucherPrice ? `<div class="voucher-price">${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(voucherPrice)}</div>` : ''}
                         <div class="voucher-username">${voucherData.username}</div>
-                        <div class="voucher-info">Profile: ${voucherData.profile || 'default'}</div>
+                        <div class="voucher-info">
+                            <div>Profile: ${voucherData.profile || 'default'}</div>
+                            ${validityLabel ? `<div>Validity: ${validityLabel}</div>` : ''}
+                            ${uptimeLabel ? `<div>Uptime Limit: ${uptimeLabel}</div>` : ''}
+                        </div>
                         <div class="voucher-footer">${adminKontak}</div>
                     </div>
                 </body>
@@ -1817,7 +1928,11 @@
                 profile: voucherSet.profile,
                 price: voucherSet.price,
                 namaHotspot: voucherSet.namaHotspot,
-                adminKontak: voucherSet.adminKontak
+                adminKontak: voucherSet.adminKontak,
+                validityText: voucherSet.validityText || formatDurationLabel(voucherSet.validitySeconds),
+                validitySeconds: voucherSet.validitySeconds || null,
+                uptimeText: voucherSet.uptimeText || formatDurationLabel(voucherSet.uptimeSeconds),
+                uptimeSeconds: voucherSet.uptimeSeconds || null
             };
             
             showToast(`Membuka preview print untuk ${voucherSet.count} voucher ${voucherSet.profile}...`, 'info');

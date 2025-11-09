@@ -167,118 +167,167 @@ async function getVoucherOnlineSettings() {
     });
 }
 
-// GET: Tampilkan form tambah user hotspot dan daftar user hotspot
-router.get('/', async (req, res) => {
-    try {
-        // Check auth mode - RADIUS atau Mikrotik API
-        let userAuthMode = 'mikrotik';
-        try {
-            const mode = await getRadiusConfigValue('user_auth_mode', null);
-            userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-        } catch (e) {
-            // Fallback
+function parseDurationToSeconds(value, unit) {
+    if (value === undefined || value === null || value === '') return null;
+    const numValue = parseInt(value, 10);
+    if (isNaN(numValue) || numValue <= 0) return null;
+
+    const unitLower = String(unit || '').toLowerCase();
+    const unitMap = {
+        's': 1,
+        'detik': 1,
+        'd': 86400,
+        'day': 86400,
+        'days': 86400,
+        'hari': 86400,
+        'h': 3600,
+        'jam': 3600,
+        'hour': 3600,
+        'hours': 3600,
+        'm': 60,
+        'men': 60,
+        'menit': 60,
+        'minute': 60,
+        'minutes': 60,
+        'w': 604800,
+        'week': 604800,
+        'weeks': 604800
+    };
+
+    const multiplier = unitMap[unitLower] || 1;
+    return numValue * multiplier;
+}
+
+function formatDuration(seconds) {
+    if (!seconds || isNaN(seconds) || seconds <= 0) return null;
+    const units = [
+        { label: 'hari', value: 86400 },
+        { label: 'jam', value: 3600 },
+        { label: 'menit', value: 60 },
+        { label: 'detik', value: 1 }
+    ];
+    let remaining = seconds;
+    const parts = [];
+    for (const unit of units) {
+        if (remaining >= unit.value) {
+            const count = Math.floor(remaining / unit.value);
+            remaining %= unit.value;
+            parts.push(`${count} ${unit.label}`);
         }
+        if (parts.length >= 2) break; // tampilkan maksimal dua unit
+    }
+    return parts.length > 0 ? parts.join(' ') : `${seconds} detik`;
+}
 
-        // Fetch routers from database
-        const db = new sqlite3.Database('./data/billing.db');
-        const routers = await new Promise((resolve, reject) => {
-            db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows || []);
-            });
+async function loadHotspotPageData() {
+    let userAuthMode = 'mikrotik';
+    try {
+        const mode = await getRadiusConfigValue('user_auth_mode', null);
+        if (mode !== null && mode !== undefined) {
+            userAuthMode = mode;
+        }
+    } catch (error) {
+        // fallback to mikrotik
+    }
+
+    const db = new sqlite3.Database('./data/billing.db');
+    const routers = await new Promise((resolve, reject) => {
+        db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
         });
+    });
+    db.close();
 
-        // Untuk mode RADIUS, ambil dari RADIUS database
-        if (userAuthMode === 'radius') {
-            try {
-                // Get active users from RADIUS
-                const activeResult = await getActiveHotspotUsers();
-                const activeUsersList = activeResult.success && Array.isArray(activeResult.data) 
-                    ? activeResult.data.map(user => ({
+    const settings = getSettingsWithCache();
+    const company_header = settings.company_header || 'Voucher Hotspot';
+    const adminKontak = settings['admins.0'] || '-';
+
+    const data = {
+        userAuthMode,
+        routers,
+        settings,
+        company_header,
+        adminKontak
+    };
+
+    if (userAuthMode === 'radius') {
+        try {
+            const activeResult = await getActiveHotspotUsers();
+            let activeUsersList = [];
+
+            if (routers && routers.length > 0) {
+                for (const router of routers) {
+                    let conn = null;
+                    try {
+                        conn = await getMikrotikConnectionForRouter(router);
+                        if (!conn) continue;
+                        const activeUsers = await conn.write('/ip/hotspot/active/print');
+                        if (Array.isArray(activeUsers) && activeUsers.length > 0) {
+                            activeUsers.forEach(active => {
+                                const username = active.user || active.name || active.username;
+                                if (!username) return;
+                                activeUsersList.push({
+                                    ...active,
+                                    user: username,
+                                    name: username,
+                                    nas_name: router.name,
+                                    nas_ip: router.nas_ip
+                                });
+                            });
+                        }
+                    } catch (routerErr) {
+                        console.error(`Error fetching active hotspot users from router ${router.name}:`, routerErr.message);
+                    } finally {
+                        if (conn && typeof conn.close === 'function') {
+                            try { await conn.close(); } catch (closeErr) { /* ignore */ }
+                        }
+                    }
+                }
+            }
+
+            if ((!activeUsersList || activeUsersList.length === 0) && activeResult.success && Array.isArray(activeResult.data)) {
+                activeUsersList = activeResult.data.map(user => {
+                    const username = user.user || user.name || user.username;
+                    return {
                         ...user,
-                        nas_name: 'RADIUS',
-                        nas_ip: 'RADIUS'
-                    }))
-                    : [];
-
-                // Get profiles from RADIUS (from adminMikrotik.js route logic)
-                const { getRadiusConnection } = require('../config/mikrotik');
-                const conn = await getRadiusConnection();
-                const [profileRows] = await conn.execute(`
-                    SELECT DISTINCT gr.groupname as name, 
-                           MAX(CASE WHEN gr.attribute = 'MikroTik-Rate-Limit' THEN gr.value END) as rate_limit,
-                           MAX(CASE WHEN gr.attribute = 'Session-Timeout' THEN gr.value END) as session_timeout,
-                           MAX(CASE WHEN gr.attribute = 'Idle-Timeout' THEN gr.value END) as idle_timeout
-                    FROM radgroupreply gr
-                    WHERE gr.groupname NOT IN ('isolir', 'default')
-                    GROUP BY gr.groupname
-                    ORDER BY gr.groupname
-                `);
-                await conn.end();
-                
-                const profiles = profileRows.map(row => ({
-                    name: row.name,
-                    'rate-limit': row.rate_limit || '',
-                    'session-timeout': row.session_timeout || '',
-                    'idle-timeout': row.idle_timeout || '',
-                    nas_id: null,
-                    nas_name: 'RADIUS',
-                    nas_ip: 'RADIUS'
-                }));
-
-                // Get all hotspot users from RADIUS
-                const allUsersResult = await getHotspotUsersRadius();
-                const allUsers = allUsersResult.success && Array.isArray(allUsersResult.data)
-                    ? allUsersResult.data
-                    : [];
-
-                const settings = getSettingsWithCache();
-                const company_header = settings.company_header || 'Voucher Hotspot';
-                const adminKontak = settings['admins.0'] || '-';
-                const voucherOnlineSettings = await getVoucherOnlineSettings();
-                db.close();
-
-                return res.render('adminHotspot', {
-                    users: activeUsersList,
-                    profiles,
-                    allUsers,
-                    routers: [],
-                    voucherOnlineSettings,
-                    success: req.query.success,
-                    error: req.query.error,
-                    company_header,
-                    adminKontak,
-                    settings,
-                    versionInfo: getVersionInfo(),
-                    versionBadge: getVersionBadge(),
-                    userAuthMode: 'radius'
-                });
-            } catch (radiusError) {
-                console.error('Error fetching hotspot data from RADIUS:', radiusError);
-                const settings = getSettingsWithCache();
-                const company_header = settings.company_header || 'Voucher Hotspot';
-                const adminKontak = settings['admins.0'] || '-';
-                db.close();
-                return res.render('adminHotspot', {
-                    users: [],
-                    profiles: [],
-                    allUsers: [],
-                    routers: [],
-                    voucherOnlineSettings: {},
-                    success: null,
-                    error: `Gagal mengambil data dari RADIUS: ${radiusError.message}`,
-                    company_header,
-                    adminKontak,
-                    settings,
-                    versionInfo: getVersionInfo(),
-                    versionBadge: getVersionBadge(),
-                    userAuthMode: 'radius'
+                        user: username,
+                        name: username,
+                        nas_name: user.nas_name || 'RADIUS',
+                        nas_ip: user.nas_ip || 'RADIUS'
+                    };
                 });
             }
-        }
 
-        // Untuk mode Mikrotik API, ambil dari semua router
-        // Aggregate active users from all NAS
+            let profiles = [];
+            try {
+                const hotspotProfilesResult = await getHotspotProfilesRadius();
+                if (hotspotProfilesResult.success && Array.isArray(hotspotProfilesResult.data)) {
+                    profiles = hotspotProfilesResult.data.map(profile => ({
+                        ...profile,
+                        nas_id: null,
+                        nas_name: 'RADIUS',
+                        nas_ip: 'RADIUS'
+                    }));
+                }
+            } catch (profileErr) {
+                console.error('Error fetching hotspot profiles from RADIUS:', profileErr.message);
+            }
+
+            const allUsersResult = await getHotspotUsersRadius();
+            const allUsers = allUsersResult.success && Array.isArray(allUsersResult.data)
+                ? allUsersResult.data
+                : [];
+
+            data.users = activeUsersList;
+            data.profiles = profiles;
+            data.allUsers = allUsers;
+            data.voucherOnlineSettings = await getVoucherOnlineSettings();
+            data.routers = [];
+        } catch (error) {
+            throw error;
+        }
+    } else {
         const activeUsersList = [];
         for (const router of routers) {
             try {
@@ -292,12 +341,11 @@ router.get('/', async (req, res) => {
                         });
                     });
                 }
-            } catch (e) {
-                console.error(`Error getting active users from ${router.name}:`, e.message);
+            } catch (err) {
+                console.error(`Error getting active users from ${router.name}:`, err.message);
             }
         }
 
-        // Aggregate profiles from all NAS
         let profiles = [];
         for (const router of routers) {
             try {
@@ -315,12 +363,11 @@ router.get('/', async (req, res) => {
                         }
                     });
                 }
-            } catch (e) {
-                console.error(`Error getting profiles from ${router.name}:`, e.message);
+            } catch (err) {
+                console.error(`Error getting profiles from ${router.name}:`, err.message);
             }
         }
 
-        // Aggregate all hotspot users from all NAS
         let allUsers = [];
         for (const router of routers) {
             try {
@@ -335,54 +382,102 @@ router.get('/', async (req, res) => {
                     nas_name: router.name,
                     nas_ip: router.nas_ip
                 })));
-            } catch (e) {
-                console.error(`Error getting users from ${router.name}:`, e.message);
+            } catch (err) {
+                console.error(`Error getting users from ${router.name}:`, err.message);
             }
         }
 
-        const settings = getSettingsWithCache();
-        const company_header = settings.company_header || 'Voucher Hotspot';
-        const adminKontak = settings['admins.0'] || '-';
+        data.users = activeUsersList;
+        data.profiles = profiles;
+        data.allUsers = allUsers;
+        data.voucherOnlineSettings = await getVoucherOnlineSettings();
+        data.routers = routers;
+    }
 
-        // Ambil setting voucher online
-        const voucherOnlineSettings = await getVoucherOnlineSettings();
+    return data;
+}
 
-        db.close();
-
+// GET: Tampilkan form tambah user hotspot dan daftar user hotspot
+router.get('/', async (req, res) => {
+    try {
+        const data = await loadHotspotPageData();
         res.render('adminHotspot', {
-            users: activeUsersList,
-            profiles,
-            allUsers,
-            routers,
-            voucherOnlineSettings,
+            users: data.users || [],
+            profiles: data.profiles || [],
+            allUsers: data.allUsers || [],
+            routers: data.routers || [],
+            voucherOnlineSettings: data.voucherOnlineSettings || {},
             success: req.query.success,
             error: req.query.error,
-            company_header,
-            adminKontak,
-            settings,
+            company_header: data.company_header,
+            adminKontak: data.adminKontak,
+            settings: data.settings,
             versionInfo: getVersionInfo(),
             versionBadge: getVersionBadge(),
-            userAuthMode: userAuthMode
+            userAuthMode: data.userAuthMode,
+            page: 'hotspot-master'
         });
     } catch (error) {
         console.error('Error in hotspot GET route:', error);
         const settings = getSettingsWithCache();
         const company_header = settings.company_header || 'Voucher Hotspot';
         const adminKontak = settings['admins.0'] || '-';
-        res.render('adminHotspot', { 
-            users: [], 
-            profiles: [], 
-            allUsers: [], 
+        res.render('adminHotspot', {
+            users: [],
+            profiles: [],
+            allUsers: [],
             routers: [],
             voucherOnlineSettings: {},
-            success: null, 
+            success: null,
             error: 'Gagal mengambil data user hotspot: ' + error.message,
             company_header,
             adminKontak,
             settings,
             versionInfo: getVersionInfo(),
             versionBadge: getVersionBadge(),
-            userAuthMode: 'mikrotik'
+            userAuthMode: 'mikrotik',
+            page: 'hotspot-master'
+        });
+    }
+});
+
+router.get('/users', async (req, res) => {
+    try {
+        const data = await loadHotspotPageData();
+        res.render('adminHotspotUsers', {
+            users: data.users || [],
+            profiles: data.profiles || [],
+            allUsers: data.allUsers || [],
+            routers: data.routers || [],
+            success: req.query.success,
+            error: req.query.error,
+            company_header: data.company_header,
+            adminKontak: data.adminKontak,
+            settings: data.settings,
+            versionInfo: getVersionInfo(),
+            versionBadge: getVersionBadge(),
+            userAuthMode: data.userAuthMode,
+            page: 'hotspot-users'
+        });
+    } catch (error) {
+        console.error('Error rendering hotspot users page:', error);
+        const settings = getSettingsWithCache();
+        const company_header = settings.company_header || 'Voucher Hotspot';
+        const adminKontak = settings['admins.0'] || '-';
+        res.render('adminHotspotUsers', {
+            users: [],
+            profiles: [],
+            allUsers: [],
+            routers: [],
+            success: null,
+            error: 'Gagal memuat daftar user hotspot: ' + error.message,
+            company_header,
+            adminKontak,
+            settings,
+            versionInfo: getVersionInfo(),
+            versionBadge: getVersionBadge(),
+            userAuthMode: 'mikrotik',
+            page: 'hotspot-users'
         });
     }
 });
@@ -403,9 +498,9 @@ router.post('/delete', async (req, res) => {
             });
         }
         await deleteHotspotUser(username, routerObj);
-        res.redirect('/admin/hotspot?success=User+Hotspot+berhasil+dihapus');
+        res.redirect('/admin/hotspot/users?success=User+Hotspot+berhasil+dihapus');
     } catch (error) {
-        res.redirect('/admin/hotspot?error=Gagal+hapus+user:+' + encodeURIComponent(error.message));
+        res.redirect('/admin/hotspot/users?error=Gagal+hapus+user:+' + encodeURIComponent(error.message));
     }
 });
 
@@ -425,12 +520,12 @@ router.post('/', async (req, res) => {
         // Untuk mode RADIUS, router_id tidak diperlukan
         if (userAuthMode === 'radius') {
             await addHotspotUser(username, password, profile, null, null, null);
-            return res.redirect('/admin/hotspot?success=User+Hotspot+berhasil+ditambahkan');
+            return res.redirect('/admin/hotspot/users?success=User+Hotspot+berhasil+ditambahkan');
         }
 
         // Untuk mode Mikrotik API, router_id diperlukan
         if (!router_id) {
-            return res.redirect('/admin/hotspot?error=Pilih+NAS+(router)+terlebih+dahulu');
+            return res.redirect('/admin/hotspot/users?error=Pilih+NAS+(router)+terlebih+dahulu');
         }
         const db = new sqlite3.Database('./data/billing.db');
         const routerObj = await new Promise((resolve, reject) => {
@@ -441,13 +536,13 @@ router.post('/', async (req, res) => {
             });
         });
         if (!routerObj) {
-            return res.redirect('/admin/hotspot?error=Router+tidak+ditemukan');
+            return res.redirect('/admin/hotspot/users?error=Router+tidak+ditemukan');
         }
         await addHotspotUser(username, password, profile, null, null, routerObj);
         // Redirect agar tidak double submit, tampilkan pesan sukses
-        res.redirect('/admin/hotspot?success=User+Hotspot+berhasil+ditambahkan');
+        res.redirect('/admin/hotspot/users?success=User+Hotspot+berhasil+ditambahkan');
     } catch (error) {
-        res.redirect('/admin/hotspot?error=Gagal+menambah+user:+"'+encodeURIComponent(error.message)+'"');
+        res.redirect('/admin/hotspot/users?error=Gagal+menambah+user:+"'+encodeURIComponent(error.message)+'"');
     }
 });
 
@@ -469,12 +564,12 @@ router.post('/edit', async (req, res) => {
             const { deleteHotspotUser, addHotspotUser } = require('../config/mikrotik');
             await deleteHotspotUser(originalUsername || username, null);
             await addHotspotUser(username, password, profile, null, null, null);
-            return res.redirect('/admin/hotspot?success=User+Hotspot+berhasil+diupdate');
+            return res.redirect('/admin/hotspot/users?success=User+Hotspot+berhasil+diupdate');
         }
 
         // Untuk mode Mikrotik API, router_id diperlukan
         if (!router_id) {
-            return res.redirect('/admin/hotspot?error=Pilih+NAS+(router)+terlebih+dahulu');
+            return res.redirect('/admin/hotspot/users?error=Pilih+NAS+(router)+terlebih+dahulu');
         }
         const db = new sqlite3.Database('./data/billing.db');
         const routerObj = await new Promise((resolve, reject) => {
@@ -485,15 +580,15 @@ router.post('/edit', async (req, res) => {
             });
         });
         if (!routerObj) {
-            return res.redirect('/admin/hotspot?error=Router+tidak+ditemukan');
+            return res.redirect('/admin/hotspot/users?error=Router+tidak+ditemukan');
         }
         // Delete old user and add new one (Mikrotik doesn't have direct edit for hotspot user)
         const { deleteHotspotUser, addHotspotUser } = require('../config/mikrotik');
         await deleteHotspotUser(originalUsername || username, routerObj);
         await addHotspotUser(username, password, profile, null, null, routerObj);
-        res.redirect('/admin/hotspot?success=User+Hotspot+berhasil+diupdate');
+        res.redirect('/admin/hotspot/users?success=User+Hotspot+berhasil+diupdate');
     } catch (error) {
-        res.redirect('/admin/hotspot?error=Gagal+update+user:+' + encodeURIComponent(error.message));
+        res.redirect('/admin/hotspot/users?error=Gagal+update+user:+' + encodeURIComponent(error.message));
     }
 });
 
@@ -609,19 +704,26 @@ router.post('/generate-vouchers', async (req, res) => {
             if (!serverMetadata.nasName) serverMetadata.nasName = routerObj.name || '';
         }
  
-        const validUntil = req.body.validUntil || '';
         const voucherPrice = price || req.body.price || '';
         const charTypeValue = charType || req.body.charType || 'alphanumeric';
+
+        const validitySeconds = parseDurationToSeconds(req.body.validityValue, req.body.validityUnit);
+        const uptimeSeconds = parseDurationToSeconds(req.body.uptimeValue, req.body.uptimeUnit);
+        const limits = { validitySeconds, uptimeSeconds };
         
         logger.info(`Generating vouchers with server hotspot: ${server} (from server: ${req.body.server || 'not provided'}, serverProfile: ${req.body.serverProfile || 'not provided'})`);
         
-        const result = await generateHotspotVouchers(count, prefix, profile, serverMetadata, validUntil, voucherPrice, charTypeValue, routerObj);
+        const result = await generateHotspotVouchers(count, prefix, profile, serverMetadata, limits, voucherPrice, charTypeValue, routerObj);
         
         if (result.success) {
             res.json({ 
                 success: true, 
                 vouchers: result.vouchers,
-                router: routerObj ? { name: routerObj.name, ip: routerObj.nas_ip } : null
+                router: routerObj ? { name: routerObj.name, ip: routerObj.nas_ip } : null,
+                validitySeconds,
+                uptimeSeconds,
+                validityText: formatDuration(validitySeconds),
+                uptimeText: formatDuration(uptimeSeconds)
             });
         } else {
             res.status(500).json({ success: false, message: result.message });
@@ -889,7 +991,8 @@ router.get('/voucher', async (req, res) => {
                     settings,
                     versionInfo: getVersionInfo(),
                     versionBadge: getVersionBadge(),
-                    userAuthMode: 'radius'
+                    userAuthMode: 'radius',
+                    page: 'hotspot-settings'
                 });
             } catch (radiusError) {
                 console.error('Error fetching voucher data from RADIUS:', radiusError);
@@ -910,7 +1013,8 @@ router.get('/voucher', async (req, res) => {
                     settings,
                     versionInfo: getVersionInfo(),
                     versionBadge: getVersionBadge(),
-                    userAuthMode: 'radius'
+                    userAuthMode: 'radius',
+                    page: 'hotspot-settings'
                 });
             }
         }
@@ -1111,7 +1215,8 @@ router.get('/voucher', async (req, res) => {
             settings,
             versionInfo: getVersionInfo(),
             versionBadge: getVersionBadge(),
-            userAuthMode: userAuthMode
+            userAuthMode: userAuthMode,
+            page: 'hotspot-settings'
         });
     } catch (error) {
         console.error('Error rendering voucher page:', error);
@@ -1131,7 +1236,8 @@ router.get('/voucher', async (req, res) => {
             settings,
             versionInfo: getVersionInfo(),
             versionBadge: getVersionBadge(),
-            userAuthMode: 'mikrotik'
+            userAuthMode: 'mikrotik',
+            page: 'hotspot-settings'
         });
     }
 });
@@ -1165,7 +1271,6 @@ router.post('/generate-voucher', async (req, res) => {
         const router_id = req.body.router_id || req.body.routerId;
         // MODE HYBRID: Prioritaskan Server Hotspot dari form, fallback ke Server Profile atau 'all'
         const server = req.body.server || req.body.serverProfile || 'all';
-        const validUntil = req.body.validUntil || '';
         // Parse price dengan lebih robust: handle string, number, null, undefined, empty string
         let price = 0;
         if (req.body.price !== null && req.body.price !== undefined && req.body.price !== '') {
@@ -1273,7 +1378,11 @@ router.post('/generate-voucher', async (req, res) => {
             if (!serverMetadata.nasIdentifier) serverMetadata.nasIdentifier = routerObj.nas_identifier || '';
         }
 
-        const result = await generateHotspotVouchers(count, prefix, profile, serverMetadata, validUntil, price, charType, routerObj);
+        const validitySeconds = parseDurationToSeconds(req.body.validityValue, req.body.validityUnit);
+        const uptimeSeconds = parseDurationToSeconds(req.body.uptimeValue, req.body.uptimeUnit);
+        const limits = { validitySeconds, uptimeSeconds };
+
+        const result = await generateHotspotVouchers(count, prefix, profile, serverMetadata, limits, price, charType, routerObj);
         
         if (!result.success) {
             throw new Error(result.message || 'Gagal generate voucher');
@@ -1294,15 +1403,24 @@ router.post('/generate-voucher', async (req, res) => {
             vouchers: result.vouchers.map(voucher => ({
                 ...voucher,
                 profile: profile, // Pastikan profile ada di setiap voucher
-                price: price || voucher.price || null // Harga dari input form /admin/hotspot/voucher
+                price: price || voucher.price || null, // Harga dari input form /admin/hotspot/voucher
+                validitySeconds: limits.validitySeconds || null,
+                uptimeSeconds: limits.uptimeSeconds || null
             })),
             server,
             profile,
-            validUntil,
+            validitySeconds,
+            uptimeSeconds,
+            validityValue: req.body.validityValue ? parseInt(req.body.validityValue, 10) || null : null,
+            validityUnit: req.body.validityUnit || null,
+            uptimeValue: req.body.uptimeValue ? parseInt(req.body.uptimeValue, 10) || null : null,
+            uptimeUnit: req.body.uptimeUnit || null,
             price: price || null, // Harga dari input form /admin/hotspot/voucher
             voucherModel: voucherModel,
             namaHotspot,
-            adminKontak
+            adminKontak,
+            validityText: formatDuration(limits.validitySeconds),
+            uptimeText: formatDuration(limits.uptimeSeconds)
         };
         
         console.log('Response:', JSON.stringify(response));
