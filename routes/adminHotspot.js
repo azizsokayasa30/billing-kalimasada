@@ -298,8 +298,13 @@ function buildHotspotUserStatus(allUsers = [], activeUsers = []) {
             uptimeLabel = formatDuration(totalSessionSeconds) || `${totalSessionSeconds} detik`;
         }
 
-        const ipAddress = user.ip_address
-            || (activeInfo && (activeInfo.address || activeInfo['framed-address'] || activeInfo['ip-address'] || activeInfo['remote-address']))
+        const lastUpdate = user.last_update || user.last_logout || user.last_login || null;
+        const startTime = user.start_time || user.first_login || user.last_login || null;
+        const routerNas = user.active_router || user.nas_name || (user.router_ip ? `NAS ${user.router_ip}` : null);
+        const serverHotspot = user.server_identifier || user.active_server || user.comment || null;
+
+        const ipAddress = (activeInfo && (activeInfo.address || activeInfo['framed-address'] || activeInfo['ip-address'] || activeInfo['remote-address']))
+            || user.ip_address
             || user.last_ip
             || '-';
 
@@ -314,14 +319,12 @@ function buildHotspotUserStatus(allUsers = [], activeUsers = []) {
             uptime_label: uptimeLabel,
             uptime_seconds_remaining: uptimeRemainingSeconds,
             ip_address: ipAddress,
-            total_upload_mb: user.total_upload_mb || null,
-            total_download_mb: user.total_download_mb || null,
-            last_update: user.last_update || user.last_login || null,
-            start_time: user.start_time || user.first_login || null,
-            router_ip: user.router_ip || null,
-            server_identifier: user.server_identifier || null,
-            active_router: activeInfo ? (activeInfo.nas_name || activeInfo['nas-name'] || user.nas_name || null) : user.nas_name || null,
-            active_server: activeInfo ? (activeInfo.server || activeInfo['server'] || null) : null
+            total_upload_mb: user.total_upload_mb || 0,
+            total_download_mb: user.total_download_mb || 0,
+            last_update: lastUpdate,
+            start_time: startTime,
+            router_nas: routerNas,
+            server_hotspot: serverHotspot
         };
     });
 }

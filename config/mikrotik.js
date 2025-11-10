@@ -1788,16 +1788,13 @@ async function getHotspotUsersRadius() {
                    MIN(acctstarttime) AS first_login,
                    MAX(acctstarttime) AS last_login,
                    MAX(acctstoptime) AS last_logout,
-                   MAX(acctlastupdate) AS last_update,
-                   MAX(acctstarttime) AS start_time,
-                   MAX(AcctOutputOctets) AS max_output,
-                   MAX(AcctInputOctets) AS max_input,
-                   SUM(IFNULL(acctinputoctets,0))/1024/1024 AS total_upload_mb,
-                   SUM(IFNULL(acctoutputoctets,0))/1024/1024 AS total_download_mb,
+                   MIN(acctstarttime) AS start_time,
+                   SUM(IFNULL(acctinputoctets,0)) AS total_input_octets,
+                   SUM(IFNULL(acctoutputoctets,0)) AS total_output_octets,
                    MAX(CASE WHEN acctstoptime IS NULL OR acctstoptime = '' OR acctstoptime = '0000-00-00 00:00:00' THEN framedipaddress ELSE NULL END) AS active_ip,
                    MAX(framedipaddress) AS last_ip,
                    MAX(nasipaddress) AS router_ip,
-                   MAX(calledstationid) AS called_station
+                   MAX(calledstationid) AS server_identifier
             FROM radacct
             WHERE username IN (${placeholders})
             GROUP BY username
@@ -1827,19 +1824,21 @@ async function getHotspotUsersRadius() {
 
         const acctMap = {};
         acctRows.forEach(row => {
+            const totalInputOctets = row.total_input_octets ? parseFloat(row.total_input_octets) : 0;
+            const totalOutputOctets = row.total_output_octets ? parseFloat(row.total_output_octets) : 0;
+            const octetToMb = (value) => value > 0 ? value / (1024 * 1024) : 0;
             acctMap[row.username] = {
                 totalSession: row.total_session ? parseInt(row.total_session, 10) || 0 : 0,
                 first_login: row.first_login || null,
                 last_login: row.last_login || null,
                 last_logout: row.last_logout || null,
-                last_update: row.last_update || null,
                 start_time: row.start_time || row.last_login || null,
-                total_upload_mb: row.total_upload_mb ? parseFloat(row.total_upload_mb) : 0,
-                total_download_mb: row.total_download_mb ? parseFloat(row.total_download_mb) : 0,
+                total_upload_mb: octetToMb(totalInputOctets),
+                total_download_mb: octetToMb(totalOutputOctets),
                 active_ip: row.active_ip || null,
                 last_ip: row.last_ip || null,
                 router_ip: row.router_ip || null,
-                server_identifier: row.called_station || null
+                server_identifier: row.server_identifier || null
             };
         });
 
