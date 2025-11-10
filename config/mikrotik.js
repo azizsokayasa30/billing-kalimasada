@@ -1865,7 +1865,14 @@ async function getHotspotUsersRadius() {
                     first_login: acct.first_login || null,
                     last_login: acct.last_login || null,
                     last_logout: acct.last_logout || null,
-                    ip_address: acct.active_ip || acct.last_ip || null
+                    start_time: acct.start_time || null,
+                    last_update: acct.last_update || null,
+                    total_upload_mb: acct.total_upload_mb || 0,
+                    total_download_mb: acct.total_download_mb || 0,
+                    ip_address: acct.active_ip || acct.last_ip || null,
+                    router_ip: acct.router_ip || null,
+                    server_identifier: acct.server_identifier || null,
+                    server_metadata: meta.server_metadata || null
                 };
             })
         };

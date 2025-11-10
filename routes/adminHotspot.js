@@ -231,9 +231,12 @@ function buildHotspotUserStatus(allUsers = [], activeUsers = [], defaultServerNa
         const activeInfo = activeMap.get(username);
         const isOnline = Boolean(activeInfo);
 
-        const chosenServerName = user.server_metadata && user.server_metadata.name
-            ? user.server_metadata.name
-            : defaultServerName;
+        const chosenServerName = (user.server_metadata && user.server_metadata.name)
+            || user.server_hotspot
+            || user.server_identifier
+            || defaultServerName
+            || (user.comment && user.comment.toLowerCase() === 'voucher' ? null : user.comment)
+            || null;
 
         const parsePositiveNumber = (value) => {
             if (value === undefined || value === null) return null;
