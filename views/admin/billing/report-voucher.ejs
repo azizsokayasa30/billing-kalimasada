@@ -267,11 +267,9 @@
                                                 </td>
                                                 <td><strong>Rp <%= parseFloat(invoice.amount || 0).toLocaleString('id-ID') %></strong></td>
                                                 <td>
-                                                    <% if (invoice.status === 'paid' || invoice.first_used_at) { %>
-                                                        <span class="badge bg-success">Lunas (Sudah Digunakan)</span>
-                                                    <% } else { %>
-                                                        <span class="badge bg-secondary">Belum Digunakan</span>
-                                                    <% } %>
+                                                    <span class="badge bg-<%= invoice.usage_status_badge || 'secondary' %>">
+                                                        <%= invoice.usage_status_label || (invoice.status === 'paid' ? 'Sudah Digunakan' : 'Belum Digunakan') %>
+                                                    </span>
                                                 </td>
                                                 <td>
                                                     <% if (invoice.usage_count > 0) { %>
@@ -287,10 +285,10 @@
                                 <tfoot>
                                     <tr class="table-info">
                                         <th colspan="5" class="text-end">Total:</th>
-                                        <th>Rp <%= invoices.reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0).toLocaleString('id-ID') %></th>
+                                        <th>Rp <%= invoices.reduce((sum, inv) => sum + (parseFloat(inv.amount || inv.price || 0) || 0), 0).toLocaleString('id-ID') %></th>
                                         <th>
-                                            <span class="badge bg-success"><%= invoices.filter(i => i.status === 'paid' || i.first_used_at).length %> Sudah Digunakan</span>
-                                            <span class="badge bg-secondary"><%= invoices.filter(i => i.status === 'unpaid' && !i.first_used_at).length %> Belum Digunakan</span>
+                                            <span class="badge bg-success"><%= invoices.filter(i => (i.computed_status || '').toLowerCase() === 'paid').length %> Sudah Digunakan</span>
+                                            <span class="badge bg-secondary"><%= invoices.filter(i => (i.computed_status || '').toLowerCase() !== 'paid').length %> Belum Digunakan</span>
                                         </th>
                                         <th>
                                             <span class="badge bg-primary"><%= invoices.reduce((sum, inv) => sum + (inv.usage_count || 0), 0) %> Total Penggunaan</span>

@@ -4553,34 +4553,9 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
     // Fungsi untuk mendapatkan statistik laporan keuangan voucher
     // Menggunakan tabel voucher_revenue (bukan invoices), karena invoice hanya untuk pelanggan PPPoE
     async getVoucherReportStats(startDate, endDate) {
-        return new Promise((resolve, reject) => {
-            const sql = `
-                SELECT 
-                    COUNT(*) as total_vouchers,
-                    SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_vouchers,
-                    SUM(CASE WHEN status = 'unpaid' THEN 1 ELSE 0 END) as unpaid_vouchers,
-                    COALESCE(SUM(CASE WHEN status = 'paid' THEN price ELSE 0 END), 0) as total_revenue,
-                    COALESCE(SUM(CASE WHEN status = 'unpaid' THEN price ELSE 0 END), 0) as unpaid_amount,
-                    COALESCE(AVG(CASE WHEN status = 'paid' THEN price ELSE NULL END), 0) as average_price
-                FROM voucher_revenue
-                WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?
-            `;
-            
-            this.db.get(sql, [startDate, endDate], (err, row) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve({
-                        total_vouchers: parseInt(row.total_vouchers) || 0,
-                        paid_vouchers: parseInt(row.paid_vouchers) || 0,
-                        unpaid_vouchers: parseInt(row.unpaid_vouchers) || 0,
-                        total_revenue: parseFloat(row.total_revenue) || 0, // Hanya dari voucher yang sudah digunakan (paid)
-                        unpaid_amount: parseFloat(row.unpaid_amount) || 0, // Voucher yang belum digunakan
-                        average_price: parseFloat(row.average_price) || 0
-                    });
-                }
-            });
-        });
+        // Keperluan backward compat: gunakan getVoucherInvoices untuk statistik
+        const invoices = await this.getVoucherInvoices(startDate, endDate);
+        return this.calculateVoucherStats(invoices);
     }
 
     // Fungsi untuk mendapatkan statistik laporan keuangan PPPoE
@@ -4620,11 +4595,10 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
 
     // Fungsi untuk mendapatkan daftar voucher revenue dengan filter tanggal
     // Menggunakan tabel voucher_revenue (bukan invoices), karena invoice hanya untuk pelanggan PPPoE
-    async getVoucherInvoices(startDate, endDate, status = null) {
+    async getVoucherInvoices(startDate, endDate) {
         return new Promise(async (resolve, reject) => {
             try {
-                // Log untuk debugging
-                logger.info(`getVoucherInvoices called: startDate=${startDate}, endDate=${endDate}, status=${status || 'all'}`);
+                logger.info(`getVoucherInvoices called: startDate=${startDate}, endDate=${endDate}`);
                 
                 // Dapatkan semua voucher revenue dari billing.db
                 let sql = `
@@ -4644,11 +4618,6 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
                 `;
                 
                 const params = [startDate, endDate];
-                
-                if (status && status !== 'all') {
-                    sql += ` AND status = ?`;
-                    params.push(status);
-                }
                 
                 sql += ` ORDER BY created_at DESC`;
                 
@@ -4704,34 +4673,52 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
                             });
                         });
                         
-                        // Merge voucher data dengan usage info
-                        const vouchersWithUsage = (voucherRows || []).map(voucher => {
+                        // Helper untuk menentukan status penggunaan
+                        const normalizeUsageInfo = (voucher) => {
                             const usage = usageMap.get(voucher.voucher_username);
-                            if (usage) {
-                                return {
-                                    ...voucher,
-                                    first_used_at: usage.first_used_at,
-                                    last_used_at: usage.last_used_at,
-                                    usage_count: usage.usage_count
-                                };
-                            } else {
-                                // Jika sudah ada di voucher_revenue (used_at, usage_count), gunakan itu
-                                return {
-                                    ...voucher,
-                                    first_used_at: voucher.used_at || null,
-                                    last_used_at: voucher.used_at || null,
-                                    usage_count: voucher.usage_count || 0
-                                };
-                            }
-                        });
+                            const fallbackFirstUsed = (voucher.used_at && voucher.used_at !== '0000-00-00 00:00:00') ? voucher.used_at : null;
+                            const firstUsedAt = usage && usage.first_used_at ? usage.first_used_at : fallbackFirstUsed;
+                            const usageCount = usage ? usage.usage_count : (voucher.usage_count || 0);
+                            const numericUsage = parseInt(usageCount, 10) || 0;
+                            const hasUsage = numericUsage > 0 || (firstUsedAt && firstUsedAt !== '0000-00-00 00:00:00');
+                            const statusFromDb = (voucher.status || '').toLowerCase();
+                            const isPaid = statusFromDb === 'paid' || hasUsage;
+                            
+                            return {
+                                ...voucher,
+                                first_used_at: firstUsedAt,
+                                last_used_at: usage && usage.last_used_at ? usage.last_used_at : (voucher.used_at || null),
+                                usage_count: numericUsage,
+                                computed_status: isPaid ? 'paid' : 'unpaid',
+                                usage_status_label: isPaid ? 'Sudah Digunakan' : 'Belum Digunakan',
+                                usage_status_badge: isPaid ? 'success' : 'secondary'
+                            };
+                        };
+                        
+                        const vouchersWithUsage = (voucherRows || []).map(normalizeUsageInfo);
                         
                         logger.info(`Returning ${vouchersWithUsage.length} vouchers with usage info (batch query)`);
                         resolve(vouchersWithUsage || []);
                     } catch (radiusError) {
                         logger.error(`Error connecting to RADIUS: ${radiusError.message}`);
                         logger.info(`Returning ${voucherRows ? voucherRows.length : 0} vouchers from database only`);
-                        // Jika error, tetap return data dari voucher_revenue (sudah ada used_at dan usage_count)
-                        resolve(voucherRows || []);
+                        // Jika error, tetap return data dari voucher_revenue dengan normalisasi status dasar
+                        const fallback = (voucherRows || []).map(voucher => {
+                            const fallbackFirstUsed = (voucher.used_at && voucher.used_at !== '0000-00-00 00:00:00') ? voucher.used_at : null;
+                            const numericUsage = parseInt(voucher.usage_count || 0, 10) || 0;
+                            const hasUsage = numericUsage > 0 || Boolean(fallbackFirstUsed);
+                            const isPaid = (voucher.status || '').toLowerCase() === 'paid' || hasUsage;
+                            return {
+                                ...voucher,
+                                first_used_at: fallbackFirstUsed,
+                                last_used_at: fallbackFirstUsed,
+                                usage_count: numericUsage,
+                                computed_status: isPaid ? 'paid' : 'unpaid',
+                                usage_status_label: isPaid ? 'Sudah Digunakan' : 'Belum Digunakan',
+                                usage_status_badge: isPaid ? 'success' : 'secondary'
+                            };
+                        });
+                        resolve(fallback);
                     }
                 });
             } catch (error) {
@@ -4781,5 +4768,35 @@ Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`;
 
 // Create singleton instance
 const billingManager = new BillingManager();
+
+billingManager.calculateVoucherStats = function(invoices = []) {
+    const totalVouchers = invoices.length;
+    const paidInvoices = invoices.filter(inv => inv.computed_status === 'paid');
+    const unpaidInvoices = invoices.filter(inv => inv.computed_status !== 'paid');
+    
+    const toNumber = (value) => {
+        const num = parseFloat(value);
+        return Number.isFinite(num) ? num : 0;
+    };
+    
+    const totalRevenue = paidInvoices.reduce((sum, inv) => sum + toNumber(inv.amount || inv.price || 0), 0);
+    const unpaidAmount = unpaidInvoices.reduce((sum, inv) => sum + toNumber(inv.amount || inv.price || 0), 0);
+    const averagePrice = paidInvoices.length > 0 ? totalRevenue / paidInvoices.length : 0;
+    
+    return {
+        total_vouchers: totalVouchers,
+        paid_vouchers: paidInvoices.length,
+        unpaid_vouchers: unpaidInvoices.length,
+        total_revenue: totalRevenue,
+        unpaid_amount: unpaidAmount,
+        average_price: averagePrice
+    };
+};
+
+billingManager.filterVoucherInvoicesByStatus = function(invoices = [], status = 'all') {
+    if (!status || status === 'all') return invoices;
+    const normalizedStatus = status.toLowerCase();
+    return invoices.filter(inv => (inv.computed_status || '').toLowerCase() === normalizedStatus);
+};
 
 module.exports = billingManager; 

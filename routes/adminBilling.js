@@ -917,15 +917,16 @@ router.get('/reports/voucher', getAppSettings, adminAuth, async (req, res) => {
         // Script update_voucher_invoices_on_use.js sebaiknya dijalankan via cron job
         // atau manual via tombol "Update Status" di UI
         
-        const stats = await billingManager.getVoucherReportStats(startDate, endDate);
-        const invoices = await billingManager.getVoucherInvoices(startDate, endDate, status || null);
+        const allInvoices = await billingManager.getVoucherInvoices(startDate, endDate);
+        const filteredInvoices = billingManager.filterVoucherInvoicesByStatus(allInvoices, status || 'all');
+        const stats = billingManager.calculateVoucherStats(filteredInvoices);
         
-        logger.info(`Found ${invoices.length} voucher invoices for date range ${startDate} to ${endDate}`);
+        logger.info(`Found ${filteredInvoices.length} voucher invoices for date range ${startDate} to ${endDate} (status=${status || 'all'})`);
         
         res.render('admin/billing/report-voucher', {
             title: 'Laporan Keuangan Voucher',
             stats,
-            invoices,
+            invoices: filteredInvoices,
             startDate,
             endDate,
             status: status || 'all',
