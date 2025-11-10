@@ -131,6 +131,7 @@
 
                 <!-- Summary Cards -->
                 <% if (financialData && financialData.summary) { %>
+                <% const voucherSummary = financialData.voucherSummary || { recognized_revenue: 0, recognized_vouchers: 0, pending_revenue: 0, pending_vouchers: 0, total_vouchers: 0 }; %>
                 <div class="row mb-4">
                     <div class="col-md-3">
                         <div class="stat-card income">
@@ -144,6 +145,7 @@
                                     </div>
                                     <div class="stat-label">Total Pemasukan</div>
                                     <small class="text-muted"><%= financialData.summary.incomeCount || 0 %> transaksi</small>
+                                    <small class="text-info d-block">Voucher: Rp <%= Number(voucherSummary.recognized_revenue || 0).toLocaleString('id-ID') %> (<%= voucherSummary.recognized_vouchers || 0 %> voucher)</small>
                                 </div>
                             </div>
                         </div>
@@ -160,22 +162,24 @@
                                     </div>
                                     <div class="stat-label">Total Pengeluaran</div>
                                     <small class="text-muted"><%= financialData.summary.expenseCount || 0 %> transaksi</small>
+                                    <small class="text-muted d-block">Komisi Kolektor: Rp <%= Number(financialData.summary.totalCommission || 0).toLocaleString('id-ID') %></small>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-3">
-                        <div class="stat-card" style="border-left-color: #6f42c1;">
+                        <div class="stat-card" style="border-left-color: #0dcaf0;">
                             <div class="d-flex align-items-center">
                                 <div class="me-3">
-                                    <i class="bx bx-user-check" style="font-size: 2rem; color: #6f42c1;"></i>
+                                    <i class="bx bx-ticket" style="font-size: 2rem; color: #0dcaf0;"></i>
                                 </div>
                                 <div>
-                                    <div class="stat-value" style="color: #6f42c1;">
-                                        Rp <%= Number(financialData.summary.totalCommission || 0).toLocaleString('id-ID') %>
+                                    <div class="stat-value" style="color: #0dcaf0;">
+                                        Rp <%= Number(voucherSummary.recognized_revenue || 0).toLocaleString('id-ID') %>
                                     </div>
-                                    <div class="stat-label">Total Komisi Kolektor</div>
-                                    <small class="text-muted">Biaya operasional</small>
+                                    <div class="stat-label">Pendapatan Voucher</div>
+                                    <small class="text-muted"><%= voucherSummary.recognized_vouchers || 0 %> voucher diakui</small>
+                                    <small class="text-muted d-block">Belum diakui: Rp <%= Number(voucherSummary.pending_revenue || 0).toLocaleString('id-ID') %></small>
                                 </div>
                 </div>
             </div>
@@ -224,12 +228,15 @@
             </tr>
             </thead>
             <tbody>
-                                    <% financialData.transactions.forEach(function(transaction) { %>
+                                    <% financialData.transactions.forEach(function(transaction) { 
+                                        const dateObj = transaction.date ? new Date(transaction.date) : null;
+                                        const isValidDate = dateObj && !isNaN(dateObj.getTime());
+                                    %>
                                     <tr>
                                         <td>
                                             <div class="d-flex flex-column">
-                                                <span><%= new Date(transaction.date).toLocaleDateString('id-ID') %></span>
-                                                <small class="text-muted"><%= new Date(transaction.date).toLocaleTimeString('id-ID') %></small>
+                                                <span><%= isValidDate ? dateObj.toLocaleDateString('id-ID') : '-' %></span>
+                                                <small class="text-muted"><%= isValidDate ? dateObj.toLocaleTimeString('id-ID') : '-' %></small>
                                             </div>
                                         </td>
                                         <td>
@@ -313,8 +320,10 @@
             const csvRows = [csvHeaders.join(',')];
             
             transactions.forEach(transaction => {
+                const dateObj = transaction.date ? new Date(transaction.date) : null;
+                const isValidDate = dateObj && !isNaN(dateObj.getTime());
                 const row = [
-                    `"${new Date(transaction.date).toLocaleDateString('id-ID')}"`,
+                    `"${isValidDate ? dateObj.toLocaleDateString('id-ID') : ''}"`,
                     `"${transaction.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}"`,
                     `"${transaction.amount}"`,
                     `"${transaction.payment_method || ''}"`,

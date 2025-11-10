@@ -3131,7 +3131,9 @@ class BillingManager {
             const currentMonth = currentDate.getMonth();
             const currentYear = currentDate.getFullYear();
             const currentMonthStart = new Date(currentYear, currentMonth, 1);
+            const currentMonthEnd = new Date(currentYear, currentMonth + 1, 0);
             const currentMonthStartStr = currentMonthStart.toISOString().split('T')[0];
+            const currentMonthEndStr = currentMonthEnd.toISOString().split('T')[0];
             
             // Check if invoice_type column exists first
             this.db.get("PRAGMA table_info(invoices)", (err, pragmaResult) => {
@@ -3238,7 +3240,45 @@ class BillingManager {
                                 stats.active_customers = stats.total_customers;
                             }
                             
-                            resolve(stats);
+                            const finalizeStats = async () => {
+                                try {
+                                    const voucherInvoices = await this.getVoucherInvoices(currentMonthStartStr, currentMonthEndStr);
+                                    const voucherStats = this.calculateVoucherStats(voucherInvoices);
+                                    
+                                    stats.voucher_summary = {
+                                        total_vouchers: voucherStats.total_vouchers,
+                                        recognized_vouchers: voucherStats.paid_vouchers,
+                                        pending_vouchers: voucherStats.unpaid_vouchers,
+                                        recognized_revenue: voucherStats.total_revenue,
+                                        pending_revenue: voucherStats.unpaid_amount
+                                    };
+                                    
+                                    stats.voucher_invoices = voucherStats.total_vouchers;
+                                    stats.paid_voucher_invoices = voucherStats.paid_vouchers;
+                                    stats.unpaid_voucher_invoices = voucherStats.unpaid_vouchers;
+                                    stats.voucher_revenue = voucherStats.total_revenue;
+                                    stats.voucher_unpaid = voucherStats.unpaid_amount;
+                                    
+                                    stats.total_invoices = (parseInt(row.monthly_invoices) || 0) + voucherStats.total_vouchers;
+                                    stats.paid_invoices = (parseInt(row.paid_monthly_invoices) || 0) + voucherStats.paid_vouchers;
+                                    stats.unpaid_invoices = (parseInt(row.unpaid_monthly_invoices) || 0) + voucherStats.unpaid_vouchers;
+                                    stats.total_revenue = (parseFloat(row.monthly_revenue) || 0) + voucherStats.total_revenue;
+                                    stats.total_unpaid = (parseFloat(row.monthly_unpaid) || 0) + voucherStats.unpaid_amount;
+                                } catch (voucherErr) {
+                                    logger.error(`Failed to compute voucher stats for dashboard: ${voucherErr.message}`);
+                                    stats.voucher_summary = {
+                                        total_vouchers: stats.voucher_invoices,
+                                        recognized_vouchers: stats.paid_voucher_invoices,
+                                        pending_vouchers: stats.unpaid_voucher_invoices,
+                                        recognized_revenue: stats.voucher_revenue,
+                                        pending_revenue: stats.voucher_unpaid
+                                    };
+                                } finally {
+                                    resolve(stats);
+                                }
+                            };
+                            
+                            finalizeStats();
                         }
                     });
                 });
@@ -4197,48 +4237,87 @@ async handlePaymentWebhook(payload, gateway) {
                     params.push(startDate, endDate, startDate, endDate);
                 }
 
-                this.db.all(sql, params, (err, rows) => {
+                this.db.all(sql, params, async (err, rows) => {
                     if (err) {
                         reject(err);
                     } else {
-                        // Hitung total dan statistik
-                        const totalIncome = rows.filter(r => r.type === 'income')
-                            .reduce((sum, r) => sum + (r.amount || 0), 0);
-                        const totalExpense = rows.filter(r => r.type === 'expense')
-                            .reduce((sum, r) => sum + (r.amount || 0), 0);
-                        const totalCommission = rows.filter(r => r.type === 'income')
-                            .reduce((sum, r) => sum + (r.commission_amount || 0), 0);
-                        const netProfit = totalIncome - totalExpense;
-                        
-                        // Statistik per tipe pembayaran
-                        const incomeByType = rows.filter(r => r.type === 'income')
-                            .reduce((acc, r) => {
-                                const gateway = r.gateway_name || 'Unknown';
-                                if (!acc[gateway]) {
-                                    acc[gateway] = { count: 0, amount: 0, commission: 0 };
+                        try {
+                            let transactions = Array.isArray(rows) ? [...rows] : [];
+                            let voucherSummary = {
+                                total_vouchers: 0,
+                                recognized_vouchers: 0,
+                                recognized_revenue: 0,
+                                pending_vouchers: 0,
+                                pending_revenue: 0
+                            };
+                            
+                            if (type !== 'expense') {
+                                const voucherInvoices = await this.getVoucherInvoices(startDate, endDate);
+                                const voucherStats = this.calculateVoucherStats(voucherInvoices);
+                                
+                                voucherSummary = {
+                                    total_vouchers: voucherStats.total_vouchers,
+                                    recognized_vouchers: voucherStats.paid_vouchers,
+                                    recognized_revenue: voucherStats.total_revenue,
+                                    pending_vouchers: voucherStats.unpaid_vouchers,
+                                    pending_revenue: voucherStats.unpaid_amount
+                                };
+                                
+                                const voucherTransactions = this.buildVoucherTransactions(voucherInvoices);
+                                if (voucherTransactions.length > 0) {
+                                    transactions = transactions.concat(voucherTransactions);
                                 }
-                                acc[gateway].count++;
-                                acc[gateway].amount += (r.amount || 0);
-                                acc[gateway].commission += (r.commission_amount || 0);
-                                return acc;
-                            }, {});
-                        
-                        const result = {
-                            transactions: rows,
-                            summary: {
-                                totalIncome,
-                                totalExpense,
-                                totalCommission,
-                                netProfit,
-                                transactionCount: rows.length,
-                                incomeCount: rows.filter(r => r.type === 'income').length,
-                                expenseCount: rows.filter(r => r.type === 'expense').length,
-                                incomeByType
-                            },
-                            dateRange: { startDate, endDate }
-                        };
-                        
-                        resolve(result);
+                            }
+                            
+                            // Urutkan transaksi dari terbaru
+                            transactions.sort((a, b) => {
+                                const dateA = new Date(a.date || a.payment_date || 0).getTime();
+                                const dateB = new Date(b.date || b.payment_date || 0).getTime();
+                                return dateB - dateA;
+                            });
+                            
+                            // Hitung total dan statistik
+                            const totalIncome = transactions.filter(r => r.type === 'income')
+                                .reduce((sum, r) => sum + (r.amount || 0), 0);
+                            const totalExpense = transactions.filter(r => r.type === 'expense')
+                                .reduce((sum, r) => sum + (r.amount || 0), 0);
+                            const totalCommission = transactions.filter(r => r.type === 'income')
+                                .reduce((sum, r) => sum + (r.commission_amount || 0), 0);
+                            const netProfit = totalIncome - totalExpense;
+                            
+                            // Statistik per tipe pembayaran
+                            const incomeByType = transactions.filter(r => r.type === 'income')
+                                .reduce((acc, r) => {
+                                    const gateway = r.gateway_name || 'Unknown';
+                                    if (!acc[gateway]) {
+                                        acc[gateway] = { count: 0, amount: 0, commission: 0 };
+                                    }
+                                    acc[gateway].count++;
+                                    acc[gateway].amount += (r.amount || 0);
+                                    acc[gateway].commission += (r.commission_amount || 0);
+                                    return acc;
+                                }, {});
+                            
+                            const result = {
+                                transactions,
+                                summary: {
+                                    totalIncome,
+                                    totalExpense,
+                                    totalCommission,
+                                    netProfit,
+                                    transactionCount: transactions.length,
+                                    incomeCount: transactions.filter(r => r.type === 'income').length,
+                                    expenseCount: transactions.filter(r => r.type === 'expense').length,
+                                    incomeByType
+                                },
+                                voucherSummary,
+                                dateRange: { startDate, endDate }
+                            };
+                            
+                            resolve(result);
+                        } catch (processError) {
+                            reject(processError);
+                        }
                     }
                 });
             } catch (error) {
@@ -4797,6 +4876,70 @@ billingManager.filterVoucherInvoicesByStatus = function(invoices = [], status = 
     if (!status || status === 'all') return invoices;
     const normalizedStatus = status.toLowerCase();
     return invoices.filter(inv => (inv.computed_status || '').toLowerCase() === normalizedStatus);
+};
+
+billingManager.normalizeVoucherDate = function(dateValue) {
+    if (!dateValue) {
+        return new Date().toISOString();
+    }
+
+    if (dateValue instanceof Date) {
+        return dateValue.toISOString();
+    }
+
+    if (typeof dateValue === 'string') {
+        let normalized = dateValue.trim();
+        if (!normalized) {
+            return new Date().toISOString();
+        }
+
+        // Replace space with T for ISO compliance
+        if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/.test(normalized)) {
+            normalized = normalized.replace(' ', 'T');
+        }
+
+        const parsed = new Date(normalized);
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed.toISOString();
+        }
+
+        // Fallback: assume local time string
+        const fallback = normalized.replace(' ', 'T');
+        const parsedFallback = new Date(fallback);
+        if (!Number.isNaN(parsedFallback.getTime())) {
+            return parsedFallback.toISOString();
+        }
+    }
+
+    return new Date().toISOString();
+};
+
+billingManager.buildVoucherTransactions = function(voucherInvoices = []) {
+    return voucherInvoices
+        .filter(inv => (inv.computed_status || '').toLowerCase() === 'paid')
+        .map(inv => {
+            const amount = parseFloat(inv.amount || inv.price || 0) || 0;
+            const dateSource = inv.first_used_at || inv.used_at || inv.created_at;
+            const normalizedDate = this.normalizeVoucherDate(dateSource);
+            const descriptionParts = [`Voucher ${inv.voucher_username}`];
+            if (inv.profile) {
+                descriptionParts.push(`(${inv.profile})`);
+            }
+            return {
+                type: 'income',
+                date: normalizedDate,
+                amount,
+                payment_method: 'voucher',
+                gateway_name: 'Voucher',
+                invoice_number: inv.invoice_number || `VCHR-${inv.voucher_username}`,
+                customer_name: inv.voucher_username,
+                customer_phone: '',
+                description: descriptionParts.join(' '),
+                notes: inv.notes || '',
+                collector_name: '',
+                commission_amount: 0
+            };
+        });
 };
 
 module.exports = billingManager; 
