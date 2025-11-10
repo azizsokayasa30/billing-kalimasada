@@ -137,14 +137,15 @@
                                 <% const statusClassMap = { 'Online': 'bg-success', 'Stand by': 'bg-warning text-dark', 'Expired': 'bg-danger', 'Offline': 'bg-secondary' }; %>
                                 <% (allUsers || []).forEach(function(user, i) { %>
                                 <% const statusBadgeClass = statusClassMap[user.status_voucher] || 'bg-secondary'; %>
-                                <tr data-username="<%= user.name %>" data-voucher-status="<%= (user.status || '').toLowerCase() %>" data-connection-status="<%= (user.status_voucher || '').toLowerCase() %>" data-router-id="<%= user.nas_id || '' %>">
+                                <tr data-username="<%= user.name %>" data-voucher-status="<%= (user.status || '').toLowerCase() %>" data-connection-status="<%= (user.status_voucher || '').toLowerCase() %>" data-router-id="<%= user.nas_id || '' %>" data-start-time="<%= user.start_time || '' %>">
                                     <td class="text-center">
                                         <input type="checkbox"
                                                class="form-check-input voucher-select-checkbox"
                                                data-username="<%= user.name %>"
                                                data-router-id="<%= user.nas_id || '' %>"
                                                data-voucher-status="<%= (user.status || '').toLowerCase() %>"
-                                               data-connection-status="<%= (user.status_voucher || '').toLowerCase() %>">
+                                               data-connection-status="<%= (user.status_voucher || '').toLowerCase() %>"
+                                               data-start-time="<%= user.start_time || '' %>">
                                     </td>
                                     <td class="text-center"><%= i+1 %></td>
                                     <td class="fw-bold text-nowrap"><%= user.name %></td>

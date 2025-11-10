@@ -98,12 +98,13 @@ $(function() {
     const $row = $(rowNode);
     const voucherStatus = ($row.data('voucher-status') || '').toString().toLowerCase();
     const connectionStatus = ($row.data('connection-status') || '').toString().toLowerCase();
+    const startTime = ($row.data('start-time') || '').toString().trim();
 
     if (filterValue === 'stock') {
-      return voucherStatus !== 'paid';
+      return voucherStatus !== 'paid' && !startTime;
     }
     if (filterValue === 'sold') {
-      return voucherStatus === 'paid';
+      return Boolean(startTime);
     }
     if (filterValue === 'online') {
       return connectionStatus === 'online';
