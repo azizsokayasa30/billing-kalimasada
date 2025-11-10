@@ -2432,18 +2432,19 @@ router.post('/system/update', async (req, res) => {
 router.post('/system/restart', async (req, res) => {
     try {
         const repoPath = getSetting('repo_path', process.cwd());
-        const appNameSetting = getSetting('pm2_restart_target', null) || getSetting('pm2_app_name', null);
-        if (!appNameSetting) {
-            return res.status(400).json({ success: false, message: 'PM2 app name is not configured' });
-        }
+        const appNameSetting = getSetting('pm2_restart_target', null)
+            || getSetting('pm2_app_name', null)
+            || process.env.PM2_APP_NAME
+            || 'cvlmedia';
+        const appResolvedFromFallback = (!getSetting('pm2_restart_target', null) && !getSetting('pm2_app_name', null) && !process.env.PM2_APP_NAME);
         const opts = { cwd: repoPath, windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/bash' };
         const pm2Cmd = `pm2 restart ${appNameSetting} || pm2 reload ${appNameSetting}`;
         exec(pm2Cmd, opts, (error, stdout, stderr) => {
             if (error) {
-                return res.status(500).json({ success: false, message: 'Restart failed', error: stderr || error.message, log: stdout, app: appNameSetting });
+                return res.status(500).json({ success: false, message: 'Restart failed', error: stderr || error.message, log: stdout, app: appNameSetting, fallbackUsed: appResolvedFromFallback });
             }
             exec('pm2 save', opts, () => {
-                res.json({ success: true, message: 'Billing system restarted', log: stdout, app: appNameSetting });
+                res.json({ success: true, message: 'Billing system restarted', log: stdout, app: appNameSetting, fallbackUsed: appResolvedFromFallback });
             });
         });
     } catch (e) {
@@ -2456,7 +2457,10 @@ router.get('/system/server-info', async (req, res) => {
         const repoPath = getSetting('repo_path', process.cwd());
         const defaultBranch = getSetting('git_default_branch', 'main');
         const appVersion = getSetting('app_version', '4.1');
-        const pm2App = getSetting('pm2_restart_target', null) || getSetting('pm2_app_name', null);
+        const pm2App = getSetting('pm2_restart_target', null)
+            || getSetting('pm2_app_name', null)
+            || process.env.PM2_APP_NAME
+            || 'cvlmedia';
         const opts = { cwd: repoPath, windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/bash' };
         const now = new Date();
 
