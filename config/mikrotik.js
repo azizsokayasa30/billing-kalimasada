@@ -2081,7 +2081,6 @@ async function getActiveHotspotUsers(routerObj = null) {
         };
     }
 }
-
 // Fungsi untuk menambahkan user hotspot
 async function addHotspotUser(username, password, profile, comment = null, customer = null, routerObj = null, price = null, server = null, serverMetadata = null, limits = null) {
     let conn = null;
@@ -2154,106 +2153,164 @@ async function addHotspotUser(username, password, profile, comment = null, custo
         await ensureVoucherRevenueColumns();
         logger.info(`Saving voucher revenue record for ${username} with price: ${voucherPrice} (original price param: ${price}, type: ${typeof price}) (RADIUS result: ${result.success ? 'success' : 'failed'})`);
         try {
-                const sqlite3 = require('sqlite3').verbose();
-                const dbPath = require('path').join(__dirname, '../data/billing.db');
-                const db = new sqlite3.Database(dbPath);
-                
-                logger.info(`[DEBUG] Opening database: ${dbPath}`);
-                
-                // Simpan ke tabel voucher_revenue (bukan invoices)
-                await new Promise((resolve, reject) => {
-                    db.run(`
-                        INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes, server_name, server_metadata)
-                        VALUES (?, ?, ?, datetime('now'), 'unpaid', ?, ?, ?)
-                        ON CONFLICT(username) DO UPDATE SET
-                            price = excluded.price,
-                            profile = excluded.profile,
-                            status = excluded.status,
-                            notes = excluded.notes,
-                            server_name = COALESCE(excluded.server_name, server_name),
-                            server_metadata = COALESCE(excluded.server_metadata, server_metadata)
-                    `, [
-                        username,
-                        voucherPrice, // Harga voucher dari input form
-                        profile,
-                        `Voucher Hotspot ${username} - Profile: ${profile}`,
-                        serverNameForVoucher,
-                        serverMetadataForStore
-                    ], function(err) {
-                        if (err) {
-                            logger.error(`Failed to save voucher revenue record for ${username}: ${err.message}`);
-                            logger.error(`[DEBUG] SQL Error details: ${JSON.stringify(err)}`);
-                            reject(err);
-                        } else {
-                            voucherRecordId = this.lastID;
-                            logger.info(`✅ Voucher revenue record saved for ${username}: ID=${voucherRecordId}, Price=Rp ${voucherPrice} - Status: unpaid (will be paid when voucher is used)`);
-                            console.log(`[DEBUG] Voucher revenue record saved for ${username}: id=${voucherRecordId}, amount=${voucherPrice}`);
-                            
-                            // Verify record was created
+            const sqlite3 = require('sqlite3').verbose();
+            const dbPath = require('path').join(__dirname, '../data/billing.db');
+            const db = new sqlite3.Database(dbPath);
+            
+            logger.info(`[DEBUG] Opening database: ${dbPath}`);
+            
+            await new Promise((resolve, reject) => {
+                db.serialize(() => {
+                    db.get(`SELECT id, server_name, server_metadata FROM voucher_revenue WHERE username = ?`, [username], async (selectErr, existing) => {
+                        if (selectErr) {
+                            logger.error(`Failed to query existing voucher revenue for ${username}: ${selectErr.message}`);
+                            reject(selectErr);
+                            return;
+                        }
+
+                        const runAsync = (sql, params) => new Promise((res, rej) => {
+                            db.run(sql, params, function(err) {
+                                if (err) {
+                                    rej(err);
+                                } else {
+                                    res(this);
+                                }
+                            });
+                        });
+
+                        try {
+                            let runResult = null;
+                            if (existing && existing.id) {
+                                runResult = await runAsync(`
+                                    UPDATE voucher_revenue
+                                    SET price = ?,
+                                        profile = ?,
+                                        status = ?,
+                                        notes = ?,
+                                        server_name = COALESCE(?, server_name),
+                                        server_metadata = COALESCE(?, server_metadata)
+                                    WHERE username = ?
+                                `, [
+                                    voucherPrice,
+                                    profile,
+                                    'unpaid',
+                                    `Voucher Hotspot ${username} - Profile: ${profile}`,
+                                    serverNameForVoucher,
+                                    serverMetadataForStore,
+                                    username
+                                ]);
+                                voucherRecordId = existing.id;
+                                logger.info(`🔁 Voucher revenue record updated for ${username}: ID=${voucherRecordId}`);
+                            } else {
+                                runResult = await runAsync(`
+                                    INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes, server_name, server_metadata)
+                                    VALUES (?, ?, ?, datetime('now'), ?, ?, ?, ?)
+                                `, [
+                                    username,
+                                    voucherPrice,
+                                    profile,
+                                    'unpaid',
+                                    `Voucher Hotspot ${username} - Profile: ${profile}`,
+                                    serverNameForVoucher,
+                                    serverMetadataForStore
+                                ]);
+                                voucherRecordId = runResult ? runResult.lastID : null;
+                                logger.info(`✅ Voucher revenue record saved for ${username}: ID=${voucherRecordId}, Price=Rp ${voucherPrice} - Status: unpaid (will be paid when voucher is used)`);
+                            }
+
                             db.get(`SELECT username, price, status, server_name FROM voucher_revenue WHERE username = ?`, [username], (verifyErr, verifyRow) => {
                                 if (verifyErr) {
                                     logger.error(`[DEBUG] Error verifying voucher revenue record: ${verifyErr.message}`);
                                 } else if (verifyRow) {
                                     logger.info(`[DEBUG] Voucher revenue record verified: ${verifyRow.username}, price=${verifyRow.price}, status=${verifyRow.status}, server_name=${verifyRow.server_name}`);
                                 } else {
-                                    logger.error(`[DEBUG] Voucher revenue record not found after creation! Username: ${username}`);
+                                    logger.error(`[DEBUG] Voucher revenue record not found after save! Username: ${username}`);
                                 }
                             });
-                            
+
                             resolve();
+                        } catch (runErr) {
+                            reject(runErr);
                         }
+                    });
+                });
+            });
+            
+            db.close();
+            logger.info(`✅ Voucher revenue record creation completed for ${username}. Record ID: ${voucherRecordId || 'null'}`);
+        } catch (voucherError) {
+            // Log error dengan detail untuk debugging
+            logger.error(`❌ CRITICAL: Error saving voucher revenue record for ${username}: ${voucherError.message}`);
+            logger.error(`Voucher error stack: ${voucherError.stack}`);
+            // Coba sekali lagi dengan retry logic
+            try {
+                logger.info(`Retrying voucher revenue record creation for ${username}...`);
+                const sqlite3 = require('sqlite3').verbose();
+                const dbPath = require('path').join(__dirname, '../data/billing.db');
+                const db = new sqlite3.Database(dbPath);
+                
+                await new Promise((resolve, reject) => {
+                    db.serialize(() => {
+                        db.get(`SELECT id FROM voucher_revenue WHERE username = ?`, [username], async (selectErr, existing) => {
+                            if (selectErr) {
+                                reject(selectErr);
+                                return;
+                            }
+
+                            const runAsync = (sql, params) => new Promise((res, rej) => {
+                                db.run(sql, params, function(err) {
+                                    if (err) {
+                                        rej(err);
+                                    } else {
+                                        res(this);
+                                    }
+                                });
+                            });
+
+                            try {
+                                if (existing && existing.id) {
+                                    await runAsync(`
+                                        UPDATE voucher_revenue
+                                        SET price = ?, profile = ?, status = ?, notes = ?, server_name = COALESCE(?, server_name), server_metadata = COALESCE(?, server_metadata)
+                                        WHERE username = ?
+                                    `, [
+                                        voucherPrice,
+                                        profile,
+                                        'unpaid',
+                                        `Voucher Hotspot ${username} - Profile: ${profile}`,
+                                        serverNameForVoucher,
+                                        serverMetadataForStore,
+                                        username
+                                    ]);
+                                    voucherRecordId = existing.id;
+                                } else {
+                                    const insertResult = await runAsync(`
+                                        INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes, server_name, server_metadata)
+                                        VALUES (?, ?, ?, datetime('now'), ?, ?, ?, ?)
+                                    `, [
+                                        username,
+                                        voucherPrice,
+                                        profile,
+                                        'unpaid',
+                                        `Voucher Hotspot ${username} - Profile: ${profile}`,
+                                        serverNameForVoucher,
+                                        serverMetadataForStore
+                                    ]);
+                                    voucherRecordId = insertResult ? insertResult.lastID : null;
+                                }
+                                resolve();
+                            } catch (runErr) {
+                                reject(runErr);
+                            }
+                        });
                     });
                 });
                 
                 db.close();
-                logger.info(`✅ Voucher revenue record creation completed for ${username}. Record ID: ${voucherRecordId || 'null'}`);
-            } catch (voucherError) {
-                // Log error dengan detail untuk debugging
-                logger.error(`❌ CRITICAL: Error saving voucher revenue record for ${username}: ${voucherError.message}`);
-                logger.error(`Voucher error stack: ${voucherError.stack}`);
-                // Coba sekali lagi dengan retry logic
-                try {
-                    logger.info(`Retrying voucher revenue record creation for ${username}...`);
-                    const sqlite3 = require('sqlite3').verbose();
-                    const dbPath = require('path').join(__dirname, '../data/billing.db');
-                    const db = new sqlite3.Database(dbPath);
-                    
-                    await new Promise((resolve, reject) => {
-                        db.run(`
-                            INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes, server_name, server_metadata)
-                            VALUES (?, ?, ?, datetime('now'), 'unpaid', ?, ?, ?)
-                            ON CONFLICT(username) DO UPDATE SET
-                                price = excluded.price,
-                                profile = excluded.profile,
-                                status = excluded.status,
-                                notes = excluded.notes,
-                                server_name = COALESCE(excluded.server_name, server_name),
-                                server_metadata = COALESCE(excluded.server_metadata, server_metadata)
-                        `, [
-                            username,
-                            voucherPrice, // Gunakan voucherPrice yang sudah di-parse dari retry
-                            profile,
-                            `Voucher Hotspot ${username} - Profile: ${profile}`,
-                            serverNameForVoucher,
-                            serverMetadataForStore
-                        ], function(err) {
-                            if (err) {
-                                logger.error(`❌ Retry failed for ${username}: ${err.message}`);
-                                reject(err);
-                            } else {
-                                voucherRecordId = this.lastID;
-                                logger.info(`✅ Retry successful! Voucher revenue record saved for ${username}: ID=${voucherRecordId} - Amount: Rp ${voucherPrice}`);
-                                console.log(`[DEBUG] Retry voucher revenue record saved for ${username}: id=${voucherRecordId}, amount=${voucherPrice}`);
-                                resolve();
-                            }
-                        });
-                    });
-                    
-                    db.close();
-                } catch (retryError) {
-                    logger.error(`❌ Retry also failed for ${username}: ${retryError.message}`);
-                }
+            } catch (retryError) {
+                logger.error(`❌ Retry also failed for ${username}: ${retryError.message}`);
             }
+        }
         
         return { ...result, voucherRecordId };
     } else {
@@ -2825,7 +2882,6 @@ async function addIPAddress(interfaceName, address) {
         return { success: false, message: `Gagal menambah IP address: ${error.message}` };
     }
 }
-
 // Fungsi untuk menghapus IP address
 async function deleteIPAddress(interfaceName, address) {
     try {
@@ -7023,32 +7079,59 @@ async function generateHotspotVouchers(count, prefix, profile, server, limits = 
                             apiServerMetadataForStore = JSON.stringify({ name: apiServerNameForVoucher });
                         }
                         await new Promise((resolve, reject) => {
-                            db.run(`
-                                INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes, server_name, server_metadata)
-                                VALUES (?, ?, ?, datetime('now'), 'unpaid', ?, ?, ?)
-                                ON CONFLICT(username) DO UPDATE SET
-                                    price = excluded.price,
-                                    profile = excluded.profile,
-                                    status = excluded.status,
-                                    notes = excluded.notes,
-                                    server_name = COALESCE(excluded.server_name, server_name),
-                                    server_metadata = COALESCE(excluded.server_metadata, server_metadata)
-                            `, [
-                                username,
-                                finalPrice, // Gunakan harga dari input yang sudah di-parse dengan benar
-                                profile,
-                                `Voucher Hotspot ${username} - Profile: ${profile}`,
-                                apiServerNameForVoucher,
-                                apiServerMetadataForStore
-                            ], function(err) {
-                                if (err) {
-                                    logger.error(`Failed to save voucher revenue record for ${username}: ${err.message}`);
-                                    reject(err);
-                                } else {
-                                    voucherRecordId = this.lastID;
-                                    logger.info(`Voucher revenue record saved for ${username}: ID=${voucherRecordId} - Amount: Rp ${finalPrice} - Status: unpaid (will be paid when voucher is used)`);
-                                    resolve();
-                                }
+                            db.serialize(() => {
+                                db.get(`SELECT id FROM voucher_revenue WHERE username = ?`, [username], async (selectErr, existing) => {
+                                    if (selectErr) {
+                                        reject(selectErr);
+                                        return;
+                                    }
+
+                                    const runAsync = (sql, params) => new Promise((res, rej) => {
+                                        db.run(sql, params, function(err) {
+                                            if (err) {
+                                                rej(err);
+                                            } else {
+                                                res(this);
+                                            }
+                                        });
+                                    });
+
+                                    try {
+                                        if (existing && existing.id) {
+                                            await runAsync(`
+                                                UPDATE voucher_revenue
+                                                SET price = ?, profile = ?, status = ?, notes = ?, server_name = COALESCE(?, server_name), server_metadata = COALESCE(?, server_metadata)
+                                                WHERE username = ?
+                                            `, [
+                                                finalPrice,
+                                                profile,
+                                                'unpaid',
+                                                `Voucher Hotspot ${username} - Profile: ${profile}`,
+                                                apiServerNameForVoucher,
+                                                apiServerMetadataForStore,
+                                                username
+                                            ]);
+                                            voucherRecordId = existing.id;
+                                        } else {
+                                            const insertResult = await runAsync(`
+                                                INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes, server_name, server_metadata)
+                                                VALUES (?, ?, ?, datetime('now'), ?, ?, ?, ?)
+                                            `, [
+                                                username,
+                                                finalPrice,
+                                                profile,
+                                                'unpaid',
+                                                `Voucher Hotspot ${username} - Profile: ${profile}`,
+                                                apiServerNameForVoucher,
+                                                apiServerMetadataForStore
+                                            ]);
+                                            voucherRecordId = insertResult ? insertResult.lastID : null;
+                                        }
+                                        resolve();
+                                    } catch (runErr) {
+                                        reject(runErr);
+                                    }
+                                });
                             });
                         });
                         
@@ -7223,7 +7306,6 @@ function mikrotikConfigChanged(newConfig, oldConfig) {
         newConfig.password !== oldConfig.password
     );
 }
-
 // Inisialisasi config awal
 lastMikrotikConfig = getCurrentMikrotikConfig();
 
