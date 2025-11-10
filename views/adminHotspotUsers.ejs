@@ -89,10 +89,34 @@
                     </div>
                 </div>
                 <div class="card-body p-0">
+                    <div class="p-3 border-bottom bg-light">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-auto">
+                                <label for="voucherCategoryFilter" class="form-label mb-0 small text-muted">Filter Voucher</label>
+                            </div>
+                            <div class="col-auto">
+                                <select class="form-select form-select-sm" id="voucherCategoryFilter">
+                                    <option value="all">Semua Voucher</option>
+                                    <option value="stock">Stok Voucher</option>
+                                    <option value="sold">Voucher Terjual</option>
+                                    <option value="online">Voucher Online</option>
+                                </select>
+                            </div>
+                            <div class="col-auto ms-auto">
+                                <div class="d-flex align-items-center gap-3">
+                                    <span class="small text-muted">Terpilih: <span id="selectedCount">0</span></span>
+                                    <button class="btn btn-danger btn-sm" id="bulkDeleteVoucher" disabled>
+                                        <i class="bi bi-trash me-1"></i>Hapus Voucher
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="table-responsive" style="overflow-x: auto;">
-                        <table class="table table-bordered table-hover" id="hotspotTable" style="width:1600px; min-width:100%;">
+                        <table class="table table-bordered table-hover" id="hotspotTable" style="width:1700px; min-width:100%;">
                             <thead class="table-light">
                                 <tr>
+                                    <th class="text-center"><input type="checkbox" class="form-check-input" id="selectAllVouchers"></th>
                                     <th>No</th>
                                     <th>Username</th>
                                     <th>Profile</th>
@@ -113,7 +137,15 @@
                                 <% const statusClassMap = { 'Online': 'bg-success', 'Stand by': 'bg-warning text-dark', 'Expired': 'bg-danger', 'Offline': 'bg-secondary' }; %>
                                 <% (allUsers || []).forEach(function(user, i) { %>
                                 <% const statusBadgeClass = statusClassMap[user.status_voucher] || 'bg-secondary'; %>
-                                <tr>
+                                <tr data-username="<%= user.name %>" data-voucher-status="<%= (user.status || '').toLowerCase() %>" data-connection-status="<%= (user.status_voucher || '').toLowerCase() %>" data-router-id="<%= user.nas_id || '' %>">
+                                    <td class="text-center">
+                                        <input type="checkbox"
+                                               class="form-check-input voucher-select-checkbox"
+                                               data-username="<%= user.name %>"
+                                               data-router-id="<%= user.nas_id || '' %>"
+                                               data-voucher-status="<%= (user.status || '').toLowerCase() %>"
+                                               data-connection-status="<%= (user.status_voucher || '').toLowerCase() %>">
+                                    </td>
                                     <td class="text-center"><%= i+1 %></td>
                                     <td class="fw-bold text-nowrap"><%= user.name %></td>
                                     <td class="text-nowrap"><%= user.profile || '-' %></td>

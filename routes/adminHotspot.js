@@ -232,6 +232,7 @@ function buildHotspotUserStatus(allUsers = [], activeUsers = [], defaultServerNa
         const isOnline = Boolean(activeInfo);
 
         const chosenServerName = (user.server_metadata && user.server_metadata.name)
+            || user.server_name
             || user.server_hotspot
             || user.server_identifier
             || defaultServerName
@@ -626,6 +627,69 @@ router.post('/delete', async (req, res) => {
     } catch (error) {
         res.redirect('/admin/hotspot/users?error=Gagal+hapus+user:+' + encodeURIComponent(error.message));
     }
+});
+
+// POST: Hapus beberapa voucher sekaligus
+router.post('/delete-selected', async (req, res) => {
+    const vouchers = Array.isArray(req.body.vouchers) ? req.body.vouchers : [];
+    if (!vouchers.length) {
+        return res.status(400).json({ success: false, message: 'Tidak ada voucher yang dipilih.' });
+    }
+
+    const db = new sqlite3.Database('./data/billing.db');
+    const routerCache = new Map();
+    const getRouterById = async (id) => {
+        if (!id) return null;
+        const numericId = parseInt(id, 10);
+        if (Number.isNaN(numericId)) return null;
+        if (routerCache.has(numericId)) {
+            return routerCache.get(numericId);
+        }
+        return await new Promise((resolve, reject) => {
+            db.get('SELECT * FROM routers WHERE id=?', [numericId], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    routerCache.set(numericId, row || null);
+                    resolve(row || null);
+                }
+            });
+        });
+    };
+
+    const failures = [];
+    let deletedCount = 0;
+
+    try {
+        for (const item of vouchers) {
+            const username = (item && item.username ? item.username : '').trim();
+            if (!username) {
+                continue;
+            }
+            try {
+                const routerObj = await getRouterById(item.router_id);
+                await deleteHotspotUser(username, routerObj);
+                deletedCount += 1;
+            } catch (err) {
+                failures.push({ username, message: err.message });
+            }
+        }
+    } catch (outerErr) {
+        failures.push({ username: '-', message: outerErr.message });
+    } finally {
+        db.close();
+    }
+
+    if (failures.length && deletedCount === 0) {
+        return res.status(500).json({ success: false, message: 'Gagal menghapus voucher.', details: failures });
+    }
+
+    const baseMessage = `Berhasil menghapus ${deletedCount} voucher.`;
+    if (failures.length) {
+        return res.status(207).json({ success: true, message: baseMessage + ` ${failures.length} voucher gagal dihapus.`, details: failures });
+    }
+
+    return res.json({ success: true, message: baseMessage });
 });
 
 // POST: Proses penambahan user hotspot

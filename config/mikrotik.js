@@ -1690,7 +1690,6 @@ async function getActiveHotspotUsersRadius() {
         data: rows.map(row => ({ name: row.username, user: row.username }))
     };
 }
-
 // Fungsi untuk mengambil semua hotspot users dari RADIUS (HANYA voucher hotspot, BUKAN PPPoE users)
 async function getHotspotUsersRadius() {
     const conn = await getRadiusConnection();
@@ -1700,9 +1699,15 @@ async function getHotspotUsersRadius() {
         const dbPath = require('path').join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
 
+        await ensureVoucherRevenueColumns();
         const voucherMetadataRows = await new Promise((resolve, reject) => {
             db.all(`
-                SELECT username, MAX(created_at) as created_at, MAX(price) as price, MAX(status) as status
+                SELECT username,
+                       MAX(created_at) as created_at,
+                       MAX(price) as price,
+                       MAX(status) as status,
+                       MAX(server_name) as server_name,
+                       MAX(server_metadata) as server_metadata
                 FROM voucher_revenue
                 GROUP BY username
             `, [], (err, rows) => {
@@ -1722,10 +1727,24 @@ async function getHotspotUsersRadius() {
             voucherUsernames = voucherMetadataRows.map(row => row.username);
             voucherMetadataRows.forEach(row => {
                 if (row.username) {
+                    let parsedMetadata = null;
+                    if (row.server_metadata) {
+                        try {
+                            parsedMetadata = JSON.parse(row.server_metadata);
+                        } catch (parseErr) {
+                            logger.warn(`Failed to parse server_metadata for ${row.username}: ${parseErr.message}`);
+                        }
+                    }
+                    const serverName = row.server_name || (parsedMetadata && parsedMetadata.name) || null;
+                    if (parsedMetadata && !parsedMetadata.name && serverName) {
+                        parsedMetadata.name = serverName;
+                    }
                     voucherMetadata[row.username] = {
                         created_at: row.created_at || null,
                         price: row.price,
-                        status: row.status
+                        status: row.status,
+                        server_name: serverName,
+                        server_metadata: parsedMetadata || (serverName ? { name: serverName } : null)
                     };
                 }
             });
@@ -1848,6 +1867,8 @@ async function getHotspotUsersRadius() {
                 const meta = voucherMetadata[row.username] || {};
                 const limits = limitMap[row.username] || {};
                 const acct = acctMap[row.username] || {};
+                const serverMetadata = meta.server_metadata || null;
+                const serverNameFromMeta = meta.server_name || (serverMetadata && serverMetadata.name) || null;
                 return {
                     name: row.username,
                     password: row.password || '',
@@ -1871,8 +1892,9 @@ async function getHotspotUsersRadius() {
                     total_download_mb: acct.total_download_mb || 0,
                     ip_address: acct.active_ip || acct.last_ip || null,
                     router_ip: acct.router_ip || null,
-                    server_identifier: acct.server_identifier || null,
-                    server_metadata: meta.server_metadata || null
+                    server_identifier: acct.server_identifier || serverNameFromMeta || null,
+                    server_metadata: serverMetadata,
+                    server_name: serverNameFromMeta
                 };
             })
         };
@@ -2100,6 +2122,36 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                 voucherPrice = 0;
             }
         }
+        const getServerNameForVoucher = () => {
+            if (serverMetadata && typeof serverMetadata === 'object') {
+                const raw = serverMetadata.name || serverMetadata.server || serverMetadata.nasName || serverMetadata.nas_name || serverMetadata.serverName;
+                if (raw) return String(raw).trim();
+            }
+            if (typeof server === 'string') {
+                return server.trim();
+            }
+            return null;
+        };
+        let serverNameForVoucher = getServerNameForVoucher();
+        if (serverNameForVoucher && ['all', 'semua', ''].includes(serverNameForVoucher.toLowerCase())) {
+            serverNameForVoucher = null;
+        }
+        let serverMetadataForStore = null;
+        if (serverMetadata && typeof serverMetadata === 'object') {
+            const metadataToStore = { ...serverMetadata };
+            if (!metadataToStore.name && serverNameForVoucher) {
+                metadataToStore.name = serverNameForVoucher;
+            }
+            try {
+                serverMetadataForStore = JSON.stringify(metadataToStore);
+            } catch (jsonErr) {
+                logger.warn(`Failed to stringify server metadata for ${username}: ${jsonErr.message}`);
+                serverMetadataForStore = null;
+            }
+        } else if (serverNameForVoucher) {
+            serverMetadataForStore = JSON.stringify({ name: serverNameForVoucher });
+        }
+        await ensureVoucherRevenueColumns();
         logger.info(`Saving voucher revenue record for ${username} with price: ${voucherPrice} (original price param: ${price}, type: ${typeof price}) (RADIUS result: ${result.success ? 'success' : 'failed'})`);
         try {
                 const sqlite3 = require('sqlite3').verbose();
@@ -2111,13 +2163,22 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                 // Simpan ke tabel voucher_revenue (bukan invoices)
                 await new Promise((resolve, reject) => {
                     db.run(`
-                        INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes)
-                        VALUES (?, ?, ?, datetime('now'), 'unpaid', ?)
+                        INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes, server_name, server_metadata)
+                        VALUES (?, ?, ?, datetime('now'), 'unpaid', ?, ?, ?)
+                        ON CONFLICT(username) DO UPDATE SET
+                            price = excluded.price,
+                            profile = excluded.profile,
+                            status = excluded.status,
+                            notes = excluded.notes,
+                            server_name = COALESCE(excluded.server_name, server_name),
+                            server_metadata = COALESCE(excluded.server_metadata, server_metadata)
                     `, [
                         username,
                         voucherPrice, // Harga voucher dari input form
                         profile,
-                        `Voucher Hotspot ${username} - Profile: ${profile}`
+                        `Voucher Hotspot ${username} - Profile: ${profile}`,
+                        serverNameForVoucher,
+                        serverMetadataForStore
                     ], function(err) {
                         if (err) {
                             logger.error(`Failed to save voucher revenue record for ${username}: ${err.message}`);
@@ -2129,13 +2190,13 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                             console.log(`[DEBUG] Voucher revenue record saved for ${username}: id=${voucherRecordId}, amount=${voucherPrice}`);
                             
                             // Verify record was created
-                            db.get(`SELECT username, price, status FROM voucher_revenue WHERE id = ?`, [voucherRecordId], (verifyErr, verifyRow) => {
+                            db.get(`SELECT username, price, status, server_name FROM voucher_revenue WHERE username = ?`, [username], (verifyErr, verifyRow) => {
                                 if (verifyErr) {
                                     logger.error(`[DEBUG] Error verifying voucher revenue record: ${verifyErr.message}`);
                                 } else if (verifyRow) {
-                                    logger.info(`[DEBUG] Voucher revenue record verified: ${verifyRow.username}, price=${verifyRow.price}, status=${verifyRow.status}`);
+                                    logger.info(`[DEBUG] Voucher revenue record verified: ${verifyRow.username}, price=${verifyRow.price}, status=${verifyRow.status}, server_name=${verifyRow.server_name}`);
                                 } else {
-                                    logger.error(`[DEBUG] Voucher revenue record not found after creation! ID: ${voucherRecordId}`);
+                                    logger.error(`[DEBUG] Voucher revenue record not found after creation! Username: ${username}`);
                                 }
                             });
                             
@@ -2159,13 +2220,22 @@ async function addHotspotUser(username, password, profile, comment = null, custo
                     
                     await new Promise((resolve, reject) => {
                         db.run(`
-                            INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes)
-                            VALUES (?, ?, ?, datetime('now'), 'unpaid', ?)
+                            INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes, server_name, server_metadata)
+                            VALUES (?, ?, ?, datetime('now'), 'unpaid', ?, ?, ?)
+                            ON CONFLICT(username) DO UPDATE SET
+                                price = excluded.price,
+                                profile = excluded.profile,
+                                status = excluded.status,
+                                notes = excluded.notes,
+                                server_name = COALESCE(excluded.server_name, server_name),
+                                server_metadata = COALESCE(excluded.server_metadata, server_metadata)
                         `, [
                             username,
                             voucherPrice, // Gunakan voucherPrice yang sudah di-parse dari retry
                             profile,
-                            `Voucher Hotspot ${username} - Profile: ${profile}`
+                            `Voucher Hotspot ${username} - Profile: ${profile}`,
+                            serverNameForVoucher,
+                            serverMetadataForStore
                         ], function(err) {
                             if (err) {
                                 logger.error(`❌ Retry failed for ${username}: ${err.message}`);
@@ -2230,7 +2300,6 @@ async function addHotspotUser(username, password, profile, comment = null, custo
             return { success: true, message: 'User hotspot berhasil ditambahkan' };
     }
 }
-
 // Fungsi untuk menghapus user hotspot
 async function deleteHotspotUser(username, routerObj = null) {
     try {
@@ -2323,7 +2392,6 @@ async function deleteHotspotUser(username, routerObj = null) {
         return { success: false, message: `Gagal menghapus user hotspot: ${error.message}` };
     }
 }
-
 // Fungsi untuk menambahkan secret PPPoE
 async function addPPPoESecret(username, password, profile, localAddress = '', conn) {
     try {
@@ -2882,7 +2950,6 @@ async function getDHCPLeases() {
         return { success: false, message: `Gagal ambil data DHCP lease: ${error.message}`, data: [] };
     }
 }
-
 // Fungsi untuk mendapatkan DHCP server
 async function getDHCPServers() {
     try {
@@ -3013,7 +3080,6 @@ async function getPPPoEProfiles(routerObj = null) {
         return { success: false, message: `Gagal ambil data PPPoE profile: ${error.message}`, data: [] };
     }
 }
-
 // Fungsi untuk mendapatkan detail profile PPPoE
 async function getPPPoEProfileDetail(id) {
     try {
@@ -3106,7 +3172,6 @@ async function getHotspotProfiles(routerObj = null) {
         return { success: false, message: `Gagal ambil data profile hotspot: ${error.message}`, data: [] };
     }
 }
-
 // Fungsi untuk mendapatkan detail profile hotspot
 async function getHotspotProfileDetail(id, routerObj = null) {
     try {
@@ -3519,7 +3584,6 @@ async function addHotspotServerProfileMikrotik(profileData, routerObj = null) {
         return { success: false, message: `Gagal menambah server profile: ${error.message}` };
     }
 }
-
 // Fungsi untuk mengedit Server Profile Hotspot di Mikrotik
 async function editHotspotServerProfileMikrotik(profileId, profileData, routerObj = null) {
     let conn = null;
@@ -4673,7 +4737,6 @@ async function updateHotspotUser(username, password, profile) {
 }
 // Fungsi untuk generate voucher hotspot secara massal (versi lama - dihapus)
 // Fungsi ini diganti dengan fungsi generateHotspotVouchers yang lebih lengkap di bawah
-
 // Fungsi untuk mendapatkan daftar profile Hotspot dari RADIUS (yang digunakan oleh voucher users)
 async function getHotspotProfilesRadius() {
     const conn = await getRadiusConnection();
@@ -6940,20 +7003,43 @@ async function generateHotspotVouchers(count, prefix, profile, server, limits = 
                 let voucherRecordId = addResult.voucherRecordId || null;
                 if (!voucherRecordId && !isRadiusMode && addResult.success) {
                     try {
-                        // Simpan ke voucher_revenue (bukan invoices)
+                        await ensureVoucherRevenueColumns();
                         const sqlite3 = require('sqlite3').verbose();
                         const dbPath = require('path').join(__dirname, '../data/billing.db');
                         const db = new sqlite3.Database(dbPath);
-                        
+                        let apiServerNameForVoucher = serverName && ['all', 'semua', ''].includes(serverName.toLowerCase()) ? null : serverName;
+                        let apiServerMetadataForStore = null;
+                        if (serverMetadata && typeof serverMetadata === 'object') {
+                            const metadataToStore = { ...serverMetadata };
+                            if (!metadataToStore.name && apiServerNameForVoucher) {
+                                metadataToStore.name = apiServerNameForVoucher;
+                            }
+                            try {
+                                apiServerMetadataForStore = JSON.stringify(metadataToStore);
+                            } catch (jsonErr) {
+                                logger.warn(`Failed to stringify server metadata for voucher ${username}: ${jsonErr.message}`);
+                            }
+                        } else if (apiServerNameForVoucher) {
+                            apiServerMetadataForStore = JSON.stringify({ name: apiServerNameForVoucher });
+                        }
                         await new Promise((resolve, reject) => {
                             db.run(`
-                                INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes)
-                                VALUES (?, ?, ?, datetime('now'), 'unpaid', ?)
+                                INSERT INTO voucher_revenue (username, price, profile, created_at, status, notes, server_name, server_metadata)
+                                VALUES (?, ?, ?, datetime('now'), 'unpaid', ?, ?, ?)
+                                ON CONFLICT(username) DO UPDATE SET
+                                    price = excluded.price,
+                                    profile = excluded.profile,
+                                    status = excluded.status,
+                                    notes = excluded.notes,
+                                    server_name = COALESCE(excluded.server_name, server_name),
+                                    server_metadata = COALESCE(excluded.server_metadata, server_metadata)
                             `, [
                                 username,
                                 finalPrice, // Gunakan harga dari input yang sudah di-parse dengan benar
                                 profile,
-                                `Voucher Hotspot ${username} - Profile: ${profile}`
+                                `Voucher Hotspot ${username} - Profile: ${profile}`,
+                                apiServerNameForVoucher,
+                                apiServerMetadataForStore
                             ], function(err) {
                                 if (err) {
                                     logger.error(`Failed to save voucher revenue record for ${username}: ${err.message}`);
@@ -7153,6 +7239,50 @@ fs.watchFile(settingsPath, { interval: 2000 }, (curr, prev) => {
         logger.error('Gagal cek perubahan konfigurasi Mikrotik:', e.message);
     }
 });
+let voucherRevenueColumnsChecked = false;
+async function ensureVoucherRevenueColumns() {
+    if (voucherRevenueColumnsChecked) return true;
+    try {
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        const columns = await new Promise((resolve, reject) => {
+            db.all("PRAGMA table_info(voucher_revenue)", [], (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(rows || []);
+                }
+            });
+        });
+        const columnNames = new Set(columns.map(col => (col.name || '').toLowerCase()));
+        const runAlter = async (sql) => {
+            await new Promise((resolve, reject) => {
+                db.run(sql, err => {
+                    if (err) {
+                        logger.warn(`Failed to alter voucher_revenue table with SQL: ${sql} -> ${err.message}`);
+                        resolve();
+                    } else {
+                        resolve();
+                    }
+                });
+            });
+        };
+        if (!columnNames.has('server_name')) {
+            await runAlter("ALTER TABLE voucher_revenue ADD COLUMN server_name TEXT");
+        }
+        if (!columnNames.has('server_metadata')) {
+            await runAlter("ALTER TABLE voucher_revenue ADD COLUMN server_metadata TEXT");
+        }
+        db.close();
+        voucherRevenueColumnsChecked = true;
+        return true;
+    } catch (error) {
+        logger.warn(`ensureVoucherRevenueColumns failed: ${error.message}`);
+        return false;
+    }
+}
+
 // Export all functions
 module.exports = {
     setSock,

@@ -1,14 +1,15 @@
 $(function() {
+  const statusPriority = {
+    'Online': 4,
+    'Stand by': 3,
+    'Offline': 2,
+    'Expired': 1
+  };
+
   $.fn.dataTable.ext.order['status-voucher'] = function(settings, col) {
-    const priority = {
-      'Online': 4,
-      'Stand by': 3,
-      'Offline': 2,
-      'Expired': 1
-    };
     return this.api().column(col, { order: 'index' }).nodes().map(function(td) {
       const text = $(td).text().trim();
-      return priority[text] !== undefined ? priority[text] : 0;
+      return statusPriority[text] !== undefined ? statusPriority[text] : 0;
     });
   };
 
@@ -16,22 +17,23 @@ $(function() {
     pageLength: 10,
     lengthMenu: [10, 25, 50, 100],
     responsive: true,
-    dom: '<"d-flex justify-content-between align-items-center mb-3"<"d-flex align-items-center"l><"d-flex"f><"ms-3"#statusFilterContainer>>rtip',
-    order: [[3, 'desc'], [0, 'asc']],
+    dom: 'lfrtip',
+    order: [[4, 'desc'], [1, 'asc']],
     columnDefs: [
-      { targets: 0, width: '4%', className: 'text-center text-nowrap' },
-      { targets: 1, width: '14%', className: 'text-nowrap' },
+      { targets: 0, orderable: false, width: '4%', className: 'text-center align-middle' },
+      { targets: 1, width: '4%', className: 'text-center text-nowrap' },
       { targets: 2, width: '12%', className: 'text-nowrap' },
-      { targets: 3, orderDataType: 'status-voucher', width: '10%', className: 'text-center text-nowrap' },
-      { targets: 4, width: '10%', className: 'text-nowrap' },
+      { targets: 3, width: '12%', className: 'text-nowrap' },
+      { targets: 4, orderDataType: 'status-voucher', width: '10%', className: 'text-center text-nowrap' },
       { targets: 5, width: '10%', className: 'text-nowrap' },
-      { targets: 6, width: '12%', className: 'text-nowrap' },
+      { targets: 6, width: '10%', className: 'text-nowrap' },
       { targets: 7, width: '12%', className: 'text-nowrap' },
-      { targets: 8, width: '8%', className: 'text-nowrap text-end' },
+      { targets: 8, width: '12%', className: 'text-nowrap' },
       { targets: 9, width: '8%', className: 'text-nowrap text-end' },
-      { targets: 10, width: '12%', className: 'text-nowrap' },
+      { targets: 10, width: '8%', className: 'text-nowrap text-end' },
       { targets: 11, width: '12%', className: 'text-nowrap' },
       { targets: 12, width: '12%', className: 'text-nowrap' },
+      { targets: 13, width: '12%', className: 'text-nowrap' },
       { targets: -1, orderable: false, width: '16%', className: 'text-center text-nowrap' }
     ],
     language: {
@@ -49,31 +51,7 @@ $(function() {
     }
   });
 
-  const statusFilter = $('<select class="form-select form-select-sm ms-2" style="width:auto; display:inline-block;">' +
-    '<option value="">Semua Status</option>' +
-    '<option value="Online">Online</option>' +
-    '<option value="Stand by">Stand by</option>' +
-    '<option value="Offline">Offline</option>' +
-    '<option value="Expired">Expired</option>' +
-    '</select>');
-  $('#statusFilterContainer').append(statusFilter);
-
-  statusFilter.on('change', function() {
-    const val = $(this).val();
-    if (val) {
-      hotspotTable.column(3).search('^' + val + '$', true, false).draw();
-    } else {
-      hotspotTable.column(3).search('', true, false).draw();
-    }
-    updateOnlineCount();
-    hotspotTable.order([3, 'desc'], [0, 'asc']).draw();
-  });
-
-  $('#hotspotTable_filter input').on('input', function() {
-    setTimeout(function() {
-      hotspotTable.order([3, 'desc'], [0, 'asc']).draw();
-    }, 120);
-  });
+  const statusColumnIndex = 4;
 
   function extractStatus(cellHtml) {
     return $('<div>').html(cellHtml).text().trim().toLowerCase();
@@ -83,17 +61,117 @@ $(function() {
     let count = 0;
     hotspotTable.rows({ search: 'applied' }).every(function() {
       const rowData = this.data();
-      const statusText = extractStatus(rowData[3]);
+      const statusText = extractStatus(rowData[statusColumnIndex]);
       if (statusText === 'online') count++;
     });
     $('#activeUserCount').text(count);
   }
 
+  function refreshSelectionState() {
+    const $checkboxes = $('.voucher-select-checkbox');
+    const $selected = $checkboxes.filter(':checked');
+    const total = $checkboxes.length;
+    const selectedCount = $selected.length;
+    $('#selectedCount').text(selectedCount);
+    $('#bulkDeleteVoucher').prop('disabled', selectedCount === 0);
+
+    const selectAll = $('#selectAllVouchers').get(0);
+    if (!selectAll) return;
+    if (selectedCount === 0) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+    } else if (selectedCount === total) {
+      selectAll.checked = true;
+      selectAll.indeterminate = false;
+    } else {
+      selectAll.checked = false;
+      selectAll.indeterminate = true;
+    }
+  }
+
+  $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+    if (settings.nTable !== hotspotTable.table().node()) return true;
+    const filterValue = $('#voucherCategoryFilter').val() || 'all';
+    if (filterValue === 'all') return true;
+    const rowNode = hotspotTable.row(dataIndex).node();
+    if (!rowNode) return true;
+    const $row = $(rowNode);
+    const voucherStatus = ($row.data('voucher-status') || '').toString().toLowerCase();
+    const connectionStatus = ($row.data('connection-status') || '').toString().toLowerCase();
+
+    if (filterValue === 'stock') {
+      return voucherStatus !== 'paid';
+    }
+    if (filterValue === 'sold') {
+      return voucherStatus === 'paid';
+    }
+    if (filterValue === 'online') {
+      return connectionStatus === 'online';
+    }
+    return true;
+  });
+
+  $('#voucherCategoryFilter').on('change', function() {
+    hotspotTable.draw();
+    refreshSelectionState();
+  });
+
+  $('#selectAllVouchers').on('change', function() {
+    const isChecked = $(this).is(':checked');
+    $('.voucher-select-checkbox').prop('checked', isChecked);
+    refreshSelectionState();
+  });
+
+  $('#hotspotTable').on('change', '.voucher-select-checkbox', function() {
+    refreshSelectionState();
+  });
+
+  $('#bulkDeleteVoucher').on('click', function() {
+    const selected = [];
+    $('.voucher-select-checkbox:checked').each(function() {
+      selected.push({
+        username: $(this).data('username'),
+        router_id: $(this).data('router-id') || ''
+      });
+    });
+    if (selected.length === 0) {
+      alert('Pilih minimal satu voucher yang akan dihapus.');
+      return;
+    }
+    if (!confirm('Yakin hapus ' + selected.length + ' voucher?')) {
+      return;
+    }
+    $.ajax({
+      url: '/admin/hotspot/delete-selected',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ vouchers: selected }),
+      success: function(response) {
+        const message = (response && response.message) ? response.message : (selected.length + ' voucher berhasil dihapus.');
+        showToast('Berhasil', message, 'success');
+        setTimeout(() => window.location.reload(), 1200);
+      },
+      error: function(xhr) {
+        let msg = 'Gagal menghapus voucher.';
+        if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+        showToast('Error', msg, 'danger');
+      }
+    });
+  });
+
+  $('#hotspotTable_filter input').on('input', function() {
+    setTimeout(function() {
+      hotspotTable.order([[statusColumnIndex, 'desc'], [1, 'asc']]).draw();
+    }, 120);
+  });
+
   hotspotTable.on('draw', function() {
     updateOnlineCount();
+    refreshSelectionState();
   });
 
   updateOnlineCount();
+  refreshSelectionState();
 
   $('#hotspotTable').on('click', '.edit-user-btn', function() {
     const username = $(this).data('username');
