@@ -91,24 +91,34 @@
     <a href="/admin/mikrotik/profiles" class="<%= typeof page !== 'undefined' && page === 'mikrotik-profiles' ? 'active' : '' %>">
         <i class="bi bi-person-badge"></i> Profile PPPoE
     </a>
-    <a href="/admin/mikrotik/hotspot-profiles" class="<%= typeof page !== 'undefined' && page === 'hotspot-profiles' ? 'active' : '' %>">
-        <i class="bi bi-wifi"></i> Profile Hotspot
-    </a>
-    <a href="/admin/mikrotik/hotspot-server-profiles" class="<%= typeof page !== 'undefined' && page === 'hotspot-server-profiles' ? 'active' : '' %>">
-        <i class="bi bi-server"></i> Server Profile Hotspot
-    </a>
-    <div class="sidebar-label">
-        <i class="bi bi-wifi"></i> Hotspot
+    <% const hotspotPages = ['hotspot-settings','hotspot-master','hotspot-users','hotspot-profiles','hotspot-server-profiles']; %>
+    <% const hotspotExpanded = typeof page !== 'undefined' && hotspotPages.includes(page); %>
+    <div class="sidebar-label d-flex justify-content-between align-items-center"
+         data-bs-toggle="collapse"
+         data-bs-target="#responsiveHotspotCollapse"
+         aria-expanded="<%= hotspotExpanded ? 'true' : 'false' %>"
+         aria-controls="responsiveHotspotCollapse"
+         style="cursor:pointer;">
+        <span><i class="bi bi-wifi me-2"></i>Hotspot</span>
+        <i class="bi <%= hotspotExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
     </div>
-    <a href="/admin/hotspot/voucher" class="<%= typeof page !== 'undefined' && page === 'hotspot-settings' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-        <i class="bi bi-sliders"></i> Setting Voucher Online
-    </a>
-    <a href="/admin/hotspot" class="<%= typeof page !== 'undefined' && page === 'hotspot-master' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-        <i class="bi bi-collection"></i> Master Data Voucher
-    </a>
-    <a href="/admin/hotspot/users" class="<%= typeof page !== 'undefined' && page === 'hotspot-users' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-        <i class="bi bi-people"></i> Daftar User Hotspot
-    </a>
+    <div class="collapse <%= hotspotExpanded ? 'show' : '' %>" id="responsiveHotspotCollapse">
+        <a href="/admin/mikrotik/hotspot-server-profiles" class="<%= typeof page !== 'undefined' && page === 'hotspot-server-profiles' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
+            <i class="bi bi-server"></i> Server Profile
+        </a>
+        <a href="/admin/mikrotik/hotspot-profiles" class="<%= typeof page !== 'undefined' && page === 'hotspot-profiles' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
+            <i class="bi bi-wifi"></i> Voucher Profiles
+        </a>
+        <a href="/admin/hotspot/voucher" class="<%= typeof page !== 'undefined' && page === 'hotspot-settings' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
+            <i class="bi bi-sliders"></i> Manajemen Voucher
+        </a>
+        <a href="/admin/hotspot" class="<%= typeof page !== 'undefined' && page === 'hotspot-master' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
+            <i class="bi bi-collection"></i> Voucher Online
+        </a>
+        <a href="/admin/hotspot/users" class="<%= typeof page !== 'undefined' && page === 'hotspot-users' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
+            <i class="bi bi-people"></i> Daftar Voucher
+        </a>
+    </div>
     <a href="/admin/trouble" class="<%= typeof page !== 'undefined' && page === 'trouble' ? 'active' : '' %>">
         <i class="bi bi-exclamation-triangle"></i> Trouble Report
     </a>
@@ -171,6 +181,27 @@
         </div>
     </div>
 </nav>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var toggler = document.querySelector('[data-bs-target="#responsiveHotspotCollapse"]');
+    var collapseEl = document.getElementById('responsiveHotspotCollapse');
+    if (toggler && collapseEl && typeof bootstrap !== 'undefined') {
+        var icon = toggler.querySelector('.toggle-arrow');
+        collapseEl.addEventListener('show.bs.collapse', function () {
+            if (icon) {
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+            }
+        });
+        collapseEl.addEventListener('hide.bs.collapse', function () {
+            if (icon) {
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+            }
+        });
+    }
+});
+</script>
 
 <style>
 /* Mobile Top Navbar */

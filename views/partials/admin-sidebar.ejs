@@ -31,12 +31,24 @@
     <a href="/admin/genieacs" class="<%= typeof page !== 'undefined' && page === 'genieacs' ? 'active' : '' %>"><i class="bi bi-hdd-network"></i> GenieACS</a>
     <a href="/admin/mikrotik" class="<%= typeof page !== 'undefined' && page === 'mikrotik' ? 'active' : '' %>"><i class="bi bi-router"></i> PPPoE</a>
     <a href="/admin/mikrotik/profiles" class="<%= typeof page !== 'undefined' && page === 'mikrotik-profiles' ? 'active' : '' %>"><i class="bi bi-person-badge"></i> Profile PPPoE</a>
-    <a href="/admin/mikrotik/hotspot-profiles" class="<%= typeof page !== 'undefined' && page === 'hotspot-profiles' ? 'active' : '' %>"><i class="bi bi-wifi"></i> Profile Hotspot</a>
-    <a href="/admin/mikrotik/hotspot-server-profiles" class="<%= typeof page !== 'undefined' && page === 'hotspot-server-profiles' ? 'active' : '' %>"><i class="bi bi-server"></i> Server Profile Hotspot</a>
-    <div class="sidebar-section-label"><i class="bi bi-wifi"></i> Hotspot</div>
-    <a href="/admin/hotspot/voucher" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-settings' ? 'active' : '' %>"><i class="bi bi-sliders"></i> Setting Voucher Online</a>
-    <a href="/admin/hotspot" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-master' ? 'active' : '' %>"><i class="bi bi-collection"></i> Master Data Voucher</a>
-    <a href="/admin/hotspot/users" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-users' ? 'active' : '' %>"><i class="bi bi-people"></i> Daftar User Hotspot</a>
+    <% const hotspotPages = ['hotspot-settings','hotspot-master','hotspot-users','hotspot-profiles','hotspot-server-profiles']; %>
+    <% const hotspotExpanded = typeof page !== 'undefined' && hotspotPages.includes(page); %>
+    <div class="sidebar-section-label d-flex justify-content-between align-items-center"
+         data-bs-toggle="collapse"
+         data-bs-target="#adminHotspotCollapse"
+         aria-expanded="<%= hotspotExpanded ? 'true' : 'false' %>"
+         aria-controls="adminHotspotCollapse"
+         style="cursor:pointer;">
+        <span><i class="bi bi-wifi me-2"></i>Hotspot</span>
+        <i class="bi <%= hotspotExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
+    </div>
+    <div class="collapse <%= hotspotExpanded ? 'show' : '' %>" id="adminHotspotCollapse">
+        <a href="/admin/mikrotik/hotspot-server-profiles" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-server-profiles' ? 'active' : '' %>"><i class="bi bi-server"></i> Server Profile</a>
+        <a href="/admin/mikrotik/hotspot-profiles" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-profiles' ? 'active' : '' %>"><i class="bi bi-wifi"></i> Voucher Profiles</a>
+        <a href="/admin/hotspot/voucher" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-settings' ? 'active' : '' %>"><i class="bi bi-sliders"></i> Manajemen Voucher</a>
+        <a href="/admin/hotspot" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-master' ? 'active' : '' %>"><i class="bi bi-collection"></i> Voucher Online</a>
+        <a href="/admin/hotspot/users" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-users' ? 'active' : '' %>"><i class="bi bi-people"></i> Daftar Voucher</a>
+    </div>
     <a href="/admin/trouble" class="<%= typeof page !== 'undefined' && page === 'trouble' ? 'active' : '' %>"><i class="bi bi-exclamation-triangle"></i> Trouble Report</a>
     <a href="/admin/settings" class="<%= typeof page !== 'undefined' && page === 'setting' ? 'active' : '' %>"><i class="bi bi-gear"></i> Setting</a>
     <a href="/admin/radius" class="<%= typeof page !== 'undefined' && page === 'setting-radius' ? 'active' : '' %>"><i class="bi bi-gear-wide-connected"></i> Setting RADIUS</a>
@@ -44,3 +56,24 @@
     <a href="#" id="restartMikrotikBtn"><i class="bi bi-arrow-repeat"></i> Restart Mikrotik</a>
     <a href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
 </nav>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var toggler = document.querySelector('[data-bs-target="#adminHotspotCollapse"]');
+    var collapseEl = document.getElementById('adminHotspotCollapse');
+    if (toggler && collapseEl && typeof bootstrap !== 'undefined') {
+        var icon = toggler.querySelector('.toggle-arrow');
+        collapseEl.addEventListener('show.bs.collapse', function () {
+            if (icon) {
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+            }
+        });
+        collapseEl.addEventListener('hide.bs.collapse', function () {
+            if (icon) {
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+            }
+        });
+    }
+});
+</script>
