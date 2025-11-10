@@ -2398,9 +2398,11 @@ router.post('/system/update', async (req, res) => {
         const repoPath = getSetting('repo_path', process.cwd());
         const opts = { cwd: repoPath, windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/bash' };
 
+        const checkoutCmd = `git checkout ${branch} || git checkout -b ${branch} origin/${branch}`;
         const updateCmd = [
             `git fetch --all --prune`,
-            `git reset --hard origin/${branch}`,
+            checkoutCmd,
+            `git pull origin ${branch}`,
             `npm ci || npm install`
         ].join(' && ');
 
@@ -2424,6 +2426,54 @@ router.post('/system/update', async (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ success: false, message: 'Unexpected error', error: e.message });
+    }
+});
+
+router.post('/system/restart', async (req, res) => {
+    try {
+        const repoPath = getSetting('repo_path', process.cwd());
+        const appNameSetting = getSetting('pm2_restart_target', null) || getSetting('pm2_app_name', null);
+        if (!appNameSetting) {
+            return res.status(400).json({ success: false, message: 'PM2 app name is not configured' });
+        }
+        const opts = { cwd: repoPath, windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/bash' };
+        const pm2Cmd = `pm2 restart ${appNameSetting} || pm2 reload ${appNameSetting}`;
+        exec(pm2Cmd, opts, (error, stdout, stderr) => {
+            if (error) {
+                return res.status(500).json({ success: false, message: 'Restart failed', error: stderr || error.message, log: stdout, app: appNameSetting });
+            }
+            exec('pm2 save', opts, () => {
+                res.json({ success: true, message: 'Billing system restarted', log: stdout, app: appNameSetting });
+            });
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: 'Unexpected error', error: e.message });
+    }
+});
+
+router.get('/system/server-info', async (req, res) => {
+    try {
+        const repoPath = getSetting('repo_path', process.cwd());
+        const defaultBranch = getSetting('git_default_branch', 'main');
+        const appVersion = getSetting('app_version', '4.1');
+        const pm2App = getSetting('pm2_restart_target', null) || getSetting('pm2_app_name', null);
+        const opts = { cwd: repoPath, windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/bash' };
+        const now = new Date();
+
+        exec('git rev-parse --abbrev-ref HEAD', opts, (err, stdout, stderr) => {
+            const branch = err ? defaultBranch : (stdout.trim() || defaultBranch);
+            res.json({
+                success: !err,
+                branch,
+                branchFallback: err ? (stderr || err.message) : null,
+                serverTimeIso: now.toISOString(),
+                serverTimeLocale: now.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
+                appVersion,
+                pm2App: pm2App || null
+            });
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: 'Failed to load server info', error: e.message });
     }
 });
 

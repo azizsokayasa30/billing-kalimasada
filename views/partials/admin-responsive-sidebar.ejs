@@ -146,6 +146,15 @@
         <i class="bi bi-box-arrow-right"></i> Logout
     </a>
     <div class="mt-2" style="padding: 0 24px;">
+        <button id="btnRestartBilling" class="btn btn-sm btn-primary w-100 mb-2">
+            <i class="bi bi-arrow-repeat"></i> Restart Billing System
+        </button>
+        <div id="billingRestartResult" class="text-light small mb-2" style="display:none;"></div>
+        <div class="server-time-box text-light mb-3">
+            <div class="text-uppercase small opacity-75">Jam Server</div>
+            <div id="serverTimeValue" class="fw-bold fs-6">--:--:--</div>
+            <div id="serverBranchValue" class="small opacity-75">Branch: -</div>
+        </div>
         <div class="mb-2">
             <label class="form-label text-light" style="font-size: 12px;">Branch</label>
             <input type="text" id="gitBranchInput" class="form-control form-control-sm" placeholder="mis. main" style="background:rgba(255,255,255,0.2);border:0;color:#fff;">
@@ -163,7 +172,7 @@
         <div class="version-details">
             <div class="version-item">
                 <span class="version-label">Version:</span>
-                <span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.version : '1.0.0' %></span>
+                <span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.version : '4.1' %></span>
             </div>
             <div class="version-item">
                 <span class="version-label">Build:</span>
@@ -176,7 +185,7 @@
         </div>
         <div class="version-badge">
             <span class="badge <%= typeof versionBadge !== 'undefined' ? versionBadge.class : 'badge-secondary' %>">
-                <%= typeof versionBadge !== 'undefined' ? versionBadge.text : 'v1.0.0' %>
+                <%= typeof versionBadge !== 'undefined' ? versionBadge.text : 'v4.1' %>
             </span>
         </div>
     </div>
@@ -284,6 +293,16 @@ document.addEventListener('DOMContentLoaded', function () {
     margin-right: 8px;
     width: 16px;
     flex-shrink: 0;
+}
+
+.server-time-box {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.server-time-box #serverTimeValue {
+    letter-spacing: 0.5px;
 }
 
 /* Sidebar Header */
@@ -850,6 +869,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const btnCheck = document.getElementById('btnCheckUpdate');
     const btnUpdate = document.getElementById('btnRunUpdate');
     const resultBox = document.getElementById('updateResult');
+    const gitBranchInput = document.getElementById('gitBranchInput');
+    const restartBillingBtn = document.getElementById('btnRestartBilling');
+    const restartResultBox = document.getElementById('billingRestartResult');
+    const serverTimeValue = document.getElementById('serverTimeValue');
+    const serverBranchValue = document.getElementById('serverBranchValue');
+    let serverTimeOffset = null;
 
     function showUpdateResult(text, success = true) {
         if (!resultBox) return;
@@ -858,11 +883,64 @@ document.addEventListener('DOMContentLoaded', function() {
         resultBox.textContent = text;
     }
 
+    function showRestartResult(text, success = true) {
+        if (!restartResultBox) return;
+        restartResultBox.style.display = 'block';
+        restartResultBox.style.color = success ? '#c8e6c9' : '#ffcdd2';
+        restartResultBox.textContent = text;
+    }
+
+    function renderServerTime() {
+        if (serverTimeOffset === null || !serverTimeValue) return;
+        const current = new Date(Date.now() + serverTimeOffset);
+        serverTimeValue.textContent = current.toLocaleString('id-ID', {
+            timeZone: 'Asia/Jakarta',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    }
+
+    async function fetchServerInfo() {
+        try {
+            const res = await fetch('/admin/billing/system/server-info');
+            const data = await res.json();
+            if (!data.success && !data.serverTimeIso) {
+                throw new Error(data.message || 'Gagal mengambil info server');
+            }
+            if (serverBranchValue && data.branch) {
+                serverBranchValue.textContent = `Branch: ${data.branch}`;
+            }
+            if (gitBranchInput && (!gitBranchInput.value || gitBranchInput.dataset.autofilled !== 'false') && data.branch) {
+                gitBranchInput.value = data.branch;
+                gitBranchInput.dataset.autofilled = 'true';
+            }
+            if (data.serverTimeIso) {
+                serverTimeOffset = new Date(data.serverTimeIso).getTime() - Date.now();
+                renderServerTime();
+            }
+        } catch (error) {
+            if (serverTimeValue) {
+                serverTimeValue.textContent = 'Gagal memuat waktu';
+            }
+            console.error('Failed to fetch server info:', error);
+        }
+    }
+
+    if (gitBranchInput) {
+        gitBranchInput.addEventListener('input', () => {
+            gitBranchInput.dataset.autofilled = 'false';
+        });
+    }
+
     if (btnCheck) {
         btnCheck.addEventListener('click', async function() {
             try {
                 showUpdateResult('Checking updates...', true);
-                const b = (document.getElementById('gitBranchInput') && document.getElementById('gitBranchInput').value.trim()) || '';
+                const b = (gitBranchInput && gitBranchInput.value.trim()) || '';
                 const url = b ? `/admin/billing/system/check-update?branch=${encodeURIComponent(b)}` : '/admin/billing/system/check-update';
                 const res = await fetch(url);
                 const data = await res.json();
@@ -885,7 +963,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!confirm('Peringatan: mohon backup file settings.json terlebih dahulu. Lanjutkan update & restart?')) return;
             try {
                 showUpdateResult('Running update... this may take a while.', true);
-                const b = (document.getElementById('gitBranchInput') && document.getElementById('gitBranchInput').value.trim()) || '';
+                const b = (gitBranchInput && gitBranchInput.value.trim()) || '';
                 const res = await fetch('/admin/billing/system/update', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ branch: b || undefined }) });
                 const data = await res.json();
                 if (!data.success) {
@@ -898,6 +976,33 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    if (restartBillingBtn) {
+        restartBillingBtn.addEventListener('click', async () => {
+            if (!confirm('Restart layanan billing sekarang?')) return;
+            try {
+                restartBillingBtn.disabled = true;
+                restartBillingBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Restarting...';
+                showRestartResult('Memproses restart...', true);
+                const res = await fetch('/admin/billing/system/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                const data = await res.json();
+                if (!data.success) {
+                    showRestartResult('Restart gagal: ' + (data.message || 'Unknown error') + '\n' + (data.error || ''), false);
+                } else {
+                    showRestartResult('Restart berhasil dijalankan.', true);
+                    await fetchServerInfo();
+                }
+            } catch (error) {
+                showRestartResult('Restart error: ' + error.message, false);
+            } finally {
+                restartBillingBtn.disabled = false;
+                restartBillingBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Restart Billing System';
+            }
+        });
+    }
+
+    fetchServerInfo();
+    setInterval(renderServerTime, 1000);
     // Auto refresh logo functionality (preserve existing functionality)
     function refreshLogo() {
         const logo = document.getElementById('logoImage');
