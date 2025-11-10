@@ -16,7 +16,9 @@ $(function() {
   const hotspotTable = $('#hotspotTable').DataTable({
     pageLength: 10,
     lengthMenu: [10, 25, 50, 100],
-    responsive: true,
+    scrollX: true,
+    scrollCollapse: true,
+    autoWidth: false,
     dom: 'lfrtip',
     order: [[4, 'desc'], [1, 'asc']],
     columnDefs: [
