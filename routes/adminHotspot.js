@@ -219,6 +219,105 @@ function formatDuration(seconds) {
     return parts.length > 0 ? parts.join(' ') : `${seconds} detik`;
 }
 
+function buildHotspotUserStatus(allUsers = [], activeUsers = []) {
+    const activeMap = new Map((activeUsers || []).map(user => {
+        const key = (user.user || user.name || user.username || '').toString().trim();
+        return [key, user];
+    }));
+    const now = Date.now();
+
+    return (allUsers || []).map(user => {
+        const username = (user.name || user.username || '').toString().trim();
+        const activeInfo = activeMap.get(username);
+        const isOnline = Boolean(activeInfo);
+
+        const parsePositiveNumber = (value) => {
+            if (value === undefined || value === null) return null;
+            const parsed = Number(value);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+        };
+
+        const totalSessionSeconds = Number(user.total_session_seconds ?? user.total_session ?? 0) || 0;
+        let limitSeconds = parsePositiveNumber(user.limit_seconds ?? user.max_all_session);
+        let validitySeconds = parsePositiveNumber(user.validity_seconds ?? user.expire_after);
+        const firstLogin = user.first_login ? new Date(user.first_login) : null;
+
+        let validityRemainingSeconds = null;
+        if (validitySeconds) {
+            if (firstLogin) {
+                validityRemainingSeconds = Math.floor((firstLogin.getTime() + validitySeconds * 1000 - now) / 1000);
+            } else {
+                validityRemainingSeconds = validitySeconds;
+            }
+        }
+
+        let uptimeRemainingSeconds = limitSeconds !== null ? limitSeconds - totalSessionSeconds : null;
+
+        const expiredByValidity = firstLogin && validityRemainingSeconds !== null && validityRemainingSeconds <= 0;
+        const expiredByUptime = limitSeconds !== null && uptimeRemainingSeconds !== null && uptimeRemainingSeconds <= 0;
+
+        let statusVoucher = 'Offline';
+        if (expiredByValidity || expiredByUptime) {
+            statusVoucher = 'Expired';
+        } else if (isOnline) {
+            statusVoucher = 'Online';
+        } else if ((validitySeconds && (!firstLogin || validityRemainingSeconds > 0)) || (limitSeconds !== null && totalSessionSeconds < limitSeconds)) {
+            statusVoucher = 'Stand by';
+        } else {
+            statusVoucher = 'Offline';
+        }
+
+        let validityLabel = '-';
+        if (validitySeconds) {
+            const limitLabel = formatDuration(validitySeconds) || `${validitySeconds} detik`;
+            if (!firstLogin) {
+                validityLabel = `Belum digunakan (${limitLabel})`;
+            } else if (validityRemainingSeconds !== null && validityRemainingSeconds <= 0) {
+                validityLabel = `Expired (${limitLabel})`;
+            } else if (validityRemainingSeconds !== null) {
+                const positiveRemaining = Math.max(0, validityRemainingSeconds);
+                const remainingLabel = formatDuration(positiveRemaining) || `${positiveRemaining} detik`;
+                validityLabel = `Sisa ${remainingLabel} dari ${limitLabel}`;
+            } else {
+                validityLabel = limitLabel;
+            }
+        }
+
+        let uptimeLabel = '-';
+        if (limitSeconds !== null) {
+            const usedLabel = totalSessionSeconds > 0 ? (formatDuration(totalSessionSeconds) || `${totalSessionSeconds} detik`) : '0 detik';
+            const limitLabel = formatDuration(limitSeconds) || `${limitSeconds} detik`;
+            if (totalSessionSeconds >= limitSeconds) {
+                uptimeLabel = `${usedLabel} dari ${limitLabel} (habis)`;
+            } else {
+                const remainingSeconds = Math.max(0, limitSeconds - totalSessionSeconds);
+                const remainingLabel = formatDuration(remainingSeconds) || `${remainingSeconds} detik`;
+                uptimeLabel = `${usedLabel} dari ${limitLabel} (sisa ${remainingLabel})`;
+            }
+        } else if (totalSessionSeconds > 0) {
+            uptimeLabel = formatDuration(totalSessionSeconds) || `${totalSessionSeconds} detik`;
+        }
+
+        const ipAddress = user.ip_address
+            || (activeInfo && (activeInfo.address || activeInfo['framed-address'] || activeInfo['ip-address'] || activeInfo['remote-address']))
+            || user.last_ip
+            || '-';
+
+        return {
+            ...user,
+            total_session_seconds: totalSessionSeconds,
+            limit_seconds: limitSeconds,
+            validity_seconds: validitySeconds,
+            status_voucher: statusVoucher,
+            validity_label: validityLabel,
+            validity_seconds_remaining: validityRemainingSeconds,
+            uptime_label: uptimeLabel,
+            uptime_seconds_remaining: uptimeRemainingSeconds,
+            ip_address: ipAddress
+        };
+    });
+}
+
 async function loadHotspotPageData() {
     let userAuthMode = 'mikrotik';
     try {
@@ -319,9 +418,11 @@ async function loadHotspotPageData() {
                 ? allUsersResult.data
                 : [];
 
+            const enrichedUsers = buildHotspotUserStatus(allUsers, activeUsersList);
+
             data.users = activeUsersList;
             data.profiles = profiles;
-            data.allUsers = allUsers;
+            data.allUsers = enrichedUsers;
             data.voucherOnlineSettings = await getVoucherOnlineSettings();
             data.routers = [];
         } catch (error) {
@@ -341,8 +442,8 @@ async function loadHotspotPageData() {
                         });
                     });
                 }
-            } catch (err) {
-                console.error(`Error getting active users from ${router.name}:`, err.message);
+            } catch (e) {
+                console.error(`Error getting active users from ${router.name}:`, e.message);
             }
         }
 
@@ -363,8 +464,8 @@ async function loadHotspotPageData() {
                         }
                     });
                 }
-            } catch (err) {
-                console.error(`Error getting profiles from ${router.name}:`, err.message);
+            } catch (e) {
+                console.error(`Error getting profiles from ${router.name}:`, e.message);
             }
         }
 
@@ -382,14 +483,16 @@ async function loadHotspotPageData() {
                     nas_name: router.name,
                     nas_ip: router.nas_ip
                 })));
-            } catch (err) {
-                console.error(`Error getting users from ${router.name}:`, err.message);
+            } catch (e) {
+                console.error(`Error getting users from ${router.name}:`, e.message);
             }
         }
 
+        const enrichedUsers = buildHotspotUserStatus(allUsers, activeUsersList);
+
         data.users = activeUsersList;
         data.profiles = profiles;
-        data.allUsers = allUsers;
+        data.allUsers = enrichedUsers;
         data.voucherOnlineSettings = await getVoucherOnlineSettings();
         data.routers = routers;
     }

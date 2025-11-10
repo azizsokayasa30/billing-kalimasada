@@ -621,7 +621,6 @@ async function suspendUserRadius(username) {
         throw error;
     }
 }
-
 // Fungsi untuk unsuspend user (kembalikan ke package sebelumnya)
 async function unsuspendUserRadius(username) {
     const conn = await getRadiusConnection();
@@ -1228,7 +1227,6 @@ function safeNumber(val) {
     const n = Number(val);
     return isNaN(n) ? 0 : n;
 }
-
 // Format uptime dari Mikrotik (format: "1w2d3h4m5s" atau seconds)
 function formatUptime(uptimeStr) {
     if (!uptimeStr || uptimeStr === 'N/A') return 'N/A';
@@ -1698,12 +1696,10 @@ async function getHotspotUsersRadius() {
     const conn = await getRadiusConnection();
     try {
         logger.info('Fetching hotspot voucher users from RADIUS database (excluding PPPoE users)...');
-        
-        // Ambil daftar username yang merupakan voucher dari tabel voucher_revenue
         const sqlite3 = require('sqlite3').verbose();
         const dbPath = require('path').join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
-        
+
         const voucherMetadataRows = await new Promise((resolve, reject) => {
             db.all(`
                 SELECT username, MAX(created_at) as created_at, MAX(price) as price, MAX(status) as status
@@ -1746,10 +1742,9 @@ async function getHotspotUsersRadius() {
             });
         }
         db.close();
-        
+
         logger.info(`Found ${voucherUsernames.length} voucher usernames to include`);
-        
-        // Jika tidak ada voucher, return empty array
+
         if (voucherUsernames.length === 0) {
             await conn.end();
             logger.info('No voucher users found in voucher_revenue table');
@@ -1758,34 +1753,108 @@ async function getHotspotUsersRadius() {
                 data: []
             };
         }
-        
-        // Query untuk mendapatkan HANYA voucher users (yang ada di voucher_revenue)
+
         const placeholders = voucherUsernames.map(() => '?').join(',');
         const [userRows] = await conn.execute(`
-            SELECT DISTINCT c.username, 
+            SELECT DISTINCT c.username,
                    c.value as password,
                    (SELECT groupname FROM radusergroup WHERE username = c.username LIMIT 1) as profile,
                    (SELECT value FROM radreply WHERE username = c.username AND attribute = 'Reply-Message' LIMIT 1) as comment
             FROM radcheck c
             WHERE c.attribute = 'Cleartext-Password'
-            AND c.username IN (${placeholders})
+              AND c.username IN (${placeholders})
             ORDER BY c.username
         `, voucherUsernames);
-        
+
         logger.info(`Found ${userRows.length} hotspot voucher users in radcheck table`);
-        
+
+        const [limitRows] = await conn.execute(`
+            SELECT username, attribute, value
+            FROM radcheck
+            WHERE username IN (${placeholders})
+              AND attribute IN ('Max-All-Session', 'Expire-After')
+        `, voucherUsernames);
+
+        const [sessionRows] = await conn.execute(`
+            SELECT username, value
+            FROM radreply
+            WHERE username IN (${placeholders})
+              AND attribute = 'Session-Timeout'
+        `, voucherUsernames);
+
+        const [acctRows] = await conn.execute(`
+            SELECT username,
+                   SUM(IFNULL(acctsessiontime,0)) AS total_session,
+                   MIN(acctstarttime) AS first_login,
+                   MAX(acctstarttime) AS last_login,
+                   MAX(acctstoptime) AS last_logout,
+                   MAX(CASE WHEN acctstoptime IS NULL OR acctstoptime = '' OR acctstoptime = '0000-00-00 00:00:00' THEN framedipaddress ELSE NULL END) AS active_ip,
+                   MAX(framedipaddress) AS last_ip
+            FROM radacct
+            WHERE username IN (${placeholders})
+            GROUP BY username
+        `, voucherUsernames);
+
         await conn.end();
+
+        const limitMap = {};
+        limitRows.forEach(row => {
+            if (!limitMap[row.username]) {
+                limitMap[row.username] = {};
+            }
+            if (row.attribute === 'Max-All-Session') {
+                const parsed = parseInt(row.value, 10);
+                limitMap[row.username].maxAllSession = !isNaN(parsed) && parsed > 0 ? parsed : null;
+            } else if (row.attribute === 'Expire-After') {
+                const parsed = parseInt(row.value, 10);
+                limitMap[row.username].expireAfter = !isNaN(parsed) && parsed > 0 ? parsed : null;
+            }
+        });
+
+        const sessionTimeoutMap = {};
+        sessionRows.forEach(row => {
+            const parsed = parseInt(row.value, 10);
+            sessionTimeoutMap[row.username] = !isNaN(parsed) && parsed > 0 ? parsed : null;
+        });
+
+        const acctMap = {};
+        acctRows.forEach(row => {
+            acctMap[row.username] = {
+                totalSession: row.total_session ? parseInt(row.total_session, 10) || 0 : 0,
+                first_login: row.first_login || null,
+                last_login: row.last_login || null,
+                last_logout: row.last_logout || null,
+                active_ip: row.active_ip || null,
+                last_ip: row.last_ip || null
+            };
+        });
+
         return {
             success: true,
-            data: userRows.map(row => ({
-                name: row.username,
-                password: row.password || '',
-                profile: row.profile || 'default',
-                comment: row.comment || '',
-                created_at: (voucherMetadata[row.username] && voucherMetadata[row.username].created_at) || null,
-                nas_name: 'RADIUS',
-                nas_ip: 'RADIUS'
-            }))
+            data: userRows.map(row => {
+                const meta = voucherMetadata[row.username] || {};
+                const limits = limitMap[row.username] || {};
+                const acct = acctMap[row.username] || {};
+                return {
+                    name: row.username,
+                    password: row.password || '',
+                    profile: row.profile || 'default',
+                    comment: row.comment || '',
+                    created_at: meta.created_at || null,
+                    price: meta.price || null,
+                    status: meta.status || null,
+                    nas_name: 'RADIUS',
+                    nas_ip: 'RADIUS',
+                    limit_seconds: limits.maxAllSession || null,
+                    validity_seconds: limits.expireAfter || null,
+                    session_timeout_seconds: sessionTimeoutMap[row.username] || null,
+                    total_session_seconds: acct.totalSession || 0,
+                    first_login: acct.first_login || null,
+                    last_login: acct.last_login || null,
+                    last_logout: acct.last_logout || null,
+                    ip_address: acct.active_ip || acct.last_ip || null
+                };
+            })
         };
     } catch (error) {
         await conn.end();
@@ -1793,7 +1862,6 @@ async function getHotspotUsersRadius() {
         return { success: false, message: error.message, data: [] };
     }
 }
-
 // Fungsi untuk menambah user hotspot ke RADIUS
 async function addHotspotUserRadius(username, password, profile, comment = null, server = null, serverMetadata = null, limits = null) {
     const conn = await getRadiusConnection();
@@ -2958,7 +3026,6 @@ async function getPPPoEProfileDetail(id) {
         return { success: false, message: `Gagal ambil detail profile: ${error.message}`, data: null };
     }
 }
-
 // Fungsi untuk mendapatkan daftar profile hotspot
 async function getHotspotProfiles(routerObj = null) {
     let conn = null;
@@ -3589,7 +3656,6 @@ async function editHotspotServerProfileMikrotik(profileId, profileData, routerOb
         return { success: false, message: `Gagal update server profile: ${error.message}` };
     }
 }
-
 // Fungsi untuk menghapus Server Profile Hotspot dari Mikrotik
 async function deleteHotspotServerProfileMikrotik(profileId, routerObj = null) {
     let conn = null;
@@ -4587,7 +4653,6 @@ async function updateHotspotUser(username, password, profile) {
         throw err;
     }
 }
-
 // Fungsi untuk generate voucher hotspot secara massal (versi lama - dihapus)
 // Fungsi ini diganti dengan fungsi generateHotspotVouchers yang lebih lengkap di bawah
 
@@ -5215,7 +5280,6 @@ async function getHotspotServerProfileDetailRadius(id) {
         return { success: false, message: `Gagal ambil detail server profile: ${error.message}`, data: null };
     }
 }
-
 let hotspotProfilesColumnsCache = null;
 
 async function ensureHotspotProfilesMetadataTable(conn) {
