@@ -285,17 +285,13 @@ function buildHotspotUserStatus(allUsers = [], activeUsers = []) {
 
         let uptimeLabel = '-';
         if (limitSeconds !== null) {
-            const usedLabel = totalSessionSeconds > 0 ? (formatDuration(totalSessionSeconds) || `${totalSessionSeconds} detik`) : '0 detik';
-            const limitLabel = formatDuration(limitSeconds) || `${limitSeconds} detik`;
-            if (totalSessionSeconds >= limitSeconds) {
-                uptimeLabel = `${usedLabel} dari ${limitLabel} (habis)`;
-            } else {
-                const remainingSeconds = Math.max(0, limitSeconds - totalSessionSeconds);
-                const remainingLabel = formatDuration(remainingSeconds) || `${remainingSeconds} detik`;
-                uptimeLabel = `${usedLabel} dari ${limitLabel} (sisa ${remainingLabel})`;
-            }
+            const usedLabel = formatSecondsToHHMMSS(totalSessionSeconds);
+            const limitLabel = formatSecondsToHHMMSS(limitSeconds);
+            uptimeLabel = `${usedLabel} / ${limitLabel}`;
         } else if (totalSessionSeconds > 0) {
-            uptimeLabel = formatDuration(totalSessionSeconds) || `${totalSessionSeconds} detik`;
+            uptimeLabel = formatSecondsToHHMMSS(totalSessionSeconds);
+        } else {
+            uptimeLabel = '00:00:00';
         }
 
         const lastUpdate = user.last_update || user.last_logout || user.last_login || null;
@@ -2016,5 +2012,16 @@ router.post('/test-voucher-generation', async (req, res) => {
         });
     }
 });
+
+function formatSecondsToHHMMSS(seconds) {
+    if (seconds === undefined || seconds === null || isNaN(seconds)) {
+        return '00:00:00';
+    }
+    const total = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(total / 3600).toString().padStart(2, '0');
+    const minutes = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
+    const secs = (total % 60).toString().padStart(2, '0');
+    return `${hours}:${minutes}:${secs}`;
+}
 
 module.exports = router;
