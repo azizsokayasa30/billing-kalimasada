@@ -17,15 +17,22 @@ $(function() {
     lengthMenu: [10, 25, 50, 100],
     responsive: true,
     dom: '<"d-flex justify-content-between align-items-center mb-3"<"d-flex align-items-center"l><"d-flex"f><"ms-3"#statusFilterContainer>>rtip',
-    order: [[2, 'desc'], [0, 'asc']],
+    order: [[3, 'desc'], [0, 'asc']],
     columnDefs: [
-      { targets: 0, width: '6%', className: 'text-center text-nowrap' },
-      { targets: 1, width: '18%', className: 'text-nowrap' },
-      { targets: 2, orderDataType: 'status-voucher', width: '16%', className: 'text-center text-nowrap' },
-      { targets: 3, width: '24%', className: 'text-nowrap' },
-      { targets: 4, width: '20%', className: 'text-nowrap' },
-      { targets: 5, width: '16%', className: 'text-nowrap' },
-      { targets: -1, orderable: false, width: '20%', className: 'text-center text-nowrap' }
+      { targets: 0, width: '4%', className: 'text-center text-nowrap' },
+      { targets: 1, width: '14%', className: 'text-nowrap' },
+      { targets: 2, width: '12%', className: 'text-nowrap' },
+      { targets: 3, orderDataType: 'status-voucher', width: '10%', className: 'text-center text-nowrap' },
+      { targets: 4, width: '10%', className: 'text-nowrap' },
+      { targets: 5, width: '10%', className: 'text-nowrap' },
+      { targets: 6, width: '12%', className: 'text-nowrap' },
+      { targets: 7, width: '12%', className: 'text-nowrap' },
+      { targets: 8, width: '8%', className: 'text-nowrap text-end' },
+      { targets: 9, width: '8%', className: 'text-nowrap text-end' },
+      { targets: 10, width: '12%', className: 'text-nowrap' },
+      { targets: 11, width: '12%', className: 'text-nowrap' },
+      { targets: 12, width: '12%', className: 'text-nowrap' },
+      { targets: -1, orderable: false, width: '16%', className: 'text-center text-nowrap' }
     ],
     language: {
       url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json',
@@ -54,17 +61,17 @@ $(function() {
   statusFilter.on('change', function() {
     const val = $(this).val();
     if (val) {
-      hotspotTable.column(2).search('^' + val + '$', true, false).draw();
+      hotspotTable.column(3).search('^' + val + '$', true, false).draw();
     } else {
-      hotspotTable.column(2).search('', true, false).draw();
+      hotspotTable.column(3).search('', true, false).draw();
     }
     updateOnlineCount();
-    hotspotTable.order([2, 'desc'], [0, 'asc']).draw();
+    hotspotTable.order([3, 'desc'], [0, 'asc']).draw();
   });
 
   $('#hotspotTable_filter input').on('input', function() {
     setTimeout(function() {
-      hotspotTable.order([2, 'desc'], [0, 'asc']).draw();
+      hotspotTable.order([3, 'desc'], [0, 'asc']).draw();
     }, 120);
   });
 
@@ -76,7 +83,7 @@ $(function() {
     let count = 0;
     hotspotTable.rows({ search: 'applied' }).every(function() {
       const rowData = this.data();
-      const statusText = extractStatus(rowData[2]);
+      const statusText = extractStatus(rowData[3]);
       if (statusText === 'online') count++;
     });
     $('#activeUserCount').text(count);

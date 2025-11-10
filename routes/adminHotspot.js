@@ -313,7 +313,15 @@ function buildHotspotUserStatus(allUsers = [], activeUsers = []) {
             validity_seconds_remaining: validityRemainingSeconds,
             uptime_label: uptimeLabel,
             uptime_seconds_remaining: uptimeRemainingSeconds,
-            ip_address: ipAddress
+            ip_address: ipAddress,
+            total_upload_mb: user.total_upload_mb || null,
+            total_download_mb: user.total_download_mb || null,
+            last_update: user.last_update || user.last_login || null,
+            start_time: user.start_time || user.first_login || null,
+            router_ip: user.router_ip || null,
+            server_identifier: user.server_identifier || null,
+            active_router: activeInfo ? (activeInfo.nas_name || activeInfo['nas-name'] || user.nas_name || null) : user.nas_name || null,
+            active_server: activeInfo ? (activeInfo.server || activeInfo['server'] || null) : null
         };
     });
 }

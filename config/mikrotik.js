@@ -1788,8 +1788,16 @@ async function getHotspotUsersRadius() {
                    MIN(acctstarttime) AS first_login,
                    MAX(acctstarttime) AS last_login,
                    MAX(acctstoptime) AS last_logout,
+                   MAX(acctlastupdate) AS last_update,
+                   MAX(acctstarttime) AS start_time,
+                   MAX(AcctOutputOctets) AS max_output,
+                   MAX(AcctInputOctets) AS max_input,
+                   SUM(IFNULL(acctinputoctets,0))/1024/1024 AS total_upload_mb,
+                   SUM(IFNULL(acctoutputoctets,0))/1024/1024 AS total_download_mb,
                    MAX(CASE WHEN acctstoptime IS NULL OR acctstoptime = '' OR acctstoptime = '0000-00-00 00:00:00' THEN framedipaddress ELSE NULL END) AS active_ip,
-                   MAX(framedipaddress) AS last_ip
+                   MAX(framedipaddress) AS last_ip,
+                   MAX(nasipaddress) AS router_ip,
+                   MAX(calledstationid) AS called_station
             FROM radacct
             WHERE username IN (${placeholders})
             GROUP BY username
@@ -1824,8 +1832,14 @@ async function getHotspotUsersRadius() {
                 first_login: row.first_login || null,
                 last_login: row.last_login || null,
                 last_logout: row.last_logout || null,
+                last_update: row.last_update || null,
+                start_time: row.start_time || row.last_login || null,
+                total_upload_mb: row.total_upload_mb ? parseFloat(row.total_upload_mb) : 0,
+                total_download_mb: row.total_download_mb ? parseFloat(row.total_download_mb) : 0,
                 active_ip: row.active_ip || null,
-                last_ip: row.last_ip || null
+                last_ip: row.last_ip || null,
+                router_ip: row.router_ip || null,
+                server_identifier: row.called_station || null
             };
         });
 
@@ -2333,7 +2347,6 @@ async function addPPPoESecret(username, password, profile, localAddress = '', co
         return { success: false, message: `Gagal menambah secret PPPoE: ${error.message}` };
     }
 }
-
 // Fungsi untuk menghapus secret PPPoE
 async function deletePPPoESecret(username) {
     try {
@@ -3122,7 +3135,6 @@ async function getHotspotProfileDetail(id, routerObj = null) {
         return { success: false, message: error.message, data: null };
     }
 }
-
 // Fungsi untuk mendapatkan daftar server hotspot
 async function getHotspotServers(routerObj = null) {
     try {
@@ -6672,7 +6684,6 @@ async function getPPPoEProfileDetailRadius(groupname) {
         return { success: false, message: `Gagal ambil detail profile: ${error.message}`, data: null };
     }
 }
-
 // Fungsi untuk menambah profile PPPoE
 async function addPPPoEProfile(profileData, routerObj = null) {
     try {
