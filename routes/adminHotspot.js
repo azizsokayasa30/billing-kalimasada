@@ -219,7 +219,7 @@ function formatDuration(seconds) {
     return parts.length > 0 ? parts.join(' ') : `${seconds} detik`;
 }
 
-function buildHotspotUserStatus(allUsers = [], activeUsers = []) {
+function buildHotspotUserStatus(allUsers = [], activeUsers = [], defaultServerName = null) {
     const activeMap = new Map((activeUsers || []).map(user => {
         const key = (user.user || user.name || user.username || '').toString().trim();
         return [key, user];
@@ -230,6 +230,10 @@ function buildHotspotUserStatus(allUsers = [], activeUsers = []) {
         const username = (user.name || user.username || '').toString().trim();
         const activeInfo = activeMap.get(username);
         const isOnline = Boolean(activeInfo);
+
+        const chosenServerName = user.server_metadata && user.server_metadata.name
+            ? user.server_metadata.name
+            : defaultServerName;
 
         const parsePositiveNumber = (value) => {
             if (value === undefined || value === null) return null;
@@ -297,7 +301,12 @@ function buildHotspotUserStatus(allUsers = [], activeUsers = []) {
         const lastUpdate = user.last_update || user.last_logout || user.last_login || null;
         const startTime = user.start_time || user.first_login || user.last_login || null;
         const routerNas = user.active_router || user.nas_name || (user.router_ip ? `NAS ${user.router_ip}` : null);
-        const serverHotspot = user.server_identifier || user.active_server || user.comment || null;
+        const serverHotspot = chosenServerName
+            || user.server_hotspot
+            || user.server_identifier
+            || user.active_server
+            || user.comment
+            || null;
 
         const ipAddress = (activeInfo && (activeInfo.address || activeInfo['framed-address'] || activeInfo['ip-address'] || activeInfo['remote-address']))
             || user.ip_address
@@ -425,7 +434,8 @@ async function loadHotspotPageData() {
                 ? allUsersResult.data
                 : [];
 
-            const enrichedUsers = buildHotspotUserStatus(allUsers, activeUsersList);
+            const serverHotspot = typeof data.serverHotspot === 'string' ? data.serverHotspot.trim() : null;
+            const enrichedUsers = buildHotspotUserStatus(allUsers, activeUsersList, serverHotspot);
 
             data.users = activeUsersList;
             data.profiles = profiles;
@@ -495,7 +505,8 @@ async function loadHotspotPageData() {
             }
         }
 
-        const enrichedUsers = buildHotspotUserStatus(allUsers, activeUsersList);
+        const serverHotspot = typeof data.serverHotspot === 'string' ? data.serverHotspot.trim() : null;
+        const enrichedUsers = buildHotspotUserStatus(allUsers, activeUsersList, serverHotspot);
 
         data.users = activeUsersList;
         data.profiles = profiles;
