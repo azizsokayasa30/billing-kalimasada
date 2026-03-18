@@ -94,9 +94,9 @@ fi
 
 # 11. Setup PM2 untuk production
 log_info "Setting up PM2 for production..."
-pm2 stop billing-system || true
-pm2 delete billing-system || true
-pm2 start app.js --name billing-system
+pm2 stop gembok-bill || true
+pm2 delete gembok-bill || true
+pm2 start app.js --name gembok-bill
 
 # 12. Setup PM2 startup script
 log_info "Setting up PM2 startup script..."
@@ -107,14 +107,14 @@ pm2 save
 log_success "Deployment completed successfully!"
 echo ""
 echo "🌐 Application URLs:"
-echo "  - Admin Portal: http://$(curl -s ifconfig.me || echo 'SERVER_IP'):3002/admin/login"
-echo "  - Customer Portal: http://$(curl -s ifconfig.me || echo 'SERVER_IP'):3002"
+echo "  - Admin Portal: http://$(curl -s ifconfig.me || echo 'SERVER_IP'):3003/admin/login"
+echo "  - Customer Portal: http://$(curl -s ifconfig.me || echo 'SERVER_IP'):3003"
 echo ""
 echo "🔧 Management Commands:"
-echo "  - Check status: pm2 status billing-system"
-echo "  - View logs: pm2 logs billing-system"
-echo "  - Restart: pm2 restart billing-system"
-echo "  - Stop: pm2 stop billing-system"
+echo "  - Check status: pm2 status gembok-bill"
+echo "  - View logs: pm2 logs gembok-bill"
+echo "  - Restart: pm2 restart gembok-bill"
+echo "  - Stop: pm2 stop gembok-bill"
 echo ""
 echo "🔍 Troubleshooting:"
 echo "  - SQLite3 errors: npm rebuild"
@@ -126,12 +126,12 @@ echo "  1. Configure settings.json with your credentials"
 echo "  2. Setup WhatsApp bot by scanning QR code"
 echo "  3. Test all features"
 echo ""
-echo "🎯 Billing-System is now running on port 3002!"
-echo "   Check: $(curl -s ifconfig.me || echo 'SERVER_IP'):3002"
+echo "🎯 Gembok-Bill is now running on port 3003!"
+echo "   Check: $(curl -s ifconfig.me || echo 'SERVER_IP'):3003"
 
 # 14. Verifikasi
 log_info "Verifying deployment..."
-pm2 status billing-system
+pm2 status gembok-bill
 
 echo ""
 log_success "🎉 Deploy selesai! Aplikasi siap digunakan."

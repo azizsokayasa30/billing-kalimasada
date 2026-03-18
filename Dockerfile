@@ -1,6 +1,6 @@
 # Dockerfile untuk Billing-System
-# Build dengan: docker build -t billing-system .
-# Run dengan: docker run -d -p 3002:3002 --name billing-system billing-system
+# Build dengan: docker build -t gembok-bill .
+# Run dengan: docker run -d -p 3003:3003 --name gembok-bill gembok-bill
 
 FROM node:20-bullseye-slim
 
@@ -33,11 +33,11 @@ RUN chmod 755 data/ logs/ whatsapp-session/ && \
     chmod 644 settings.json
 
 # Expose port
-EXPOSE 3002
+EXPOSE 3003
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3002 || exit 1
+    CMD curl -f http://localhost:3003/health || exit 1
 
 # Start aplikasi
 CMD ["npm", "start"]

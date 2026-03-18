@@ -43,7 +43,4 @@ networks:
   gembok-network:
     driver: bridge
 
-volumes:
-  gembok-data:
-  gembok-logs:
-  gembok-session:
+
