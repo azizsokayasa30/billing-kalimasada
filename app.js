@@ -727,7 +727,7 @@ function startServer(portToUse) {
     // Hanya gunakan port dari settings.json, tidak ada fallback
     // Listen di semua interface (0.0.0.0) agar bisa diakses dari network
     try {
-        const server = app.listen(port, () => {
+        const server = app.listen(port, "0.0.0.0", () => {
             logger.info(`✅ Server berhasil berjalan pada port ${port}`);
             logger.info(`🌐 Web Portal tersedia di: http://0.0.0.0:${port} (semua interface)`);
             logger.info(`🌐 Akses lokal: http://localhost:${port}`);
