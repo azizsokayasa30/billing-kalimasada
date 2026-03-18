@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Member - Admin Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <%- include('../../partials/billing-sidebar', { page: page, settings: settings, versionInfo: versionInfo, versionBadge: versionBadge }) %>
+            
+            <main class="col-md-9 ms-sm-auto col-lg-9 px-md-4 main-content py-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="h3 mb-0"><i class="bi bi-person-check me-2"></i>Data Member</h1>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
+                        <i class="bi bi-plus-circle me-2"></i>Tambah Member
+                    </button>
+                </div>
+
+                <% if (success) { %>
+                    <div class="alert alert-success alert-dismissible fade show">
+                        <i class="bi bi-check-circle me-2"></i><%= success %>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <% } %>
+                
+                <% if (error) { %>
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="bi bi-exclamation-triangle me-2"></i><%= error %>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <% } %>
+
+                <!-- Filter -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <form method="GET" action="/admin/member/data" class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Cari</label>
+                                <input type="text" class="form-control" name="search" value="<%= filters.search || '' %>" placeholder="Nama, Telepon, Username...">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Status</label>
+                                <select class="form-select" name="status">
+                                    <option value="">Semua</option>
+                                    <option value="active" <%= filters.status === 'active' ? 'selected' : '' %>>Aktif</option>
+                                    <option value="suspend" <%= filters.status === 'suspend' ? 'selected' : '' %>>Suspend</option>
+                                    <option value="isolir" <%= filters.status === 'isolir' ? 'selected' : '' %>>Isolir</option>
+                                    <option value="inactive" <%= filters.status === 'inactive' ? 'selected' : '' %>>Nonaktif</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Paket</label>
+                                <select class="form-select" name="package_id">
+                                    <option value="">Semua Paket</option>
+                                    <% if (packages && packages.length > 0) { %>
+                                        <% packages.forEach(function(pkg) { %>
+                                            <option value="<%= pkg.id %>" <%= filters.package_id == pkg.id ? 'selected' : '' %>><%= pkg.name %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-search me-2"></i>Cari
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>Daftar Member</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table id="membersTable" class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Nama</th>
+                                        <th>Telepon</th>
+                                        <th>Username</th>
+                                        <th>Hotspot Username</th>
+                                        <th>Paket</th>
+                                        <th>Status</th>
+                                        <th>Tanggal Bergabung</th>
+                                        <th style="width: 120px;">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% if (members && members.length > 0) { %>
+                                        <% members.forEach(function(member) { %>
+                                            <tr>
+                                                <td><strong><%= member.name || '-' %></strong></td>
+                                                <td><%= member.phone || '-' %></td>
+                                                <td><%= member.username || '-' %></td>
+                                                <td><span class="badge bg-info"><%= member.hotspot_username || '-' %></span></td>
+                                                <td>
+                                                    <% if (member.package_name) { %>
+                                                        <span class="badge bg-primary"><%= member.package_name %></span>
+                                                    <% } else { %>
+                                                        <span class="text-muted">-</span>
+                                                    <% } %>
+                                                </td>
+                                                <td>
+                                                    <% if (member.status === 'active') { %>
+                                                        <span class="badge bg-success">Aktif</span>
+                                                    <% } else if (member.status === 'suspend') { %>
+                                                        <span class="badge bg-warning">Suspend</span>
+                                                    <% } else if (member.status === 'isolir') { %>
+                                                        <span class="badge bg-danger">Isolir</span>
+                                                    <% } else { %>
+                                                        <span class="badge bg-secondary">Nonaktif</span>
+                                                    <% } %>
+                                                </td>
+                                                <td>
+                                                    <% if (member.join_date) { %>
+                                                        <%= new Date(member.join_date).toLocaleDateString('id-ID') %>
+                                                    <% } else { %>
+                                                        <span class="text-muted">-</span>
+                                                    <% } %>
+                                                </td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-info" onclick="viewMemberProfile(<%= member.id %>)" title="Lihat Profile">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-primary" onclick="editMember(<%= member.id %>)" title="Edit">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger" onclick="deleteMember(<%= member.id %>)" title="Hapus">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        <% }); %>
+                                    <% } %>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Add Member Modal -->
+    <div class="modal fade" id="addMemberModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Tambah Member Baru</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="addMemberForm" method="POST" action="/admin/member/data" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nama *</label>
+                                <input type="text" class="form-control" name="name" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Telepon *</label>
+                                <input type="text" class="form-control" name="phone" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Foto KTP</label>
+                                <input type="file" class="form-control" name="ktp_photo" accept="image/*">
+                                <small class="text-muted">Maksimal 20MB. Format: JPG, PNG</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Foto Rumah Tampak Depan</label>
+                                <input type="file" class="form-control" name="house_photo" accept="image/*">
+                                <small class="text-muted">Maksimal 20MB. Format: JPG, PNG</small>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="form-control" name="username" placeholder="Auto-generate jika kosong">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Hotspot Username</label>
+                                <input type="text" class="form-control" name="hotspot_username" placeholder="Auto-generate jika kosong">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Password Hotspot</label>
+                                <input type="text" class="form-control" name="password" placeholder="Default: sama dengan username">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" name="email">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Alamat</label>
+                            <textarea class="form-control" name="address" rows="2"></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Paket Member *</label>
+                                <select class="form-select" name="package_id" required>
+                                    <option value="">Pilih Paket</option>
+                                    <% if (packages && packages.length > 0) { %>
+                                        <% packages.forEach(function(pkg) { %>
+                                            <option value="<%= pkg.id %>"><%= pkg.name %> - <%= pkg.speed %> (Rp <%= parseFloat(pkg.price).toLocaleString('id-ID') %>)</option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Hotspot Profile</label>
+                                <select class="form-select" name="hotspot_profile">
+                                    <option value="">Gunakan dari Paket</option>
+                                    <% if (hotspotProfiles && hotspotProfiles.length > 0) { %>
+                                        <% hotspotProfiles.forEach(function(profile) { %>
+                                            <option value="<%= profile.groupname || profile.name %>"><%= profile.groupname || profile.name %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                        </div>
+                        <% if (hotspotServers && hotspotServers.length > 0) { %>
+                            <div class="mb-3">
+                                <label class="form-label">Server Hotspot</label>
+                                <select class="form-select" name="server_hotspot">
+                                    <option value="">Semua Server (Global)</option>
+                                    <% hotspotServers.forEach(function(server) { %>
+                                        <option value="<%= server.name || server['server-name'] %>"><%= server.name || server['server-name'] %></option>
+                                    <% }); %>
+                                </select>
+                                <small class="text-muted">Pilih server hotspot untuk membatasi login member ke server tertentu</small>
+                            </div>
+                        <% } %>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Billing Day</label>
+                                <input type="number" class="form-control" name="billing_day" value="15" min="1" max="28">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Auto Suspension</label>
+                                <select class="form-select" name="auto_suspension">
+                                    <option value="1">Aktif</option>
+                                    <option value="0">Nonaktif</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-primary">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Member Modal -->
+    <div class="modal fade" id="editMemberModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Member</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="editMemberForm" method="POST" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <input type="hidden" id="edit_member_id" name="id">
+                        <input type="hidden" id="edit_existing_ktp_photo" name="existing_ktp_photo">
+                        <input type="hidden" id="edit_existing_house_photo" name="existing_house_photo">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nama *</label>
+                                <input type="text" class="form-control" id="edit_name" name="name" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Telepon *</label>
+                                <input type="text" class="form-control" id="edit_phone" name="phone" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Foto KTP</label>
+                                <input type="file" class="form-control" name="ktp_photo" accept="image/*">
+                                <small class="text-muted">Kosongkan jika tidak ingin mengubah. Maksimal 20MB</small>
+                                <div id="edit_ktp_photo_preview" class="mt-2"></div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Foto Rumah Tampak Depan</label>
+                                <input type="file" class="form-control" name="house_photo" accept="image/*">
+                                <small class="text-muted">Kosongkan jika tidak ingin mengubah. Maksimal 20MB</small>
+                                <div id="edit_house_photo_preview" class="mt-2"></div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="form-control" id="edit_username" name="username">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Hotspot Username</label>
+                                <input type="text" class="form-control" id="edit_hotspot_username" name="hotspot_username">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Password Hotspot (kosongkan jika tidak diubah)</label>
+                                <input type="text" class="form-control" name="password" placeholder="Kosongkan jika tidak diubah">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" id="edit_email" name="email">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Alamat</label>
+                            <textarea class="form-control" id="edit_address" name="address" rows="2"></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Paket Member *</label>
+                                <select class="form-select" id="edit_package_id" name="package_id" required>
+                                    <option value="">Pilih Paket</option>
+                                    <% if (packages && packages.length > 0) { %>
+                                        <% packages.forEach(function(pkg) { %>
+                                            <option value="<%= pkg.id %>"><%= pkg.name %> - <%= pkg.speed %> (Rp <%= parseFloat(pkg.price).toLocaleString('id-ID') %>)</option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Status</label>
+                                <select class="form-select" id="edit_status" name="status">
+                                    <option value="active">Aktif</option>
+                                    <option value="suspend">Suspend</option>
+                                    <option value="isolir">Isolir</option>
+                                    <option value="inactive">Nonaktif</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Hotspot Profile</label>
+                                <select class="form-select" id="edit_hotspot_profile" name="hotspot_profile">
+                                    <option value="">Gunakan dari Paket</option>
+                                    <% if (hotspotProfiles && hotspotProfiles.length > 0) { %>
+                                        <% hotspotProfiles.forEach(function(profile) { %>
+                                            <option value="<%= profile.groupname || profile.name %>"><%= profile.groupname || profile.name %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Billing Day</label>
+                                <input type="number" class="form-control" id="edit_billing_day" name="billing_day" min="1" max="28">
+                            </div>
+                        </div>
+                        <% if (hotspotServers && hotspotServers.length > 0) { %>
+                            <div class="mb-3">
+                                <label class="form-label">Server Hotspot</label>
+                                <select class="form-select" id="edit_server_hotspot" name="server_hotspot">
+                                    <option value="">Semua Server (Global)</option>
+                                    <% hotspotServers.forEach(function(server) { %>
+                                        <option value="<%= server.name || server['server-name'] %>"><%= server.name || server['server-name'] %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                        <% } %>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-primary">Update</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Member Profile Modal -->
+    <div class="modal fade" id="viewMemberProfileModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title"><i class="bi bi-person-circle me-2"></i>Profile Member</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="memberProfileContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Pastikan tabel sudah ada sebelum inisialisasi DataTables
+            if ($('#membersTable').length) {
+                try {
+                    $('#membersTable').DataTable({
+                        language: {
+                            url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json',
+                            emptyTable: 'Belum ada member'
+                        },
+                        order: [[6, 'desc']], // Sort by join_date descending
+                        columnDefs: [
+                            { orderable: false, targets: 7 } // Disable sorting on Aksi column
+                        ],
+                        autoWidth: false,
+                        responsive: true,
+                        paging: true,
+                        searching: true,
+                        info: true
+                    });
+                } catch (e) {
+                    console.error('Error initializing DataTable:', e);
+                }
+            }
+        });
+
+        const members = <%- JSON.stringify(members || []) %>;
+
+        function viewMemberProfile(id) {
+            const member = members.find(m => m.id == id);
+            if (!member) {
+                alert('Member tidak ditemukan');
+                return;
+            }
+            
+            // Build profile HTML
+            let profileHTML = `
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Nama Lengkap</h6>
+                        <p class="mb-3"><strong>${member.name || '-'}</strong></p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Nomor Telepon</h6>
+                        <p class="mb-3"><strong>${member.phone || '-'}</strong></p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Username</h6>
+                        <p class="mb-3">${member.username || '-'}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Hotspot Username</h6>
+                        <p class="mb-3"><span class="badge bg-info">${member.hotspot_username || '-'}</span></p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Email</h6>
+                        <p class="mb-3">${member.email || '-'}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Status</h6>
+                        <p class="mb-3">
+                            ${member.status === 'active' 
+                                ? '<span class="badge bg-success">Aktif</span>' 
+                                : member.status === 'suspend'
+                                ? '<span class="badge bg-warning">Suspend</span>'
+                                : member.status === 'isolir'
+                                ? '<span class="badge bg-danger">Isolir</span>'
+                                : '<span class="badge bg-secondary">Nonaktif</span>'}
+                        </p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Paket Member</h6>
+                        <p class="mb-3">
+                            ${member.package_name 
+                                ? `<span class="badge bg-primary">${member.package_name}</span>` 
+                                : '-'}
+                        </p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Tanggal Bergabung</h6>
+                        <p class="mb-3">${member.join_date ? new Date(member.join_date).toLocaleDateString('id-ID') : '-'}</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <h6 class="text-muted mb-1">Alamat</h6>
+                        <p class="mb-3">${member.address || '-'}</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Hotspot Profile</h6>
+                        <p class="mb-3">${member.hotspot_profile || 'default'}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Server Hotspot</h6>
+                        <p class="mb-3">${member.server_hotspot || 'Global (Semua Server)'}</p>
+                    </div>
+                </div>
+            `;
+            
+            // Add photo sections
+            if (member.ktp_photo_path || member.house_photo_path) {
+                profileHTML += '<hr><div class="row"><div class="col-12"><h5 class="mb-3"><i class="bi bi-images me-2"></i>Dokumen & Foto</h5></div></div>';
+                profileHTML += '<div class="row">';
+                
+                if (member.ktp_photo_path) {
+                    profileHTML += `
+                        <div class="col-md-6 mb-3">
+                            <h6 class="text-muted mb-2">Foto KTP</h6>
+                            <img src="${member.ktp_photo_path}" class="img-fluid rounded border" style="max-height: 300px; cursor: pointer;" onclick="window.open('${member.ktp_photo_path}', '_blank')" alt="Foto KTP">
+                        </div>
+                    `;
+                }
+                
+                if (member.house_photo_path) {
+                    profileHTML += `
+                        <div class="col-md-6 mb-3">
+                            <h6 class="text-muted mb-2">Foto Rumah Tampak Depan</h6>
+                            <img src="${member.house_photo_path}" class="img-fluid rounded border" style="max-height: 300px; cursor: pointer;" onclick="window.open('${member.house_photo_path}', '_blank')" alt="Foto Rumah">
+                        </div>
+                    `;
+                }
+                
+                profileHTML += '</div>';
+            }
+            
+            $('#memberProfileContent').html(profileHTML);
+            new bootstrap.Modal(document.getElementById('viewMemberProfileModal')).show();
+        }
+
+        function editMember(id) {
+            const member = members.find(m => m.id == id);
+            if (!member) return;
+            
+            $('#edit_member_id').val(member.id);
+            $('#edit_name').val(member.name);
+            $('#edit_phone').val(member.phone);
+            $('#edit_username').val(member.username || '');
+            $('#edit_hotspot_username').val(member.hotspot_username || '');
+            $('#edit_email').val(member.email || '');
+            $('#edit_address').val(member.address || '');
+            $('#edit_package_id').val(member.package_id || '');
+            $('#edit_status').val(member.status || 'active');
+            $('#edit_hotspot_profile').val(member.hotspot_profile || '');
+            $('#edit_billing_day').val(member.billing_day || 15);
+            $('#edit_server_hotspot').val(member.server_hotspot || '');
+            $('#edit_existing_ktp_photo').val(member.ktp_photo_path || '');
+            $('#edit_existing_house_photo').val(member.house_photo_path || '');
+            $('#editMemberForm').attr('action', '/admin/member/data/' + id + '/update');
+            
+            // Show existing photos if available
+            let ktpPreview = '';
+            let housePreview = '';
+            if (member.ktp_photo_path) {
+                ktpPreview = `<img src="${member.ktp_photo_path}" class="img-thumbnail" style="max-height: 100px;" alt="Foto KTP saat ini">`;
+            }
+            if (member.house_photo_path) {
+                housePreview = `<img src="${member.house_photo_path}" class="img-thumbnail" style="max-height: 100px;" alt="Foto Rumah saat ini">`;
+            }
+            $('#edit_ktp_photo_preview').html(ktpPreview ? '<small class="text-muted d-block mb-2">Foto saat ini:</small>' + ktpPreview : '');
+            $('#edit_house_photo_preview').html(housePreview ? '<small class="text-muted d-block mb-2">Foto saat ini:</small>' + housePreview : '');
+            
+            new bootstrap.Modal(document.getElementById('editMemberModal')).show();
+        }
+
+        function deleteMember(id) {
+            if (confirm('Apakah Anda yakin ingin menghapus member ini?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/admin/member/data/' + id + '/delete';
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+    </script>
+</body>
+</html>

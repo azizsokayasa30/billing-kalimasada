@@ -76,11 +76,7 @@ async function licenseLoginCheck(req, res, next) {
                 const { getSettingsWithCache } = require('../config/settingsManager');
                 const settings = getSettingsWithCache();
                 
-                return res.render('adminLogin', {
-                    error: 'Trial period telah berakhir. Silakan aktivasi license key terlebih dahulu.',
-                    licenseExpired: true,
-                    settings
-                });
+                return res.redirect('/login');
             }
         }
         

@@ -90,11 +90,75 @@ class ServiceSuspensionManager {
                 // Check jika menggunakan RADIUS mode
                 if (authMode === 'radius') {
                     try {
+                        // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah group
+                        // Agar saat reconnect, langsung dapat IP isolir
+                        try {
+                            const { disconnectPPPoEUser, getRouterForCustomer, getMikrotikConnectionForRouter } = require('./mikrotik');
+                            let routerObj = null;
+                            
+                            // Coba dapatkan router dari customer mapping
+                            try {
+                                routerObj = await getRouterForCustomer(customer);
+                            } catch (routerError) {
+                                // Jika customer tidak punya router mapping, cari di semua router
+                                logger.warn(`RADIUS: Customer tidak punya router mapping, mencari di semua router untuk ${pppUser}`);
+                                const sqlite3 = require('sqlite3').verbose();
+                                const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
+                                const routers = await new Promise((resolve) => 
+                                    db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []))
+                                );
+                                db.close();
+                                
+                                // Cari router yang memiliki user aktif
+                                for (const router of routers) {
+                                    try {
+                                        const conn = await getMikrotikConnectionForRouter(router);
+                                        const activeSessions = await conn.write('/ppp/active/print', [`?name=${pppUser}`]);
+                                        if (activeSessions && activeSessions.length > 0) {
+                                            routerObj = router;
+                                            logger.info(`RADIUS: Found active session for ${pppUser} on router ${router.name}`);
+                                            break;
+                                        }
+                                    } catch (e) {
+                                        // Continue to next router
+                                    }
+                                }
+                                
+                                // Jika tidak ditemukan, gunakan router pertama sebagai fallback
+                                if (!routerObj && routers.length > 0) {
+                                    routerObj = routers[0];
+                                    logger.warn(`RADIUS: No active session found, using first router as fallback: ${routerObj.name}`);
+                                }
+                            }
+                            
+                            if (routerObj) {
+                                // Disconnect active session TERLEBIH DAHULU menggunakan helper function
+                                const disconnectResult = await disconnectPPPoEUser(pppUser, routerObj);
+                                
+                                if (disconnectResult.success && disconnectResult.disconnected > 0) {
+                                    logger.info(`RADIUS: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${pppUser} before changing to isolir group`);
+                                    
+                                    // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                } else if (disconnectResult.disconnected === 0) {
+                                    logger.info(`RADIUS: User ${pppUser} tidak sedang online, langsung ubah group ke isolir`);
+                                } else {
+                                    logger.warn(`RADIUS: Disconnect result: ${disconnectResult.message}`);
+                                }
+                            } else {
+                                logger.warn(`RADIUS: Tidak ada router yang tersedia untuk disconnect ${pppUser}`);
+                            }
+                        } catch (disconnectError) {
+                            logger.warn(`RADIUS: Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
+                            // Continue dengan perubahan group meskipun disconnect gagal
+                        }
+                        
+                        // Setelah disconnect, baru ubah group ke isolir
                         const suspendResult = await suspendUserRadius(pppUser);
                         if (suspendResult && suspendResult.success) {
                             results.mikrotik = true;
                             results.radius = true;
-                            logger.info(`RADIUS: Successfully suspended user ${pppUser} (moved to isolir group)`);
+                            logger.info(`RADIUS: Successfully suspended user ${pppUser} (moved to isolir group, will get isolir IP on reconnect)`);
                         } else {
                             logger.error(`RADIUS: Suspension failed for ${pppUser}`);
                         }
@@ -111,6 +175,23 @@ class ServiceSuspensionManager {
                         // Pastikan profile isolir ada pada NAS milik customer
                         await this.ensureIsolirProfile(customer);
 
+                        // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah profile
+                        // Agar saat reconnect, langsung dapat IP isolir
+                        const { disconnectPPPoEUser } = require('./mikrotik');
+                        const disconnectResult = await disconnectPPPoEUser(pppUser, mikrotik);
+                        
+                        if (disconnectResult.success && disconnectResult.disconnected > 0) {
+                            logger.info(`Mikrotik: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${customer.pppoe_username} before changing to isolir profile`);
+                            
+                            // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        } else if (disconnectResult.disconnected === 0) {
+                            logger.info(`Mikrotik: User ${customer.pppoe_username} tidak sedang online, langsung ubah profile ke isolir`);
+                        } else {
+                            logger.warn(`Mikrotik: Disconnect result: ${disconnectResult.message}`);
+                        }
+
+                        // Setelah disconnect, baru ubah profile ke isolir
                         // Cari .id secret berdasarkan name terlebih dahulu
                         let secretId = null;
                         try {
@@ -130,20 +211,7 @@ class ServiceSuspensionManager {
                             : [`=name=${pppUser}`, `=profile=${selectedProfile}`, `=comment=SUSPENDED - ${reason}`];
 
                         await mikrotik.write('/ppp/secret/set', setParams);
-                        logger.info(`Mikrotik: Set profile to '${selectedProfile}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'})`);
-                        
-                        // Disconnect active session jika ada
-                        const activeSessions = await mikrotik.write('/ppp/active/print', [
-                            `?name=${pppUser}`
-                        ]);
-                        
-                        if (activeSessions && activeSessions.length > 0) {
-                            for (const session of activeSessions) {
-                                await mikrotik.write('/ppp/active/remove', [
-                                    `=.id=${session['.id']}`
-                                ]);
-                            }
-                        }
+                        logger.info(`Mikrotik: Set profile to '${selectedProfile}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'}) - will get isolir IP on reconnect`);
                         
                         results.mikrotik = true;
                         logger.info(`Mikrotik: Successfully suspended PPPoE user ${customer.pppoe_username} with isolir profile`);
@@ -264,6 +332,14 @@ class ServiceSuspensionManager {
             } catch (notificationError) {
                 logger.error(`WhatsApp notification failed for ${customer.username}:`, notificationError.message);
             }
+            
+            // 5. Send Email notification
+            try {
+                const emailNotifications = require('./email-notifications');
+                await emailNotifications.sendServiceSuspensionNotification(customer, reason);
+            } catch (notificationError) {
+                logger.error(`Email notification failed for ${customer.username}:`, notificationError.message);
+            }
 
             return {
                 success: results.mikrotik || results.genieacs || results.billing,
@@ -307,11 +383,75 @@ class ServiceSuspensionManager {
                 // Check jika menggunakan RADIUS mode
                 if (authMode === 'radius') {
                     try {
+                        // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah group
+                        // Agar saat reconnect, langsung dapat IP dari package yang benar
+                        try {
+                            const { disconnectPPPoEUser, getRouterForCustomer, getMikrotikConnectionForRouter } = require('./mikrotik');
+                            let routerObj = null;
+                            
+                            // Coba dapatkan router dari customer mapping
+                            try {
+                                routerObj = await getRouterForCustomer(customer);
+                            } catch (routerError) {
+                                // Jika customer tidak punya router mapping, cari di semua router
+                                logger.warn(`RADIUS: Customer tidak punya router mapping, mencari di semua router untuk ${pppUser}`);
+                                const sqlite3 = require('sqlite3').verbose();
+                                const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
+                                const routers = await new Promise((resolve) => 
+                                    db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []))
+                                );
+                                db.close();
+                                
+                                // Cari router yang memiliki user aktif
+                                for (const router of routers) {
+                                    try {
+                                        const conn = await getMikrotikConnectionForRouter(router);
+                                        const activeSessions = await conn.write('/ppp/active/print', [`?name=${pppUser}`]);
+                                        if (activeSessions && activeSessions.length > 0) {
+                                            routerObj = router;
+                                            logger.info(`RADIUS: Found active session for ${pppUser} on router ${router.name}`);
+                                            break;
+                                        }
+                                    } catch (e) {
+                                        // Continue to next router
+                                    }
+                                }
+                                
+                                // Jika tidak ditemukan, gunakan router pertama sebagai fallback
+                                if (!routerObj && routers.length > 0) {
+                                    routerObj = routers[0];
+                                    logger.warn(`RADIUS: No active session found, using first router as fallback: ${routerObj.name}`);
+                                }
+                            }
+                            
+                            if (routerObj) {
+                                // Disconnect active session TERLEBIH DAHULU menggunakan helper function
+                                const disconnectResult = await disconnectPPPoEUser(pppUser, routerObj);
+                                
+                                if (disconnectResult.success && disconnectResult.disconnected > 0) {
+                                    logger.info(`RADIUS: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${pppUser} before restoring to previous package`);
+                                    
+                                    // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                } else if (disconnectResult.disconnected === 0) {
+                                    logger.info(`RADIUS: User ${pppUser} tidak sedang online, langsung ubah group ke package sebelumnya`);
+                                } else {
+                                    logger.warn(`RADIUS: Disconnect result: ${disconnectResult.message}`);
+                                }
+                            } else {
+                                logger.warn(`RADIUS: Tidak ada router yang tersedia untuk disconnect ${pppUser}`);
+                            }
+                        } catch (disconnectError) {
+                            logger.warn(`RADIUS: Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
+                            // Continue dengan perubahan group meskipun disconnect gagal
+                        }
+                        
+                        // Setelah disconnect, baru ubah group kembali ke package sebelumnya
                         const unsuspendResult = await unsuspendUserRadius(pppUser);
                         if (unsuspendResult && unsuspendResult.success) {
                             results.mikrotik = true;
                             results.radius = true;
-                            logger.info(`RADIUS: Successfully unsuspended user ${pppUser} (restored to previous package)`);
+                            logger.info(`RADIUS: Successfully unsuspended user ${pppUser} (restored to previous package, will get package IP on reconnect)`);
                         } else {
                             logger.error(`RADIUS: Unsuspend failed for ${pppUser}`);
                         }
@@ -331,6 +471,23 @@ class ServiceSuspensionManager {
                             profileToUse = packageData?.pppoe_profile || getSetting('default_pppoe_profile', 'default');
                         }
                         
+                        // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah profile
+                        // Agar saat reconnect, langsung dapat IP dari package yang benar
+                        const { disconnectPPPoEUser } = require('./mikrotik');
+                        const disconnectResult = await disconnectPPPoEUser(pppUser, mikrotik);
+                        
+                        if (disconnectResult.success && disconnectResult.disconnected > 0) {
+                            logger.info(`Mikrotik: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${customer.pppoe_username} before restoring to ${profileToUse} profile`);
+                            
+                            // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        } else if (disconnectResult.disconnected === 0) {
+                            logger.info(`Mikrotik: User ${customer.pppoe_username} tidak sedang online, langsung ubah profile ke ${profileToUse}`);
+                        } else {
+                            logger.warn(`Mikrotik: Disconnect result: ${disconnectResult.message}`);
+                        }
+
+                        // Setelah disconnect, baru ubah profile ke package normal
                         // Cari .id secret berdasarkan name terlebih dahulu
                         let secretId = null;
                         try {
@@ -350,21 +507,7 @@ class ServiceSuspensionManager {
                             : [`=name=${pppUser}`, `=profile=${profileToUse}`, `=comment=ACTIVE - ${reason}`];
 
                         await mikrotik.write('/ppp/secret/set', setParams);
-                        logger.info(`Mikrotik: Restored profile to '${profileToUse}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'})`);
-                        
-                        // Disconnect active session agar client reconnect dengan profile baru
-                        const activeSessions = await mikrotik.write('/ppp/active/print', [
-                            `?name=${pppUser}`
-                        ]);
-                        
-                        if (activeSessions && activeSessions.length > 0) {
-                            for (const session of activeSessions) {
-                                await mikrotik.write('/ppp/active/remove', [
-                                    `=.id=${session['.id']}`
-                                ]);
-                            }
-                            logger.info(`Mikrotik: Disconnected ${activeSessions.length} active session(s) for ${customer.pppoe_username} to apply new profile`);
-                        }
+                        logger.info(`Mikrotik: Restored profile to '${profileToUse}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'}) - will get package IP on reconnect`);
 
                         results.mikrotik = true;
                         logger.info(`Mikrotik: Successfully restored PPPoE user ${customer.pppoe_username} with ${profileToUse} profile`);
@@ -477,6 +620,14 @@ class ServiceSuspensionManager {
                 await whatsappNotifications.sendServiceRestorationNotification(customer, reason);
             } catch (notificationError) {
                 logger.error(`WhatsApp notification failed for ${customer.username}:`, notificationError.message);
+            }
+            
+            // 5. Send Email notification
+            try {
+                const emailNotifications = require('./email-notifications');
+                await emailNotifications.sendServiceRestorationNotification(customer, reason);
+            } catch (notificationError) {
+                logger.error(`Email notification failed for ${customer.username}:`, notificationError.message);
             }
 
             return {
@@ -608,6 +759,359 @@ class ServiceSuspensionManager {
             throw error;
         } finally {
             this.isRunning = false;
+        }
+    }
+
+    async checkAndSuspendOverdueMembers() {
+        if (this.isRunning) {
+            logger.info('Member service suspension check already running, skipping...');
+            return;
+        }
+
+        try {
+            this.isRunning = true;
+            logger.info('Starting automatic member service suspension check...');
+
+            // Ambil pengaturan grace period
+            const gracePeriodDays = parseInt(getSetting('suspension_grace_period_days', '7'));
+            const autoSuspensionEnabled = getSetting('auto_suspension_enabled', true) === true || getSetting('auto_suspension_enabled', 'true') === 'true';
+
+            if (!autoSuspensionEnabled) {
+                logger.info('Auto suspension is disabled in settings');
+                return;
+            }
+
+            // Ambil tagihan member yang overdue
+            const overdueInvoices = await billingManager.getOverdueInvoices();
+            const memberInvoices = overdueInvoices.filter(inv => inv.member_id && inv.invoice_type_entity === 'member');
+            logger.info(`Found ${memberInvoices.length} overdue member invoices to check`);
+            
+            if (memberInvoices.length === 0) {
+                logger.info('No overdue member invoices found, skipping suspension check');
+                return { checked: 0, suspended: 0, errors: 0, details: [] };
+            }
+            
+            const results = {
+                checked: 0,
+                suspended: 0,
+                errors: 0,
+                details: []
+            };
+
+            for (const invoice of memberInvoices) {
+                results.checked++;
+
+                try {
+                    // Hitung berapa hari telat
+                    const dueDate = new Date(invoice.due_date);
+                    const today = new Date();
+                    
+                    const dueDateStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+                    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    
+                    const daysOverdue = Math.floor((todayStart - dueDateStart) / (1000 * 60 * 60 * 24));
+                    
+                    logger.info(`Member ${invoice.member_name}: Due date: ${dueDate.toISOString().split('T')[0]}, Today: ${today.toISOString().split('T')[0]}, Days overdue: ${daysOverdue}, Grace period: ${gracePeriodDays}`);
+
+                    // Skip jika belum melewati grace period
+                    if (daysOverdue < gracePeriodDays) {
+                        logger.info(`Member ${invoice.member_name} overdue ${daysOverdue} days, grace period ${gracePeriodDays} days - skipping`);
+                        continue;
+                    }
+
+                    // Ambil data member
+                    const member = await billingManager.getMemberById(invoice.member_id);
+                    if (!member) {
+                        logger.warn(`Member not found for invoice ${invoice.invoice_number}`);
+                        continue;
+                    }
+
+                    // Skip jika sudah isolir
+                    if (member.status === 'isolir') {
+                        logger.info(`Member ${member.hotspot_username || member.name} already isolir - skipping`);
+                        continue;
+                    }
+
+                    // Skip jika auto_suspension = 0
+                    if (member.auto_suspension === 0) {
+                        logger.info(`Member ${member.hotspot_username || member.name} has auto_suspension disabled - skipping`);
+                        continue;
+                    }
+
+                    // Suspend layanan member
+                    const suspensionResult = await this.suspendMemberService(member, `Telat bayar ${daysOverdue} hari`);
+                    
+                    if (suspensionResult.success) {
+                        results.suspended++;
+                        results.details.push({
+                            member: member.hotspot_username || member.name,
+                            invoice: invoice.invoice_number,
+                            daysOverdue,
+                            status: 'suspended'
+                        });
+                        logger.info(`Successfully suspended service for member ${member.hotspot_username || member.name} (${daysOverdue} days overdue)`);
+                    } else {
+                        results.errors++;
+                        results.details.push({
+                            member: member.hotspot_username || member.name,
+                            invoice: invoice.invoice_number,
+                            daysOverdue,
+                            status: 'failed'
+                        });
+                        logger.error(`Failed to suspend service for member ${member.hotspot_username || member.name}`);
+                    }
+
+                } catch (memberError) {
+                    results.errors++;
+                    logger.error(`Error processing member for invoice ${invoice.invoice_number}:`, memberError);
+                }
+            }
+
+            logger.info(`Member service suspension check completed. Checked: ${results.checked}, Suspended: ${results.suspended}, Errors: ${results.errors}`);
+            return results;
+
+        } catch (error) {
+            logger.error('Error in automatic member service suspension check:', error);
+            throw error;
+        } finally {
+            this.isRunning = false;
+        }
+    }
+
+    async suspendMemberService(member, reason = 'Telat bayar') {
+        try {
+            const { disconnectHotspotUser, disableHotspotUserRadius } = require('./mikrotik');
+            const authMode = await getUserAuthMode();
+            
+            if (authMode !== 'radius') {
+                logger.warn('Member suspension only supports RADIUS mode');
+                return { success: false, message: 'Only RADIUS mode supported' };
+            }
+
+            const hotspotUsername = member.hotspot_username;
+            if (!hotspotUsername) {
+                logger.warn(`Member ${member.name} has no hotspot_username`);
+                return { success: false, message: 'No hotspot username' };
+            }
+
+            // Disconnect active hotspot session first
+            try {
+                const disconnectResult = await disconnectHotspotUser(hotspotUsername);
+                if (disconnectResult.success) {
+                    logger.info(`Disconnected hotspot session for ${hotspotUsername}`);
+                    // Wait a bit to ensure disconnect completes
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } else if (disconnectResult.message && disconnectResult.message.includes('tidak ditemukan')) {
+                    logger.info(`Hotspot user ${hotspotUsername} tidak sedang online`);
+                }
+            } catch (disconnectError) {
+                logger.warn(`Failed to disconnect hotspot session for ${hotspotUsername}: ${disconnectError.message}`);
+                // Continue dengan suspend meskipun disconnect gagal
+            }
+
+            // Disable hotspot user di RADIUS (tambahkan Auth-Type := Reject)
+            // Karena hotspot tidak mempunyai profile isolir, kita disable username langsung
+            try {
+                const disableResult = await disableHotspotUserRadius(hotspotUsername);
+                if (!disableResult || !disableResult.success) {
+                    logger.error(`Failed to disable hotspot user ${hotspotUsername} in RADIUS`);
+                    return { success: false, message: disableResult?.message || 'RADIUS disable failed' };
+                }
+                logger.info(`Hotspot user ${hotspotUsername} disabled in RADIUS (Auth-Type := Reject)`);
+            } catch (disableError) {
+                logger.error(`Error disabling hotspot user ${hotspotUsername}: ${disableError.message}`);
+                return { success: false, message: `Failed to disable user: ${disableError.message}` };
+            }
+
+            // Update member status to isolir (include all required fields)
+            await billingManager.updateMember(member.id, {
+                name: member.name,
+                username: member.username || member.hotspot_username || '',
+                phone: member.phone,
+                hotspot_username: member.hotspot_username,
+                email: member.email,
+                address: member.address,
+                package_id: member.package_id,
+                hotspot_profile: member.hotspot_profile,
+                status: 'isolir',
+                server_hotspot: member.server_hotspot,
+                auto_suspension: member.auto_suspension !== undefined ? member.auto_suspension : 1,
+                billing_day: member.billing_day || 15,
+                latitude: member.latitude,
+                longitude: member.longitude,
+                ktp_photo_path: member.ktp_photo_path,
+                house_photo_path: member.house_photo_path
+            });
+            logger.info(`Member ${hotspotUsername} status updated to isolir`);
+
+            // Send notification
+            try {
+                const whatsappNotifications = require('./whatsapp-notifications');
+                await whatsappNotifications.sendMemberIsolirNotification(member.id, reason);
+            } catch (notifError) {
+                logger.error(`Failed to send isolir notification: ${notifError.message}`);
+            }
+
+            return { success: true, message: 'Member service suspended successfully' };
+
+        } catch (error) {
+            logger.error(`Error suspending member service: ${error.message}`);
+            return { success: false, message: error.message };
+        }
+    }
+
+    async restoreMemberService(member, reason = 'Manual restore') {
+        try {
+            const { enableHotspotUserRadius } = require('./mikrotik');
+            const authMode = await getUserAuthMode();
+            
+            if (authMode !== 'radius') {
+                logger.warn('Member restoration only supports RADIUS mode');
+                return { success: false, message: 'Only RADIUS mode supported' };
+            }
+
+            const hotspotUsername = member.hotspot_username;
+            if (!hotspotUsername) {
+                logger.warn(`Member ${member.name} has no hotspot_username`);
+                return { success: false, message: 'No hotspot username' };
+            }
+
+            // Enable hotspot user di RADIUS (hapus Auth-Type := Reject)
+            try {
+                const enableResult = await enableHotspotUserRadius(hotspotUsername);
+                if (!enableResult || !enableResult.success) {
+                    logger.error(`Failed to enable hotspot user ${hotspotUsername} in RADIUS`);
+                    return { success: false, message: enableResult?.message || 'RADIUS enable failed' };
+                }
+                logger.info(`Hotspot user ${hotspotUsername} enabled in RADIUS (Auth-Type Reject removed)`);
+            } catch (enableError) {
+                logger.error(`Error enabling hotspot user ${hotspotUsername}: ${enableError.message}`);
+                return { success: false, message: `Failed to enable user: ${enableError.message}` };
+            }
+
+            // Update member status to active (preserve all existing fields)
+            const updateData = { 
+                name: member.name,
+                username: member.username || member.hotspot_username || '',
+                phone: member.phone,
+                hotspot_username: member.hotspot_username || member.username || '',
+                email: member.email || '',
+                address: member.address || '',
+                package_id: member.package_id,
+                hotspot_profile: member.hotspot_profile || '',
+                status: 'active',
+                server_hotspot: member.server_hotspot || '',
+                auto_suspension: member.auto_suspension || 0,
+                billing_day: member.billing_day || null,
+                latitude: member.latitude || null,
+                longitude: member.longitude || null,
+                ktp_photo_path: member.ktp_photo_path || null,
+                house_photo_path: member.house_photo_path || null
+            };
+            await billingManager.updateMember(member.id, updateData);
+            logger.info(`Member ${hotspotUsername} status updated to active`);
+
+            return { success: true, message: 'Member service restored successfully' };
+
+        } catch (error) {
+            logger.error(`Error restoring member service: ${error.message}`);
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
+     * Sync status suspended customers dari billing ke RADIUS
+     * Memastikan customer yang statusnya 'suspended' di billing juga di group 'isolir' di RADIUS
+     */
+    async syncSuspendedStatusToRadius() {
+        try {
+            logger.info('Starting sync suspended status to RADIUS...');
+            
+            const { getUserAuthModeAsync } = require('./mikrotik');
+            const authMode = await getUserAuthModeAsync();
+            
+            if (authMode !== 'radius') {
+                logger.info('Auth mode bukan RADIUS, skip sync');
+                return { synced: 0, alreadyIsolir: 0, errors: 0 };
+            }
+            
+            // Ambil semua customer yang statusnya suspended
+            const customers = await billingManager.getCustomers();
+            const suspendedCustomers = customers.filter(c => c.status === 'suspended');
+            
+            logger.info(`Found ${suspendedCustomers.length} customers with status 'suspended'`);
+            
+            if (suspendedCustomers.length === 0) {
+                return { synced: 0, alreadyIsolir: 0, errors: 0 };
+            }
+            
+            const { getRadiusConnection, suspendUserRadius, getMikrotikConnectionForCustomer } = require('./mikrotik');
+            const conn = await getRadiusConnection();
+            let synced = 0;
+            let alreadyIsolir = 0;
+            let errors = 0;
+            
+            for (const customer of suspendedCustomers) {
+                const pppUser = (customer.pppoe_username && String(customer.pppoe_username).trim()) || 
+                               (customer.username && String(customer.username).trim());
+                
+                if (!pppUser) {
+                    continue;
+                }
+                
+                try {
+                    // Cek group saat ini di RADIUS
+                    const [currentGroup] = await conn.execute(
+                        "SELECT groupname FROM radusergroup WHERE username = ? LIMIT 1",
+                        [pppUser]
+                    );
+                    
+                    if (currentGroup && currentGroup.length > 0 && currentGroup[0].groupname === 'isolir') {
+                        alreadyIsolir++;
+                    } else {
+                        // Disconnect active session TERLEBIH DAHULU
+                        try {
+                            const mikrotik = await getMikrotikConnectionForCustomer(customer);
+                            const activeSessions = await mikrotik.write('/ppp/active/print', [
+                                `?name=${pppUser}`
+                            ]);
+                            
+                            if (activeSessions && activeSessions.length > 0) {
+                                for (const session of activeSessions) {
+                                    await mikrotik.write('/ppp/active/remove', [
+                                        `=.id=${session['.id']}`
+                                    ]);
+                                }
+                                logger.info(`Disconnected ${activeSessions.length} active session(s) for ${pppUser}`);
+                            }
+                        } catch (disconnectError) {
+                            logger.warn(`Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
+                        }
+                        
+                        // Pindahkan ke group isolir
+                        const result = await suspendUserRadius(pppUser);
+                        if (result && result.success) {
+                            synced++;
+                            logger.info(`Synced ${pppUser} to isolir group`);
+                        } else {
+                            errors++;
+                            logger.error(`Failed to sync ${pppUser} to isolir: ${result?.message || 'Unknown error'}`);
+                        }
+                    }
+                } catch (error) {
+                    errors++;
+                    logger.error(`Error syncing ${pppUser}: ${error.message}`);
+                }
+            }
+            
+            await conn.end();
+            
+            logger.info(`Sync suspended status completed: synced=${synced}, alreadyIsolir=${alreadyIsolir}, errors=${errors}`);
+            return { synced, alreadyIsolir, errors };
+            
+        } catch (error) {
+            logger.error(`Error in syncSuspendedStatusToRadius: ${error.message}`);
+            return { synced: 0, alreadyIsolir: 0, errors: 1 };
         }
     }
 

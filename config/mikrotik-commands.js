@@ -665,17 +665,39 @@ async function handlePing(remoteJid, params) {
     let message = `🏓 *PING RESULT: ${host}*\n\n`;
 
     if (result.data && result.data.length > 0) {
-        const pingData = result.data[0];
-        if (pingData.status === 'timeout') {
-            message += '❌ Request timeout\n';
-        } else {
-            message += `✅ Reply from ${pingData.host || host}\n`;
-            if (pingData.time) message += `• Time: ${pingData.time}\n`;
-            if (pingData.ttl) message += `• TTL: ${pingData.ttl}\n`;
-            if (pingData.size) message += `• Size: ${pingData.size} bytes\n`;
+        let successCount = 0;
+        let timeoutCount = 0;
+        let totalTime = 0;
+        let timeCount = 0;
+
+        result.data.forEach((pingData, index) => {
+            if (pingData.status === 'timeout') {
+                timeoutCount++;
+                message += `${index + 1}. ❌ Request timeout\n`;
+            } else {
+                successCount++;
+                const time = pingData.time ? parseFloat(pingData.time.replace('ms', '')) : 0;
+                if (time > 0) {
+                    totalTime += time;
+                    timeCount++;
+                }
+                message += `${index + 1}. ✅ Reply from ${pingData.host || host}`;
+                if (pingData.time) message += ` - Time: ${pingData.time}`;
+                if (pingData.ttl) message += ` - TTL: ${pingData.ttl}`;
+                if (pingData.size) message += ` - Size: ${pingData.size} bytes`;
+                message += '\n';
+            }
+        });
+
+        message += `\n📊 *STATISTIK:*\n`;
+        message += `• Berhasil: ${successCount}/${result.data.length}\n`;
+        message += `• Timeout: ${timeoutCount}/${result.data.length}\n`;
+        if (timeCount > 0) {
+            const avgTime = (totalTime / timeCount).toFixed(2);
+            message += `• Rata-rata waktu: ${avgTime}ms\n`;
         }
     } else {
-        message += 'Ping selesai, tidak ada data response';
+        message += '❌ Ping selesai, tidak ada data response';
     }
 
     await sock.sendMessage(remoteJid, { text: message });

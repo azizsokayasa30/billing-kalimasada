@@ -67,7 +67,7 @@
         }
     </style>
 </head>
-<body data-company-header="<%= company_header || 'Nama Hotspot' %>" data-admin-kontak="<%= adminKontak || 'Kontak Admin' %>">
+<body data-company-header="<%= company_header || 'Nama Hotspot' %>" data-admin-kontak="<%= adminKontak || 'Kontak Admin' %>" data-logo-url="<%= settings && settings.logo_filename ? ('/img/' + settings.logo_filename + '?ts=' + Date.now()) : '/img/logo.png' %>">
 <div class="container-fluid">
     <div class="row">
         <!-- Include Responsive Admin Sidebar -->
@@ -685,7 +685,7 @@
                                 <div class="col-md-6 mb-3">
                                     <label for="voucherModel" class="form-label">Model Voucher</label>
                                     <select class="form-select" id="voucherModel" name="voucherModel">
-                                        <option value="default" selected>Default</option>
+                                        <option value="default" selected>Default (Logo + QR)</option>
                                         <option value="model1">Model 1 (Simple)</option>
                                         <option value="model2">Model 2 (Standard)</option>
                                     </select>
@@ -981,8 +981,43 @@
 // Global variable to hold voucher data for printing
 window.vouchersToPrint = {};
 
+function escapeHtml(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatDurationLabel(seconds) {
+    if (!seconds || isNaN(seconds) || seconds <= 0) {
+        return null;
+    }
+    const units = [
+        { label: 'hari', value: 86400 },
+        { label: 'jam', value: 3600 },
+        { label: 'menit', value: 60 },
+        { label: 'detik', value: 1 }
+    ];
+    let remaining = seconds;
+    const parts = [];
+    for (const unit of units) {
+        if (remaining >= unit.value) {
+            const count = Math.floor(remaining / unit.value);
+            parts.push(`${count} ${unit.label}`);
+            remaining %= unit.value;
+        }
+        if (parts.length >= 2) break;
+    }
+    return parts.length > 0 ? parts.join(' ') : `${seconds} detik`;
+}
+
 // Template for Model 1 (Simple)
-function getModel1VoucherHTML(voucher, price, companyHeader, adminKontak) {
+function getModel1VoucherHTML(voucher, price, companyHeader, adminKontak, index, options = {}) {
     const colors = { '5000': '#1433FD', '10000': '#663399', '20000': '#0000FF', '50000': '#FF8C00' };
     const color = colors[price] || '#FF69B4';
     const formattedPrice = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
@@ -1002,7 +1037,7 @@ function getModel1VoucherHTML(voucher, price, companyHeader, adminKontak) {
 }
 
 // Template for Model 2 (Standard)
-function getModel2VoucherHTML(voucher, price, companyHeader, adminKontak) {
+function getModel2VoucherHTML(voucher, price, companyHeader, adminKontak, index, options = {}) {
     const color = '#bf0000';
     const formattedPrice = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(price);
     return `
@@ -1024,31 +1059,78 @@ function getModel2VoucherHTML(voucher, price, companyHeader, adminKontak) {
     `;
 }
 
-// Template for Default Model
-function getDefaultVoucherHTML(voucher, price, companyHeader, adminKontak) {
-    const priceValue = typeof price === 'string' ? parseInt(price) || 0 : price || 0;
-    const formattedPrice = new Intl.NumberFormat('id-ID', { 
-        style: 'currency', 
-        currency: 'IDR', 
-        minimumFractionDigits: 0 
-    }).format(priceValue);
-    
-    const header = companyHeader || 'Nama Hotspot';
-    const contact = adminKontak || 'Kontak Admin';
-    
+// Template for Default Model (Modern)
+function getDefaultVoucherHTML(voucher, price, companyHeader, adminKontak, index, options = {}) {
+    const priceValue = typeof price === 'string' ? parseInt(price, 10) || 0 : Number(price) || 0;
+    const priceDisplay = priceValue > 0
+        ? new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(priceValue)
+        : '0';
+    const priceFull = priceValue > 0
+        ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(priceValue)
+        : 'Gratis';
+
+    const header = escapeHtml(companyHeader || 'Nama Hotspot');
+    const contact = escapeHtml(options.contact || adminKontak || '');
+    const username = escapeHtml(voucher.username || '-');
+    const passwordRaw = voucher.password || voucher.username || '';
+    const password = escapeHtml(passwordRaw);
+    const profile = escapeHtml(voucher.profile || '');
+
+    const showPassword = Boolean(passwordRaw) && passwordRaw !== voucher.username;
+    const credentialNote = showPassword
+        ? 'Gunakan username dan password di atas untuk login.'
+        : 'Gunakan kode di atas sebagai username & password.';
+
+    const validitySeconds = voucher.validitySeconds || options.validitySeconds;
+    const uptimeSeconds = voucher.uptimeSeconds || options.uptimeSeconds;
+
+    const validityLabel = escapeHtml(
+        (options.validityLabel && options.validityLabel.toUpperCase()) ||
+        (formatDurationLabel(validitySeconds) || '').toUpperCase()
+    );
+    const uptimeLabel = escapeHtml(
+        (options.uptimeLabel && options.uptimeLabel.toUpperCase()) ||
+        (formatDurationLabel(uptimeSeconds) || '').toUpperCase()
+    );
+
+    const logoUrlRaw = options.logoUrl || '';
+    const logoUrl = escapeHtml(logoUrlRaw);
+    const cardIndex = typeof index === 'number' ? index : 0;
+
     return `
-        <div class="voucher-card">
-            <div class="header">${header}</div>
-            <div class="price">${formattedPrice}</div>
-            <div class="login-info">
-                <div>Login: @hotspot</div>
-                <div class="credentials">
-                    <div class="username">${voucher.username}</div>
-                    ${voucher.username !== voucher.password ? 
-                        `<div class="password">Pass: ${voucher.password}</div>` : ''}
+        <div class="voucher-card voucher-modern">
+            <div class="voucher-modern__inner">
+                <div class="voucher-modern__price">
+                    <span>${priceDisplay}</span>
+                </div>
+                <div class="voucher-modern__body">
+                    <div class="voucher-modern__logo">
+                        ${logoUrl ? `<img src="${logoUrl}" alt="${header}">` : `<span>${header}</span>`}
+                    </div>
+                    <div class="voucher-modern__credentials">
+                        <div class="voucher-modern__label">Kode Voucher</div>
+                        <div class="voucher-modern__value">${username}</div>
+                        ${showPassword ? `
+                            <div class="voucher-modern__label">Password</div>
+                            <div class="voucher-modern__value voucher-modern__value--password">${password}</div>
+                        ` : ''}
+                    </div>
+                    <div class="voucher-modern__meta">
+                        ${profile ? `<div class="voucher-modern__meta-item">${profile}</div>` : ''}
+                        ${validityLabel ? `<div class="voucher-modern__meta-item">Masa Aktif: ${validityLabel}</div>` : ''}
+                        ${uptimeLabel ? `<div class="voucher-modern__meta-item">Batas Waktu: ${uptimeLabel}</div>` : ''}
+                    </div>
+                    <div class="voucher-modern__note">${credentialNote}</div>
+                    ${contact ? `<div class="voucher-modern__contact">Kontak: ${contact}</div>` : ''}
+                </div>
+                <div class="voucher-modern__qr">
+                    <div class="voucher-modern__qr-box" id="qr-${cardIndex}"></div>
+                    <div class="voucher-modern__qr-caption">Scan untuk login</div>
                 </div>
             </div>
-            <div class="footer">Hubungi: ${contact}</div>
+            <div class="voucher-modern__footer">
+                <span class="voucher-modern__footer-label">${priceFull}</span>
+            </div>
         </div>
     `;
 }
@@ -1062,24 +1144,40 @@ function printVouchers() {
     const { vouchers, price, model } = window.vouchersToPrint;
     const companyHeader = document.body.getAttribute('data-company-header') || 'Nama Hotspot';
     const adminKontak = document.body.getAttribute('data-admin-kontak') || 'Kontak Admin';
+    const logoUrl = window.vouchersToPrint.logoUrl || document.body.getAttribute('data-logo-url') || '';
+    const validitySeconds = window.vouchersToPrint.validitySeconds || null;
+    const validityLabel = window.vouchersToPrint.validityLabel || '';
+    const uptimeSeconds = window.vouchersToPrint.uptimeSeconds || null;
+    const uptimeLabel = window.vouchersToPrint.uptimeLabel || '';
 
     let content = '<div class="voucher-container">';
+    const qrDataList = [];
+
     vouchers.forEach((voucher, index) => {
+        const templateOptions = {
+            logoUrl,
+            contact: adminKontak,
+            validityLabel,
+            validitySeconds,
+            uptimeLabel,
+            uptimeSeconds
+        };
         let voucherHTML = '';
         switch (model) {
             case 'model1':
-                voucherHTML = getModel1VoucherHTML(voucher, price, companyHeader, adminKontak);
+                voucherHTML = getModel1VoucherHTML(voucher, price, companyHeader, adminKontak, index, templateOptions);
                 break;
             case 'model2':
-                voucherHTML = getModel2VoucherHTML(voucher, price, companyHeader, adminKontak);
+                voucherHTML = getModel2VoucherHTML(voucher, price, companyHeader, adminKontak, index, templateOptions);
                 break;
             default:
-                voucherHTML = getDefaultVoucherHTML(voucher, price, companyHeader, adminKontak);
-        }
-        if (index > 0 && index % 8 === 0) {
-            content += '<div class="page-break"></div>';
+                voucherHTML = getDefaultVoucherHTML(voucher, price, companyHeader, adminKontak, index, templateOptions);
         }
         content += voucherHTML;
+        qrDataList.push({
+            username: voucher.username || '',
+            password: voucher.password || voucher.username || ''
+        });
     });
     content += '</div>';
 
@@ -1098,50 +1196,213 @@ function printVouchers() {
                         print-color-adjust: exact !important;
                         margin: 0; padding: 0;
                     }
-                    .voucher-container { page-break-after: always; page-break-inside: avoid; }
+                    .voucher-container { page-break-inside: avoid; }
                     .page-break { page-break-after: always; break-after: page; }
                 }
                 body {
-                    font-family: Arial, sans-serif;
-                    margin: 0; padding: 0.5cm;
-                    width: 21cm; min-height: 29.7cm;
-                    box-sizing: border-box;
+                    font-family: 'Roboto', Arial, sans-serif;
+                    margin: 0;
+                    padding: 12px;
+                    background-color: #f7f7f7;
                 }
                 .voucher-container {
                     display: grid;
-                    grid-template-columns: repeat(4, 1fr);
-                    gap: 0.5cm; width: 100%;
+                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                    gap: 12px;
+                    width: 100%;
+                    box-sizing: border-box;
                 }
-                .voucher-card {
-                    width: 100%; border: 1px solid #ccc;
-                    border-radius: 10px; padding: 10px;
-                    box-sizing: border-box; break-inside: avoid;
-                    page-break-inside: avoid; background-color: #fff;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                .voucher-modern {
+                    width: 100%;
+                    border: 1px solid rgba(241, 143, 1, 0.35);
+                    border-radius: 12px;
+                    overflow: hidden;
+                    box-sizing: border-box;
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                    background: #ffffff;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+                    position: relative;
                 }
-                .header {
-                    font-weight: bold; font-size: 0.9em; color: #fff;
-                    background-color: #007bff; padding: 8px;
-                    border-radius: 5px 5px 0 0;
-                    margin: -10px -10px 10px -10px;
+                .voucher-modern__inner {
+                    display: flex;
+                    align-items: stretch;
+                    min-height: 180px;
+                    background: linear-gradient(180deg, #fffaf0 0%, #ffffff 65%, #fff6e4 100%);
                 }
-                .price {
-                    font-size: 1em; font-weight: bold; margin: 5px 0; color: #333;
+                .voucher-modern__price {
+                    width: 48px;
+                    background: linear-gradient(180deg, #f49c20 0%, #f5c553 100%);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: #fff;
+                    font-weight: 800;
+                    letter-spacing: 1px;
+                    text-transform: uppercase;
                 }
-                .login-info { margin: 8px 0; font-size: 0.8em; }
-                .credentials {
-                    border: 1px dashed #666; padding: 5px; margin: 8px 0;
-                    background-color: #f9f9f9; border-radius: 4px;
+                .voucher-modern__price span {
+                    transform: rotate(-90deg);
+                    display: block;
+                    font-size: 18px;
+                    letter-spacing: 2px;
                 }
-                .username { font-size: 1.1em; font-weight: bold; word-break: break-all; }
-                .password { font-size: 0.9em; color: #555; word-break: break-all; }
-                .footer {
-                    font-size: 0.8em; margin-top: 8px; color: #666;
-                    border-top: 1px solid #eee; padding-top: 5px;
+                .voucher-modern__body {
+                    flex: 1;
+                    padding: 14px 16px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    box-sizing: border-box;
+                }
+                .voucher-modern__logo {
+                    text-align: center;
+                    margin-bottom: 10px;
+                }
+                .voucher-modern__logo img {
+                    max-width: 100%;
+                    max-height: 52px;
+                    object-fit: contain;
+                }
+                .voucher-modern__logo span {
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: #f18f01;
+                    letter-spacing: 1.5px;
+                }
+                .voucher-modern__credentials {
+                    text-align: center;
+                }
+                .voucher-modern__label {
+                    font-size: 10px;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                    color: #666;
+                    margin-bottom: 2px;
+                }
+                .voucher-modern__value {
+                    font-size: 22px;
+                    font-weight: 700;
+                    letter-spacing: 1px;
+                    color: #1f1f1f;
+                    line-height: 1.2;
+                    word-break: break-word;
+                }
+                .voucher-modern__value--password {
+                    color: #d7263d;
+                }
+                .voucher-modern__meta {
+                    margin-top: 8px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                    font-size: 10px;
+                    text-align: center;
+                    color: #555;
+                }
+                .voucher-modern__meta-item {
+                    line-height: 1.3;
+                }
+                .voucher-modern__note {
+                    margin-top: 6px;
+                    font-size: 9px;
+                    text-align: center;
+                    color: #555;
+                }
+                .voucher-modern__contact {
+                    margin-top: 6px;
+                    font-size: 9px;
+                    text-align: center;
+                    color: #666;
+                }
+                .voucher-modern__qr {
+                    width: 112px;
+                    padding: 12px 10px;
+                    border-left: 1px dashed rgba(241, 143, 1, 0.35);
+                    background: #fff;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 6px;
+                }
+                .voucher-modern__qr-box {
+                    width: 92px;
+                    height: 92px;
+                }
+                .voucher-modern__qr-box canvas {
+                    width: 100% !important;
+                    height: 100% !important;
+                }
+                .voucher-modern__qr-caption {
+                    font-size: 9px;
+                    text-transform: uppercase;
+                    color: #555;
+                    text-align: center;
+                    letter-spacing: 0.5px;
+                }
+                .voucher-modern__footer {
+                    padding: 6px 12px 10px;
+                    background: linear-gradient(90deg, rgba(241,143,1,0.12) 0%, rgba(245,197,83,0.18) 100%);
+                    text-align: right;
+                }
+                .voucher-modern__footer-label {
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: #a36505;
+                    letter-spacing: 0.5px;
+                }
+                .page-break {
+                    break-after: page;
+                    page-break-after: always;
+                }
+                @media print {
+                    body {
+                        background: #fff;
+                        padding: 8mm;
+                    }
+                    .voucher-container {
+                        gap: 8mm;
+                    }
+                    .voucher-modern {
+                        box-shadow: none;
+                        border: 1px solid rgba(241, 143, 1, 0.4);
+                    }
                 }
             </style>
         </head>
-        <body onload="window.print();">${content}</body>
+        <body>
+            ${content}
+            <script src="/js/qrcode.min.js"></script>
+            <script>
+                const qrDataList = ${JSON.stringify(qrDataList)};
+                window.addEventListener('load', function() {
+                    if (typeof QRCode === 'undefined') {
+                        console.error('QRCode library gagal dimuat untuk cetak voucher.');
+                        return;
+                    }
+                    qrDataList.forEach(function(item, index) {
+                        const target = document.getElementById('qr-' + index);
+                        if (!target) return;
+                        target.innerHTML = '';
+                        const username = item.username || '';
+                        const password = item.password || username;
+                        const qrText = 'LOGIN WIFI\\nUSER: ' + username + '\\nPASS: ' + password;
+                        new QRCode(target, {
+                            text: qrText,
+                            width: 92,
+                            height: 92,
+                            margin: 0,
+                            correctLevel: QRCode.CorrectLevel.Q
+                        });
+                    });
+                    setTimeout(function() {
+                        window.focus();
+                        window.print();
+                    }, 350);
+                });
+            <\/script>
+        </body>
         </html>
     `);
     printWindow.document.close();
@@ -1580,11 +1841,16 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             const result = await response.json();
 
-                            if (result.success) {
+                if (result.success) {
                     window.vouchersToPrint = {
                         vouchers: result.vouchers,
                         price: data.price,
-                        model: data.voucherModel
+                        model: data.voucherModel,
+                        validitySeconds: result.validitySeconds || null,
+                        validityLabel: result.validityText || (result.validitySeconds ? formatDurationLabel(result.validitySeconds) : ''),
+                        uptimeSeconds: result.uptimeSeconds || null,
+                        uptimeLabel: result.uptimeText || (result.uptimeSeconds ? formatDurationLabel(result.uptimeSeconds) : ''),
+                        logoUrl: document.body.getAttribute('data-logo-url') || ''
                     };
 
                     let resultHTML = `

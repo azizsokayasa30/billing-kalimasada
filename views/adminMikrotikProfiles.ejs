@@ -252,6 +252,10 @@
                                 <% if(profile.default === 'true') { %>
                                     <span class="badge bg-primary ms-1">Default</span>
                                 <% } %>
+                                <% if(profile.is_isolir || profile.is_system_profile) { %>
+                                    <span class="badge bg-danger ms-1">Isolir</span>
+                                    <span class="badge bg-warning ms-1">Sistem</span>
+                                <% } %>
                             </td>
                             <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
                             <td>
@@ -311,7 +315,7 @@
                                         title="Lihat Detail">
                                     <i class="bi bi-eye"></i>
                                 </button>
-                                <% if(profile.default !== 'true') { %>
+                                <% if(profile.default !== 'true' && !profile.is_system_profile && !profile.is_isolir) { %>
                                 <button class="btn btn-sm btn-warning edit-profile-btn" 
                                         data-id="<%= profile['.id'] %>" 
                                         data-name="<%= profile.name %>" 
@@ -339,6 +343,10 @@
                                         title="Hapus">
                                     <i class="bi bi-trash"></i>
                                 </button>
+                                <% } else if(profile.is_isolir || profile.is_system_profile) { %>
+                                <span class="text-muted small" title="Profil sistem tidak bisa diedit/dihapus">
+                                    <i class="bi bi-lock"></i> Sistem
+                                </span>
                                 <% } %>
                             </td>
                         </tr>
@@ -415,6 +423,7 @@
                                 <small class="text-muted">Format: upload/download atau upload/download max-limit burst-limit</small>
                             </div>
                             
+                            <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
                             <div class="mb-3">
                                 <label for="localAddress" class="form-label">Local Address</label>
                                 <div class="input-group">
@@ -431,24 +440,25 @@
                                     </ul>
                                 </div>
                             </div>
+                            <% } else { %>
+                            <!-- Mode RADIUS: Local Address TIDAK DIDUKUNG -->
+                            <!-- Local Address harus dikonfigurasi di profil PPP di Mikrotik, bukan dari RADIUS -->
+                            <!-- Tidak ada attribute RADIUS standard untuk Local Address -->
+                            <% } %>
                             
                             <div class="mb-3">
                                 <label for="remoteAddress" class="form-label">Remote Address</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="remoteAddress" name="remote-address" 
                                            placeholder="Contoh: pool_pppoe atau 192.168.10.100-192.168.10.200">
-                                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                        Preset
+                                    <select class="form-select" id="remoteAddressPool" style="max-width: 200px;">
+                                        <option value="">Pilih Pool</option>
+                                    </select>
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshPoolBtn" title="Refresh Pool dari MikroTik">
+                                        <i class="bi bi-arrow-clockwise"></i>
                                     </button>
-                                    <ul class="dropdown-menu">
-                                        <li><a class="dropdown-item" href="#" onclick="setRemoteAddress('pool_pppoe')">pool_pppoe</a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="setRemoteAddress('dhcp_vlan-GenieAcs')">dhcp_vlan-GenieAcs</a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="setRemoteAddress('isolir')">isolir</a></li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li><a class="dropdown-item" href="#" onclick="setRemoteAddress('192.168.10.100-192.168.10.200')">192.168.10.100-200</a></li>
-                                        <li><a class="dropdown-item" href="#" onclick="setRemoteAddress('192.168.1.100-192.168.1.200')">192.168.1.100-200</a></li>
-                                    </ul>
                                 </div>
+                                <small class="text-muted">Pilih IP pool dari MikroTik yang terdaftar atau ketik manual</small>
                             </div>
                         </div>
                         
@@ -472,6 +482,7 @@
                                 </div>
                             </div>
                             
+                            <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
                             <div class="mb-3">
                                 <label for="parentQueue" class="form-label">Parent Queue</label>
                                 <input type="text" class="form-control" id="parentQueue" name="parent-queue" 
@@ -483,6 +494,22 @@
                                 <input type="text" class="form-control" id="addressList" name="address-list" 
                                        placeholder="Contoh: nama address list">
                             </div>
+                            <% } else { %>
+                            <!-- Mode RADIUS: Parent Queue dan Address List tetap bisa digunakan (MikroTik-Parent-Queue dan MikroTik-Address-List) -->
+                            <div class="mb-3">
+                                <label for="parentQueue" class="form-label">Parent Queue <small class="text-muted">(Opsional)</small></label>
+                                <input type="text" class="form-control" id="parentQueue" name="parent-queue" 
+                                       placeholder="Contoh: none atau nama queue">
+                                <small class="text-muted">Disimpan sebagai <code>MikroTik-Parent-Queue</code> di RADIUS</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="addressList" class="form-label">Address List <small class="text-muted">(Opsional)</small></label>
+                                <input type="text" class="form-control" id="addressList" name="address-list" 
+                                       placeholder="Contoh: nama address list">
+                                <small class="text-muted">Disimpan sebagai <code>MikroTik-Address-List</code> di RADIUS</small>
+                            </div>
+                            <% } %>
                             
                             <div class="mb-3">
                                 <label for="profileComment" class="form-label">Komentar</label>
@@ -492,6 +519,7 @@
                         </div>
                     </div>
                     
+                    <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
                     <hr>
                     <h6 class="text-info">Konfigurasi Lanjutan</h6>
                     <div class="row">
@@ -553,6 +581,10 @@
                             </div>
                         </div>
                     </div>
+                    <% } else { %>
+                    <!-- Mode RADIUS: Field konfigurasi lanjutan yang tidak didukung RADIUS disembunyikan -->
+                    <!-- Field yang didukung RADIUS: Rate Limit, Local Address, Remote Address, DNS Server, Address List, Parent Queue, Only One (Simultaneous-Use) -->
+                    <% } %>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
@@ -603,14 +635,48 @@
 </div>
 <!-- Notifikasi -->
 <div id="restartNotif" class="alert d-none position-fixed top-0 end-0 m-4" style="z-index:9999; min-width:300px;"></div>
+<!-- Toast Container -->
+<div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 9999;"></div>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
 <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/js/sweetalert-helper.js"></script>
 
 <script>
+// Fungsi toast notification menggunakan Bootstrap Toast
+function showToast(type, title, message, duration = 5000) {
+    const toastId = 'toast-' + Date.now();
+    const iconClass = type === 'success' ? 'bi-check-circle' : type === 'error' ? 'bi-x-circle' : type === 'warning' ? 'bi-exclamation-triangle' : 'bi-info-circle';
+    const bgClass = type === 'success' ? 'bg-success' : type === 'error' ? 'bg-danger' : type === 'warning' ? 'bg-warning' : 'bg-primary';
+    
+    const toastHtml = `
+        <div id="${toastId}" class="toast align-items-center text-white ${bgClass} border-0" role="alert" aria-live="assertive" aria-atomic="true" style="min-width: 300px;">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="bi ${iconClass} me-2"></i>
+                    <strong>${title}</strong><br>
+                    <small>${message}</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    
+    $('#toast-container').append(toastHtml);
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: duration });
+    toast.show();
+    
+    // Auto remove after hide
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastElement.remove();
+    });
+}
 $(function() {
     const isRadiusMode = <%= typeof authMode !== 'undefined' && authMode === 'radius' ? 'true' : 'false' %>;
     
@@ -643,18 +709,24 @@ $(function() {
         $('#routerId').val('');
         $('#profileName').val('');
         $('#rateLimit').val('');
+        <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
         $('#localAddress').val('');
+        <% } %>
         $('#remoteAddress').val('');
         $('#dnsServer').val('');
         $('#parentQueue').val('');
         $('#addressList').val('');
         $('#profileComment').val('');
+        <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
         $('#bridgeLearning').val('default');
         $('#useMpls').val('default');
         $('#useCompression').val('default');
         $('#useEncryption').val('default');
         $('#onlyOne').val('default');
         $('#changeTcpMss').val('default');
+        <% } else { %>
+        // Mode RADIUS: Field konfigurasi lanjutan tidak digunakan
+        <% } %>
         $('#profileModalLabel').text('Tambah Profile PPPoE');
         $('#profileModal').modal('show');
     });
@@ -750,18 +822,36 @@ $(function() {
         $('#routerId').val($(this).data('router-id') || '');
         $('#profileName').val($(this).data('name'));
         $('#rateLimit').val($(this).data('rate-limit') || '');
+        <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
         $('#localAddress').val($(this).data('local-address') || '');
-        $('#remoteAddress').val($(this).data('remote-address') || '');
+        <% } %>
+        const remoteAddressValue = $(this).data('remote-address') || '';
+        $('#remoteAddress').val(remoteAddressValue);
+        // Set dropdown pool jika value sesuai dengan pool yang ada
+        if (remoteAddressValue) {
+            const poolSelect = $('#remoteAddressPool');
+            // Tunggu pools dimuat dulu, lalu set value
+            setTimeout(function() {
+                const matchingOption = poolSelect.find(`option[value="${remoteAddressValue}"]`);
+                if (matchingOption.length > 0) {
+                    poolSelect.val(remoteAddressValue);
+                } else {
+                    poolSelect.val('');
+                }
+            }, 500);
+        }
         $('#dnsServer').val($(this).data('dns-server') || '');
         $('#parentQueue').val($(this).data('parent-queue') || '');
         $('#addressList').val($(this).data('address-list') || '');
         $('#profileComment').val($(this).data('comment') || '');
+        <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
         $('#bridgeLearning').val($(this).data('bridge-learning') || 'default');
         $('#useMpls').val($(this).data('use-mpls') || 'default');
         $('#useCompression').val($(this).data('use-compression') || 'default');
         $('#useEncryption').val($(this).data('use-encryption') || 'default');
         $('#onlyOne').val($(this).data('only-one') || 'default');
         $('#changeTcpMss').val($(this).data('change-tcp-mss') || 'default');
+        <% } %>
         $('#profileModalLabel').text('Edit Profile PPPoE');
         $('#profileModal').modal('show');
     });
@@ -776,12 +866,12 @@ $(function() {
         
         // In RADIUS mode, router_id is not required
         if (!isRadiusMode && !routerId && !id) {
-            alert('Pilih NAS (router) terlebih dahulu!');
+            showWarningAlert('Peringatan', 'Pilih NAS (router) terlebih dahulu!');
             return;
         }
         
         if (!name) {
-            alert('Nama profile tidak boleh kosong!');
+            showWarningAlert('Peringatan', 'Nama profile tidak boleh kosong!');
             return;
         }
         
@@ -791,31 +881,36 @@ $(function() {
             router_id: routerId,
             name: name,
             'rate-limit': $('#rateLimit').val(),
+            <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
             'local-address': $('#localAddress').val(),
+            <% } %>
             'remote-address': $('#remoteAddress').val(),
             'dns-server': $('#dnsServer').val(),
             'parent-queue': $('#parentQueue').val(),
             'address-list': $('#addressList').val(),
-            comment: $('#profileComment').val(),
+            comment: $('#profileComment').val()<% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>,
             'bridge-learning': $('#bridgeLearning').val(),
             'use-mpls': $('#useMpls').val(),
             'use-compression': $('#useCompression').val(),
             'use-encryption': $('#useEncryption').val(),
             'only-one': $('#onlyOne').val(),
             'change-tcp-mss': $('#changeTcpMss').val()
+            <% } %>
         };
         
         const url = (id || groupname) ? '/admin/mikrotik/edit-profile' : '/admin/mikrotik/add-profile';
         
         $.post(url, formData, function(res) {
             if(res.success) {
-                alert('Profile berhasil disimpan!');
-                location.reload();
+                showSuccessAlert('Berhasil!', 'Profile berhasil disimpan!', function() {
+                    location.reload();
+                });
             } else {
-                alert('Gagal menyimpan profile: ' + (res.message || 'Unknown error'));
+                showErrorAlert('Gagal Menyimpan', 'Gagal menyimpan profile: ' + (res.message || 'Unknown error'));
             }
-        }).fail(function() {
-            alert('Gagal menyimpan profile. Pastikan koneksi ke server stabil.');
+        }).fail(function(xhr) {
+            const errorMsg = xhr.responseJSON?.message || 'Gagal menyimpan profile. Pastikan koneksi ke server stabil.';
+            showErrorAlert('Error', errorMsg);
         });
     });
 
@@ -823,17 +918,28 @@ $(function() {
      $(document).on('click', '.delete-profile-btn', function() {
          const name = $(this).data('name');
          const routerId = $(this).data('router-id');
-         if(confirm('Yakin ingin menghapus profile PPPoE "' + name + '"?')) {
-             const id = $(this).data('id');
-             $.post('/admin/mikrotik/delete-profile', { id, router_id: routerId }, function(res) {
-                 if(res.success) {
-                     alert('Profile berhasil dihapus!');
-                     location.reload();
-                 } else {
-                     alert('Gagal menghapus profile: ' + (res.message || 'Unknown error'));
-                 }
-             });
-         }
+         const id = $(this).data('id');
+         
+         showConfirmAlert(
+             'Konfirmasi Hapus',
+             'Yakin ingin menghapus profile PPPoE "' + name + '"?',
+             'Ya, Hapus',
+             'Batal',
+             function() {
+                 $.post('/admin/mikrotik/delete-profile', { id, router_id: routerId }, function(res) {
+                     if(res.success) {
+                         showSuccessAlert('Berhasil!', 'Profile berhasil dihapus!', function() {
+                             location.reload();
+                         });
+                     } else {
+                         showErrorAlert('Gagal Menghapus', 'Gagal menghapus profile: ' + (res.message || 'Unknown error'));
+                     }
+                 }).fail(function(xhr) {
+                     const errorMsg = xhr.responseJSON?.message || 'Terjadi kesalahan saat menghapus profile';
+                     showErrorAlert('Error', errorMsg);
+                 });
+             }
+         );
      });
 
      // Refresh Data
@@ -916,15 +1022,94 @@ $(function() {
      document.getElementById('localAddress').value = value;
  }
 
- // Fungsi untuk set preset remote address
- function setRemoteAddress(value) {
-     document.getElementById('remoteAddress').value = value;
- }
+// Fungsi untuk memuat pools dari semua MikroTik
+function loadPoolsFromMikrotik() {
+    const poolSelect = document.getElementById('remoteAddressPool');
+    const refreshBtn = document.getElementById('refreshPoolBtn');
+    
+    if (!poolSelect) return;
+    
+    // Disable dropdown dan button saat loading
+    poolSelect.disabled = true;
+    if (refreshBtn) refreshBtn.disabled = true;
+    poolSelect.innerHTML = '<option value="">Memuat pools...</option>';
+    
+    $.ajax({
+        url: '/admin/mikrotik/address-pools/api/all',
+        method: 'GET',
+        success: function(response) {
+            poolSelect.innerHTML = '<option value="">Pilih Pool</option>';
+            
+            if (response.success && response.pools && response.pools.length > 0) {
+                response.pools.forEach(function(pool) {
+                    const routerInfo = pool.routers && pool.routers.length > 0 
+                        ? ` (${pool.routers.map(r => r.name).join(', ')})` 
+                        : '';
+                    const rangesInfo = pool.ranges ? ` - ${pool.ranges}` : '';
+                    const displayText = `${pool.name}${rangesInfo}${routerInfo}`;
+                    
+                    const option = document.createElement('option');
+                    option.value = pool.name;
+                    option.textContent = displayText;
+                    option.setAttribute('data-ranges', pool.ranges || '');
+                    poolSelect.appendChild(option);
+                });
+                
+                if (response.message) {
+                    showToast('success', 'Berhasil', response.message);
+                }
+            } else {
+                poolSelect.innerHTML = '<option value="">Tidak ada pool ditemukan</option>';
+                if (response.message) {
+                    showToast('warning', 'Peringatan', response.message);
+                }
+            }
+            
+            poolSelect.disabled = false;
+            if (refreshBtn) refreshBtn.disabled = false;
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading pools:', error);
+            poolSelect.innerHTML = '<option value="">Error memuat pools</option>';
+            poolSelect.disabled = false;
+            if (refreshBtn) refreshBtn.disabled = false;
+            showToast('error', 'Error', 'Gagal memuat pools dari MikroTik: ' + error);
+        }
+    });
+}
 
- // Fungsi untuk set preset DNS server
- function setDnsServer(value) {
-     document.getElementById('dnsServer').value = value;
- }
+// Event handler untuk dropdown pool
+$(document).on('change', '#remoteAddressPool', function() {
+    const selectedValue = $(this).val();
+    if (selectedValue) {
+        $('#remoteAddress').val(selectedValue);
+    }
+});
+
+// Event handler untuk refresh button
+$(document).on('click', '#refreshPoolBtn', function() {
+    loadPoolsFromMikrotik();
+});
+
+// Load pools saat modal dibuka
+$(document).on('shown.bs.modal', '#profileModal', function() {
+    loadPoolsFromMikrotik();
+});
+
+// Fungsi untuk set preset remote address (legacy, untuk kompatibilitas)
+function setRemoteAddress(value) {
+    document.getElementById('remoteAddress').value = value;
+    // Reset dropdown jika value di-set manual
+    const poolSelect = document.getElementById('remoteAddressPool');
+    if (poolSelect) {
+        poolSelect.value = '';
+    }
+}
+
+// Fungsi untuk set preset DNS server
+function setDnsServer(value) {
+    document.getElementById('dnsServer').value = value;
+}
  
  // Hamburger & sidebar logic
  const hamburger = document.getElementById('hamburgerBtn');

@@ -47,6 +47,68 @@
                 <h3><i class="bi bi-hdd-network me-2"></i>Server Hotspot & Server Profile Hotspot</h3>
             </div>
 
+            <!-- Section Database Server Hotspot (Untuk semua mode) -->
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-database me-2"></i>Database Server Hotspot</h5>
+                    <button class="btn btn-light btn-sm" id="btnTambahServerDB">
+                        <i class="bi bi-plus-circle"></i> Tambah Server Hotspot ke Database
+                    </button>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Daftar server hotspot yang tersimpan di database. Server hotspot ini akan digunakan di form voucher.
+                        Pastikan nama server hotspot sama persis dengan nama yang dikonfigurasi di Mikrotik router.
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="serverDBTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>No</th>
+                                    <th>Nama Server</th>
+                                    <th>Deskripsi</th>
+                                    <th>Tanggal Dibuat</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="serverDBTableBody">
+                                <% if (typeof hotspotServersDB !== 'undefined' && hotspotServersDB && hotspotServersDB.length > 0) { %>
+                                    <% hotspotServersDB.forEach(function(server, index) { %>
+                                        <tr>
+                                            <td><%= index + 1 %></td>
+                                            <td><strong><%= server.name %></strong></td>
+                                            <td><%= server.description || '-' %></td>
+                                            <td><%= server.created_at ? new Date(server.created_at).toLocaleString('id-ID') : '-' %></td>
+                                            <td>
+                                                <button class="btn btn-sm btn-warning edit-server-db-btn" 
+                                                        data-id="<%= server.id %>"
+                                                        data-name="<%= server.name %>"
+                                                        data-description="<%= server.description || '' %>">
+                                                    <i class="bi bi-pencil"></i> Edit
+                                                </button>
+                                                <button class="btn btn-sm btn-danger delete-server-db-btn" 
+                                                        data-id="<%= server.id %>"
+                                                        data-name="<%= server.name %>">
+                                                    <i class="bi bi-trash"></i> Hapus
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    <% }); %>
+                                <% } else { %>
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">
+                                            <i class="bi bi-inbox me-2"></i>Belum ada server hotspot di database
+                                        </td>
+                                    </tr>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <% if (typeof radiusMode === 'undefined' || radiusMode !== true) { %>
             <% if (error) { %>
                 <div class="alert alert-danger alert-dismissible fade show">
                     <i class="bi bi-exclamation-triangle"></i> <%= error %>
@@ -161,10 +223,12 @@
                     </div>
                 </div>
             </div>
+            <% } %>
         </main>
     </div>
 </div>
 
+<% if (typeof radiusMode === 'undefined' || radiusMode !== true) { %>
 <!-- Modal Tambah/Edit Server Hotspot -->
 <div class="modal fade" id="serverModal" tabindex="-1" aria-labelledby="serverModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -354,13 +418,85 @@
         </form>
     </div>
 </div>
+<% } %>
+
+<!-- Modal Tambah/Edit Server Hotspot Database -->
+<div class="modal fade" id="serverDBModal" tabindex="-1" aria-labelledby="serverDBModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form id="serverDBForm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="serverDBModalLabel">Tambah Server Hotspot ke Database</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="serverDBId" name="id">
+                    
+                    <div class="mb-3">
+                        <label for="serverDBMikrotikSelect" class="form-label">
+                            <i class="bi bi-router me-1"></i>Ambil dari Mikrotik <small class="text-muted">(Opsional)</small>
+                        </label>
+                        <div class="input-group">
+                            <select class="form-select" id="serverDBMikrotikSelect">
+                                <option value="">-- Pilih Server Hotspot dari Mikrotik --</option>
+                            </select>
+                            <button type="button" class="btn btn-outline-secondary" id="btnRefreshMikrotikServers" title="Refresh daftar server">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <small class="form-text text-muted">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Pilih server hotspot yang sudah ada di Mikrotik untuk auto-fill nama. 
+                            Nama akan otomatis terisi dari pilihan ini. Server diambil dari semua Mikrotik yang terdaftar.
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="serverDBName" class="form-label">
+                            <i class="bi bi-hdd-network me-1"></i>Nama Server Hotspot <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="serverDBName" name="name" required 
+                               placeholder="Contoh: hotspot-server-a">
+                        <small class="form-text text-muted">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Masukkan nama server hotspot yang sudah dikonfigurasi di Mikrotik router. 
+                            Nama harus sama persis dengan nama di Mikrotik (case-sensitive).
+                            <br>
+                            <i class="bi bi-lightbulb me-1"></i>
+                            <strong>Tips:</strong> Gunakan dropdown di atas untuk memilih dari server yang sudah ada di Mikrotik.
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="serverDBDescription" class="form-label">
+                            <i class="bi bi-file-text me-1"></i>Deskripsi <small class="text-muted">(Opsional)</small>
+                        </label>
+                        <textarea class="form-control" id="serverDBDescription" name="description" rows="3" 
+                                  placeholder="Contoh: Server Hotspot untuk Area A"></textarea>
+                        <small class="form-text text-muted">Deskripsi atau catatan untuk server hotspot ini</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save me-1"></i>Simpan
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Scripts -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/js/sweetalert-helper.js"></script>
 
+<% if (typeof radiusMode === 'undefined' || radiusMode !== true) { %>
 <script type="application/json" id="servers-data"><%- JSON.stringify(servers || []) %></script>
 <script type="application/json" id="profiles-data"><%- JSON.stringify(profiles || []) %></script>
 <script type="application/json" id="routers-data"><%- JSON.stringify(routers || []) %></script>
@@ -536,11 +672,11 @@ $(function() {
                 }
             } else {
                 console.error('Failed to load servers:', res.message);
-                alert('Gagal memuat server hotspot: ' + (res.message || 'Unknown error'));
+                showErrorAlert('Gagal Memuat', 'Gagal memuat server hotspot: ' + (res.message || 'Unknown error'));
             }
         }).fail(function(xhr) {
             console.error('Error loading servers:', xhr);
-            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+            showErrorAlert('Error', 'Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
         });
     }
 
@@ -562,11 +698,11 @@ $(function() {
                 }
             } else {
                 console.error('Failed to load profiles:', res.message);
-                alert('Gagal memuat server profiles: ' + (res.message || 'Unknown error'));
+                showErrorAlert('Gagal Memuat', 'Gagal memuat server profiles: ' + (res.message || 'Unknown error'));
             }
         }).fail(function(xhr) {
             console.error('Error loading profiles:', xhr);
-            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+            showErrorAlert('Error', 'Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
         });
     }
 
@@ -584,7 +720,7 @@ $(function() {
     window.editServer = function(id, nasId) {
         const server = servers.find(s => (s.id || s['.id']) == id && s.nas_id == nasId);
         if (!server) {
-            alert('Server tidak ditemukan');
+            showErrorAlert('Error', 'Server tidak ditemukan');
             return;
         }
 
@@ -633,20 +769,26 @@ $(function() {
 
     // Delete Server
     window.deleteServer = function(id, nasId, name) {
-        if (!confirm(`Apakah Anda yakin ingin menghapus server hotspot "${name}"?`)) {
-            return;
-        }
-
-        $.post('/admin/mikrotik/hotspot-servers/delete', { id: id, router_id: nasId }, function(res) {
-            if (res.success) {
-                alert('Server hotspot berhasil dihapus!');
-                loadServers();
-            } else {
-                alert('Gagal menghapus server hotspot: ' + (res.message || 'Unknown error'));
+        showConfirmAlert(
+            'Konfirmasi Hapus',
+            `Apakah Anda yakin ingin menghapus server hotspot "${name}"?`,
+            'Ya, Hapus',
+            'Batal',
+            function() {
+                $.post('/admin/mikrotik/hotspot-servers/delete', { id: id, router_id: nasId }, function(res) {
+                    if (res.success) {
+                        showSuccessAlert('Berhasil!', 'Server hotspot berhasil dihapus!', function() {
+                            loadServers();
+                        });
+                    } else {
+                        showErrorAlert('Gagal Menghapus', 'Gagal menghapus server hotspot: ' + (res.message || 'Unknown error'));
+                    }
+                }).fail(function(xhr) {
+                    const errorMsg = xhr.responseJSON?.message || 'Unknown error';
+                    showErrorAlert('Error', 'Error: ' + errorMsg);
+                });
             }
-        }).fail(function(xhr) {
-            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
-        });
+        );
     };
 
     // Submit Server Form
@@ -666,14 +808,16 @@ $(function() {
         
         $.post(url, formData, function(res) {
             if (res.success) {
-                alert('Server hotspot berhasil disimpan!');
-                $('#serverModal').modal('hide');
-                loadServers();
+                showSuccessAlert('Berhasil!', 'Server hotspot berhasil disimpan!', function() {
+                    $('#serverModal').modal('hide');
+                    loadServers();
+                });
             } else {
-                alert('Gagal menyimpan server hotspot: ' + (res.message || 'Unknown error'));
+                showErrorAlert('Gagal Menyimpan', 'Gagal menyimpan server hotspot: ' + (res.message || 'Unknown error'));
             }
         }).fail(function(xhr) {
-            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+            const errorMsg = xhr.responseJSON?.message || 'Unknown error';
+            showErrorAlert('Error', 'Error: ' + errorMsg);
         });
     });
 
@@ -845,7 +989,7 @@ $(function() {
                     name: p.name
                 }))
             });
-            alert('Profile tidak ditemukan. Silakan refresh halaman dan coba lagi.');
+            showErrorAlert('Error', 'Profile tidak ditemukan. Silakan refresh halaman dan coba lagi.');
             return;
         }
 
@@ -916,20 +1060,26 @@ $(function() {
 
     // Delete Profile
     window.deleteProfile = function(id, nasId, name) {
-        if (!confirm(`Apakah Anda yakin ingin menghapus server profile "${name}"?`)) {
-            return;
-        }
-
-        $.post('/admin/mikrotik/hotspot-server-profiles/delete', { id: id, router_id: nasId }, function(res) {
-            if (res.success) {
-                alert('Server profile berhasil dihapus!');
-                loadProfiles();
-            } else {
-                alert('Gagal menghapus server profile: ' + (res.message || 'Unknown error'));
+        showConfirmAlert(
+            'Konfirmasi Hapus',
+            `Apakah Anda yakin ingin menghapus server profile "${name}"?`,
+            'Ya, Hapus',
+            'Batal',
+            function() {
+                $.post('/admin/mikrotik/hotspot-server-profiles/delete', { id: id, router_id: nasId }, function(res) {
+                    if (res.success) {
+                        showSuccessAlert('Berhasil!', 'Server profile berhasil dihapus!', function() {
+                            loadProfiles();
+                        });
+                    } else {
+                        showErrorAlert('Gagal Menghapus', 'Gagal menghapus server profile: ' + (res.message || 'Unknown error'));
+                    }
+                }).fail(function(xhr) {
+                    const errorMsg = xhr.responseJSON?.message || 'Unknown error';
+                    showErrorAlert('Error', 'Error: ' + errorMsg);
+                });
             }
-        }).fail(function(xhr) {
-            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
-        });
+        );
     };
 
     // Submit Profile Form
@@ -944,7 +1094,7 @@ $(function() {
         console.log('Profile ID:', profileId);
         
         if (!routerId || routerId === '') {
-            alert('NAS (Router) harus dipilih!');
+            showWarningAlert('Peringatan', 'NAS (Router) harus dipilih!');
             return;
         }
         
@@ -972,19 +1122,21 @@ $(function() {
         $.post(url, formData, function(res) {
             console.log('Server response:', res);
             if (res.success) {
-                alert('Server profile berhasil disimpan!');
-                $('#profileModal').modal('hide');
-                // Tunggu sebentar sebelum reload untuk memastikan perubahan sudah tersimpan di Mikrotik
-                setTimeout(function() {
-                    console.log('Reloading profiles after successful save...');
-                    loadProfiles();
-                }, 500);
+                showSuccessAlert('Berhasil!', 'Server profile berhasil disimpan!', function() {
+                    $('#profileModal').modal('hide');
+                    // Tunggu sebentar sebelum reload untuk memastikan perubahan sudah tersimpan di Mikrotik
+                    setTimeout(function() {
+                        console.log('Reloading profiles after successful save...');
+                        loadProfiles();
+                    }, 500);
+                });
             } else {
-                alert('Gagal menyimpan server profile: ' + (res.message || 'Unknown error'));
+                showErrorAlert('Gagal Menyimpan', 'Gagal menyimpan server profile: ' + (res.message || 'Unknown error'));
             }
         }).fail(function(xhr) {
             console.error('Error submitting form:', xhr);
-            alert('Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+            const errorMsg = xhr.responseJSON?.message || 'Unknown error';
+            showErrorAlert('Error', 'Error: ' + errorMsg);
         });
     });
 
@@ -995,6 +1147,162 @@ $(function() {
     // Kemudian refresh dari API untuk mendapatkan data terbaru
     loadServers();
     loadProfiles();
+});
+</script>
+<% } %>
+
+<script>
+// ============================================
+// HOTSPOT SERVER DATABASE CRUD (Untuk semua mode)
+// ============================================
+
+$(document).ready(function() {
+    // Load server hotspot dari Mikrotik
+    function loadHotspotServersFromMikrotik() {
+        const select = $('#serverDBMikrotikSelect');
+        select.html('<option value="">Memuat server hotspot dari Mikrotik...</option>');
+        select.prop('disabled', true);
+        
+        $.get('/admin/mikrotik/hotspot-server-profiles/api-servers-from-mikrotik', function(res) {
+            select.prop('disabled', false);
+            
+            if (res.success && Array.isArray(res.servers) && res.servers.length > 0) {
+                let options = '<option value="">-- Pilih Server Hotspot dari Mikrotik --</option>';
+                res.servers.forEach(server => {
+                    const displayText = `${server.name} (${server.router_name} - ${server.router_ip})`;
+                    options += `<option value="${server.name}" data-router="${server.router_name}">${displayText}</option>`;
+                });
+                select.html(options);
+                
+                if (res.errors && res.errors.length > 0) {
+                    console.warn('Beberapa router gagal:', res.errors);
+                }
+            } else {
+                select.html('<option value="">Tidak ada server hotspot ditemukan di Mikrotik</option>');
+                if (res.message) {
+                    console.warn('Info:', res.message);
+                }
+            }
+        }).fail(function(xhr) {
+            select.prop('disabled', false);
+            select.html('<option value="">Error memuat server hotspot</option>');
+            console.error('Error loading servers from Mikrotik:', xhr);
+        });
+    }
+    
+    // Auto-fill nama server saat dipilih dari dropdown
+    $('#serverDBMikrotikSelect').change(function() {
+        const selectedValue = $(this).val();
+        if (selectedValue) {
+            $('#serverDBName').val(selectedValue);
+            // Trigger input event untuk validasi
+            $('#serverDBName').trigger('input');
+        }
+    });
+    
+    // Button refresh server dari Mikrotik
+    $('#btnRefreshMikrotikServers').click(function() {
+        loadHotspotServersFromMikrotik();
+    });
+    
+    // Button Tambah Server DB
+    $('#btnTambahServerDB').click(function() {
+        $('#serverDBForm')[0].reset();
+        $('#serverDBId').val('');
+        $('#serverDBMikrotikSelect').val('');
+        $('#serverDBModalLabel').text('Tambah Server Hotspot ke Database');
+        
+        // Load server hotspot dari Mikrotik saat modal dibuka
+        loadHotspotServersFromMikrotik();
+        
+        $('#serverDBModal').modal('show');
+    });
+
+    // Button Edit Server DB
+    $(document).on('click', '.edit-server-db-btn', function() {
+        const id = $(this).data('id');
+        const name = $(this).data('name');
+        const description = $(this).data('description') || '';
+        
+        $('#serverDBId').val(id);
+        $('#serverDBName').val(name);
+        $('#serverDBDescription').val(description);
+        $('#serverDBMikrotikSelect').val(''); // Reset dropdown saat edit
+        $('#serverDBModalLabel').text('Edit Server Hotspot');
+        
+        // Load server hotspot dari Mikrotik saat modal dibuka (untuk referensi)
+        loadHotspotServersFromMikrotik();
+        
+        // Set dropdown ke nama yang sedang diedit jika ada
+        setTimeout(function() {
+            if (name) {
+                $('#serverDBMikrotikSelect').val(name);
+            }
+        }, 500);
+        
+        $('#serverDBModal').modal('show');
+    });
+
+    // Button Delete Server DB
+    $(document).on('click', '.delete-server-db-btn', function() {
+        const id = $(this).data('id');
+        const name = $(this).data('name');
+        
+        showConfirmAlert(
+            'Konfirmasi Hapus',
+            'Apakah Anda yakin ingin menghapus server hotspot "' + name + '" dari database?',
+            'Ya, Hapus',
+            'Batal',
+            function() {
+                $.post('/admin/mikrotik/hotspot-server-profiles/delete-server', { id: id }, function(res) {
+                    if (res.success) {
+                        showSuccessAlert('Berhasil!', 'Server hotspot berhasil dihapus!', function() {
+                            location.reload();
+                        });
+                    } else {
+                        showErrorAlert('Gagal Menghapus', 'Error: ' + (res.message || 'Gagal menghapus server hotspot'));
+                    }
+                }).fail(function(xhr) {
+                    const errorMsg = xhr.responseJSON?.message || 'Unknown error';
+                    showErrorAlert('Error', 'Error: ' + errorMsg);
+                });
+            }
+        );
+    });
+
+    // Submit Server DB Form
+    $('#serverDBForm').submit(function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            id: $('#serverDBId').val(),
+            name: $('#serverDBName').val().trim(),
+            description: $('#serverDBDescription').val().trim()
+        };
+        
+        if (!formData.name) {
+            showWarningAlert('Peringatan', 'Nama server hotspot harus diisi!');
+            return;
+        }
+        
+        const url = formData.id 
+            ? '/admin/mikrotik/hotspot-server-profiles/edit-server'
+            : '/admin/mikrotik/hotspot-server-profiles/add-server';
+        
+        $.post(url, formData, function(res) {
+            if (res.success) {
+                showSuccessAlert('Berhasil!', 'Server hotspot berhasil disimpan!', function() {
+                    $('#serverDBModal').modal('hide');
+                    location.reload();
+                });
+            } else {
+                showErrorAlert('Gagal Menyimpan', 'Error: ' + (res.message || 'Gagal menyimpan server hotspot'));
+            }
+        }).fail(function(xhr) {
+            const errorMsg = xhr.responseJSON?.message || 'Unknown error';
+            showErrorAlert('Error', 'Error: ' + errorMsg);
+        });
+    });
 });
 </script>
 </body>

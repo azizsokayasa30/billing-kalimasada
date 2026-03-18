@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %> - <%= appSettings.companyHeader %></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <!-- Admin Mobile Optimizations -->
@@ -98,6 +99,38 @@
         .pagination .page-item.active .page-link {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-color: #667eea;
+        }
+        
+        /* Ensure all icons are always visible */
+        i[class*="bx"],
+        i[class*="bi"],
+        .bx,
+        .bi {
+            display: inline-block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            font-style: normal !important;
+            font-variant: normal !important;
+            text-rendering: auto !important;
+            line-height: 1 !important;
+        }
+        
+        /* Ensure icons in buttons are visible */
+        .btn i,
+        .btn .bx,
+        .btn .bi {
+            display: inline-block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        
+        /* Ensure icons in cards are visible */
+        .card i,
+        .card .bx,
+        .card .bi {
+            display: inline-block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
         }
     </style>
 </head>

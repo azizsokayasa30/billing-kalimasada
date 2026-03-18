@@ -8,6 +8,34 @@ const path = require('path');
 const { getSettingsWithCache } = require('../config/settingsManager')
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const sqlite3 = require('sqlite3').verbose();
+console.log('[HOTSPOT] adminHotspot routes module loaded');
+
+const VOUCHER_PAGE_TIMEOUT_MS = 8000;
+/** Timeout untuk load penuh halaman users/hotspot (agar tidak ERR_EMPTY_RESPONSE saat router lambat) */
+const LOAD_PAGE_TIMEOUT_MS = 25000;
+
+function withTimeout(promise, ms, contextDescription) {
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new Error(`${contextDescription} timed out after ${ms}ms`));
+        }, ms);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
+}
+
+async function safeCall(promiseFactory, contextDescription, timeoutMs = VOUCHER_PAGE_TIMEOUT_MS) {
+    try {
+        return await withTimeout(
+            Promise.resolve().then(promiseFactory),
+            timeoutMs,
+            contextDescription
+        );
+    } catch (error) {
+        console.error(`[Voucher Page] ${contextDescription} gagal:`, error.message || error);
+        return null;
+    }
+}
 
 // Helper function untuk mengambil setting voucher online
 async function getVoucherOnlineSettings() {
@@ -220,15 +248,20 @@ function formatDuration(seconds) {
 }
 
 function buildHotspotUserStatus(allUsers = [], activeUsers = [], defaultServerName = null) {
-    const activeMap = new Map((activeUsers || []).map(user => {
-        const key = (user.user || user.name || user.username || '').toString().trim();
-        return [key, user];
-    }));
+    // Buat map active users dengan normalisasi username (lowercase, trim)
+    const activeMap = new Map();
+    (activeUsers || []).forEach(user => {
+        const key = (user.user || user.name || user.username || '').toString().trim().toLowerCase();
+        if (key) {
+            activeMap.set(key, user);
+        }
+    });
     const now = Date.now();
 
     return (allUsers || []).map(user => {
         const username = (user.name || user.username || '').toString().trim();
-        const activeInfo = activeMap.get(username);
+        const usernameLower = username.toLowerCase();
+        const activeInfo = activeMap.get(usernameLower);
         const isOnline = Boolean(activeInfo);
 
         const chosenServerName = (user.server_metadata && user.server_metadata.name)
@@ -263,15 +296,37 @@ function buildHotspotUserStatus(allUsers = [], activeUsers = [], defaultServerNa
 
         const expiredByValidity = firstLogin && validityRemainingSeconds !== null && validityRemainingSeconds <= 0;
         const expiredByUptime = limitSeconds !== null && uptimeRemainingSeconds !== null && uptimeRemainingSeconds <= 0;
+        
+        // Cek apakah validity masih ada (belum expired)
+        const validityStillValid = !expiredByValidity && (validitySeconds === null || !firstLogin || validityRemainingSeconds > 0);
+        // Cek apakah uptime masih ada (belum habis)
+        const uptimeStillValid = !expiredByUptime && (limitSeconds === null || uptimeRemainingSeconds > 0);
 
         let statusVoucher = 'Offline';
-        if (expiredByValidity || expiredByUptime) {
-            statusVoucher = 'Expired';
-        } else if (isOnline) {
+        // PRIORITAS 1: Jika masih online, status selalu 'Online' (meskipun validity/uptime sudah habis)
+        // Voucher yang masih online berarti masih bisa digunakan
+        // Validasi tambahan: pastikan active_ip ada (dari query yang sudah difilter)
+        const hasActiveIp = user.active_ip && user.active_ip !== 'N/A' && user.active_ip !== '-';
+        const everUsed = !!firstLogin || (totalSessionSeconds && totalSessionSeconds > 0);
+        if (isOnline && hasActiveIp) {
             statusVoucher = 'Online';
-        } else if ((validitySeconds && (!firstLogin || validityRemainingSeconds > 0)) || (limitSeconds !== null && totalSessionSeconds < limitSeconds)) {
-            statusVoucher = 'Stand by';
+        } else if (expiredByValidity) {
+            // PRIORITAS 2: Jika validity habis, status 'Expired'
+            statusVoucher = 'Expired';
+        } else if (expiredByUptime && validityStillValid) {
+            // PRIORITAS 3: Jika uptime habis tapi validity masih ada, status 'Time UP'
+            statusVoucher = 'Time UP';
+        } else if (validityStillValid || uptimeStillValid) {
+            // PRIORITAS 4:
+            // - Jika belum pernah dipakai dan masih ada masa aktif => New
+            // - Jika sudah pernah dipakai dan masih ada masa aktif => Terpakai
+            if (everUsed) {
+                statusVoucher = 'Terpakai';
+            } else {
+                statusVoucher = 'New';
+            }
         } else {
+            // PRIORITAS 5: Default status 'Offline'
             statusVoucher = 'Offline';
         }
 
@@ -441,91 +496,272 @@ async function loadHotspotPageData() {
             const serverHotspot = typeof data.serverHotspot === 'string' ? data.serverHotspot.trim() : null;
             const enrichedUsers = buildHotspotUserStatus(allUsers, activeUsersList, serverHotspot);
 
+            // Hitung statistik dari enrichedUsers yang sudah di-enrich dengan status
+            const activeUsersCount = enrichedUsers.filter(user => user.status_voucher === 'Online').length;
+            const offlineUsersCount = enrichedUsers.filter(user => user.status_voucher !== 'Online').length;
+
             data.users = activeUsersList;
             data.profiles = profiles;
             data.allUsers = enrichedUsers;
-            data.voucherOnlineSettings = await getVoucherOnlineSettings();
+            data.activeUsersCount = activeUsersCount;
+            data.offlineUsersCount = offlineUsersCount;
+            data.voucherOnlineSettings = await withTimeout(getVoucherOnlineSettings(), 6000, 'Voucher online settings').catch(function () { return {}; });
             data.routers = [];
         } catch (error) {
             throw error;
         }
     } else {
+        const ROUTER_FETCH_TIMEOUT_MS = 10000;
         const activeUsersList = [];
-        for (const router of routers) {
-            try {
-                const result = await getActiveHotspotUsers(router);
-                if (result.success && Array.isArray(result.data)) {
-                    result.data.forEach(user => {
-                        activeUsersList.push({
-                            ...user,
-                            nas_name: router.name,
-                            nas_ip: router.nas_ip
-                        });
-                    });
-                }
-            } catch (e) {
-                console.error(`Error getting active users from ${router.name}:`, e.message);
+        const activeResults = await Promise.all(
+            routers.map(function (router) {
+                return safeCall(
+                    function () { return getActiveHotspotUsers(router); },
+                    'Active users dari ' + router.name,
+                    ROUTER_FETCH_TIMEOUT_MS
+                ).then(function (result) { return { router: router, result: result }; });
+            })
+        );
+        activeResults.forEach(function (item) {
+            var router = item.router;
+            var result = item.result;
+            if (result && result.success && Array.isArray(result.data)) {
+                result.data.forEach(function (user) {
+                    activeUsersList.push(Object.assign({}, user, {
+                        nas_name: router.name,
+                        nas_ip: router.nas_ip
+                    }));
+                });
             }
-        }
+        });
 
         let profiles = [];
-        for (const router of routers) {
-            try {
-                const profilesResult = await getHotspotProfiles(router);
-                if (profilesResult.success && Array.isArray(profilesResult.data)) {
-                    profilesResult.data.forEach(prof => {
-                        const existing = profiles.find(p => p.name === prof.name && p.nas_id === router.id);
-                        if (!existing) {
-                            profiles.push({
-                                ...prof,
-                                nas_id: router.id,
-                                nas_name: router.name,
-                                nas_ip: router.nas_ip
-                            });
-                        }
-                    });
+        const profileResults = await Promise.all(
+            routers.map(function (router) {
+                return safeCall(
+                    function () { return getHotspotProfiles(router); },
+                    'Mengambil hotspot profile dari ' + router.name
+                ).then(function (result) { return { router: router, result: result }; });
+            })
+        );
+        profileResults.forEach(function (item) {
+            var router = item.router;
+            var result = item.result;
+            if (!result || !result.success || !Array.isArray(result.data)) return;
+            result.data.forEach(function (prof) {
+                var existing = profiles.find(function (p) { return p.name === prof.name && p.nas_id === router.id; });
+                if (!existing) {
+                    profiles.push(Object.assign({}, prof, {
+                        nas_id: router.id,
+                        nas_name: router.name,
+                        nas_ip: router.nas_ip
+                    }));
                 }
-            } catch (e) {
-                console.error(`Error getting profiles from ${router.name}:`, e.message);
-            }
-        }
+            });
+        });
 
         let allUsers = [];
-        for (const router of routers) {
-            try {
-                const conn = await getMikrotikConnectionForRouter(router);
-                const users = await conn.write('/ip/hotspot/user/print');
-                allUsers = allUsers.concat(users.map(u => ({
-                    name: u.name || '',
-                    password: u.password || '',
-                    profile: u.profile || '',
-                    created_at: u['last-logged-in'] || u['last-logged-out'] || u['last-seen'] || null,
-                    nas_id: router.id,
-                    nas_name: router.name,
-                    nas_ip: router.nas_ip
-                })));
-            } catch (e) {
-                console.error(`Error getting users from ${router.name}:`, e.message);
-            }
-        }
+        const userChunks = await Promise.all(
+            routers.map(router =>
+                safeCall(
+                    async () => {
+                        const conn = await getMikrotikConnectionForRouter(router);
+                        const users = await conn.write('/ip/hotspot/user/print');
+                        if (conn && typeof conn.close === 'function') {
+                            try { await conn.close(); } catch (_) { /* ignore */ }
+                        }
+                        return (users || []).map(u => ({
+                            name: u.name || '',
+                            password: u.password || '',
+                            profile: u.profile || '',
+                            created_at: u['last-logged-in'] || u['last-logged-out'] || u['last-seen'] || null,
+                            nas_id: router.id,
+                            nas_name: router.name,
+                            nas_ip: router.nas_ip
+                        }));
+                    },
+                    `User hotspot dari ${router.name}`,
+                    ROUTER_FETCH_TIMEOUT_MS
+                ).then(rows => rows || [])
+            )
+        );
+        userChunks.forEach(chunk => { allUsers = allUsers.concat(chunk); });
 
         const serverHotspot = typeof data.serverHotspot === 'string' ? data.serverHotspot.trim() : null;
         const enrichedUsers = buildHotspotUserStatus(allUsers, activeUsersList, serverHotspot);
 
+        // Hitung statistik dari enrichedUsers yang sudah di-enrich dengan status
+        const activeUsersCount = enrichedUsers.filter(user => user.status_voucher === 'Online').length;
+        const offlineUsersCount = enrichedUsers.filter(user => user.status_voucher !== 'Online').length;
+
         data.users = activeUsersList;
         data.profiles = profiles;
         data.allUsers = enrichedUsers;
-        data.voucherOnlineSettings = await getVoucherOnlineSettings();
+        data.activeUsersCount = activeUsersCount;
+        data.offlineUsersCount = offlineUsersCount;
+        data.voucherOnlineSettings = await withTimeout(getVoucherOnlineSettings(), 6000, 'Voucher online settings').catch(function () { return {}; });
         data.routers = routers;
     }
 
     return data;
 }
 
+// Versi ringan khusus halaman /admin/hotspot/users
+// - Jika mode RADIUS: baca langsung dari RADIUS (tanpa koneksi RouterOS ke tiap NAS)
+// - Jika mode Mikrotik: hanya siapkan shell UI (tabel kosong) supaya halaman tetap stabil
+async function loadHotspotUsersPageDataSimple() {
+    let userAuthMode = 'mikrotik';
+    try {
+        const mode = await getRadiusConfigValue('user_auth_mode', null);
+        if (mode !== null && mode !== undefined) {
+            userAuthMode = mode;
+        }
+    } catch (e) {
+        // fallback tetap mikrotik
+    }
+
+    const db = new sqlite3.Database('./data/billing.db');
+    const routers = await new Promise((resolve, reject) => {
+        db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+        });
+    });
+    db.close();
+
+    const settings = getSettingsWithCache();
+    const company_header = settings.company_header || 'Voucher Hotspot';
+    const adminKontak = settings['admins.0'] || '-';
+
+    const voucherOnlineSettings = await withTimeout(
+        getVoucherOnlineSettings(),
+        6000,
+        'Voucher online settings (simple users page)'
+    ).catch(() => ({}));
+
+    // Jika mode RADIUS, ambil data voucher/user dari RADIUS saja (tanpa koneksi RouterOS)
+    if (userAuthMode === 'radius') {
+        let activeUsersList = [];
+        try {
+            const activeResult = await getActiveHotspotUsers();
+            if (activeResult && activeResult.success && Array.isArray(activeResult.data)) {
+                activeUsersList = activeResult.data.map(user => {
+                    const username = user.user || user.name || user.username;
+                    return Object.assign({}, user, {
+                        user: username,
+                        name: username,
+                        nas_name: user.nas_name || 'RADIUS',
+                        nas_ip: user.nas_ip || 'RADIUS'
+                    });
+                });
+            }
+        } catch (err) {
+            console.error('[HOTSPOT USERS SIMPLE] Error fetching active users from RADIUS:', err.message || err);
+        }
+
+        let profiles = [];
+        try {
+            const hotspotProfilesResult = await getHotspotProfilesRadius();
+            if (hotspotProfilesResult && hotspotProfilesResult.success && Array.isArray(hotspotProfilesResult.data)) {
+                profiles = hotspotProfilesResult.data.map(profile => Object.assign({}, profile, {
+                    nas_id: null,
+                    nas_name: 'RADIUS',
+                    nas_ip: 'RADIUS'
+                }));
+            }
+        } catch (err) {
+            console.error('[HOTSPOT USERS SIMPLE] Error fetching hotspot profiles from RADIUS:', err.message || err);
+        }
+
+        let allUsers = [];
+        try {
+            const allUsersResult = await getHotspotUsersRadius();
+            allUsers = allUsersResult && allUsersResult.success && Array.isArray(allUsersResult.data)
+                ? allUsersResult.data
+                : [];
+        } catch (err) {
+            console.error('[HOTSPOT USERS SIMPLE] Error fetching hotspot users from RADIUS:', err.message || err);
+        }
+
+        const serverHotspot = null;
+        const enrichedUsers = buildHotspotUserStatus(allUsers, activeUsersList, serverHotspot);
+        const activeUsersCount = enrichedUsers.filter(user => user.status_voucher === 'Online').length;
+        const offlineUsersCount = enrichedUsers.filter(user => user.status_voucher !== 'Online').length;
+
+        return {
+            userAuthMode: 'radius',
+            routers: [], // konsisten dengan loadHotspotPageData radius
+            settings,
+            company_header,
+            adminKontak,
+            users: activeUsersList,
+            profiles,
+            allUsers: enrichedUsers,
+            activeUsersCount,
+            offlineUsersCount,
+            voucherOnlineSettings
+        };
+    }
+
+    // Mode mikrotik: hanya siapkan kerangka UI, data di-load lewat mekanisme lain
+    return {
+        userAuthMode,
+        routers,
+        settings,
+        company_header,
+        adminKontak,
+        users: [],
+        profiles: [],
+        allUsers: [],
+        activeUsersCount: 0,
+        offlineUsersCount: 0,
+        voucherOnlineSettings
+    };
+}
+
+// Endpoint data JSON untuk tabel user hotspot (dipanggil via AJAX dari UI)
+// Memakai loader penuh (termasuk koneksi Mikrotik/RADIUS) tetapi dibatasi timeout,
+// sehingga jika terjadi masalah di sisi router, halaman utama tetap aman.
+router.get('/users/data', async (req, res) => {
+    try {
+        const data = await withTimeout(
+            loadHotspotPageData(),
+            LOAD_PAGE_TIMEOUT_MS,
+            'Memuat data JSON user hotspot (AJAX)'
+        );
+        res.json({
+            success: true,
+            users: data.allUsers || [],
+            activeUsersCount: typeof data.activeUsersCount === 'number'
+                ? data.activeUsersCount
+                : (data.allUsers || []).filter(u => u.status_voucher === 'Online').length,
+            offlineUsersCount: typeof data.offlineUsersCount === 'number'
+                ? data.offlineUsersCount
+                : (data.allUsers || []).filter(u => u.status_voucher !== 'Online').length,
+            totalUsers: (data.allUsers || []).length,
+            profileCount: (data.profiles || []).length,
+            userAuthMode: data.userAuthMode || 'mikrotik'
+        });
+    } catch (error) {
+        console.error('[HOTSPOT USERS] Error loading AJAX data:', error);
+        res.status(500).json({
+            success: false,
+            error: error && error.message ? error.message : String(error)
+        });
+    }
+});
+
 // GET: Tampilkan form tambah user hotspot dan daftar user hotspot
 router.get('/', async (req, res) => {
+    console.log('[HOTSPOT] GET /admin/hotspot hit');
     try {
-        const data = await loadHotspotPageData();
+        // Gunakan loader versi ringan agar halaman stabil dan tidak menyebabkan ERR_EMPTY_RESPONSE.
+        // Untuk mode RADIUS, loader ini sudah membaca data user/profil dari RADIUS.
+        const data = await withTimeout(
+            loadHotspotUsersPageDataSimple(),
+            LOAD_PAGE_TIMEOUT_MS,
+            'Memuat data halaman Hotspot (simple)'
+        );
         res.render('adminHotspot', {
             users: data.users || [],
             profiles: data.profiles || [],
@@ -567,43 +803,69 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/users', async (req, res) => {
+    console.log('[HOTSPOT USERS] GET /admin/hotspot/users hit');
+    var responseSent = false;
+    function safeSend(fn) {
+        if (responseSent) return;
+        try {
+            fn();
+            responseSent = true;
+        } catch (e) {
+            console.error('Error in safeSend:', e);
+            if (!responseSent) {
+                responseSent = true;
+                res.status(500).set('Content-Type', 'text/html').send('<h1>Error</h1><p>Gagal memuat halaman. Coba lagi.</p>');
+            }
+        }
+    }
     try {
-        const data = await loadHotspotPageData();
-        res.render('adminHotspotUsers', {
-            users: data.users || [],
-            profiles: data.profiles || [],
-            allUsers: data.allUsers || [],
-            routers: data.routers || [],
-            success: req.query.success,
-            error: req.query.error,
-            company_header: data.company_header,
-            adminKontak: data.adminKontak,
-            settings: data.settings,
-            versionInfo: getVersionInfo(),
-            versionBadge: getVersionBadge(),
-            userAuthMode: data.userAuthMode,
-            page: 'hotspot-users'
+        // Untuk kestabilan, halaman users pakai loader versi ringan (tanpa koneksi Mikrotik langsung)
+        var data = await withTimeout(
+            loadHotspotUsersPageDataSimple(),
+            LOAD_PAGE_TIMEOUT_MS,
+            'Memuat data halaman Daftar Voucher (simple)'
+        );
+        safeSend(function () {
+            res.render('adminHotspotUsers', {
+                users: data.users || [],
+                profiles: data.profiles || [],
+                allUsers: data.allUsers || [],
+                routers: data.routers || [],
+                success: req.query.success,
+                error: req.query.error,
+                company_header: data.company_header,
+                adminKontak: data.adminKontak,
+                settings: data.settings,
+                versionInfo: getVersionInfo(),
+                versionBadge: getVersionBadge(),
+                userAuthMode: data.userAuthMode,
+                page: 'hotspot-users'
+            });
         });
     } catch (error) {
         console.error('Error rendering hotspot users page:', error);
-        const settings = getSettingsWithCache();
-        const company_header = settings.company_header || 'Voucher Hotspot';
-        const adminKontak = settings['admins.0'] || '-';
-        res.render('adminHotspotUsers', {
-            users: [],
-            profiles: [],
-            allUsers: [],
-            routers: [],
-            success: null,
-            error: 'Gagal memuat daftar user hotspot: ' + error.message,
-            company_header,
-            adminKontak,
-            settings,
-            versionInfo: getVersionInfo(),
-            versionBadge: getVersionBadge(),
-            userAuthMode: 'mikrotik',
-            page: 'hotspot-users'
+        safeSend(function () {
+            var settings = getSettingsWithCache();
+            res.render('adminHotspotUsers', {
+                users: [],
+                profiles: [],
+                allUsers: [],
+                routers: [],
+                success: null,
+                error: 'Gagal memuat daftar user hotspot: ' + (error && error.message ? error.message : String(error)),
+                company_header: settings.company_header || 'Voucher Hotspot',
+                adminKontak: settings['admins.0'] || '-',
+                settings: settings,
+                versionInfo: getVersionInfo(),
+                versionBadge: getVersionBadge(),
+                userAuthMode: 'mikrotik',
+                page: 'hotspot-users'
+            });
         });
+    }
+    if (!responseSent) {
+        responseSent = true;
+        res.status(500).set('Content-Type', 'text/html').send('<h1>Error</h1><p>Halaman tidak dapat dimuat. Coba lagi.</p>');
     }
 });
 
@@ -692,9 +954,217 @@ router.post('/delete-selected', async (req, res) => {
     return res.json({ success: true, message: baseMessage });
 });
 
+// POST: Remove expired vouchers
+router.post('/remove-expired', async (req, res) => {
+    try {
+        const { getRadiusConnection } = require('../config/mikrotik');
+        const conn = await getRadiusConnection();
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database('./data/billing.db');
+        
+        // Ambil semua voucher yang memiliki Expire-After
+        const [allVouchersWithExpire] = await conn.execute(`
+            SELECT DISTINCT c.username, c.value as expire_after_seconds
+            FROM radcheck c
+            WHERE c.attribute = 'Expire-After'
+        `);
+        
+        let deletedCount = 0;
+        const failures = [];
+        const now = new Date();
+        
+        for (const voucher of allVouchersWithExpire) {
+            try {
+                const expireAfterSeconds = parseInt(voucher.expire_after_seconds);
+                if (isNaN(expireAfterSeconds) || expireAfterSeconds <= 0) {
+                    continue; // Skip jika Expire-After tidak valid
+                }
+                
+                // Cek apakah voucher sudah pernah login
+                const [firstLoginRows] = await conn.execute(
+                    'SELECT MIN(acctstarttime) as first_login FROM radacct WHERE username = ?',
+                    [voucher.username]
+                );
+                
+                let isExpired = false;
+                
+                if (firstLoginRows.length > 0 && firstLoginRows[0].first_login) {
+                    // Voucher sudah pernah login - cek berdasarkan first_login + Expire-After
+                    const firstLogin = new Date(firstLoginRows[0].first_login);
+                    const expireTime = new Date(firstLogin.getTime() + expireAfterSeconds * 1000);
+                    isExpired = now >= expireTime;
+                } else {
+                    // Voucher belum pernah login - cek berdasarkan created_at dari voucher_revenue + Expire-After
+                    const voucherRevenue = await new Promise((resolve, reject) => {
+                        db.get(
+                            'SELECT created_at FROM voucher_revenue WHERE username = ? ORDER BY created_at ASC LIMIT 1',
+                            [voucher.username],
+                            (err, row) => {
+                                if (err) reject(err);
+                                else resolve(row);
+                            }
+                        );
+                    });
+                    
+                    if (voucherRevenue && voucherRevenue.created_at) {
+                        const createdAt = new Date(voucherRevenue.created_at);
+                        const expireTime = new Date(createdAt.getTime() + expireAfterSeconds * 1000);
+                        isExpired = now >= expireTime;
+                    } else {
+                        // Jika tidak ada created_at, skip (mungkin bukan voucher dari sistem ini)
+                        continue;
+                    }
+                }
+                
+                if (isExpired) {
+                    // Pastikan user tidak sedang online sebelum hapus
+                    const [activeCheck] = await conn.execute(
+                        'SELECT COUNT(*) as count FROM radacct WHERE username = ? AND acctstoptime IS NULL',
+                        [voucher.username]
+                    );
+                    
+                    if (activeCheck.length > 0 && activeCheck[0].count > 0) {
+                        // User sedang online, skip
+                        console.log(`Skipping ${voucher.username} - user is currently online`);
+                        continue;
+                    }
+                    
+                    await deleteHotspotUser(voucher.username, null);
+                    deletedCount++;
+                    console.log(`Deleted expired voucher: ${voucher.username}`);
+                }
+            } catch (err) {
+                console.error(`Error processing voucher ${voucher.username}:`, err);
+                failures.push({ username: voucher.username, message: err.message });
+            }
+        }
+        
+        await conn.end();
+        db.close();
+        
+        if (failures.length && deletedCount === 0) {
+            return res.status(500).json({
+                success: false,
+                message: 'Gagal menghapus voucher expired',
+                details: failures
+            });
+        }
+        
+        const message = `Berhasil menghapus ${deletedCount} voucher expired${failures.length > 0 ? `. ${failures.length} voucher gagal dihapus.` : ''}`;
+        return res.json({
+            success: true,
+            message: message,
+            deleted: deletedCount,
+            failures: failures.length
+        });
+    } catch (error) {
+        console.error('Error removing expired vouchers:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal menghapus voucher expired: ' + error.message
+        });
+    }
+});
+
+// POST: Enable vouchers
+router.post('/enable-vouchers', async (req, res) => {
+    try {
+        const { usernames } = req.body;
+        if (!Array.isArray(usernames) || usernames.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Tidak ada voucher yang dipilih'
+            });
+        }
+        
+        const { enableHotspotUserRadius } = require('../config/mikrotik');
+        let enabledCount = 0;
+        const failures = [];
+        
+        for (const username of usernames) {
+            try {
+                await enableHotspotUserRadius(username);
+                enabledCount++;
+            } catch (err) {
+                failures.push({ username, message: err.message });
+            }
+        }
+        
+        if (failures.length && enabledCount === 0) {
+            return res.status(500).json({
+                success: false,
+                message: 'Gagal mengaktifkan voucher',
+                details: failures
+            });
+        }
+        
+        const message = `Berhasil mengaktifkan ${enabledCount} voucher${failures.length > 0 ? `. ${failures.length} voucher gagal diaktifkan.` : ''}`;
+        return res.json({
+            success: true,
+            message: message,
+            enabled: enabledCount,
+            failures: failures.length
+        });
+    } catch (error) {
+        console.error('Error enabling vouchers:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal mengaktifkan voucher: ' + error.message
+        });
+    }
+});
+
+// POST: Disable vouchers
+router.post('/disable-vouchers', async (req, res) => {
+    try {
+        const { usernames } = req.body;
+        if (!Array.isArray(usernames) || usernames.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Tidak ada voucher yang dipilih'
+            });
+        }
+        
+        const { disableHotspotUserRadius } = require('../config/mikrotik');
+        let disabledCount = 0;
+        const failures = [];
+        
+        for (const username of usernames) {
+            try {
+                await disableHotspotUserRadius(username);
+                disabledCount++;
+            } catch (err) {
+                failures.push({ username, message: err.message });
+            }
+        }
+        
+        if (failures.length && disabledCount === 0) {
+            return res.status(500).json({
+                success: false,
+                message: 'Gagal menonaktifkan voucher',
+                details: failures
+            });
+        }
+        
+        const message = `Berhasil menonaktifkan ${disabledCount} voucher${failures.length > 0 ? `. ${failures.length} voucher gagal dinonaktifkan.` : ''}`;
+        return res.json({
+            success: true,
+            message: message,
+            disabled: disabledCount,
+            failures: failures.length
+        });
+    } catch (error) {
+        console.error('Error disabling vouchers:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal menonaktifkan voucher: ' + error.message
+        });
+    }
+});
+
 // POST: Proses penambahan user hotspot
 router.post('/', async (req, res) => {
-    const { username, password, profile, router_id } = req.body;
+    const { username, password, profile, router_id, server_hotspot } = req.body;
     try {
         // Check auth mode
         let userAuthMode = 'mikrotik';
@@ -707,7 +1177,10 @@ router.post('/', async (req, res) => {
 
         // Untuk mode RADIUS, router_id tidak diperlukan
         if (userAuthMode === 'radius') {
-            await addHotspotUser(username, password, profile, null, null, null);
+            // Mode RADIUS: Gunakan server_hotspot jika ada
+            const server = server_hotspot && server_hotspot.trim() !== '' ? server_hotspot.trim() : null;
+            const serverMetadata = server ? { name: server } : null;
+            await addHotspotUser(username, password, profile, null, null, null, null, server, serverMetadata);
             return res.redirect('/admin/hotspot/users?success=User+Hotspot+berhasil+ditambahkan');
         }
 
@@ -736,7 +1209,7 @@ router.post('/', async (req, res) => {
 
 // POST: Edit user hotspot
 router.post('/edit', async (req, res) => {
-    const { username, password, profile, router_id, originalUsername } = req.body;
+    const { username, password, profile, router_id, originalUsername, server_hotspot } = req.body;
     try {
         // Check auth mode
         let userAuthMode = 'mikrotik';
@@ -750,8 +1223,11 @@ router.post('/edit', async (req, res) => {
         // Untuk mode RADIUS, router_id tidak diperlukan
         if (userAuthMode === 'radius') {
             const { deleteHotspotUser, addHotspotUser } = require('../config/mikrotik');
+            // Mode RADIUS: Gunakan server_hotspot jika ada
+            const server = server_hotspot && server_hotspot.trim() !== '' ? server_hotspot.trim() : null;
+            const serverMetadata = server ? { name: server } : null;
             await deleteHotspotUser(originalUsername || username, null);
-            await addHotspotUser(username, password, profile, null, null, null);
+            await addHotspotUser(username, password, profile, null, null, null, null, server, serverMetadata);
             return res.redirect('/admin/hotspot/users?success=User+Hotspot+berhasil+diupdate');
         }
 
@@ -1014,28 +1490,37 @@ router.get('/voucher', async (req, res) => {
             });
         });
 
-        // Untuk mode RADIUS, ambil dari RADIUS database
+        // Untuk mode RADIUS, data voucher tetap diambil dari RADIUS,
+        // tetapi daftar PROFILE untuk Generate Voucher diambil langsung dari Mikrotik (RouterOS).
         if (userAuthMode === 'radius') {
             try {
-                // Get HOTSPOT profiles from RADIUS (hanya Hotspot Profiles, bukan PPPoE)
-                // Fungsi getHotspotProfilesRadius() sudah memfilter hanya profil yang memiliki Session-Timeout
-                // atau profil yang digunakan oleh voucher users
-                const hotspotProfilesResult = await getHotspotProfilesRadius();
-                
+                // Aggregate hotspot profiles dari semua router Mikrotik
                 let profiles = [];
-                if (hotspotProfilesResult.success && Array.isArray(hotspotProfilesResult.data)) {
-                    profiles = hotspotProfilesResult.data.map(prof => ({
-                        name: prof.name || prof.groupname || '',
-                        'rate-limit': prof['rate-limit'] || '',
-                        'session-timeout': prof['session-timeout'] || '',
-                        'idle-timeout': prof['idle-timeout'] || '',
-                        nas_id: null,
-                        nas_name: 'RADIUS',
-                        nas_ip: 'RADIUS'
-                    }));
+                for (const router of routers) {
+                    try {
+                        const profilesResult = await getHotspotProfiles(router);
+                        if (profilesResult.success && Array.isArray(profilesResult.data)) {
+                            profilesResult.data.forEach(prof => {
+                                const name = prof.name || prof['name'] || '';
+                                if (!name) return;
+                                const existing = profiles.find(p => p.name === name && p.nas_id === router.id);
+                                if (!existing) {
+                                    profiles.push({
+                                        ...prof,
+                                        name,
+                                        nas_id: router.id,
+                                        nas_name: router.name,
+                                        nas_ip: router.nas_ip
+                                    });
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.error(`Error getting profiles from ${router.name} (RADIUS voucher page):`, e.message);
+                    }
                 }
 
-                // Get Server Profiles from RADIUS
+                // Get Server Profiles dari RADIUS (tetap sama seperti sebelumnya)
                 const serverProfilesResult = await getHotspotServerProfilesRadius();
                 let serverProfiles = [];
                 if (serverProfilesResult.success && Array.isArray(serverProfilesResult.data)) {
@@ -1047,19 +1532,39 @@ router.get('/voucher', async (req, res) => {
                     }));
                 }
 
-                // MODE HYBRID: Ambil Server Hotspot dari Mikrotik API (dari semua router)
-                // Server Hotspot tidak bisa dibuat via RADIUS, hanya bisa diambil dari Mikrotik
-                let servers = [];
-                for (const router of routers) {
-                    try {
-                        const serversResult = await getHotspotServers(router);
-                        if (serversResult.success && Array.isArray(serversResult.data)) {
-                            servers = servers.concat(serversResult.data);
-                        }
-                    } catch (e) {
-                        console.error(`Error getting hotspot servers from ${router.name}:`, e.message);
-                    }
-                }
+                // Ambil Server Hotspot dari Database (prioritas utama)
+                // Pastikan table hotspot_servers ada
+                await new Promise((resolve, reject) => {
+                    db.run(`
+                        CREATE TABLE IF NOT EXISTS hotspot_servers (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            name TEXT NOT NULL UNIQUE,
+                            description TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    `, (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+                
+                // Ambil server hotspot dari database
+                const hotspotServersDB = await new Promise((resolve, reject) => {
+                    db.all('SELECT * FROM hotspot_servers ORDER BY name', [], (err, rows) => {
+                        if (err) reject(err);
+                        else resolve(rows || []);
+                    });
+                });
+                
+                // Konversi ke format yang sama dengan servers dari API
+                let servers = hotspotServersDB.map(server => ({
+                    name: server.name,
+                    nas_id: null,
+                    nas_name: 'Database',
+                    nas_ip: 'Database',
+                    description: server.description || ''
+                }));
 
                 // Get active users untuk check status
                 const activeResult = await getActiveHotspotUsers();
@@ -1233,70 +1738,122 @@ router.get('/voucher', async (req, res) => {
         
         // Aggregate server profiles from all NAS
         let serverProfiles = [];
-        for (const router of routers) {
-            try {
-                const serverProfilesResult = await getHotspotServerProfiles(router);
-                if (serverProfilesResult.success && Array.isArray(serverProfilesResult.data)) {
-                    serverProfilesResult.data.forEach(prof => {
-                        const existing = serverProfiles.find(p => p.name === prof.name && p.nas_id === router.id);
-                        if (!existing) {
-                            serverProfiles.push({
-                                ...prof,
-                                nas_id: router.id,
-                                nas_name: router.name,
-                                nas_ip: router.nas_ip
-                            });
-                        }
+        const serverProfileResults = await Promise.all(
+            routers.map(router =>
+                safeCall(
+                    () => getHotspotServerProfiles(router),
+                    `Mengambil hotspot server profile dari ${router.name}`
+                ).then(result => ({ router, result }))
+            )
+        );
+        serverProfileResults.forEach(({ router, result }) => {
+            if (!result || !result.success || !Array.isArray(result.data)) return;
+            result.data.forEach(prof => {
+                const existing = serverProfiles.find(p => p.name === prof.name && p.nas_id === router.id);
+                if (!existing) {
+                    serverProfiles.push({
+                        ...prof,
+                        nas_id: router.id,
+                        nas_name: router.name,
+                        nas_ip: router.nas_ip
                     });
                 }
-            } catch (e) {
-                console.error(`Error getting server profiles from ${router.name}:`, e.message);
-            }
-        }
+            });
+        });
         
-        // Aggregate servers from all NAS
-        let servers = [];
-        for (const router of routers) {
-            try {
-                const serversResult = await getHotspotServers(router);
-                if (serversResult.success && Array.isArray(serversResult.data)) {
-                    servers = servers.concat(serversResult.data);
-                }
-            } catch (e) {
-                console.error(`Error getting servers from ${router.name}:`, e.message);
-            }
-        }
+        // Ambil Server Hotspot dari Database (prioritas utama)
+        // Pastikan table hotspot_servers ada
+        await new Promise((resolve, reject) => {
+            db.run(`
+                CREATE TABLE IF NOT EXISTS hotspot_servers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    description TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `, (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        
+        // Ambil server hotspot dari database
+        const hotspotServersDB = await new Promise((resolve, reject) => {
+            db.all('SELECT * FROM hotspot_servers ORDER BY name', [], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+        
+        // Konversi ke format yang sama dengan servers dari API
+        let servers = hotspotServersDB.map(server => ({
+            name: server.name,
+            nas_id: null,
+            nas_name: 'Database',
+            nas_ip: 'Database',
+            description: server.description || ''
+        }));
         
         // Aggregate all hotspot users from all NAS for voucher history
         let allUsers = [];
         const activeUsernames = [];
         
-        for (const router of routers) {
-            try {
-                const conn = await getMikrotikConnectionForRouter(router);
-                const users = await conn.write('/ip/hotspot/user/print');
+        const routerSnapshots = await Promise.all(
+            routers.map(async router => {
+                const conn = await safeCall(
+                    () => getMikrotikConnectionForRouter(router),
+                    `Membuka koneksi ke ${router.name}`
+                );
+                if (!conn) {
+                    return { router, users: [], active: [] };
+                }
+                const [usersRaw, activeRaw] = await Promise.all([
+                    safeCall(() => conn.write('/ip/hotspot/user/print'), `Mengambil data user hotspot dari ${router.name}`),
+                    safeCall(() => conn.write('/ip/hotspot/active/print'), `Mengambil data user aktif hotspot dari ${router.name}`)
+                ]);
+                try {
+                    if (typeof conn.close === 'function') {
+                        await conn.close();
+                    } else if (typeof conn.disconnect === 'function') {
+                        await conn.disconnect();
+                    }
+                } catch (closeErr) {
+                    console.warn(`Gagal menutup koneksi Mikrotik ${router.name}:`, closeErr.message || closeErr);
+                }
+                return {
+                    router,
+                    users: Array.isArray(usersRaw) ? usersRaw : [],
+                    active: Array.isArray(activeRaw) ? activeRaw : []
+                };
+            })
+        );
+
+        routerSnapshots.forEach(snapshot => {
+            if (!snapshot) return;
+            const { router, users, active } = snapshot;
+            const mappedRouter = router || {};
+            if (Array.isArray(users) && users.length > 0) {
                 allUsers = allUsers.concat(users.map(u => ({
                     name: u.name || '',
                     password: u.password || '',
                     profile: u.profile || 'default',
                     server: u.server || 'all',
                     comment: u.comment || '',
-                    nas_id: router.id,
-                    nas_name: router.name,
-                    nas_ip: router.nas_ip
+                    nas_id: mappedRouter.id,
+                    nas_name: mappedRouter.name,
+                    nas_ip: mappedRouter.nas_ip
                 })));
-                
-                // Get active users from this router
-                const activeResult = await getActiveHotspotUsers(router);
-                if (activeResult.success && Array.isArray(activeResult.data)) {
-                    activeResult.data.forEach(user => {
-                        activeUsernames.push(user.user || user.name || '');
-                    });
-                }
-            } catch (e) {
-                console.error(`Error getting users from ${router.name}:`, e.message);
             }
-        }
+            if (Array.isArray(active) && active.length > 0) {
+                active.forEach(user => {
+                    const username = user.user || user.name || user.username || '';
+                    if (username) {
+                        activeUsernames.push(username);
+                    }
+                });
+            }
+        });
         
         // Query SEMUA invoice voucher terlebih dahulu (tidak perlu filter by username)
         const invoiceDates = await new Promise((resolve, reject) => {
@@ -1623,7 +2180,7 @@ router.post('/generate-voucher', async (req, res) => {
 });
 
 // GET: Print vouchers page
-router.get('/print-vouchers', async (req, res) => {
+router.get('/print-vouchers-page', async (req, res) => {
     try {
         // Ambil pengaturan dari settings.json
         const settings = getSettingsWithCache();
@@ -1989,6 +2546,802 @@ router.post('/save-voucher-online-settings', async (req, res) => {
     }
 });
 
+// GET: List voucher print templates
+router.get('/voucher-templates', async (req, res) => {
+    try {
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database('./data/billing.db');
+        
+        // Pastikan tabel template ada
+        await new Promise((resolve, reject) => {
+            db.run(`
+                CREATE TABLE IF NOT EXISTS voucher_print_templates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    template_name TEXT NOT NULL UNIQUE,
+                    template_code TEXT NOT NULL,
+                    is_default INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'enabled' CHECK (status IN ('enabled', 'disabled')),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `, (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        
+        // Ambil semua template yang enabled
+        const templates = await new Promise((resolve, reject) => {
+            db.all(
+                'SELECT id, template_name, is_default, status FROM voucher_print_templates WHERE status = ? ORDER BY is_default DESC, template_name ASC',
+                ['enabled'],
+                (err, rows) => {
+                    db.close();
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+        
+        res.json({
+            success: true,
+            data: templates
+        });
+        
+    } catch (error) {
+        console.error('Error getting templates:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Gagal mengambil template: ' + error.message
+        });
+    }
+});
+
+// POST: Print vouchers from selected usernames
+router.post('/print-vouchers', async (req, res) => {
+    try {
+        const { usernames, template_id } = req.body;
+        
+        if (!usernames || !Array.isArray(usernames) || usernames.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Username tidak boleh kosong'
+            });
+        }
+        
+        // Ambil template dari database (gunakan template_id jika ada, jika tidak gunakan default)
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database('./data/billing.db');
+        
+        // Pastikan tabel template ada
+        await new Promise((resolve, reject) => {
+            db.run(`
+                CREATE TABLE IF NOT EXISTS voucher_print_templates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    template_name TEXT NOT NULL UNIQUE,
+                    template_code TEXT NOT NULL,
+                    is_default INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'enabled' CHECK (status IN ('enabled', 'disabled')),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `, (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        
+        // Ambil template berdasarkan template_id atau default
+        let template;
+        if (template_id) {
+            template = await new Promise((resolve, reject) => {
+                db.get(
+                    'SELECT * FROM voucher_print_templates WHERE id = ? AND status = ?',
+                    [template_id, 'enabled'],
+                    (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row || null);
+                    }
+                );
+            });
+        }
+        
+        // Jika template_id tidak ada atau tidak ditemukan, ambil default
+        if (!template) {
+            template = await new Promise((resolve, reject) => {
+                db.get(
+                    'SELECT * FROM voucher_print_templates WHERE is_default = 1 AND status = ? ORDER BY id LIMIT 1',
+                    ['enabled'],
+                    (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row || null);
+                    }
+                );
+            });
+        }
+        
+        // Jika masih tidak ada, ambil template pertama yang enabled
+        if (!template) {
+            template = await new Promise((resolve, reject) => {
+                db.get(
+                    'SELECT * FROM voucher_print_templates WHERE status = ? ORDER BY id LIMIT 1',
+                    ['enabled'],
+                    (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row || null);
+                    }
+                );
+            });
+        }
+        
+        if (!template) {
+            db.close();
+            return res.status(500).json({
+                success: false,
+                message: 'Template tidak ditemukan. Silakan import template terlebih dahulu.'
+            });
+        }
+        
+        // Ambil data user hotspot dari database
+        const { getRadiusConnection } = require('../config/mikrotik');
+        const conn = await getRadiusConnection();
+        
+        const voucherData = [];
+        
+        for (const username of usernames) {
+            try {
+                // Ambil data dari radcheck
+                const [radcheckRows] = await conn.execute(
+                    'SELECT attribute, value FROM radcheck WHERE username = ?',
+                    [username]
+                );
+                
+                // Ambil data dari radusergroup untuk profile
+                const [radusergroupRows] = await conn.execute(
+                    'SELECT groupname FROM radusergroup WHERE username = ? LIMIT 1',
+                    [username]
+                );
+                
+                // Ambil password dari radcheck
+                const passwordRow = radcheckRows.find(r => r.attribute === 'Cleartext-Password');
+                const password = passwordRow ? passwordRow.value : '';
+                
+                // Ambil profile
+                const profile = radusergroupRows.length > 0 ? radusergroupRows[0].groupname : 'default';
+                
+                // Ambil durasi (Max-All-Session) dari radcheck
+                const maxSessionRow = radcheckRows.find(r => r.attribute === 'Max-All-Session');
+                const maxSessionSeconds = maxSessionRow ? parseInt(maxSessionRow.value, 10) : null;
+                const duration = maxSessionSeconds ? formatDuration(maxSessionSeconds) : 'Unlimited';
+                
+                // Ambil validity (Expire-After) dari radcheck
+                const expireAfterRow = radcheckRows.find(r => r.attribute === 'Expire-After');
+                const expireAfterSeconds = expireAfterRow ? parseInt(expireAfterRow.value, 10) : null;
+                const validity = expireAfterSeconds ? formatDuration(expireAfterSeconds) : 'Unlimited';
+                
+                // Ambil data dari voucher_revenue jika ada (untuk price, dll)
+                const voucherRevenue = await new Promise((resolve, reject) => {
+                    db.get(
+                        'SELECT price, created_at, status FROM voucher_revenue WHERE username = ? ORDER BY created_at DESC LIMIT 1',
+                        [username],
+                        (err, row) => {
+                            if (err) reject(err);
+                            else resolve(row || null);
+                        }
+                    );
+                });
+                
+                voucherData.push({
+                    username: username,
+                    password: password,
+                    profile: profile,
+                    price: voucherRevenue ? voucherRevenue.price : null,
+                    created_at: voucherRevenue ? voucherRevenue.created_at : null,
+                    status: voucherRevenue ? voucherRevenue.status : 'active',
+                    duration: duration,
+                    validity: validity,
+                    maxSessionSeconds: maxSessionSeconds,
+                    expireAfterSeconds: expireAfterSeconds
+                });
+            } catch (error) {
+                console.error(`Error getting data for username ${username}:`, error);
+                // Skip user ini jika error
+            }
+        }
+        
+        await conn.end();
+        db.close();
+        
+        if (voucherData.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Tidak ada data voucher ditemukan'
+            });
+        }
+        
+        // Ambil settings
+        const settings = getSettingsWithCache();
+        const namaHotspot = settings.company_header || 'HOTSPOT VOUCHER';
+        const adminKontak = settings['admins.0'] || '-';
+        const logoUrl = settings.logo_filename ? `/img/${settings.logo_filename}` : '/img/logo.png';
+        // Ambil DNS login hotspot dari settings.json (field baru: dns_name_login_hotspot)
+        const hotspotDns = settings.dns_name_login_hotspot || settings.hotspot_dns || '192.168.88.1';
+        const currencyCode = settings.currency_code || 'Rp';
+        
+        // Generate HTML untuk print menggunakan template dari database
+        const printHtml = generateVoucherPrintHTMLFromTemplate(
+            voucherData, 
+            template.template_code, 
+            namaHotspot, 
+            adminKontak, 
+            logoUrl,
+            hotspotDns,
+            currencyCode
+        );
+        
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(printHtml);
+        
+    } catch (error) {
+        console.error('Error printing vouchers:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Gagal mencetak voucher: ' + error.message
+        });
+    }
+});
+
+// Helper function untuk generate HTML print voucher dari template database
+// Template menggunakan format Smarty seperti di voucher-manager
+function generateVoucherPrintHTMLFromTemplate(vouchers, templateCode, namaHotspot, adminKontak, logoUrl, hotspotDns, currencyCode) {
+    // Extract style dari template
+    const styleMatch = templateCode.match(/<style>([\s\S]*?)<\/style>/);
+    const styleContent = styleMatch ? styleMatch[1] : '';
+    
+    // Extract body content dari template (setelah </style> atau langsung jika tidak ada style tag)
+    let bodyTemplate = templateCode;
+    if (styleMatch) {
+        bodyTemplate = templateCode.substring(templateCode.indexOf('</style>') + 8).trim();
+    }
+    
+    // Extract voucher item template dari foreach loop
+    // Format: {foreach $v as $vs} ... {/foreach}
+    const foreachMatch = bodyTemplate.match(/\{foreach \$v as \$vs\}([\s\S]*?)\{\/foreach\}/);
+    const voucherItemTemplate = foreachMatch ? foreachMatch[1] : bodyTemplate;
+    
+    // Render setiap voucher
+    let vouchersHtml = '';
+    vouchers.forEach(voucher => {
+        const priceNumber = voucher.price || 0;
+        const priceFormatted = priceNumber ? new Intl.NumberFormat('id-ID', {
+            style: 'currency',
+            currency: 'IDR',
+            minimumFractionDigits: 0
+        }).format(priceNumber) : '';
+        const isVoucherCode = voucher.username === voucher.password;
+        
+        let voucherHtml = voucherItemTemplate;
+        
+        // Replace Smarty variables dengan data aktual
+        // {$vs['code']} -> username
+        voucherHtml = voucherHtml.replace(/\{\$vs\['code'\]\}/g, voucher.username);
+        
+        // {$vs['secret']} -> password
+        voucherHtml = voucherHtml.replace(/\{\$vs\['secret'\]\}/g, voucher.password);
+        
+        // {$vs['total']} -> price (formatted dengan currency)
+        voucherHtml = voucherHtml.replace(/\{\$vs\['total'\]\}/g, priceFormatted || 'Rp 0');
+        
+        // {$vs['company_name']} -> namaHotspot
+        voucherHtml = voucherHtml.replace(/\{\$vs\['company_name'\]\}/g, namaHotspot);
+        
+        // {$_c['company_name']} -> namaHotspot (alternatif format)
+        voucherHtml = voucherHtml.replace(/\{\$_c\['company_name'\]\}/g, namaHotspot);
+        
+        // {$company_name} -> namaHotspot (alternatif format tanpa array)
+        voucherHtml = voucherHtml.replace(/\{\$company_name\}/g, namaHotspot);
+        
+        // {$vs['logo_url']} -> logoUrl
+        voucherHtml = voucherHtml.replace(/\{\$vs\['logo_url'\]\}/g, logoUrl);
+        
+        // {$_c['logo_url']} -> logoUrl (alternatif format)
+        voucherHtml = voucherHtml.replace(/\{\$_c\['logo_url'\]\}/g, logoUrl);
+        
+        // {$logo_url} -> logoUrl (alternatif format tanpa array)
+        voucherHtml = voucherHtml.replace(/\{\$logo_url\}/g, logoUrl);
+        
+        // {$hotspotdns} -> hotspotDns
+        voucherHtml = voucherHtml.replace(/\{\$hotspotdns\}/gi, hotspotDns);
+        
+        // {$_c['currency_code']} -> currencyCode
+        voucherHtml = voucherHtml.replace(/\{\$_c\['currency_code'\]\}/g, currencyCode);
+        
+        // {$_theme}images/{$_c['show-logo']} -> logoUrl
+        voucherHtml = voucherHtml.replace(/\{\$_theme\}images\/\{\$_c\['show-logo'\]\}/g, logoUrl);
+        
+        // {$_theme}images/{$_c['logo']} -> logoUrl (alternatif format)
+        voucherHtml = voucherHtml.replace(/\{\$_theme\}images\/\{\$_c\['logo'\]\}/g, logoUrl);
+        
+        // {$_c['show-logo']} -> logoUrl (tanpa path theme)
+        voucherHtml = voucherHtml.replace(/\{\$_c\['show-logo'\]\}/g, logoUrl);
+        
+        // {$_c['logo']} -> logoUrl (tanpa path theme, alternatif)
+        voucherHtml = voucherHtml.replace(/\{\$_c\['logo'\]\}/g, logoUrl);
+        
+        // PENTING: Handle nested conditionals timelimit/datalimit TERLEBIH DAHULU dengan placeholder
+        // Ini untuk menghindari konflik dengan conditional code/secret
+        voucherHtml = voucherHtml.replace(/\{if \$vs\['timelimit'\] eq 'unlimited'\}\s*\{if \$vs\['datalimit'\] eq 'unlimited'\}\s*\{\$vs\['validperiod'\]\}\s*\{else\}\s*\{\$vs\['datalimit'\]\}\s*\{\/if\}\s*\{else\}\s*\{\$vs\['timelimit'\]\}\s*\{\/if\}/g, '__UNLIMITED_PLACEHOLDER__');
+        
+        // Handle nested timelimit/datalimit lainnya
+        let timelimitChanged = true;
+        let timelimitLoop = 0;
+        while (timelimitChanged && timelimitLoop < 5) {
+            const before = voucherHtml;
+            voucherHtml = voucherHtml.replace(/\{if \$vs\['timelimit'\] eq 'unlimited'\}\s*\{if \$vs\['datalimit'\] eq 'unlimited'\}([\s\S]*?)\{else\}([\s\S]*?)\{\/if\}\s*\{else\}([\s\S]*?)\{\/if\}/g, '__UNLIMITED_PLACEHOLDER__');
+            timelimitChanged = (before !== voucherHtml);
+            timelimitLoop++;
+        }
+        
+        voucherHtml = voucherHtml.replace(/\{if \$vs\['timelimit'\] eq 'unlimited'\}([\s\S]*?)\{\/if\}/g, '__UNLIMITED_PLACEHOLDER__');
+        voucherHtml = voucherHtml.replace(/\{if \$vs\['datalimit'\] eq 'unlimited'\}([\s\S]*?)\{\/if\}/g, '__UNLIMITED_PLACEHOLDER__');
+        
+        // Replace variable timelimit/datalimit dengan placeholder
+        voucherHtml = voucherHtml.replace(/\{\$vs\['validperiod'\]\}/g, '__UNLIMITED_PLACEHOLDER__');
+        voucherHtml = voucherHtml.replace(/\{\$vs\['timelimit'\]\}/g, '__UNLIMITED_PLACEHOLDER__');
+        voucherHtml = voucherHtml.replace(/\{\$vs\['datalimit'\]\}/g, '__UNLIMITED_PLACEHOLDER__');
+        
+        // SEKARANG handle conditional code/secret setelah nested conditional sudah di-replace dengan placeholder
+        // Gunakan pendekatan yang lebih agresif untuk memastikan seluruh bagian terhapus
+        let codeSecretChanged = true;
+        let codeSecretLoop = 0;
+        while (codeSecretChanged && codeSecretLoop < 15) {
+            const before = voucherHtml;
+            
+            // Handle conditional: {if $vs['code'] neq $vs['secret']} ... {/if}
+            // Non-greedy match untuk menangkap conditional terdekat
+            voucherHtml = voucherHtml.replace(/\{if \$vs\['code'\] neq \$vs\['secret'\]\}([\s\S]*?)\{\/if\}/g, (match, content) => {
+                if (isVoucherCode) {
+                    // Hapus seluruh bagian termasuk tag pembuka dan penutup div jika ada
+                    return '';
+                }
+                return content; // Keep jika bukan voucher code
+            });
+            
+            // Handle conditional: {if $vs['code'] eq $vs['secret']} ... {/if}
+            voucherHtml = voucherHtml.replace(/\{if \$vs\['code'\] eq \$vs\['secret'\]\}([\s\S]*?)\{\/if\}/g, (match, content) => {
+                if (isVoucherCode) {
+                    return content; // Keep jika voucher code
+                }
+                // Hapus seluruh bagian jika bukan voucher code
+                return '';
+            });
+            
+            codeSecretChanged = (before !== voucherHtml);
+            codeSecretLoop++;
+        }
+        
+        // SEKARANG replace placeholder dengan data durasi/validity yang sebenarnya
+        // Untuk template lama yang masih menggunakan placeholder, kita replace dengan duration
+        // Template baru sudah menggunakan {$vs['timelimit_display']} dan {$vs['validity_display']} yang sudah di-replace di atas
+        const durationDisplay = voucher.duration || 'Unlimited';
+        voucherHtml = voucherHtml.replace(/__UNLIMITED_PLACEHOLDER__/g, durationDisplay);
+        
+        // Handle conditional: {if $vs['logo_url'] neq ''} ... {/if}
+        voucherHtml = voucherHtml.replace(/\{if \$vs\['logo_url'\] neq ''\}([\s\S]*?)\{\/if\}/g, (match, content) => {
+            return logoUrl ? content : '';
+        });
+        
+        // Replace variable validity dan duration dari data voucher yang sebenarnya
+        // Durasi dari Max-All-Session, Validity dari Expire-After
+        voucherHtml = voucherHtml.replace(/\{\$vs\['validity'\]\}/g, voucher.validity || 'Unlimited');
+        voucherHtml = voucherHtml.replace(/\{\$vs\['duration'\]\}/g, voucher.duration || 'Unlimited');
+        
+        // Replace variable timelimit_display dan validity_display (untuk template baru)
+        voucherHtml = voucherHtml.replace(/\{\$vs\['timelimit_display'\]\}/g, voucher.duration || 'Unlimited');
+        voucherHtml = voucherHtml.replace(/\{\$vs\['validity_display'\]\}/g, voucher.validity || 'Unlimited');
+        // Replace datalimit_display (untuk template Orange/Test)
+        voucherHtml = voucherHtml.replace(/\{\$vs\['datalimit_display'\]\}/g, 'Unlimited');
+        
+        // Handle conditional validity: {if $vs['validity'] neq ''} ... {else} ... {/if}
+        voucherHtml = voucherHtml.replace(/\{if \$vs\['validity'\] neq ''\}([\s\S]*?)\{else\}([\s\S]*?)\{\/if\}/g, (match, ifContent, elseContent) => {
+            const validity = voucher.validity || '';
+            // Jika validity kosong, gunakan elseContent (yang biasanya "Unlimited")
+            return validity ? ifContent : (elseContent || 'Unlimited');
+        });
+        
+        // Clean up: Hapus semua tag Smarty yang tersisa yang tidak ter-render
+        // Hapus semua {if ...} tags yang tersisa (loop sampai tidak ada perubahan)
+        changed = true;
+        let loopCount = 0;
+        while (changed && loopCount < 10) {
+            const before = voucherHtml;
+            // Hapus nested conditionals yang kompleks
+            voucherHtml = voucherHtml.replace(/\{if[^}]*\}/g, '');
+            voucherHtml = voucherHtml.replace(/\{\/if\}/g, '');
+            voucherHtml = voucherHtml.replace(/\{else\}/g, '');
+            changed = (before !== voucherHtml);
+            loopCount++;
+        }
+        
+        // Hapus semua variable Smarty yang tidak ter-replace (lebih agresif)
+        voucherHtml = voucherHtml.replace(/\{\$vs\[['"][^'"]+['"]\]\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{\$vs\[[^\]]+\]\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{\$hotspotdns\}/gi, '');
+        voucherHtml = voucherHtml.replace(/\{\$_c\[['"][^'"]+['"]\]\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{\$_c\[[^\]]+\]\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{\$_theme\}[^}]*/g, '');
+        
+        // Hapus semua sisa tag Smarty yang mungkin terlewat (hati-hati agar tidak menghapus HTML valid)
+        voucherHtml = voucherHtml.replace(/\{if[^}]*\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{\/if\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{else\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{foreach[^}]*\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{\/foreach\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{include[^}]*\}/g, '');
+        
+        // Hapus variable Smarty yang tersisa (format: {$variable})
+        voucherHtml = voucherHtml.replace(/\{\$[^}]+\}/g, '');
+        
+        // Clean up whitespace berlebihan yang mungkin muncul setelah penghapusan tag
+        voucherHtml = voucherHtml.replace(/\s{2,}/g, ' ');
+        voucherHtml = voucherHtml.replace(/>\s+</g, '><');
+        voucherHtml = voucherHtml.replace(/\s+</g, '<');
+        voucherHtml = voucherHtml.replace(/>\s+/g, '>');
+        
+        // Remove include statements (tidak diperlukan untuk HTML output)
+        voucherHtml = voucherHtml.replace(/\{include file="rad-template-header\.tpl"\}/g, '');
+        voucherHtml = voucherHtml.replace(/\{include file="rad-template-footer\.tpl"\}/g, '');
+        voucherHtml = voucherHtml.replace(/<!-- DON'T REMOVE THIS LINE -->/g, '');
+        
+        vouchersHtml += voucherHtml;
+    });
+    
+    // Collect QR code data untuk di-generate di browser
+    const qrDataList = vouchers.map(v => ({
+        username: v.username,
+        password: v.password,
+        id: `qrcode-${v.username}`
+    }));
+    
+    // Wrap dengan HTML structure
+    return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Print Voucher</title>
+    <style>
+        /* Pastikan semua warna tercetak */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+        }
+        
+        @page {
+            size: A4 landscape;
+            margin: 0.3cm;
+        }
+        
+        @media print {
+            /* Pastikan semua warna dan background tercetak */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            
+            body { 
+                margin: 0 !important; 
+                padding: 0 !important;
+                background: white !important;
+            }
+            
+            .print-controls { 
+                display: none !important; 
+            }
+            
+            .container, .voucher-container { 
+                page-break-inside: avoid !important;
+                /* Pastikan background tercetak */
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            
+            /* Pastikan semua text terlihat saat print */
+            .voucher-code,
+            .voucher-code-large {
+                color: #667eea !important;
+                -webkit-text-fill-color: #667eea !important;
+                background: transparent !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+        /* Fix untuk Mikhmon Classic dan template lainnya */
+        body {
+            margin: 0 !important;
+            padding: 10px !important;
+            overflow-x: hidden !important;
+        }
+        /* Override body margin dari template */
+        body[style*="margin-left"],
+        body[style*="margin-top"] {
+            margin: 0 !important;
+            padding: 10px !important;
+        }
+        /* Pastikan container tidak overflow - khusus untuk Mikhmon Classic */
+        .container {
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+            word-wrap: break-word !important;
+            position: relative !important;
+        }
+        /* Fix untuk container dengan fixed height - biarkan height menyesuaikan konten */
+        .container.bg-white.border-1 {
+            min-height: 127px !important;
+            height: auto !important;
+            max-height: none !important;
+        }
+        /* Fix untuk border dan padding */
+        .container.bg-white {
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+        }
+        /* Pastikan konten dalam container tidak keluar */
+        .container * {
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        /* Fix untuk row dan col agar tidak overflow */
+        .container .row {
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+        .container .col-1,
+        .container .col-2,
+        .container .col-5,
+        .container .col-9,
+        .container .col-10 {
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+        }
+        /* Fix untuk text yang panjang */
+        .container p, .container span, .container div {
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
+        }
+        /* Fix untuk image agar tidak keluar */
+        .container img {
+            max-width: 100% !important;
+            height: auto !important;
+            display: block !important;
+            object-fit: contain !important;
+        }
+        /* Fix untuk rotate-r90 agar tidak keluar */
+        .container .rotate-r90 {
+            overflow: hidden !important;
+            max-width: 100% !important;
+        }
+        ${styleContent}
+        .print-controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .print-controls button {
+            padding: 8px 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-print {
+            background: #4299e1;
+            color: white;
+        }
+        .btn-close {
+            background: #718096;
+            color: white;
+        }
+    </style>
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+</head>
+<body>
+    <div class="print-controls">
+        <button class="btn-print" onclick="window.print()">🖨️ Print</button>
+        <button class="btn-close" onclick="window.close()">❌ Tutup</button>
+    </div>
+    ${vouchersHtml}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const qrDataList = ${JSON.stringify(qrDataList)};
+            qrDataList.forEach(function(data) {
+                const qrCodeDiv = document.getElementById(data.id);
+                if (qrCodeDiv && typeof QRCode !== 'undefined') {
+                    new QRCode(qrCodeDiv, {
+                        text: 'Username: ' + data.username + '\\nPassword: ' + data.password,
+                        width: 35,
+                        height: 35,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>`;
+}
+
+// Helper function untuk generate HTML print voucher (legacy, untuk backward compatibility)
+function generateVoucherPrintHTML(vouchers, namaHotspot, adminKontak, logoUrl, templateId) {
+    // Template sederhana untuk print voucher (33 per halaman A4)
+    const voucherSize = {
+        width: '6.3cm',
+        height: '3.5cm',
+        margin: '0.2cm'
+    };
+    
+    let html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Print Voucher</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0.5cm;
+        }
+        @media print {
+            body { margin: 0; padding: 0; }
+            .print-controls { display: none; }
+            .voucher-item { page-break-inside: avoid; }
+        }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0.5cm;
+            background: #f5f5f5;
+        }
+        .print-controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .print-controls button {
+            padding: 8px 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-print {
+            background: #4299e1;
+            color: white;
+        }
+        .btn-close {
+            background: #718096;
+            color: white;
+        }
+        .voucher-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.2cm;
+        }
+        .voucher-item {
+            width: ${voucherSize.width};
+            height: ${voucherSize.height};
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 0.3cm;
+            background: white;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 10px;
+        }
+        .voucher-header {
+            text-align: center;
+            font-weight: bold;
+            font-size: 11px;
+            margin-bottom: 0.2cm;
+            color: #2d3748;
+        }
+        .voucher-logo {
+            text-align: center;
+            margin-bottom: 0.1cm;
+        }
+        .voucher-logo img {
+            max-height: 25px;
+            max-width: 100%;
+        }
+        .voucher-username {
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: #2d3748;
+            margin: 0.2cm 0;
+        }
+        .voucher-password {
+            text-align: center;
+            font-size: 12px;
+            color: #4299e1;
+            font-weight: bold;
+            margin-bottom: 0.2cm;
+        }
+        .voucher-info {
+            font-size: 9px;
+            color: #718096;
+            margin-top: 0.2cm;
+        }
+        .voucher-price {
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            color: #48bb78;
+            margin: 0.1cm 0;
+        }
+        .voucher-footer {
+            text-align: center;
+            font-size: 8px;
+            color: #718096;
+            margin-top: 0.2cm;
+        }
+    </style>
+</head>
+<body>
+    <div class="print-controls">
+        <button class="btn-print" onclick="window.print()">🖨️ Print</button>
+        <button class="btn-close" onclick="window.close()">❌ Tutup</button>
+    </div>
+    <div class="voucher-container">`;
+    
+    vouchers.forEach(voucher => {
+        const price = voucher.price ? new Intl.NumberFormat('id-ID', {
+            style: 'currency',
+            currency: 'IDR',
+            minimumFractionDigits: 0
+        }).format(voucher.price) : '';
+        
+        html += `
+        <div class="voucher-item">
+            ${logoUrl ? `<div class="voucher-logo"><img src="${logoUrl}" alt="${namaHotspot}"></div>` : ''}
+            <div class="voucher-header">${namaHotspot}</div>
+            ${price ? `<div class="voucher-price">${price}</div>` : ''}
+            <div class="voucher-username">${voucher.username}</div>
+            <div class="voucher-password">${voucher.password}</div>
+            <div class="voucher-info">
+                <div>Profile: ${voucher.profile}</div>
+            </div>
+            <div class="voucher-footer">${adminKontak}</div>
+        </div>`;
+    });
+    
+    html += `
+    </div>
+</body>
+</html>`;
+    
+    return html;
+}
+
 // POST: Save voucher generation settings
 router.post('/save-voucher-generation-settings', async (req, res) => {
     try {
@@ -2101,5 +3454,41 @@ function formatSecondsToHHMMSS(seconds) {
     const secs = (total % 60).toString().padStart(2, '0');
     return `${hours}:${minutes}:${secs}`;
 }
+
+// GET: Halaman Buat Template Voucher
+router.get('/voucher-template', async (req, res) => {
+    try {
+        const { adminAuth } = require('./adminAuth');
+        await adminAuth(req, res, async () => {
+            const settings = getSettingsWithCache();
+            const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
+            const versionInfo = getVersionInfo();
+            const versionBadge = getVersionBadge();
+            
+            // Ambil data voucher dari database
+            const dbPath = path.join(__dirname, '../data/billing.db');
+            const db = new sqlite3.Database(dbPath);
+            
+            // Ambil voucher history dari localStorage (akan diambil via frontend)
+            // Atau bisa ambil dari database jika ada tabel voucher_history
+            const voucherHistory = [];
+            
+            // Tutup database
+            db.close();
+            
+            res.render('admin/voucher-template', {
+                title: 'Buat Template Voucher',
+                page: 'voucher-template',
+                settings: settings,
+                versionInfo: versionInfo,
+                versionBadge: versionBadge,
+                voucherHistory: voucherHistory
+            });
+        });
+    } catch (error) {
+        console.error('Error loading voucher template page:', error);
+        res.status(500).send('Error loading page: ' + error.message);
+    }
+});
 
 module.exports = router;

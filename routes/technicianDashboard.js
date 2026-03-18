@@ -90,10 +90,13 @@ router.get('/monitoring', technicianAuth, async (req, res) => {
         const { getDevices } = require('../config/genieacs');
         const { getSettingsWithCache } = require('../config/settingsManager');
         
-        // Get devices data
-        // ENHANCEMENT: Gunakan cached version untuk performa lebih baik
-        const { getDevicesCached } = require('../config/genieacs');
-        const devicesRaw = await getDevicesCached();
+        // Get GenieACS servers list (same as admin)
+        const { getAllGenieacsServers, getAllDevicesFromAllServers } = require('../config/genieacs');
+        const servers = await getAllGenieacsServers();
+        
+        // Get devices data from all servers (same as admin route)
+        // This ensures devices have _genieacs_server_name and _genieacs_server_id
+        const devicesRaw = await getAllDevicesFromAllServers();
         
         // Use the exact same parameter paths as admin GenieACS
         const parameterPaths = {
@@ -182,6 +185,8 @@ router.get('/monitoring', technicianAuth, async (req, res) => {
             password: device.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.KeyPassphrase?._value || '-',
             userKonek: device.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.TotalAssociations?._value || '-',
             rxPower: getParameterWithPaths(device, parameterPaths.rxPower),
+            genieacsServer: device._genieacs_server_name || 'Default',
+            genieacsServerId: device._genieacs_server_id || null,
             tag: (Array.isArray(device.Tags) && device.Tags.length > 0)
                 ? device.Tags.join(', ')
                 : (typeof device.Tags === 'string' && device.Tags)
@@ -207,6 +212,7 @@ router.get('/monitoring', technicianAuth, async (req, res) => {
         res.render('adminGenieacs', {
             title: 'Monitoring GenieACS - Portal Teknisi',
             devices,
+            servers, // Pass servers for filter dropdown
             settings,
             genieacsTotal,
             genieacsOnline,
@@ -219,9 +225,19 @@ router.get('/monitoring', technicianAuth, async (req, res) => {
 
     } catch (error) {
         logger.error('Error loading technician monitoring:', error);
+        // Get servers even on error to prevent template error
+        let servers = [];
+        try {
+            const { getAllGenieacsServers } = require('../config/genieacs');
+            servers = await getAllGenieacsServers();
+        } catch (serverError) {
+            logger.warn('Failed to get GenieACS servers:', serverError);
+        }
+        
         res.render('adminGenieacs', {
             title: 'Monitoring GenieACS - Portal Teknisi',
             devices: [],
+            servers: servers || [], // Pass servers even on error
             settings: {},
             genieacsTotal: 0,
             genieacsOnline: 0,
@@ -239,8 +255,7 @@ router.get('/monitoring', technicianAuth, async (req, res) => {
  */
 router.get('/customers', technicianAuth, async (req, res) => {
     try {
-        // Ambil data customers & packages
-        const allCustomers = await billingManager.getCustomers();
+        // OPTIMASI: Gunakan pagination dari database, bukan load semua lalu filter di JavaScript
         const packages = await billingManager.getPackages();
         
         // Get ODPs for dropdown selection (termasuk sub ODP)
@@ -263,24 +278,17 @@ router.get('/customers', technicianAuth, async (req, res) => {
         const search = (req.query.search || '').trim();
         const page = Math.max(parseInt(req.query.page) || 1, 1);
         const limit = 20;
+        const offset = (page - 1) * limit;
 
-        // Filter sederhana di sisi server (name/phone/username)
-        const filtered = !search
-            ? allCustomers
-            : allCustomers.filter(c => {
-                const s = search.toLowerCase();
-                return (
-                    (c.name || '').toLowerCase().includes(s) ||
-                    (c.phone || '').toLowerCase().includes(s) ||
-                    (c.username || '').toLowerCase().includes(s)
-                );
-            });
-
-        const totalCustomers = filtered.length;
-        const totalPages = Math.max(1, Math.ceil(totalCustomers / limit));
-        const currentPage = Math.min(page, totalPages);
-        const offset = (currentPage - 1) * limit;
-        const customers = filtered.slice(offset, offset + limit);
+        // Gunakan pagination dari database (lebih efisien)
+        const filters = {};
+        if (search) filters.search = search;
+        
+        const customersResult = await billingManager.getCustomersPaginated(limit, offset, filters);
+        const customers = customersResult.customers;
+        const totalCustomers = customersResult.totalCount;
+        const totalPages = customersResult.totalPages;
+        const currentPage = customersResult.page;
 
         // Log activity
         await authManager.logActivity(req.technician.id, 'customers_access', 'Mengakses halaman pelanggan');
@@ -2780,6 +2788,8 @@ router.get('/mobile/monitoring', technicianAuth, async (req, res) => {
             password: device.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.KeyPassphrase?._value || '-',
             userKonek: device.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.TotalAssociations?._value || '-',
             rxPower: getParameterWithPaths(device, parameterPaths.rxPower),
+            genieacsServer: device._genieacs_server_name || 'Default',
+            genieacsServerId: device._genieacs_server_id || null,
             tag: (Array.isArray(device.Tags) && device.Tags.length > 0)
                 ? device.Tags.join(', ')
                 : (typeof device.Tags === 'string' && device.Tags)
@@ -2836,8 +2846,7 @@ router.get('/mobile/monitoring', technicianAuth, async (req, res) => {
  */
 router.get('/mobile/customers', technicianAuth, async (req, res) => {
     try {
-        // Ambil data customers & packages
-        const allCustomers = await billingManager.getCustomers();
+        // OPTIMASI: Gunakan pagination dari database, bukan load semua lalu filter di JavaScript
         const packages = await billingManager.getPackages();
         
         // Get ODPs for dropdown selection (termasuk sub ODP)
@@ -2860,24 +2869,17 @@ router.get('/mobile/customers', technicianAuth, async (req, res) => {
         const search = (req.query.search || '').trim();
         const page = Math.max(parseInt(req.query.page) || 1, 1);
         const limit = 20;
+        const offset = (page - 1) * limit;
 
-        // Filter sederhana di sisi server (name/phone/username)
-        const filtered = !search
-            ? allCustomers
-            : allCustomers.filter(c => {
-                const s = search.toLowerCase();
-                return (
-                    (c.name || '').toLowerCase().includes(s) ||
-                    (c.phone || '').toLowerCase().includes(s) ||
-                    (c.username || '').toLowerCase().includes(s)
-                );
-            });
-
-        const totalCustomers = filtered.length;
-        const totalPages = Math.max(1, Math.ceil(totalCustomers / limit));
-        const currentPage = Math.min(page, totalPages);
-        const offset = (currentPage - 1) * limit;
-        const customers = filtered.slice(offset, offset + limit);
+        // Gunakan pagination dari database (lebih efisien)
+        const filters = {};
+        if (search) filters.search = search;
+        
+        const customersResult = await billingManager.getCustomersPaginated(limit, offset, filters);
+        const customers = customersResult.customers;
+        const totalCustomers = customersResult.totalCount;
+        const totalPages = customersResult.totalPages;
+        const currentPage = customersResult.page;
 
         // Log activity
         await authManager.logActivity(req.technician.id, 'mobile_customers_access', 'Mengakses mobile pelanggan');

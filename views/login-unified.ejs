@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | <%= appSettings.company_header %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.3);
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            color: #1e293b;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 440px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .login-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            width: 100%;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+
+        .login-header {
+            padding: 40px 40px 20px;
+            text-align: center;
+        }
+
+        .logo-box {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 20px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .logo-box img {
+            max-width: 50px;
+            height: auto;
+        }
+
+        .login-body {
+            padding: 0 40px 40px;
+        }
+
+        .role-selector-container {
+            margin-bottom: 25px;
+        }
+
+        .role-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2364748b' class='bi bi-chevron-down' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            background-size: 16px;
+            padding-right: 48px !important;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1.5px solid #e2e8f0;
+            background-color: white;
+        }
+
+        .role-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-label {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #475569;
+        }
+
+        .form-control {
+            border-radius: 12px;
+            padding: 12px 16px;
+            border: 1.5px solid #e2e8f0;
+            background: rgba(255, 255, 255, 0.5);
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            background: white;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        .btn-login {
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 14px;
+            font-weight: 700;
+            width: 100%;
+            margin-top: 10px;
+            transition: all 0.2s;
+        }
+
+        .btn-login:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-otp {
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .registration-footer {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px dashed #e2e8f0;
+            text-align: center;
+            font-size: 14px;
+            color: #64748b;
+        }
+
+        .registration-footer a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .registration-footer a:hover {
+            text-decoration: underline;
+        }
+
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="logo-box">
+                    <img src="/img/<%= appSettings.logo_filename %>" alt="Logo">
+                </div>
+                <h4 class="fw-bold mb-1"><%= appSettings.company_header %></h4>
+                <p class="text-muted small">Silakan pilih peran dan masukkan kredensial Anda</p>
+            </div>
+
+            <div class="login-body">
+                <div class="role-selector-container">
+                    <label class="form-label">Masuk Sebagai</label>
+                    <select id="roleSelect" class="form-control role-select">
+                        <option value="customer" data-auth="otp">Pelanggan</option>
+                        <option value="collector" data-auth="password">Collector</option>
+                        <option value="agent" data-auth="password">Agent</option>
+                        <option value="technician" data-auth="otp">Teknisi</option>
+                        <option value="admin" data-auth="password">Admin</option>
+                    </select>
+                </div>
+
+                <form id="loginForm">
+                    <input type="hidden" name="role" id="selectedRole" value="customer">
+                    
+                    <!-- Phone/Username Field -->
+                    <div class="mb-3">
+                        <label class="form-label" id="labelUsername">Nomor WhatsApp / ID</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-person text-muted"></i></span>
+                            <input type="text" class="form-control border-start-0" id="username" name="username" placeholder="Contoh: 0812..." required>
+                        </div>
+                    </div>
+
+                    <!-- Password Field (Dynamic) -->
+                    <div class="mb-3" id="passwordGroup" style="display: none;">
+                        <label class="form-label">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-lock text-muted"></i></span>
+                            <input type="password" class="form-control border-start-0" id="password" name="password" placeholder="••••••••">
+                        </div>
+                    </div>
+
+                    <!-- OTP Fields (Dynamic) -->
+                    <div id="otpGroup">
+                        <div class="d-grid mb-3">
+                            <button type="button" class="btn btn-outline-primary btn-otp" id="btnSendOTP">
+                                <i class="bi bi-whatsapp me-2"></i>Kirim Kode OTP
+                            </button>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Kode OTP</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-shield-check text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0" id="otp" name="otp" placeholder="6 Digit Kode">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="alertPlaceholder"></div>
+
+                    <button type="submit" class="btn-login" id="btnLogin">
+                        <span class="spinner-border spinner-border-sm me-2" style="display: none;" id="loginSpinner"></span>
+                        Login Sekarang
+                    </button>
+                </form>
+
+                <div id="customerLinks" class="registration-footer">
+                    Belum jadi pelanggan? <a href="#">Daftar Sekarang</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <%= appSettings.footer_info %>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Role Selection Change
+            $('#roleSelect').change(function() {
+                const selectedOption = $(this).find('option:selected');
+                const role = $(this).val();
+                const auth = selectedOption.data('auth');
+                
+                $('#selectedRole').val(role);
+
+                // Toggle fields
+                if (auth === 'password') {
+                    $('#passwordGroup').show().addClass('fade-in');
+                    $('#otpGroup').hide();
+                    $('#labelUsername').text(role === 'admin' ? 'Username Admin' : 'Nomor WhatsApp / Email');
+                } else {
+                    $('#passwordGroup').hide();
+                    $('#otpGroup').show().addClass('fade-in');
+                    $('#labelUsername').text('Nomor WhatsApp');
+                }
+
+                // Customer links visibility
+                if (role === 'customer') {
+                    $('#customerLinks').show();
+                } else {
+                    $('#customerLinks').hide();
+                }
+
+                // Clear alerts
+                $('#alertPlaceholder').empty();
+            });
+
+            // Send OTP Handler
+            $('#btnSendOTP').click(function() {
+                const role = $('#selectedRole').val();
+                const phone = $('#username').val();
+                
+                if (!phone) {
+                    showAlert('danger', 'Silakan masukkan nomor WhatsApp Anda');
+                    return;
+                }
+
+                const $btn = $(this);
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Mengirim...');
+
+                const endpoint = role === 'technician' ? '/api/auth/request-otp' : '/api/auth/request-otp'; // Unified for now
+                
+                $.post(endpoint, { phone: phone }, function(res) {
+                    if (res.success) {
+                        showAlert('success', 'Kode OTP telah dikirim ke WhatsApp Anda');
+                    } else {
+                        showAlert('danger', res.message || 'Gagal mengirim OTP');
+                    }
+                }).fail(function(xhr) {
+                    showAlert('danger', xhr.responseJSON?.message || 'Terjadi kesalahan sistem');
+                }).always(function() {
+                    $btn.prop('disabled', false).html('<i class="bi bi-whatsapp me-2"></i>Kirim Kode OTP');
+                });
+            });
+
+            // Login Form Handler
+            $('#loginForm').on('submit', function(e) {
+                e.preventDefault();
+                
+                const data = {
+                    role: $('#selectedRole').val(),
+                    username: $('#username').val(),
+                    password: $('#password').val(),
+                    phone: $('#username').val(),
+                    otp: $('#otp').val()
+                };
+
+                $('#loginSpinner').show();
+                $('#btnLogin').prop('disabled', true);
+
+                $.ajax({
+                    url: '/login',
+                    method: 'POST',
+                    data: data,
+                    success: function(res) {
+                        if (res.success) {
+                            window.location.href = res.redirect;
+                        } else {
+                            showAlert('danger', res.message || 'Login gagal, periksa kembali kredensial Anda');
+                            $('#loginSpinner').hide();
+                            $('#btnLogin').prop('disabled', false);
+                        }
+                    },
+                    error: function(xhr) {
+                        showAlert('danger', xhr.responseJSON?.message || 'Terjadi kesalahan sistem');
+                        $('#loginSpinner').hide();
+                        $('#btnLogin').prop('disabled', false);
+                    }
+                });
+            });
+
+            function showAlert(type, message) {
+                $('#alertPlaceholder').html(`
+                    <div class="alert alert-${type} alert-dismissible fade show small py-2" role="alert">
+                        ${message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close" style="padding: 0.5rem;"></button>
+                    </div>
+                `);
+            }
+        });
+    </script>
+</body>
+</html>

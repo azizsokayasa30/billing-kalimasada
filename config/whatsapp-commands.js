@@ -4,32 +4,56 @@ const logger = require('./logger');
 class WhatsAppCommands {
     constructor(whatsappCore) {
         this.core = whatsappCore;
-        this.sock = null;
+        this.sock = null; // Keep for backward compatibility
     }
 
-    // Set socket instance
+    // Set socket instance (backward compatibility)
     setSock(sock) {
         this.sock = sock;
     }
 
-    // Get socket instance
+    // Get socket instance (backward compatibility)
     getSock() {
         return this.sock || this.core.getSock();
     }
 
-    // Helper function untuk mengirim pesan
-    async sendMessage(remoteJid, text) {
-        const sock = this.getSock();
-        if (!sock) {
-            console.error('Sock instance not set');
-            return false;
-        }
+    // Get provider instance
+    getProvider() {
+        return this.core.getProvider();
+    }
 
+    // Helper function untuk mengirim pesan (refactored to use provider)
+    async sendMessage(remoteJid, text) {
         try {
-            await sock.sendMessage(remoteJid, { text });
-            return true;
+            const provider = this.getProvider();
+            if (!provider) {
+                logger.error('❌ Provider not available');
+                // Fallback ke sock langsung untuk backward compatibility
+                const sock = this.getSock();
+                if (sock) {
+                    await sock.sendMessage(remoteJid, { text });
+                    return true;
+                }
+                return false;
+            }
+
+            // Extract phone number from JID
+            const phoneNumber = remoteJid.split('@')[0];
+            const result = await provider.sendMessage(phoneNumber, text);
+            
+            return result.success || false;
         } catch (error) {
-            console.error('Error sending message:', error);
+            logger.error('❌ Error sending message:', error);
+            // Fallback ke sock langsung untuk backward compatibility
+            try {
+                const sock = this.getSock();
+                if (sock) {
+                    await sock.sendMessage(remoteJid, { text });
+                    return true;
+                }
+            } catch (fallbackError) {
+                logger.error('❌ Fallback sendMessage also failed:', fallbackError);
+            }
             return false;
         }
     }

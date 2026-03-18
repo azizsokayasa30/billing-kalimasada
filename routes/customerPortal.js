@@ -2,12 +2,48 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const multer = require('multer');
 const { findDeviceByTag } = require('../config/addWAN');
 const { findDeviceByPPPoE } = require('../config/genieacs');
 const { sendMessage } = require('../config/sendMessage');
 const { getSettingsWithCache, getSetting } = require('../config/settingsManager');
 const billingManager = require('../config/billing');
 const router = express.Router();
+
+// Configure multer for customer photo uploads
+const customerPhotoStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, '../public/uploads/customers');
+        // Create directory if it doesn't exist
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        // Generate unique filename: customer-{phone}-{type}-{timestamp}.{ext}
+        const phone = req.body.phone ? req.body.phone.replace(/\D/g, '') : Date.now();
+        const type = file.fieldname === 'ktp_photo' ? 'ktp' : 'house';
+        const ext = path.extname(file.originalname) || '.jpg';
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, `customer-${phone}-${type}-${uniqueSuffix}${ext}`);
+    }
+});
+
+const customerPhotoUpload = multer({ 
+    storage: customerPhotoStorage,
+    limits: {
+        fileSize: 20 * 1024 * 1024 // 20MB limit
+    },
+    fileFilter: function (req, file, cb) {
+        // Accept only image files
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Hanya file gambar yang diizinkan (JPG, PNG, GIF)'));
+        }
+    }
+});
 
 // Phone helpers: normalize and variants (08..., 62..., +62...)
 function normalizePhone(input) {
@@ -30,6 +66,30 @@ function generatePhoneVariants(input) {
   return Array.from(new Set([raw, norm, local, plus, shortLocal].filter(Boolean)));
 }
 
+// Validasi nomor member
+async function isValidMember(phone) {
+  try {
+    const variants = generatePhoneVariants(phone);
+    console.log(`🔍 [VALIDATION] Checking member with phone variants:`, variants);
+    
+    for (const v of variants) {
+      try {
+        const member = await billingManager.getMemberByPhone(v);
+        if (member) {
+          console.log(`✅ [VALIDATION] Member found in billing database: ${v} (input: ${phone})`);
+          return true;
+        }
+      } catch (error) {
+        console.log(`⚠️ [VALIDATION] Error checking member variant ${v}:`, error.message);
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ [VALIDATION] Error in isValidMember:', error);
+    return false;
+  }
+}
+
 // Validasi nomor pelanggan - PRIORITAS KE BILLING SYSTEM
 async function isValidCustomer(phone) {
   try {
@@ -47,6 +107,13 @@ async function isValidCustomer(phone) {
       } catch (error) {
         console.log(`⚠️ [VALIDATION] Error checking variant ${v}:`, error.message);
       }
+    }
+    
+    // Check member as fallback
+    const isMember = await isValidMember(phone);
+    if (isMember) {
+      console.log(`✅ [VALIDATION] Member found in billing database: ${phone}`);
+      return true;
     }
     
     // 2. Jika tidak ada di billing, cek di GenieACS sebagai fallback dengan semua varian
@@ -105,24 +172,37 @@ const parameterPaths = {
   rxPower: [
     'VirtualParameters.RXPower',
     'VirtualParameters.redaman',
-    'InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower'
+    'InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.X_ALU-COM_RxPower',
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.RxPower',
+    'Device.Optical.Interface.1.RxPower'
   ],
   pppoeIP: [
     'VirtualParameters.pppoeIP',
     'VirtualParameters.pppIP',
-    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress'
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ExternalIPAddress',
+    'Device.PPP.Interface.1.IPCPExtensions.RemoteIPAddress'
   ],
   pppUsername: [
     'VirtualParameters.pppoeUsername',
     'VirtualParameters.pppUsername',
-    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username'
+    'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username',
+    'Device.PPP.Interface.1.Username'
   ],
   uptime: [
     'VirtualParameters.getdeviceuptime',
-    'InternetGatewayDevice.DeviceInfo.UpTime'
+    'InternetGatewayDevice.DeviceInfo.UpTime',
+    'Device.DeviceInfo.UpTime'
+  ],
+  softwareVersion: [
+    'InternetGatewayDevice.DeviceInfo.SoftwareVersion',
+    'Device.DeviceInfo.SoftwareVersion',
+    'VirtualParameters.softwareVersion'
   ],
   userConnected: [
-    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations'
+    'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations',
+    'VirtualParameters.activedevices',
+    'Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries'
   ]
 };
 function getParameterWithPaths(device, paths) {
@@ -132,15 +212,22 @@ function getParameterWithPaths(device, paths) {
     for (const part of parts) {
       if (value && typeof value === 'object' && part in value) {
         value = value[part];
-        if (value && value._value !== undefined) value = value._value;
+        // Handle GenieACS VirtualParameters structure yang menggunakan _value
+        if (value && typeof value === 'object' && value._value !== undefined) {
+          value = value._value;
+        }
       } else {
         value = undefined;
         break;
       }
     }
-    if (value !== undefined && value !== null && value !== '') return value;
+    // Return value jika valid (bukan undefined, null, atau empty string)
+    if (value !== undefined && value !== null && value !== '') {
+      // Convert to string jika perlu, tapi pertahankan angka untuk RX Power
+      return value;
+    }
   }
-  return 'N/A';
+  return '-';
 }
 
 // Helper: Ambil info perangkat dan user terhubung - PRIORITAS KE BILLING SYSTEM
@@ -214,17 +301,22 @@ async function getCustomerDeviceData(phone) {
           
           // Jika test tidak berhasil, coba search normal (dengan customer untuk multi-server)
           if (!device) {
-            device = await findDeviceByPPPoE(pppoeToSearch, customer);
-            if (device) {
-              console.log(`✅ [BILLING] Device found by PPPoE username: ${pppoeToSearch}`);
-              console.log(`📱 [BILLING] Device details:`, {
-                id: device._id,
-                serialNumber: device.DeviceID?.SerialNumber,
-                model: device.DeviceID?.ProductClass,
-                lastInform: device._lastInform
-              });
-            } else {
-              console.log(`⚠️ [BILLING] No device found by PPPoE username: ${pppoeToSearch}`);
+            try {
+              device = await findDeviceByPPPoE(pppoeToSearch, customer);
+              if (device) {
+                console.log(`✅ [BILLING] Device found by PPPoE username: ${pppoeToSearch}`);
+                console.log(`📱 [BILLING] Device details:`, {
+                  id: device._id,
+                  serialNumber: device.DeviceID?.SerialNumber,
+                  model: device.DeviceID?.ProductClass,
+                  lastInform: device._lastInform
+                });
+              } else {
+                console.log(`⚠️ [BILLING] No device found by PPPoE username: ${pppoeToSearch}`);
+              }
+            } catch (pppoeError) {
+              console.error(`❌ [BILLING] Error finding device by PPPoE username ${pppoeToSearch}:`, pppoeError.message);
+              // Continue dengan fallback ke tag search
             }
           }
         } catch (error) {
@@ -317,6 +409,19 @@ async function getCustomerDeviceData(phone) {
     
     // 7. Jika ada device di GenieACS, ambil data lengkap
     console.log(`✅ Processing device data for: ${device._id}`);
+    console.log(`📊 Device data structure:`, {
+      hasVirtualParameters: !!device.VirtualParameters,
+      virtualParamsKeys: device.VirtualParameters ? Object.keys(device.VirtualParameters) : [],
+      hasInternetGatewayDevice: !!device.InternetGatewayDevice,
+      lastInform: device._lastInform,
+      // Debug: cek struktur RX Power
+      rxPowerDirect: device?.VirtualParameters?.RXPower,
+      rxPowerIGD: device?.InternetGatewayDevice?.WANDevice?.['1']?.WANPONInterfaceConfig?.RXPower,
+      // Debug: cek struktur PPPoE IP
+      pppoeIPDirect: device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.ExternalIPAddress,
+      // Debug: cek Software Version
+      softwareVersionIGD: device?.InternetGatewayDevice?.DeviceInfo?.SoftwareVersion
+    });
     
     const ssid = device?.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.SSID?._value || 
                  device?.VirtualParameters?.SSID || 
@@ -330,13 +435,20 @@ async function getCustomerDeviceData(phone) {
           ? new Date(device.InternetGatewayDevice.DeviceInfo['1'].LastInform._value).toLocaleString('id-ID')
           : '-';
     
-    const status = lastInform !== '-' ? 'Online' : 'Unknown';
+    // Tentukan status berdasarkan lastInform (Online jika < 5 menit)
+    let status = 'Unknown';
+    if (device?._lastInform) {
+      const lastInformTime = new Date(device._lastInform).getTime();
+      const currentTime = Date.now();
+      const diffMinutes = (currentTime - lastInformTime) / (1000 * 60);
+      status = diffMinutes < 5 ? 'Online' : 'Offline';
+    }
     
     // User terhubung (WiFi)
     let connectedUsers = [];
     try {
       const totalAssociations = getParameterWithPaths(device, parameterPaths.userConnected);
-      if (totalAssociations && totalAssociations !== 'N/A' && totalAssociations > 0) {
+      if (totalAssociations && totalAssociations !== '-' && totalAssociations !== 'N/A' && totalAssociations > 0) {
         connectedUsers = Array.from({ length: parseInt(totalAssociations) }, (_, i) => ({
           id: i + 1,
           name: `User ${i + 1}`,
@@ -349,20 +461,64 @@ async function getCustomerDeviceData(phone) {
       console.error('Error getting connected users:', error);
     }
     
-    // Ambil data lengkap device
+    // Ambil data lengkap device - gunakan akses langsung seperti di adminGenieacs untuk konsistensi
+    // Software Version - cek langsung di struktur device (VirtualParameters menggunakan _value jika ada)
+    const softwareVersion = (device?.InternetGatewayDevice?.DeviceInfo?.SoftwareVersion?._value !== undefined && device?.InternetGatewayDevice?.DeviceInfo?.SoftwareVersion?._value !== null && device?.InternetGatewayDevice?.DeviceInfo?.SoftwareVersion?._value !== '') ? device.InternetGatewayDevice.DeviceInfo.SoftwareVersion._value :
+                           (device?.Device?.DeviceInfo?.SoftwareVersion?._value !== undefined && device?.Device?.DeviceInfo?.SoftwareVersion?._value !== null && device?.Device?.DeviceInfo?.SoftwareVersion?._value !== '') ? device.Device.DeviceInfo.SoftwareVersion._value :
+                           (device?.VirtualParameters?.softwareVersion?._value !== undefined && device?.VirtualParameters?.softwareVersion?._value !== null && device?.VirtualParameters?.softwareVersion?._value !== '') ? device.VirtualParameters.softwareVersion._value :
+                           (device?.VirtualParameters?.softwareVersion !== undefined && device?.VirtualParameters?.softwareVersion !== null && device?.VirtualParameters?.softwareVersion !== '' && typeof device.VirtualParameters.softwareVersion !== 'object') ? device.VirtualParameters.softwareVersion :
+                           getParameterWithPaths(device, parameterPaths.softwareVersion);
+    
+    // RX Power - cek langsung di struktur device dulu (VirtualParameters menggunakan _value)
+    const rxPower = (device?.VirtualParameters?.RXPower?._value !== undefined && device?.VirtualParameters?.RXPower?._value !== null && device?.VirtualParameters?.RXPower?._value !== '') ? device.VirtualParameters.RXPower._value :
+                    (device?.VirtualParameters?.redaman?._value !== undefined && device?.VirtualParameters?.redaman?._value !== null && device?.VirtualParameters?.redaman?._value !== '') ? device.VirtualParameters.redaman._value :
+                    (device?.InternetGatewayDevice?.WANDevice?.['1']?.WANPONInterfaceConfig?.RXPower?._value !== undefined && device?.InternetGatewayDevice?.WANDevice?.['1']?.WANPONInterfaceConfig?.RXPower?._value !== null) ? device.InternetGatewayDevice.WANDevice['1'].WANPONInterfaceConfig.RXPower._value :
+                    (device?.InternetGatewayDevice?.WANDevice?.['1']?.WANPONInterfaceConfig?.RXPower !== undefined && device?.InternetGatewayDevice?.WANDevice?.['1']?.WANPONInterfaceConfig?.RXPower !== null) ? device.InternetGatewayDevice.WANDevice['1'].WANPONInterfaceConfig.RXPower :
+                    getParameterWithPaths(device, parameterPaths.rxPower);
+    
+    // PPPoE IP - akses langsung seperti di adminGenieacs (VirtualParameters menggunakan _value)
+    const pppoeIP = (device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.ExternalIPAddress?._value !== undefined && device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.ExternalIPAddress?._value !== null && device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.ExternalIPAddress?._value !== '') ? device.InternetGatewayDevice.WANDevice['1'].WANConnectionDevice['1'].WANPPPConnection['1'].ExternalIPAddress._value :
+                    (device?.VirtualParameters?.pppoeIP?._value !== undefined && device?.VirtualParameters?.pppoeIP?._value !== null && device?.VirtualParameters?.pppoeIP?._value !== '') ? device.VirtualParameters.pppoeIP._value :
+                    (device?.VirtualParameters?.pppIP?._value !== undefined && device?.VirtualParameters?.pppIP?._value !== null && device?.VirtualParameters?.pppIP?._value !== '') ? device.VirtualParameters.pppIP._value :
+                    (device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.ExternalIPAddress !== undefined && device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.ExternalIPAddress !== null) ? device.InternetGatewayDevice.WANDevice['1'].WANConnectionDevice['1'].WANPPPConnection['1'].ExternalIPAddress :
+                    getParameterWithPaths(device, parameterPaths.pppoeIP);
+    
+    // Total Associations
+    const totalAssociations = device?.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.TotalAssociations?._value ||
+                              device?.InternetGatewayDevice?.LANDevice?.['1']?.WLANConfiguration?.['1']?.TotalAssociations ||
+                              device?.VirtualParameters?.activedevices?._value ||
+                              device?.VirtualParameters?.activedevices ||
+                              getParameterWithPaths(device, parameterPaths.userConnected) || '0';
+    
+    // Uptime - cek langsung di struktur device (VirtualParameters menggunakan _value)
+    const uptime = (device?.InternetGatewayDevice?.DeviceInfo?.UpTime?._value !== undefined && device?.InternetGatewayDevice?.DeviceInfo?.UpTime?._value !== null && device?.InternetGatewayDevice?.DeviceInfo?.UpTime?._value !== '') ? device.InternetGatewayDevice.DeviceInfo.UpTime._value :
+                   (device?.InternetGatewayDevice?.DeviceInfo?.['1']?.UpTime?._value !== undefined && device?.InternetGatewayDevice?.DeviceInfo?.['1']?.UpTime?._value !== null && device?.InternetGatewayDevice?.DeviceInfo?.['1']?.UpTime?._value !== '') ? device.InternetGatewayDevice.DeviceInfo['1'].UpTime._value :
+                   (device?.VirtualParameters?.getdeviceuptime?._value !== undefined && device?.VirtualParameters?.getdeviceuptime?._value !== null && device?.VirtualParameters?.getdeviceuptime?._value !== '') ? device.VirtualParameters.getdeviceuptime._value :
+                   (device?.VirtualParameters?.getdeviceuptime !== undefined && device?.VirtualParameters?.getdeviceuptime !== null && device?.VirtualParameters?.getdeviceuptime !== '' && typeof device.VirtualParameters.getdeviceuptime !== 'object') ? device.VirtualParameters.getdeviceuptime :
+                   getParameterWithPaths(device, parameterPaths.uptime);
+    
+    console.log(`📋 Extracted device parameters:`, {
+      softwareVersion,
+      rxPower,
+      pppoeIP,
+      totalAssociations,
+      uptime,
+      status,
+      hasVirtualParams: !!device.VirtualParameters,
+      virtualKeys: device.VirtualParameters ? Object.keys(device.VirtualParameters) : []
+    });
+    
     const deviceData = {
       phone: phone,
       ssid: ssid,
       status: status,
       lastInform: lastInform,
-      softwareVersion: device?.InternetGatewayDevice?.DeviceInfo?.SoftwareVersion?._value || 
-                     device?.VirtualParameters?.softwareVersion || '-',
-      rxPower: getParameterWithPaths(device, parameterPaths.rxPower),
-      pppoeIP: device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.ExternalIPAddress?._value || 
-               device?.VirtualParameters?.pppoeIP || '-',
+      softwareVersion: softwareVersion,
+      rxPower: rxPower,
+      pppoeIP: pppoeIP,
       pppoeUsername: customer ? (customer.pppoe_username || customer.username) : 
                      getParameterWithPaths(device, parameterPaths.pppUsername),
-      totalAssociations: getParameterWithPaths(device, parameterPaths.userConnected) || '0',
+      totalAssociations: totalAssociations,
       connectedUsers: connectedUsers,
       billingData: billingData,
       deviceFound: true,
@@ -370,7 +526,7 @@ async function getCustomerDeviceData(phone) {
       serialNumber: device.DeviceID?.SerialNumber || device._id,
       model: device.DeviceID?.ProductClass || 
              device.InternetGatewayDevice?.DeviceInfo?.ModelName?._value || '-',
-      uptime: device?.InternetGatewayDevice?.DeviceInfo?.UpTime?._value || '-',
+      uptime: uptime,
       searchMethod: customer ? 'pppoe_username' : 'tag',
       message: 'Device ONU ditemukan dan berfungsi normal'
     };
@@ -1009,163 +1165,307 @@ async function updatePasswordOptimized(phone, newPassword) {
 
 // GET: Login page
 router.get('/login', (req, res) => {
-  const settings = getSettingsWithCache();
-  res.render('login', { settings, error: null });
+  res.redirect('/login');
 });
+
+// GET: API untuk mendapatkan packages (untuk registrasi)
+router.get('/api/packages', async (req, res) => {
+  try {
+    const packages = await billingManager.getPackages();
+    res.json({
+      success: true,
+      packages: packages
+    });
+  } catch (error) {
+    console.error('Error getting packages:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal memuat daftar paket'
+    });
+  }
+});
+
+// POST: Registrasi pelanggan baru
+router.post('/register', customerPhotoUpload.fields([
+  { name: 'ktp_photo', maxCount: 1 },
+  { name: 'house_photo', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { name, phone, email, address, package_id } = req.body;
+    
+    // Validate required fields
+    if (!name || !phone || !package_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nama, No Handphone, dan Paket wajib diisi',
+        details: 'Silakan lengkapi semua field yang bertanda (*)'
+      });
+    }
+    
+    // Validate photos
+    if (!req.files || !req.files.ktp_photo || req.files.ktp_photo.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Foto KTP wajib diupload',
+        details: 'Silakan upload foto KTP Anda'
+      });
+    }
+    
+    if (!req.files || !req.files.house_photo || req.files.house_photo.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Foto Rumah Tampak Depan wajib diupload',
+        details: 'Silakan upload foto rumah tampak depan'
+      });
+    }
+    
+    // Normalize phone
+    const normalizedPhone = normalizePhone(phone);
+    
+    // Check if customer already exists
+    const existingCustomer = await billingManager.getCustomerByPhone(normalizedPhone);
+    if (existingCustomer) {
+      // Delete uploaded files if customer already exists
+      if (req.files.ktp_photo && req.files.ktp_photo[0]) {
+        try { fs.unlinkSync(req.files.ktp_photo[0].path); } catch (e) {}
+      }
+      if (req.files.house_photo && req.files.house_photo[0]) {
+        try { fs.unlinkSync(req.files.house_photo[0].path); } catch (e) {}
+      }
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Nomor telepon sudah terdaftar',
+        details: 'Nomor telepon yang Anda masukkan sudah digunakan. Silakan login atau gunakan nomor yang berbeda.'
+      });
+    }
+    
+    // Auto-generate email if empty
+    let finalEmail = email;
+    if (!finalEmail || finalEmail.trim() === '') {
+      // Generate email from name
+      let cleanEmail = name.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '')
+        .substring(0, 30);
+      if (!cleanEmail) cleanEmail = 'user';
+      finalEmail = cleanEmail + '@gmail.com';
+    }
+    
+    // Get photo paths (relative to public folder)
+    const ktpPhotoPath = req.files.ktp_photo[0].path.replace(path.join(__dirname, '../public'), '').replace(/\\/g, '/');
+    const housePhotoPath = req.files.house_photo[0].path.replace(path.join(__dirname, '../public'), '').replace(/\\/g, '/');
+    
+    // Prepare customer data (system will auto-generate username, customer_id, etc.)
+    // Status 'register' - akan diubah menjadi 'active' setelah admin accept
+    const customerData = {
+      name: name.trim(),
+      phone: normalizedPhone,
+      email: finalEmail.trim(),
+      address: address ? address.trim() : null,
+      package_id: parseInt(package_id),
+      status: 'register', // Status register - menunggu accept dari admin
+      auto_suspension: 1,
+      billing_day: 15,
+      renewal_type: 'renewal',
+      ktp_photo_path: ktpPhotoPath,
+      house_photo_path: housePhotoPath
+    };
+    
+    // Create customer
+    const result = await billingManager.createCustomer(customerData);
+    
+    // Get full customer data with package info
+    const newCustomer = await billingManager.getCustomerById(result.id);
+    
+    // JANGAN kirim welcome message saat registrasi
+    // Welcome message akan dikirim setelah admin accept customer
+    // Hanya kirim notifikasi ke admin/technician bahwa ada pendaftaran baru
+    try {
+      await sendNewCustomerNotificationToAdmin(newCustomer);
+    } catch (notifError) {
+      console.error('Error sending notification to admin/technicians:', notifError);
+      // Don't fail registration if notification fails
+    }
+    
+    res.json({
+      success: true,
+      message: 'Registrasi berhasil! Akun Anda telah dibuat.',
+      customer_id: newCustomer.customer_id,
+      customer: {
+        id: newCustomer.id,
+        name: newCustomer.name,
+        phone: newCustomer.phone,
+        email: newCustomer.email
+      }
+    });
+  } catch (error) {
+    console.error('Error registering customer:', error);
+    
+    // Delete uploaded files on error
+    if (req.files) {
+      if (req.files.ktp_photo && req.files.ktp_photo[0]) {
+        try { fs.unlinkSync(req.files.ktp_photo[0].path); } catch (e) {}
+      }
+      if (req.files.house_photo && req.files.house_photo[0]) {
+        try { fs.unlinkSync(req.files.house_photo[0].path); } catch (e) {}
+      }
+    }
+    
+    // Handle specific errors
+    let errorMessage = 'Gagal mendaftarkan pelanggan';
+    let errorDetails = '';
+    
+    if (error.message.includes('UNIQUE constraint failed')) {
+      if (error.message.includes('phone')) {
+        errorMessage = 'Nomor telepon sudah terdaftar';
+        errorDetails = 'Nomor telepon yang Anda masukkan sudah digunakan. Silakan login atau gunakan nomor yang berbeda.';
+      } else if (error.message.includes('username')) {
+        errorMessage = 'Username sudah digunakan';
+        errorDetails = 'Terjadi konflik username. Silakan coba lagi.';
+      } else {
+        errorMessage = 'Data duplikat terdeteksi';
+        errorDetails = 'Data yang Anda masukkan sudah ada dalam sistem.';
+      }
+    } else if (error.message.includes('FOREIGN KEY constraint failed')) {
+      errorMessage = 'Paket tidak valid';
+      errorDetails = 'Paket yang dipilih tidak ditemukan. Silakan pilih paket yang tersedia.';
+    } else if (error.message.includes('Hanya file gambar')) {
+      errorMessage = 'Format file tidak valid';
+      errorDetails = error.message;
+    } else if (error.message.includes('File too large')) {
+      errorMessage = 'Ukuran file terlalu besar';
+      errorDetails = 'Ukuran file maksimal 20MB. Silakan kompres gambar atau gunakan file yang lebih kecil.';
+    } else {
+      errorDetails = error.message || 'Silakan coba lagi atau hubungi administrator.';
+    }
+    
+    res.status(400).json({
+      success: false,
+      message: errorMessage,
+      details: errorDetails
+    });
+  }
+});
+
+// Helper function to send new customer notification to admin and technicians
+async function sendNewCustomerNotificationToAdmin(customer) {
+  try {
+    const whatsappNotifications = require('../config/whatsapp-notifications');
+    const { getSetting } = require('../config/settingsManager');
+    
+    // Get admin phone
+    const adminPhone = getSetting('admin_phone') || getSetting('contact_phone');
+    
+    // Format registration date
+    const registrationDate = new Date().toLocaleDateString('id-ID', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    // Build notification message
+    const message = `🎉 *PELANGGAN BARU DAFTAR ONLINE*\n\n` +
+      `*No ID Pelanggan:* ${customer.customer_id || 'N/A'}\n` +
+      `*Nama Pelanggan:* ${customer.name}\n` +
+      `*No HP/WA:* ${customer.phone}\n` +
+      `*Paket:* ${customer.package_name || 'N/A'} (${customer.package_speed || 'N/A'})\n` +
+      `*Tanggal Daftar:* ${registrationDate}\n` +
+      `*Alamat:* ${customer.address || 'Tidak diisi'}\n` +
+      `*Email:* ${customer.email || 'Tidak diisi'}\n\n` +
+      `Pelanggan ini telah terdaftar melalui Portal Pelanggan.`;
+    
+    // Send to admin (try multiple admin numbers from settings)
+    let adminNotified = false;
+    let adminIndex = 0;
+    while (adminIndex < 5) { // Try up to 5 admin numbers
+      const adminNum = getSetting(`admins.${adminIndex}`, '');
+      if (!adminNum) break;
+      
+      try {
+        await whatsappNotifications.sendNotification(adminNum, message);
+        console.log(`New customer notification sent to admin ${adminIndex}: ${adminNum}`);
+        adminNotified = true;
+        break; // Success, no need to try more
+      } catch (adminError) {
+        console.error(`Error sending notification to admin ${adminIndex}:`, adminError);
+      }
+      adminIndex++;
+    }
+    
+    // Also try admin_phone and contact_phone if not already notified
+    if (!adminNotified && adminPhone) {
+      try {
+        await whatsappNotifications.sendNotification(adminPhone, message);
+        console.log(`New customer notification sent to admin (fallback): ${adminPhone}`);
+        adminNotified = true;
+      } catch (adminError) {
+        console.error('Error sending notification to admin (fallback):', adminError);
+      }
+    }
+    
+    // Send to active technicians
+    try {
+      const db = require('../config/billing').db;
+      const technicians = await new Promise((resolve, reject) => {
+        db.all('SELECT phone, name FROM technicians WHERE is_active = 1 AND phone IS NOT NULL AND phone != ""', [], (err, rows) => {
+          if (err) {
+            // If table doesn't exist, just return empty array
+            if (err.message.includes('no such table')) {
+              return resolve([]);
+            }
+            reject(err);
+          } else {
+            resolve(rows || []);
+          }
+        });
+      });
+      
+      for (const tech of technicians) {
+        try {
+          await whatsappNotifications.sendNotification(tech.phone, message);
+          console.log(`New customer notification sent to technician: ${tech.name} (${tech.phone})`);
+        } catch (techError) {
+          console.error(`Error sending notification to technician ${tech.name}:`, techError);
+        }
+      }
+    } catch (techError) {
+      console.error('Error getting technicians:', techError);
+      // Don't fail if technicians table doesn't exist
+    }
+  } catch (error) {
+    console.error('Error in sendNewCustomerNotificationToAdmin:', error);
+    throw error;
+  }
+}
 
 // GET: Base customer portal - redirect appropriately
 router.get('/', (req, res) => {
   const phone = req.session && req.session.phone;
   if (phone) return res.redirect('/customer/dashboard');
-  return res.redirect('/customer/login');
+  return res.redirect('/login');
 });
 
-// POST: Proses login - Optimized dengan AJAX support
+// POST: Proses login - Redirected to unified login
 router.post('/login', async (req, res) => {
-  try {
-    const { phone } = req.body;
-    const settings = getSettingsWithCache();
-    
-    // Fast validation: terima 08..., 62..., +62...
-    const valid = !!phone && (/^08[0-9]{8,13}$/.test(phone) || /^\+?62[0-9]{8,13}$/.test(phone));
-    if (!valid) {
-      if (req.xhr || req.headers.accept.indexOf('json') > -1) {
-        return res.status(400).json({ success: false, message: 'Nomor HP harus valid (08..., 62..., atau +62...)' });
-      } else {
-        return res.render('login', { settings, error: 'Nomor HP tidak valid.' });
-      }
-    }
-    
-    const normalizedPhone = normalizePhone(phone);
-
-    // Check customer validity
-    if (!await isValidCustomer(normalizedPhone)) {
-      if (req.xhr || req.headers.accept.indexOf('json') > -1) {
-        return res.status(401).json({ success: false, message: 'Nomor HP tidak terdaftar.' });
-      } else {
-        return res.render('login', { settings, error: 'Nomor HP tidak valid atau belum terdaftar.' });
-      }
-    }
-    
-    // Aktifkan OTP jika setting bernilai true (boolean) atau 'true' (string)
-    if (settings.customerPortalOtp === true || String(settings.customerPortalOtp).toLowerCase() === 'true') {
-      // Generate OTP sesuai jumlah digit di settings
-      const otpLength = parseInt(settings.otp_length || '6', 10);
-      const min = Math.pow(10, otpLength - 1);
-      const max = Math.pow(10, otpLength) - 1;
-      const otp = Math.floor(min + Math.random() * (max - min)).toString();
-      const expiryMin = parseInt(settings.otp_expiry_minutes || '5', 10);
-      otpStore[normalizedPhone] = { otp, expires: Date.now() + (isNaN(expiryMin) ? 5 : expiryMin) * 60 * 1000 };
-      
-      // Kirim OTP ke WhatsApp pelanggan
-      try {
-        const waJid = normalizedPhone + '@s.whatsapp.net';
-        const msg = `🔐 *KODE OTP PORTAL PELANGGAN*\n\n` +
-          `Kode OTP Anda adalah: *${otp}*\n\n` +
-          `⏰ Kode ini berlaku selama ${(isNaN(expiryMin) ? 5 : expiryMin)} menit\n` +
-          `🔒 Jangan bagikan kode ini kepada siapapun`;
-        
-        await sendMessage(waJid, msg);
-        console.log(`OTP berhasil dikirim ke ${normalizedPhone}: ${otp}`);
-      } catch (error) {
-        console.error(`Gagal mengirim OTP ke ${normalizedPhone}:`, error);
-      }
-      
-      if (req.xhr || req.headers.accept.indexOf('json') > -1) {
-        return res.json({ success: true, message: 'OTP berhasil dikirim', redirect: `/customer/otp?phone=${normalizedPhone}` });
-      } else {
-        return res.render('otp', { phone: normalizedPhone, error: null, otp_length: otpLength, settings });
-      }
-    } else {
-      req.session.phone = normalizedPhone;
-      
-      // Set customer_username untuk konsistensi dengan billing
-      try {
-        const billingManager = require('../config/billing');
-        const customer = await billingManager.getCustomerByPhone(normalizedPhone);
-        if (customer) {
-          req.session.customer_username = customer.username;
-          req.session.customer_phone = normalizedPhone;
-          console.log(`✅ [LOGIN] Set session customer_username: ${customer.username} for phone: ${normalizedPhone}`);
-        } else {
-          // Customer belum ada di billing, set temporary username
-          req.session.customer_username = `temp_${normalizedPhone}`;
-          req.session.customer_phone = normalizedPhone;
-          console.log(`⚠️ [LOGIN] No billing customer found for phone: ${normalizedPhone}, set temp username`);
-        }
-      } catch (error) {
-        console.error(`❌ [LOGIN] Error getting customer from billing:`, error);
-        // Fallback ke temporary username
-        req.session.customer_username = `temp_${normalizedPhone}`;
-        req.session.customer_phone = normalizedPhone;
-      }
-      
-      if (req.xhr || req.headers.accept.indexOf('json') > -1) {
-        return res.json({ success: true, message: 'Login berhasil', redirect: '/customer/dashboard' });
-      } else {
-        return res.redirect('/customer/dashboard');
-      }
-    }
-  } catch (error) {
-    console.error('Login error:', error);
-    
-    if (req.xhr || req.headers.accept.indexOf('json') > -1) {
-      return res.status(500).json({ success: false, message: 'Terjadi kesalahan saat login' });
-    } else {
-      return res.render('login', { settings: getSettingsWithCache(), error: 'Terjadi kesalahan saat login.' });
-    }
-  }
+  res.redirect('/login');
 });
 
-// GET: Halaman OTP
+// GET: Halaman OTP - Redirected to unified login
 router.get('/otp', (req, res) => {
-  const { phone } = req.query;
-  const settings = getSettingsWithCache();
-  res.render('otp', { phone: normalizePhone(phone), error: null, otp_length: settings.otp_length || 6, settings });
+  res.redirect('/login');
 });
 
-// POST: Verifikasi OTP
+// POST: Verifikasi OTP - Redirected to unified login
 router.post('/otp', async (req, res) => {
-  const { phone, otp } = req.body;
-  const normalizedPhone = normalizePhone(phone);
-  const data = otpStore[normalizedPhone];
-  const settings = getSettingsWithCache();
-  if (!data || data.otp !== otp || Date.now() > data.expires) {
-    return res.render('otp', { phone: normalizedPhone, error: 'OTP salah atau sudah kadaluarsa.', otp_length: settings.otp_length || 6, settings });
-  }
-  // Sukses login
-  delete otpStore[normalizedPhone];
-  req.session = req.session || {};
-  req.session.phone = normalizedPhone;
-  
-  // Set customer_username untuk konsistensi dengan billing
-  try {
-    const billingManager = require('../config/billing');
-    const customer = await billingManager.getCustomerByPhone(normalizedPhone);
-    if (customer) {
-      req.session.customer_username = customer.username;
-      req.session.customer_phone = normalizedPhone;
-      console.log(`✅ [OTP_LOGIN] Set session customer_username: ${customer.username} for phone: ${normalizedPhone}`);
-    } else {
-      // Customer belum ada di billing, set temporary username
-      req.session.customer_username = `temp_${normalizedPhone}`;
-      req.session.customer_phone = normalizedPhone;
-      console.log(`⚠️ [OTP_LOGIN] No billing customer found for phone: ${normalizedPhone}, set temp username`);
-    }
-  } catch (error) {
-    console.error(`❌ [OTP_LOGIN] Error getting customer from billing:`, error);
-    // Fallback ke temporary username
-    req.session.customer_username = `temp_${normalizedPhone}`;
-    req.session.customer_phone = normalizedPhone;
-  }
-  
-  return res.redirect('/customer/dashboard');
+  res.redirect('/login');
 });
 
-// GET: Halaman billing pelanggan
 router.get('/billing', async (req, res) => {
   const phone = req.session && req.session.phone;
-  if (!phone) return res.redirect('/customer/login');
+  if (!phone) return res.redirect('/login');
   const settings = getSettingsWithCache();
   
   try {
@@ -1425,7 +1725,23 @@ router.post('/restart-device', async (req, res) => {
 
 // GET: Dashboard pelanggan
 router.get('/dashboard', async (req, res) => {
+  console.log(`🔍 [CUSTOMER_DASHBOARD] Route hit! Checking if member...`);
   const phone = req.session && req.session.phone;
+  const isMember = req.session && req.session.is_member;
+  
+  console.log(`🔍 [CUSTOMER_DASHBOARD] Session:`, {
+    phone: phone,
+    is_member: isMember,
+    customer_username: req.session?.customer_username,
+    member_id: req.session?.member_id
+  });
+  
+  // If member, redirect to billing dashboard
+  if (isMember) {
+    console.log(`✅ [CUSTOMER_DASHBOARD] Member detected, redirecting to billing dashboard`);
+    return res.redirect('/customer/billing/dashboard');
+  }
+  
   if (!phone) return res.redirect('/customer/login');
   const settings = getSettingsWithCache();
   
@@ -1476,10 +1792,9 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-// POST: Ganti SSID (Legacy - redirect to homepage with notification)
 router.post('/change-ssid', async (req, res) => {
   const phone = req.session && req.session.phone;
-  if (!phone) return res.redirect('/customer/login');
+  if (!phone) return res.redirect('/login');
   const { ssid } = req.body;
   const ok = await updateSSIDOptimized(phone, ssid);
   if (ok) {
@@ -1542,10 +1857,9 @@ router.post('/api/change-ssid', async (req, res) => {
   }
 });
 
-// POST: Ganti Password (Legacy - untuk backward compatibility)
 router.post('/change-password', async (req, res) => {
   const phone = req.session && req.session.phone;
-  if (!phone) return res.redirect('/customer/login');
+  if (!phone) return res.redirect('/login');
   const { password } = req.body;
   const ok = await updatePassword(phone, password);
   if (ok) {
@@ -1611,13 +1925,13 @@ router.post('/api/change-password', async (req, res) => {
 // Logout route - support both GET and POST methods
 router.get('/logout', (req, res) => {
   req.session.destroy(() => {
-    res.redirect('/customer/login');
+    res.redirect('/login');
   });
 });
 
 router.post('/logout', (req, res) => {
   req.session.destroy(() => {
-    res.redirect('/customer/login');
+    res.redirect('/login');
   });
 });
 
@@ -1627,11 +1941,9 @@ router.use('/trouble', troubleReportRouter);
 
 module.exports = router; 
  
-// GET: Dashboard pelanggan versi mobile (UI modern, card tappable)
-// Catatan: Tidak mengubah route lama. Menggunakan data sama seperti dashboard biasa
 router.get('/dashboard/mobile', async (req, res) => {
   const phone = req.session && req.session.phone;
-  if (!phone) return res.redirect('/customer/login');
+  if (!phone) return res.redirect('/login');
   const settings = getSettingsWithCache();
   try {
     const data = await getCustomerDeviceData(phone);

@@ -1,10 +1,9 @@
-const BillingManager = require('../config/billing');
+const billingManager = require('../config/billing');
 
 async function addMappingIndexes() {
     try {
         console.log('🔍 Menambahkan index untuk optimasi mapping...');
         
-        const billingManager = new BillingManager();
         
         // Menambahkan index untuk kolom latitude dan longitude pada tabel customers
         billingManager.db.run("CREATE INDEX IF NOT EXISTS idx_customers_coordinates ON customers(latitude, longitude)", (err) => {

@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buat Template Voucher - <%= settings.company_header || 'JINOM-HOMENET' %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --premium-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            transition: margin-left 0.3s ease, width 0.3s ease;
+        }
+
+        /* Adjust main container when sidebar is open/closed */
+        @media (min-width: 768px) {
+            /* Sidebar expanded (default) - sidebar width is 16.666667% */
+            .main-container {
+                margin-left: calc(16.666667% + 20px);
+                width: calc(83.333333% - 40px);
+                max-width: calc(83.333333% - 40px);
+            }
+
+            /* Sidebar collapsed - sidebar width is 70px */
+            #adminSidebar.collapsed ~ .main-container,
+            body:has(#adminSidebar.collapsed) .main-container {
+                margin-left: calc(70px + 20px) !important;
+                width: calc(100% - 70px - 40px) !important;
+                max-width: calc(100% - 70px - 40px) !important;
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .main-container {
+                margin-left: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin-top: 60px; /* Space for mobile navbar */
+            }
+        }
+
+        .page-header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .page-header h1 {
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .page-header p {
+            color: #666;
+            margin: 0;
+        }
+
+        .content-wrapper {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 30px;
+        }
+
+        /* Sidebar Controls */
+        .controls-panel {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .controls-panel h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+            display: block;
+            font-size: 0.9rem;
+        }
+
+        .form-control, .form-select {
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 12px 15px;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            outline: none;
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            border-radius: 12px;
+            padding: 12px 25px;
+            font-weight: 600;
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        /* Voucher Preview Area */
+        .preview-area {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            min-height: 600px;
+        }
+
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .preview-header h3 {
+            font-weight: 700;
+            color: #333;
+            margin: 0;
+        }
+
+        .btn-print {
+            background: var(--success-gradient);
+            border: none;
+            border-radius: 12px;
+            padding: 10px 20px;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-print:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(79, 172, 254, 0.3);
+        }
+
+        /* Voucher Grid */
+        .voucher-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 25px;
+        }
+
+        /* Grid khusus untuk template standard (50mm x 80mm) */
+        .voucher-grid:has(.template-standard) {
+            grid-template-columns: repeat(auto-fill, 50mm);
+            gap: 5mm;
+            justify-content: center;
+        }
+
+        /* Modern Voucher Card */
+        .voucher-card-modern {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            border: 2px solid transparent;
+        }
+
+        .voucher-card-modern:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+            border-color: #667eea;
+        }
+
+        .voucher-card-modern::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: var(--primary-gradient);
+        }
+
+        /* Override padding untuk template standard */
+        .template-standard.voucher-card-modern {
+            padding: 4mm 6mm;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .voucher-logo-section {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .voucher-logo-section img {
+            max-height: 50px;
+            max-width: 100%;
+            object-fit: contain;
+        }
+
+        /* Ukuran logo untuk template standard */
+        .template-standard .voucher-logo-section {
+            margin-bottom: 3mm;
+            flex-shrink: 0;
+        }
+
+        .template-standard .voucher-logo-section img {
+            max-height: 20px;
+            width: auto;
+        }
+
+        .voucher-company-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        /* Ukuran company name untuk template standard */
+        .template-standard .voucher-company-name {
+            font-size: 0.65rem;
+            margin-bottom: 2mm;
+            line-height: 1.2;
+            flex-shrink: 0;
+        }
+
+        .voucher-price-modern {
+            font-size: 2rem;
+            font-weight: 800;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        /* Ukuran price untuk template standard */
+        .template-standard .voucher-price-modern {
+            font-size: 1rem;
+            margin-bottom: 3mm;
+            line-height: 1.2;
+            flex-shrink: 0;
+        }
+
+        .voucher-credentials {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        /* Ukuran credentials untuk template standard */
+        .template-standard .voucher-credentials {
+            padding: 3mm 4mm;
+            margin-bottom: 3mm;
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+
+        .credential-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        /* Ukuran credential item untuk template standard */
+        .template-standard .credential-item {
+            padding: 2mm 0;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .template-standard .credential-item:last-child {
+            border-bottom: none;
+        }
+
+        .template-standard .credential-label {
+            font-size: 0.6rem;
+            font-weight: 600;
+            margin-bottom: 2mm;
+        }
+
+        .template-standard .credential-value {
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding-left: 4mm;
+            word-break: break-all;
+        }
+
+        .credential-item:last-child {
+            border-bottom: none;
+        }
+
+        .credential-label {
+            font-weight: 600;
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        .credential-value {
+            font-weight: 700;
+            color: #333;
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+        }
+
+        .voucher-info-section {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        /* Ukuran info section untuk template standard */
+        .template-standard .voucher-info-section {
+            padding: 3mm 4mm;
+            margin-bottom: 3mm;
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+        }
+
+        /* Ukuran info item untuk template standard */
+        .template-standard .info-item {
+            margin-bottom: 2mm;
+            font-size: 0.6rem;
+            line-height: 1.3;
+        }
+
+        .template-standard .info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .template-standard .info-label {
+            font-size: 0.6rem;
+            font-weight: 600;
+        }
+
+        .template-standard .info-value {
+            font-size: 0.6rem;
+            font-weight: 700;
+        }
+
+        .info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .info-value {
+            font-weight: 700;
+            color: #333;
+        }
+
+        .voucher-footer-modern {
+            text-align: center;
+            padding-top: 15px;
+            border-top: 2px dashed #e0e0e0;
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        /* Ukuran footer untuk template standard */
+        .template-standard .voucher-footer-modern {
+            padding-top: 2mm;
+            margin-top: auto;
+            font-size: 0.55rem;
+            line-height: 1.2;
+            flex-shrink: 0;
+        }
+
+        /* Template Styles */
+        .template-standard {
+            border-top: 3px solid #667eea;
+            width: 50mm;
+            height: 80mm;
+            box-sizing: border-box;
+            page-break-inside: avoid;
+            break-inside: avoid;
+            overflow: hidden;
+        }
+
+        .template-premium {
+            border-top: 5px solid #f5576c;
+            background: linear-gradient(135deg, #fff 0%, #fff5f5 100%);
+        }
+
+        .template-premium .voucher-price-modern {
+            background: linear-gradient(135deg, #f5576c 0%, #fee140 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Compact Template (33 PCS/A4) */
+        .template-compact {
+            display: flex;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            overflow: hidden;
+            background: white;
+            height: 25mm; /* A4 (297mm) - padding (4mm) - 10 gap (15mm) = 278mm / 11 baris = ~25mm */
+            position: relative;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .compact-price-strip {
+            width: 15mm;
+            background: #ff6b35 !important;
+            background-image: linear-gradient(180deg, #ff6b35 0%, #f7931e 100%) !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            color: white !important;
+            font-weight: 800;
+            font-size: 0.9rem;
+            padding: 3px;
+            flex-shrink: 0;
+        }
+
+        .compact-content {
+            flex: 1;
+            display: flex;
+            padding: 4px 4px 4px 2px;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .compact-left {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-start;
+            height: 100%;
+            padding: 2px 0;
+        }
+
+        .compact-logo {
+            text-align: center;
+            margin-bottom: 3px;
+            width: 100%;
+        }
+
+        .compact-logo img {
+            max-height: 35px;
+            max-width: 100%;
+            object-fit: contain;
+        }
+
+        .compact-voucher-code {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #333 !important;
+            text-align: center;
+            margin-bottom: 4px;
+            padding-bottom: 3px;
+            border-bottom: 1px solid #ddd;
+            font-family: 'Courier New', monospace;
+            line-height: 1.4;
+            letter-spacing: 0.5px;
+            width: 100%;
+        }
+
+        .compact-info {
+            font-size: 0.6rem;
+            color: #555 !important;
+            line-height: 1.4;
+            text-align: left;
+            width: 100%;
+            margin-top: 2px;
+        }
+
+        .compact-info-item {
+            margin-bottom: 2px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            min-height: 14px;
+        }
+
+        .compact-info-label {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .compact-info-value {
+            font-weight: 700;
+            margin-left: 5px;
+        }
+
+
+        /* Grid untuk compact template */
+        .voucher-grid-compact {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5mm;
+            padding: 2mm;
+            width: 100%;
+        }
+
+        /* Print Styles */
+        @media print {
+            @page {
+                size: A4;
+                margin: 0;
+            }
+
+            body {
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            /* Sembunyikan semua elemen yang mengganggu */
+            .page-header,
+            .controls-panel,
+            .preview-header,
+            .btn-print,
+            #adminSidebar,
+            .sidebar,
+            .mobile-navbar,
+            .sidebar-overlay,
+            .hamburger,
+            nav,
+            .navbar,
+            header {
+                display: none !important;
+            }
+
+            /* Tampilkan preview area dan voucher grid */
+            .preview-area {
+                display: block !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                position: relative !important;
+                top: 0 !important;
+                left: 0 !important;
+            }
+
+            .voucher-grid,
+            .voucher-grid-compact {
+                display: grid !important;
+            }
+
+            .main-container {
+                margin: 0 !important;
+                padding: 0 !important;
+                max-width: 100% !important;
+            }
+
+            .content-wrapper {
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            .voucher-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 15px;
+            }
+
+            /* Print styles untuk template standard (50mm x 80mm) */
+            .voucher-grid:has(.template-standard) {
+                grid-template-columns: repeat(3, 50mm);
+                gap: 5mm;
+                justify-content: center;
+                padding: 5mm;
+            }
+
+            .template-standard {
+                width: 50mm !important;
+                height: 80mm !important;
+                padding: 4mm 6mm !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
+            }
+
+            .voucher-card-modern {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            /* Print untuk compact template */
+            .voucher-grid-compact {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 1.5mm;
+                padding: 3mm;
+                width: 100%;
+            }
+
+            .template-compact {
+                height: 25mm !important;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                border: 1px solid #ddd !important;
+            }
+
+            .voucher-grid-compact {
+                gap: 1.5mm !important;
+                padding: 2mm !important;
+            }
+
+            .compact-price-strip {
+                background: #ff6b35 !important;
+                background-image: linear-gradient(180deg, #ff6b35 0%, #f7931e 100%) !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color: white !important;
+            }
+
+            .compact-company-name,
+            .compact-voucher-code,
+            .compact-info {
+                color: #333 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            /* Pastikan semua elemen voucher terlihat */
+            .main-container {
+                display: block !important;
+                visibility: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            .content-wrapper {
+                display: block !important;
+                visibility: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            .preview-area {
+                display: block !important;
+                visibility: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            .voucher-grid,
+            .voucher-grid-compact {
+                display: grid !important;
+                visibility: visible !important;
+            }
+
+            .template-compact {
+                display: flex !important;
+                visibility: visible !important;
+            }
+
+            .voucher-card-modern {
+                display: block !important;
+                visibility: visible !important;
+            }
+
+            /* Pastikan semua child elements terlihat */
+            .preview-area *,
+            .voucher-grid *,
+            .voucher-grid-compact * {
+                visibility: visible !important;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .content-wrapper {
+                grid-template-columns: 1fr;
+            }
+
+            .controls-panel {
+                position: static;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .voucher-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body data-logo-url="<%= settings && settings.logo_filename ? ('/img/' + settings.logo_filename + '?ts=' + Date.now()) : '/img/logo.png' %>">
+    <%- include('../partials/admin-responsive-sidebar', { page: 'voucher-template', settings: settings }) %>
+    
+    <div class="main-container">
+        <div class="page-header">
+            <h1><i class="bi bi-file-earmark-image me-2"></i>Buat Template Voucher</h1>
+            <p>Desain dan cetak template voucher dengan tampilan modern dan profesional</p>
+        </div>
+
+        <div class="content-wrapper">
+            <!-- Controls Panel -->
+            <div class="controls-panel">
+                <h3><i class="bi bi-sliders me-2"></i>Pengaturan</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">Pilih Voucher</label>
+                    <select class="form-select" id="voucherSelect">
+                        <option value="">-- Pilih Voucher --</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Template Style</label>
+                    <select class="form-select" id="templateStyle">
+                        <option value="standard">Standard (Biru)</option>
+                        <option value="premium">Premium (Emas)</option>
+                        <option value="compact">Compact (33 PCS/A4)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Jumlah Voucher per Halaman</label>
+                    <input type="number" class="form-control" id="voucherPerPage" value="6" min="1" max="12">
+                </div>
+
+                <button class="btn btn-primary" onclick="loadVoucherData()">
+                    <i class="bi bi-arrow-clockwise me-2"></i>Muat Data Voucher
+                </button>
+
+                <button class="btn btn-primary mt-3" onclick="generateTemplate()">
+                    <i class="bi bi-magic me-2"></i>Generate Template
+                </button>
+            </div>
+
+            <!-- Preview Area -->
+            <div class="preview-area">
+                <div class="preview-header">
+                    <h3><i class="bi bi-eye me-2"></i>Preview Template</h3>
+                    <button class="btn btn-print" onclick="window.print()">
+                        <i class="bi bi-printer me-2"></i>Print
+                    </button>
+                </div>
+
+                <div class="voucher-grid" id="voucherGrid">
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-inbox" style="font-size: 3rem; opacity: 0.3;"></i>
+                        <p class="mt-3">Pilih voucher dan klik "Generate Template" untuk melihat preview</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="/js/sweetalert-helper.js"></script>
+    <script>
+        // Ambil logo URL dari body attribute
+        function getLogoUrl() {
+            return document.body.getAttribute('data-logo-url') || '/img/logo.png';
+        }
+        
+        // Load voucher history dari localStorage
+        function loadVoucherData() {
+            const voucherHistory = JSON.parse(localStorage.getItem('voucherPrintHistory') || '[]');
+            const select = document.getElementById('voucherSelect');
+            
+            select.innerHTML = '<option value="">-- Pilih Voucher --</option>';
+            
+            if (voucherHistory.length === 0) {
+                select.innerHTML += '<option value="" disabled>Belum ada data voucher</option>';
+                return;
+            }
+            
+            voucherHistory.forEach((set, index) => {
+                const date = new Date(set.timestamp).toLocaleString('id-ID');
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `${set.count} Voucher - ${set.profile} (${date})`;
+                option.dataset.voucherSet = JSON.stringify(set);
+                select.appendChild(option);
+            });
+        }
+
+        // Generate template
+        function generateTemplate() {
+            const select = document.getElementById('voucherSelect');
+            const selectedIndex = select.value;
+            
+            if (!selectedIndex) {
+                showWarningAlert('Peringatan', 'Pilih voucher terlebih dahulu!');
+                return;
+            }
+            
+            const voucherHistory = JSON.parse(localStorage.getItem('voucherPrintHistory') || '[]');
+            const voucherSet = voucherHistory[selectedIndex];
+            
+            if (!voucherSet || !voucherSet.vouchers || voucherSet.vouchers.length === 0) {
+                showErrorAlert('Error', 'Data voucher tidak ditemukan!');
+                return;
+            }
+            
+            // Simpan voucherSet data ke window untuk akses di createVoucherCard
+            window.voucherSetData = {
+                validityText: voucherSet.validityText,
+                validitySeconds: voucherSet.validitySeconds,
+                uptimeText: voucherSet.uptimeText,
+                uptimeSeconds: voucherSet.uptimeSeconds
+            };
+            
+            const templateStyle = document.getElementById('templateStyle').value;
+            const voucherPerPage = parseInt(document.getElementById('voucherPerPage').value) || 6;
+            
+            renderVouchers(voucherSet.vouchers, templateStyle, voucherSet.namaHotspot || 'JINOM-HOMENET', voucherSet.adminKontak || 'Hubungi Admin', voucherSet.price);
+        }
+
+        // Render vouchers
+        function renderVouchers(vouchers, style, companyName, adminContact, price) {
+            const grid = document.getElementById('voucherGrid');
+            grid.innerHTML = '';
+            
+            // Set grid class berdasarkan style
+            if (style === 'compact') {
+                grid.className = 'voucher-grid-compact';
+            } else {
+                grid.className = 'voucher-grid';
+            }
+            
+            vouchers.forEach((voucher, index) => {
+                const card = createVoucherCard(voucher, style, companyName, adminContact, price);
+                grid.appendChild(card);
+            });
+        }
+
+        // Create voucher card
+        function createVoucherCard(voucher, style, companyName, adminContact, price) {
+            const card = document.createElement('div');
+            const logoUrl = getLogoUrl();
+            
+            // Get validity and uptime text, dengan fallback ke voucherSet data jika ada
+            let validityText = voucher.validityText || formatDurationLabel(voucher.validitySeconds);
+            let uptimeText = voucher.uptimeText || formatDurationLabel(voucher.uptimeSeconds);
+            
+            // Jika masih kosong, coba ambil dari window.voucherSetData (jika ada)
+            if (!validityText && window.voucherSetData) {
+                validityText = window.voucherSetData.validityText || formatDurationLabel(window.voucherSetData.validitySeconds);
+            }
+            if (!uptimeText && window.voucherSetData) {
+                uptimeText = window.voucherSetData.uptimeText || formatDurationLabel(window.voucherSetData.uptimeSeconds);
+            }
+            
+            const formattedPrice = price ? new Intl.NumberFormat('id-ID', { 
+                style: 'currency', 
+                currency: 'IDR', 
+                minimumFractionDigits: 0 
+            }).format(price) : '';
+            
+            // Template Compact (33 PCS/A4)
+            if (style === 'compact') {
+                card.className = 'template-compact';
+                const priceText = formattedPrice ? formattedPrice.replace('Rp', '').replace(/\s/g, '') : '0';
+                
+                card.innerHTML = `
+                    <div class="compact-price-strip">
+                        ${priceText}
+                    </div>
+                    <div class="compact-content">
+                        <div class="compact-left">
+                            ${logoUrl ? `
+                            <div class="compact-logo">
+                                <img src="${logoUrl}" alt="${companyName}">
+                            </div>
+                            ` : ''}
+                            <div class="compact-voucher-code">${voucher.username}</div>
+                            <div class="compact-info">
+                                <div class="compact-info-item">
+                                    <span class="compact-info-label">Masa Aktif:</span>
+                                    <span class="compact-info-value">${validityText || '-'}</span>
+                                </div>
+                                <div class="compact-info-item">
+                                    <span class="compact-info-label">Masa Pakai:</span>
+                                    <span class="compact-info-value">${uptimeText || '-'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Template Standard & Premium
+                card.className = `voucher-card-modern template-${style}`;
+                
+                card.innerHTML = `
+                    ${logoUrl ? `
+                    <div class="voucher-logo-section">
+                        <img src="${logoUrl}" alt="${companyName}">
+                    </div>
+                    ` : ''}
+                    
+                    <div class="voucher-company-name">
+                        <i class="bi bi-wifi me-2"></i>${companyName}
+                    </div>
+                    
+                    ${formattedPrice ? `
+                    <div class="voucher-price-modern">
+                        ${formattedPrice}
+                    </div>
+                    ` : ''}
+                    
+                    <div class="voucher-credentials">
+                        <div class="credential-item">
+                            <div class="credential-label">Username:</div>
+                            <div class="credential-value">${voucher.username}</div>
+                        </div>
+                        <div class="credential-item">
+                            <div class="credential-label">Password:</div>
+                            <div class="credential-value">${voucher.password || 'N/A'}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="voucher-info-section">
+                        ${validityText ? `
+                        <div class="info-item">
+                            <span class="info-label">Masa Aktif:</span>
+                            <span class="info-value">${validityText}</span>
+                        </div>
+                        ` : ''}
+                        ${uptimeText ? `
+                        <div class="info-item">
+                            <span class="info-label">Masa Pakai:</span>
+                            <span class="info-value">${uptimeText}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="voucher-footer-modern">
+                        <i class="bi bi-telephone me-2"></i>${adminContact}
+                    </div>
+                `;
+            }
+            
+            return card;
+        }
+
+        // Format duration label
+        function formatDurationLabel(seconds) {
+            if (!seconds || seconds === 0) return null;
+            
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            
+            if (days > 0) return `${days} Hari`;
+            if (hours > 0) return `${hours} Jam`;
+            if (minutes > 0) return `${minutes} Menit`;
+            return `${seconds} Detik`;
+        }
+
+        // Adjust main container when sidebar toggles
+        function adjustMainContainer() {
+            const sidebar = document.getElementById('adminSidebar');
+            const mainContainer = document.querySelector('.main-container');
+            
+            if (!sidebar || !mainContainer) return;
+            
+            // Wait a bit for sidebar transition to complete
+            setTimeout(function() {
+                if (window.innerWidth >= 768) {
+                    if (sidebar.classList.contains('collapsed')) {
+                        mainContainer.style.marginLeft = 'calc(70px + 20px)';
+                        mainContainer.style.width = 'calc(100% - 70px - 40px)';
+                        mainContainer.style.maxWidth = 'calc(100% - 70px - 40px)';
+                    } else {
+                        mainContainer.style.marginLeft = 'calc(16.666667% + 20px)';
+                        mainContainer.style.width = 'calc(83.333333% - 40px)';
+                        mainContainer.style.maxWidth = 'calc(83.333333% - 40px)';
+                    }
+                } else {
+                    mainContainer.style.marginLeft = '0';
+                    mainContainer.style.width = '100%';
+                    mainContainer.style.maxWidth = '100%';
+                }
+            }, 100);
+        }
+
+        // Load data saat halaman dimuat
+        document.addEventListener('DOMContentLoaded', function() {
+            loadVoucherData();
+            adjustMainContainer();
+            
+            // Watch for sidebar changes
+            const sidebar = document.getElementById('adminSidebar');
+            const hamburgerBtn = document.getElementById('hamburgerBtn');
+            
+            if (hamburgerBtn) {
+                hamburgerBtn.addEventListener('click', function() {
+                    setTimeout(adjustMainContainer, 350); // Wait for transition
+                });
+            }
+            
+            // Watch for window resize
+            window.addEventListener('resize', adjustMainContainer);
+            
+            // Watch for sidebar class changes (MutationObserver)
+            if (sidebar) {
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                            setTimeout(adjustMainContainer, 50);
+                        }
+                    });
+                });
+                observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+            }
+        });
+    </script>
+</body>
+</html>
+

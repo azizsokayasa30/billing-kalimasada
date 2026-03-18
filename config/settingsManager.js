@@ -97,12 +97,49 @@ function clearSettingsCache() {
   cacheExpiry = null;
 }
 
+// Helper function untuk mendapatkan timezone server
+function getServerTimezone() {
+    try {
+        // Coba ambil dari environment variable TZ jika ada
+        if (process.env.TZ) {
+            return process.env.TZ;
+        }
+        
+        // Coba baca dari /etc/timezone (Linux)
+        try {
+            const timezoneFile = fs.readFileSync('/etc/timezone', 'utf8').trim();
+            if (timezoneFile) {
+                return timezoneFile;
+            }
+        } catch (e) {
+            // File tidak ada, lanjut ke metode lain
+        }
+        
+        // Coba baca dari timedatectl output
+        try {
+            const { execSync } = require('child_process');
+            const output = execSync('timedatectl show -p Timezone --value', { encoding: 'utf8' }).trim();
+            if (output) {
+                return output;
+            }
+        } catch (e) {
+            // Command tidak tersedia, gunakan default
+        }
+        
+        // Fallback: gunakan UTC (default server biasanya UTC)
+        return 'UTC';
+    } catch (error) {
+        return 'UTC';
+    }
+}
+
 module.exports = { 
   getSettingsWithCache, 
   getSetting, 
   setSetting, 
   clearSettingsCache,
   deleteSetting,
+  getServerTimezone,
   getPerformanceStats: () => performanceMonitor.getStats(),
   getPerformanceReport: () => performanceMonitor.getPerformanceReport(),
   getQuickStats: () => performanceMonitor.getQuickStats()

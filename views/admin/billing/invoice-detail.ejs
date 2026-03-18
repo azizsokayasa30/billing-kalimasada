@@ -91,12 +91,22 @@
                                                 <td><%= new Date(invoice.created_at).toLocaleDateString('id-ID') %></td>
                                             </tr>
                                             <tr>
+                                                <td class="fw-bold">Tipe:</td>
+                                                <td>
+                                                    <% if (invoice.is_member) { %>
+                                                        <span class="badge bg-info">Member (Hotspot)</span>
+                                                    <% } else { %>
+                                                        <span class="badge bg-primary">Customer (PPPoE)</span>
+                                                    <% } %>
+                                                </td>
+                                            </tr>
+                                            <tr>
                                                 <td class="fw-bold">Paket:</td>
-                                                <td><%= invoice.package_name %></td>
+                                                <td><%= invoice.package_name || '-' %></td>
                                             </tr>
                                             <tr>
                                                 <td class="fw-bold">Kecepatan:</td>
-                                                <td><%= invoice.package_speed %></td>
+                                                <td><%= invoice.package_speed || '-' %></td>
                                             </tr>
                                             <tr>
                                                 <td class="fw-bold">Catatan:</td>

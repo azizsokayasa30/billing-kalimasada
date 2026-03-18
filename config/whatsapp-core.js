@@ -2,10 +2,11 @@ const path = require('path');
 const fs = require('fs');
 const logger = require('./logger');
 const { getSettingsWithCache } = require('./settingsManager');
+const { getProviderManager } = require('./whatsapp-provider-manager');
 
 class WhatsAppCore {
     constructor() {
-        this.sock = null;
+        this.sock = null; // Keep for backward compatibility
         this.genieacsCommandsEnabled = true;
         this.superAdminNumber = this.getSuperAdminNumber();
         this.whatsappStatus = {
@@ -15,6 +16,7 @@ class WhatsAppCore {
             connectedSince: null,
             status: 'disconnected'
         };
+        this.providerManager = null;
     }
 
     // Fungsi untuk mendekripsi nomor admin yang dienkripsi
@@ -140,24 +142,71 @@ class WhatsAppCore {
         }
     }
 
-    // Set socket instance
+    // Set socket instance (backward compatibility)
     setSock(sock) {
         this.sock = sock;
         this.whatsappStatus.connected = true;
         this.whatsappStatus.status = 'connected';
         this.whatsappStatus.connectedSince = new Date();
         
+        // Update provider manager jika menggunakan Baileys
+        if (!this.providerManager) {
+            this.providerManager = getProviderManager();
+        }
+        
+        // Set socket ke BaileysProvider jika ada
+        if (this.providerManager.isInitialized() && this.providerManager.getProviderType() === 'baileys') {
+            this.providerManager.setBaileysSocket(sock);
+        }
+        
         // Update global status
         global.whatsappStatus = this.whatsappStatus;
     }
 
-    // Get socket instance
+    // Get socket instance (backward compatibility)
     getSock() {
+        // Coba dapatkan dari provider manager dulu
+        if (this.providerManager && this.providerManager.isInitialized()) {
+            const provider = this.providerManager.getProvider();
+            if (provider && provider.constructor.name === 'BaileysProvider') {
+                return provider.sock || this.sock;
+            }
+        }
         return this.sock;
+    }
+
+    // Get provider instance
+    getProvider() {
+        if (!this.providerManager) {
+            this.providerManager = getProviderManager();
+        }
+        
+        if (!this.providerManager.isInitialized()) {
+            logger.warn('⚠️ ProviderManager not initialized, initializing now...');
+            // Auto-initialize jika belum
+            this.providerManager.initialize({ baileysSock: this.sock }).catch(err => {
+                logger.error('❌ Failed to auto-initialize provider:', err);
+            });
+        }
+        
+        return this.providerManager.getProvider();
     }
 
     // Get WhatsApp status
     getWhatsAppStatus() {
+        // Update dari provider jika tersedia
+        if (this.providerManager && this.providerManager.isInitialized()) {
+            const provider = this.providerManager.getProvider();
+            if (provider) {
+                const providerStatus = provider.getStatus();
+                // Merge dengan status lokal
+                return {
+                    ...this.whatsappStatus,
+                    ...providerStatus,
+                    provider: this.providerManager.getProviderType()
+                };
+            }
+        }
         return this.whatsappStatus;
     }
 
@@ -197,18 +246,22 @@ class WhatsAppCore {
         return formattedNumber ? `${formattedNumber}@s.whatsapp.net` : null;
     }
 
-    // Send formatted message
+    // Send formatted message (refactored to use provider)
     async sendFormattedMessage(remoteJid, text) {
-        if (!this.sock) {
-            console.error('Sock instance not set');
-            return false;
-        }
-
         try {
-            await this.sock.sendMessage(remoteJid, { text });
-            return true;
+            const provider = this.getProvider();
+            if (!provider) {
+                logger.error('❌ Provider not available');
+                return false;
+            }
+
+            // Extract phone number from JID
+            const phoneNumber = remoteJid.split('@')[0];
+            const result = await provider.sendMessage(phoneNumber, text);
+            
+            return result.success || false;
         } catch (error) {
-            console.error('Error sending formatted message:', error);
+            logger.error('❌ Error sending formatted message:', error);
             return false;
         }
     }

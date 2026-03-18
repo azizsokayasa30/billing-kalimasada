@@ -10,6 +10,7 @@ const logger = require('./logger');
 const WhatsAppCore = require('./whatsapp-core');
 const WhatsAppCommands = require('./whatsapp-commands');
 const WhatsAppMessageHandlers = require('./whatsapp-message-handlers');
+const { getProviderManager } = require('./whatsapp-provider-manager');
 
 // Import modul-modul lain yang diperlukan
 const genieacsCommands = require('./genieacs-commands');
@@ -26,12 +27,22 @@ const whatsappCore = new WhatsAppCore();
 const whatsappCommands = new WhatsAppCommands(whatsappCore);
 const messageHandlers = new WhatsAppMessageHandlers(whatsappCore, whatsappCommands);
 
+// Inisialisasi provider manager
+const providerManager = getProviderManager();
+
 // Variabel global untuk status WhatsApp
 global.whatsappStatus = whatsappCore.getWhatsAppStatus();
 
 // Fungsi untuk koneksi WhatsApp
 async function connectToWhatsApp() {
     try {
+        // Cek apakah Baileys enabled
+        const { isBaileysEnabled } = require('./baileys-config');
+        if (!isBaileysEnabled()) {
+            logger.info('🚫 Baileys disabled, skipping WhatsApp connection');
+            return null;
+        }
+        
         console.log('Memulai koneksi WhatsApp...');
         
         // Buat direktori session
@@ -71,7 +82,15 @@ async function connectToWhatsApp() {
             version // Tambahkan versi yang diambil secara dinamis
         });
         
-        // Set socket ke semua modul
+        // Initialize provider manager dengan Baileys socket
+        if (!providerManager.isInitialized()) {
+            await providerManager.initialize({ baileysSock: sock, forceProvider: 'baileys' });
+        } else {
+            // Update socket jika sudah initialized
+            providerManager.setBaileysSocket(sock);
+        }
+        
+        // Set socket ke semua modul (untuk backward compatibility)
         whatsappCore.setSock(sock);
         whatsappCommands.setSock(sock);
         
@@ -85,6 +104,15 @@ async function connectToWhatsApp() {
             whatsappNotifications.setSock(sock);
         } catch (error) {
             console.error('Error setting sock for WhatsApp notifications:', error);
+        }
+        
+        // Setup provider message listener untuk pesan masuk
+        const provider = providerManager.getProvider();
+        if (provider) {
+            provider.onMessage(async (message) => {
+                // Handle pesan masuk dari provider (untuk Wablas)
+                await messageHandlers.handleIncomingMessage(provider, message);
+            });
         }
         
         // Event handlers

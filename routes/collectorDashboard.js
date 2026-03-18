@@ -548,6 +548,17 @@ router.post('/api/payment', collectorAuth, async (req, res) => {
             console.error('Error sending payment notification:', notificationError);
             // Jangan gagalkan transaksi karena notifikasi
         }
+        
+        // Kirim notifikasi Email jika ada payment yang dicatat
+        try {
+            if (lastPaymentId) {
+                const emailNotifications = require('../config/email-notifications');
+                await emailNotifications.sendPaymentReceivedNotification(lastPaymentId);
+            }
+        } catch (notificationError) {
+            console.error('Error sending email payment notification:', notificationError);
+            // Jangan gagalkan transaksi karena notifikasi
+        }
 
         // Cek restore layanan jika semua tagihan pelanggan sudah lunas
         // Delay sedikit untuk memastikan database connection sudah ditutup

@@ -418,6 +418,19 @@
                       <i class="bi bi-person-circle me-2"></i>Data Pelanggan
                     </h6>
                     <% if (customer) { %>
+                    <% if (customer.is_member) { %>
+                    <div class="mb-2">
+                      <strong>Tipe:</strong> 
+                      <span class="badge bg-info">Member (Hotspot)</span>
+                    </div>
+                    <% } else if (customer.customer_id) { %>
+                    <div class="mb-2">
+                      <strong>ID Pelanggan:</strong> 
+                      <span class="badge bg-primary" style="font-family: monospace; font-size: 0.9rem;">
+                        <%= customer.customer_id %>
+                      </span>
+                    </div>
+                    <% } %>
                     <div class="mb-2">
                       <strong>Nama:</strong> <%= customer.name %>
                     </div>
@@ -429,12 +442,24 @@
                     </div>
                     <div class="mb-2">
                       <strong>Paket:</strong> 
-                      <% if (customer.package_name) { %>
+                      <% if (customer.package_name && customer.package_name !== 'Loading...') { %>
                         <span class="badge bg-info">
-                          <%= customer.package_name %> - Rp <%= parseFloat(customer.package_price).toLocaleString('id-ID') %>
+                          <%= customer.package_name %> - Rp <%= parseFloat(customer.package_price || 0).toLocaleString('id-ID') %>
                         </span>
                       <% } else { %>
                         <span class="text-muted">Belum ada paket</span>
+                      <% } %>
+                    </div>
+                    <div class="mb-2">
+                      <strong>Status Pelanggan:</strong>
+                      <% if (customer.status === 'active') { %>
+                        <span class="badge bg-success">Aktif</span>
+                      <% } else if (customer.status === 'suspended' || customer.status === 'suspend' || customer.status === 'isolir') { %>
+                        <span class="badge bg-danger">Isolir</span>
+                      <% } else if (customer.status === 'register' || customer.status === 'Register') { %>
+                        <span class="badge" style="background-color: #9900CC; color: white;">Register</span>
+                      <% } else { %>
+                        <span class="badge bg-secondary">Nonaktif</span>
                       <% } %>
                     </div>
                     <div class="mb-2">
@@ -973,7 +998,7 @@
   </div>
 
   <footer class="footer">
-    &copy; <%= new Date().getFullYear() %> <%= settings.companyHeader || 'CV Lintas Multimedia' %>
+    &copy; <%= new Date().getFullYear() %> <%= settings.companyHeader || (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Net digital Group') %>
     </footer>
 
   <!-- DataTables JS -->

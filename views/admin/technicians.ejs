@@ -126,6 +126,10 @@
                                 <small>Opsional. Kosongkan jika menggunakan group default dari settings</small>
                             </div>
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Password *</label>
+                            <input type="password" class="form-control" name="password" required>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
@@ -174,6 +178,10 @@
                             <label class="form-label">Catatan/Area</label>
                             <input type="text" class="form-control" id="editTechNotes" placeholder="Area liputan / catatan">
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Password Baru (Biarkan kosong jika tidak ingin mengubah)</label>
+                            <input type="password" class="form-control" id="editTechPassword" placeholder="Masukkan password baru">
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
@@ -185,6 +193,9 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="/js/sweetalert-helper.js"></script>
     <script>
         document.getElementById('addTechnicianForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -200,13 +211,14 @@
                 
                 const result = await response.json();
                 if (result.success) {
-                    alert('Teknisi berhasil ditambahkan');
-                    location.reload();
+                    showSuccessAlert('Berhasil!', 'Teknisi berhasil ditambahkan', function() {
+                        location.reload();
+                    });
                 } else {
-                    alert('Gagal: ' + result.message);
+                    showErrorAlert('Gagal', 'Gagal: ' + result.message);
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
+                showErrorAlert('Error', 'Error: ' + error.message);
             }
         });
 
@@ -236,18 +248,43 @@
 
         async function bulkCall(url, payload, confirmText) {
             if (!getSelectedIds().length) return;
-            if (confirmText && !confirm(confirmText)) return;
-            try {
-                const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                const data = await resp.json();
-                if (data.success) {
-                    alert(data.message || 'Berhasil');
-                    location.reload();
-                } else {
-                    alert('Gagal: ' + (data.message || 'Tidak diketahui'));
+            
+            if (confirmText) {
+                showConfirmAlert(
+                    'Konfirmasi',
+                    confirmText,
+                    'Ya',
+                    'Batal',
+                    async function() {
+                        try {
+                            const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                            const data = await resp.json();
+                            if (data.success) {
+                                showSuccessAlert('Berhasil!', data.message || 'Berhasil', function() {
+                                    location.reload();
+                                });
+                            } else {
+                                showErrorAlert('Gagal', 'Gagal: ' + (data.message || 'Tidak diketahui'));
+                            }
+                        } catch (e) {
+                            showErrorAlert('Error', 'Error: ' + e.message);
+                        }
+                    }
+                );
+            } else {
+                try {
+                    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    const data = await resp.json();
+                    if (data.success) {
+                        showSuccessAlert('Berhasil!', data.message || 'Berhasil', function() {
+                            location.reload();
+                        });
+                    } else {
+                        showErrorAlert('Gagal', 'Gagal: ' + (data.message || 'Tidak diketahui'));
+                    }
+                } catch (e) {
+                    showErrorAlert('Error', 'Error: ' + e.message);
                 }
-            } catch (e) {
-                alert('Error: ' + e.message);
             }
         }
 
@@ -259,7 +296,10 @@
             try {
                 const resp = await fetch(`/admin/technicians/${id}`);
                 const data = await resp.json();
-                if (!data.success) return alert(data.message || 'Gagal mengambil data teknisi');
+                if (!data.success) {
+                    showErrorAlert('Error', data.message || 'Gagal mengambil data teknisi');
+                    return;
+                }
                 const t = data.technician;
                 document.getElementById('editTechId').value = t.id;
                 document.getElementById('editTechName').value = t.name || '';
@@ -267,9 +307,10 @@
                 document.getElementById('editTechRole').value = t.role || 'technician';
                 document.getElementById('editTechWhatsAppGroup').value = t.whatsapp_group_id || '';
                 document.getElementById('editTechNotes').value = t.area_coverage || '';
+                document.getElementById('editTechPassword').value = '';
                 new bootstrap.Modal(document.getElementById('editTechnicianModal')).show();
             } catch (e) {
-                alert('Error: ' + e.message);
+                showErrorAlert('Error', 'Error: ' + e.message);
             }
         }
 
@@ -281,9 +322,13 @@
                 phone: document.getElementById('editTechPhone').value.trim(),
                 role: document.getElementById('editTechRole').value,
                 whatsapp_group_id: document.getElementById('editTechWhatsAppGroup').value.trim(),
-                notes: document.getElementById('editTechNotes').value.trim()
+                notes: document.getElementById('editTechNotes').value.trim(),
+                password: document.getElementById('editTechPassword').value.trim()
             };
-            if (!body.name || !body.phone || !body.role) return alert('Nama, Telepon, dan Role wajib diisi');
+            if (!body.name || !body.phone || !body.role) {
+                showWarningAlert('Peringatan', 'Nama, Telepon, dan Role wajib diisi');
+                return;
+            }
             try {
                 const resp = await fetch(`/admin/technicians/${id}/update`, {
                     method: 'PUT',
@@ -292,48 +337,68 @@
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    alert('Teknisi berhasil diperbarui');
-                    location.reload();
+                    showSuccessAlert('Berhasil!', 'Teknisi berhasil diperbarui', function() {
+                        location.reload();
+                    });
                 } else {
-                    alert('Gagal: ' + (data.message || 'Tidak diketahui'));
+                    showErrorAlert('Gagal', 'Gagal: ' + (data.message || 'Tidak diketahui'));
                 }
             } catch (e) {
-                alert('Error: ' + e.message);
+                showErrorAlert('Error', 'Error: ' + e.message);
             }
         });
 
         async function deleteTechnician(id) {
-            if (!confirm('Yakin ingin menghapus teknisi ini?')) return;
-            try {
-                const resp = await fetch(`/admin/technicians/${id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
-                const data = await resp.json();
-                if (data.success) {
-                    alert('Teknisi berhasil dihapus');
-                    location.reload();
-                } else {
-                    alert('Gagal: ' + (data.message || 'Tidak diketahui'));
+            showConfirmAlert(
+                'Konfirmasi Hapus',
+                'Yakin ingin menghapus teknisi ini?',
+                'Ya, Hapus',
+                'Batal',
+                async function() {
+                    try {
+                        const resp = await fetch(`/admin/technicians/${id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
+                        const data = await resp.json();
+                        if (data.success) {
+                            showSuccessAlert('Berhasil!', 'Teknisi berhasil dihapus', function() {
+                                location.reload();
+                            });
+                        } else {
+                            showErrorAlert('Gagal', 'Gagal: ' + (data.message || 'Tidak diketahui'));
+                        }
+                    } catch (e) {
+                        showErrorAlert('Error', 'Error: ' + e.message);
+                    }
                 }
-            } catch (e) {
-                alert('Error: ' + e.message);
-            }
+            );
         }
 
         function toggleStatus(id, currentStatus) {
-            if (confirm('Yakin ingin mengubah status teknisi ini?')) {
-                fetch(`/admin/technicians/${id}/toggle-status`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ is_active: !currentStatus })
-                })
+            showConfirmAlert(
+                'Konfirmasi',
+                'Yakin ingin mengubah status teknisi ini?',
+                'Ya',
+                'Batal',
+                function() {
+                    fetch(`/admin/technicians/${id}/toggle-status`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ is_active: !currentStatus })
+                    })
                 .then(response => response.json())
                 .then(result => {
                     if (result.success) {
-                        location.reload();
+                        showSuccessAlert('Berhasil!', 'Status teknisi berhasil diubah', function() {
+                            location.reload();
+                        });
                     } else {
-                        alert('Gagal: ' + result.message);
+                        showErrorAlert('Gagal', 'Gagal: ' + result.message);
                     }
+                })
+                .catch(error => {
+                    showErrorAlert('Error', 'Error: ' + error.message);
                 });
             }
+        );
         }
     </script>
 </body>

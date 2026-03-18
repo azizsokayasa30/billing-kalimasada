@@ -120,6 +120,7 @@
                             <table class="table table-centered table-nowrap table-hover mb-0" id="previewTable">
                                 <thead>
                                     <tr>
+                                        <th>Tipe</th>
                                         <th>Username</th>
                                         <th>Nama</th>
                                         <th>Paket</th>
@@ -191,6 +192,12 @@
                 if (data.success) {
                     displayPreview(data.customers);
                     document.getElementById('previewSection').style.display = 'block';
+                    
+                    // Show summary if available
+                    if (data.customer_count !== undefined || data.member_count !== undefined) {
+                        const summary = `Total: ${data.total_count || data.customers.length} invoice (Customer: ${data.customer_count || 0}, Member: ${data.member_count || 0})`;
+                        console.log(summary);
+                    }
                 } else {
                     showAlert('danger', data.message || 'Gagal memuat preview');
                 }
@@ -211,17 +218,21 @@
             tbody.innerHTML = '';
             
             if (customers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Tidak ada pelanggan yang perlu dibuatkan invoice</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Tidak ada pelanggan atau member yang perlu dibuatkan invoice</td></tr>';
                 return;
             }
             
-            customers.forEach(customer => {
+            customers.forEach(item => {
                 const row = document.createElement('tr');
+                const typeBadge = item.type === 'member' 
+                    ? '<span class="badge bg-info">Member</span>' 
+                    : '<span class="badge bg-primary">Customer</span>';
                 row.innerHTML = `
-                    <td>${customer.username}</td>
-                    <td>${customer.name}</td>
-                    <td>${customer.package_name || '-'}</td>
-                    <td>Rp ${Math.round(parseFloat(customer.package_price || 0)).toLocaleString('id-ID')}</td>
+                    <td>${typeBadge}</td>
+                    <td>${item.username}</td>
+                    <td>${item.name}</td>
+                    <td>${item.package_name || '-'}</td>
+                    <td>Rp ${Math.round(parseFloat(item.price_with_tax || item.package_price || 0)).toLocaleString('id-ID')}</td>
                     <td><span class="badge bg-success">Aktif</span></td>
                 `;
                 tbody.appendChild(row);

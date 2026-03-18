@@ -19,8 +19,9 @@ class CollectorPWA {
     async registerServiceWorker() {
         if ('serviceWorker' in navigator) {
             try {
-                const registration = await navigator.serviceWorker.register('/sw-collector.js');
-                console.log('PWA: Service Worker registered successfully', registration);
+                // const registration = await navigator.serviceWorker.register('/sw-collector.js');
+                // console.log('PWA: Service Worker registered successfully', registration);
+                console.log('PWA: Service Worker registration disabled for debugging');
                 
                 // Check for updates
                 registration.addEventListener('updatefound', () => {

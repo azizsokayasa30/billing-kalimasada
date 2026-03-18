@@ -11,6 +11,20 @@
     body { background: #f5f6fa; }
     .main-content { padding: 32px 24px; }
     .card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .radius-status-indicator {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      display: inline-block;
+      background-color: #6c757d;
+      transition: background-color 0.3s;
+      cursor: help;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .radius-status-indicator:hover {
+      transform: scale(1.1);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+    }
   </style>
 </head>
 <body>
@@ -18,7 +32,17 @@
   <div class="row">
     <%- include('partials/admin-responsive-sidebar', { page: 'setting-radius', settings: settings }) %>
     <main class="col-md-10 ms-sm-auto main-content">
-      <h3 class="mb-3"><i class="bi bi-gear-wide-connected"></i> Setting RADIUS</h3>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="mb-0"><i class="bi bi-gear-wide-connected"></i> Setting RADIUS</h3>
+        <!-- Status Indicator -->
+        <div class="d-flex align-items-center">
+          <span class="me-2">Status:</span>
+          <div id="radiusStatusIndicator" class="radius-status-indicator" style="width: 24px; height: 24px; border-radius: 4px; display: inline-block; background-color: #6c757d; transition: background-color 0.3s;">
+            <span class="visually-hidden">Loading status...</span>
+          </div>
+          <span id="radiusStatusText" class="ms-2 small text-muted">Memuat...</span>
+        </div>
+      </div>
       <% if (error) { %>
         <div class="alert alert-danger"><%= error %></div>
       <% } %>
@@ -27,15 +51,16 @@
       <% } %>
 
       <form method="post" action="/admin/radius" class="card p-3 shadow-sm">
+        <!-- Hidden field: Mode selalu RADIUS (100% RADIUS mode) -->
+        <input type="hidden" name="user_auth_mode" value="radius">
+        
+        <div class="alert alert-info mb-3">
+          <i class="bi bi-info-circle me-2"></i>
+          <strong>Mode RADIUS 100%:</strong> Sistem ini menggunakan mode RADIUS sepenuhnya. Semua operasi user management dilakukan melalui database RADIUS.
+        </div>
+        
         <div class="row">
           <div class="col-md-6">
-            <div class="mb-3">
-              <label class="form-label">Mode Autentikasi</label>
-              <select name="user_auth_mode" class="form-select">
-                <option value="radius" <%= (settings.user_auth_mode||'radius')==='radius'?'selected':'' %>>RADIUS</option>
-                <option value="mikrotik" <%= settings.user_auth_mode==='mikrotik'?'selected':'' %>>Mikrotik API</option>
-              </select>
-            </div>
             <div class="mb-3">
               <label class="form-label">RADIUS Host</label>
               <input type="text" name="radius_host" class="form-control" value="<%= settings.radius_host || 'localhost' %>" placeholder="127.0.0.1">
@@ -85,6 +110,125 @@
           </div>
         </div>
       </div>
+
+      <!-- Sync Password Section -->
+      <div class="row mt-3">
+        <div class="col-12">
+          <div class="card p-3 shadow-sm">
+            <h5 class="mb-3"><i class="bi bi-key"></i> Sinkronisasi Password FreeRADIUS</h5>
+            <p class="text-muted mb-3">
+              Setelah restore database, password user MySQL mungkin berbeda dengan password di konfigurasi FreeRADIUS. 
+              Gunakan fitur ini untuk menyelaraskan password FreeRADIUS dengan password yang digunakan aplikasi billing.
+            </p>
+            
+            <div id="passwordSyncStatus" class="alert alert-info mb-3" style="display: none;">
+              <i class="bi bi-info-circle me-2"></i>
+              <span id="passwordSyncStatusText">Memeriksa status sinkronisasi...</span>
+            </div>
+            
+            <div class="d-flex gap-2">
+              <button type="button" id="checkPasswordSyncBtn" class="btn btn-outline-info">
+                <i class="bi bi-search"></i> Cek Status Sinkronisasi
+              </button>
+              <button type="button" id="syncPasswordBtn" class="btn btn-warning">
+                <i class="bi bi-arrow-repeat"></i> Sinkronkan Password
+              </button>
+            </div>
+            
+            <div id="passwordSyncResult" class="mt-3"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Backup & Restore Section -->
+      <div class="row mt-3">
+        <div class="col-12">
+          <div class="card p-3 shadow-sm">
+            <h5 class="mb-3"><i class="bi bi-database"></i> Backup & Restore RADIUS</h5>
+            <p class="text-muted mb-3">
+              Backup mencakup semua data database RADIUS dan konfigurasi FreeRADIUS. 
+              Restore akan memulihkan semua data dan konfigurasi ke server baru tanpa perubahan struktur.
+            </p>
+            
+            <div class="row">
+              <div class="col-md-6">
+                <div class="card border-primary mb-3">
+                  <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-download"></i> Backup</h6>
+                    <p class="card-text text-muted small">
+                      Buat backup lengkap database RADIUS dan konfigurasi FreeRADIUS. 
+                      File backup akan diunduh sebagai file .tar.gz
+                    </p>
+                    <button type="button" id="backupBtn" class="btn btn-primary">
+                      <i class="bi bi-download"></i> Buat Backup
+                    </button>
+                    <div id="backupResult" class="mt-2"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="col-md-6">
+                <div class="card border-success mb-3">
+                  <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-upload"></i> Restore</h6>
+                    <p class="card-text text-muted small">
+                      Restore backup dari server lama. File akan mengembalikan database dan konfigurasi.
+                    </p>
+                    <form id="restoreForm" method="post" action="/admin/radius/restore" enctype="multipart/form-data">
+                      <div class="mb-2">
+                        <input type="file" name="backupFile" id="backupFile" class="form-control form-control-sm" 
+                               accept=".tar.gz,.gz" required>
+                        <small class="text-muted">Pilih file backup (.tar.gz)</small>
+                      </div>
+                      <button type="submit" id="restoreBtn" class="btn btn-success">
+                        <i class="bi bi-upload"></i> Restore Backup
+                      </button>
+                    </form>
+                    <div id="restoreResult" class="mt-2"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- List of Backups -->
+            <div class="mt-3">
+              <h6><i class="bi bi-list-ul"></i> Daftar Backup</h6>
+              <div id="backupsList" class="table-responsive">
+                <table class="table table-sm table-hover">
+                  <thead>
+                    <tr>
+                      <th>Nama File</th>
+                      <th>Ukuran</th>
+                      <th>Tanggal Dibuat</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="backupsTableBody">
+                    <% if (backups && backups.length > 0) { %>
+                      <% backups.forEach(function(backup) { %>
+                        <tr>
+                          <td><small><%= backup.fileName %></small></td>
+                          <td><small><%= (backup.size / 1024 / 1024).toFixed(2) %> MB</small></td>
+                          <td><small><%= new Date(backup.created).toLocaleString('id-ID') %></small></td>
+                          <td>
+                            <a href="/admin/radius/backup?file=<%= backup.fileName %>" class="btn btn-sm btn-outline-primary">
+                              <i class="bi bi-download"></i> Download
+                            </a>
+                          </td>
+                        </tr>
+                      <% }); %>
+                    <% } else { %>
+                      <tr>
+                        <td colspan="4" class="text-center text-muted">Belum ada backup</td>
+                      </tr>
+                    <% } %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -93,6 +237,59 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 $(document).ready(function() {
+  // Function to check and update RADIUS status
+  function checkRadiusStatus() {
+    $.ajax({
+      url: '/admin/radius/status',
+      method: 'GET',
+      timeout: 10000,
+      success: function(response) {
+        const indicator = $('#radiusStatusIndicator');
+        const statusText = $('#radiusStatusText');
+        
+        if (response.success) {
+          // Update indicator color based on status
+          if (response.status === 'running') {
+            // Hijau = Status Radius Running Normal
+            indicator.css('background-color', '#28a745');
+            statusText.text('RADIUS Running Normal').removeClass('text-muted text-warning text-danger').addClass('text-success');
+          } else if (response.status === 'error') {
+            // Kuning = Ada error / masalah pada radius
+            indicator.css('background-color', '#ffc107');
+            statusText.text('Ada Masalah pada RADIUS').removeClass('text-muted text-success text-danger').addClass('text-warning');
+          } else if (response.status === 'not_running') {
+            // Merah = Status Radius Tidak Running
+            indicator.css('background-color', '#dc3545');
+            statusText.text('RADIUS Tidak Running').removeClass('text-muted text-success text-warning').addClass('text-danger');
+          } else {
+            // Unknown status
+            indicator.css('background-color', '#6c757d');
+            statusText.text('Status Tidak Diketahui').removeClass('text-success text-warning text-danger').addClass('text-muted');
+          }
+          
+          // Add tooltip with details
+          indicator.attr('title', response.message);
+        } else {
+          // Error checking status
+          indicator.css('background-color', '#6c757d');
+          statusText.text('Gagal Memuat Status').removeClass('text-success text-warning text-danger').addClass('text-muted');
+        }
+      },
+      error: function() {
+        const indicator = $('#radiusStatusIndicator');
+        const statusText = $('#radiusStatusText');
+        indicator.css('background-color', '#6c757d');
+        statusText.text('Gagal Memuat Status').removeClass('text-success text-warning text-danger').addClass('text-muted');
+      }
+    });
+  }
+  
+  // Check status on page load
+  checkRadiusStatus();
+  
+  // Auto-refresh status every 30 seconds
+  setInterval(checkRadiusStatus, 30000);
+  
   $('#testConnectionBtn').on('click', function() {
     const btn = $(this);
     const resultDiv = $('#testResult');
@@ -156,6 +353,179 @@ $(document).ready(function() {
       }
     });
   });
+
+  // Backup functionality
+  $('#backupBtn').on('click', function() {
+    const btn = $(this);
+    const resultDiv = $('#backupResult');
+    
+    btn.prop('disabled', true);
+    btn.html('<span class="spinner-border spinner-border-sm"></span> Membuat backup...');
+    resultDiv.html('<div class="alert alert-info">Sedang membuat backup, mohon tunggu...</div>');
+    
+    // Create backup
+    window.location.href = '/admin/radius/backup';
+    
+    // Reset button after 3 seconds (file download should start)
+    setTimeout(function() {
+      btn.prop('disabled', false);
+      btn.html('<i class="bi bi-download"></i> Buat Backup');
+      resultDiv.html('<div class="alert alert-success">Backup berhasil dibuat. File akan terunduh otomatis.</div>');
+    }, 3000);
+  });
+
+  // Restore functionality
+  $('#restoreForm').on('submit', function(e) {
+    e.preventDefault();
+    
+    const form = $(this);
+    const btn = $('#restoreBtn');
+    const resultDiv = $('#restoreResult');
+    const fileInput = $('#backupFile')[0];
+    
+    if (!fileInput.files || !fileInput.files[0]) {
+      resultDiv.html('<div class="alert alert-danger">Pilih file backup terlebih dahulu</div>');
+      return;
+    }
+    
+    if (!confirm('PERINGATAN: Restore akan mengganti semua data database dan konfigurasi yang ada. Apakah Anda yakin?')) {
+      return;
+    }
+    
+    btn.prop('disabled', true);
+    btn.html('<span class="spinner-border spinner-border-sm"></span> Restoring...');
+    resultDiv.html('<div class="alert alert-info">Sedang melakukan restore, mohon tunggu...</div>');
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('backupFile', fileInput.files[0]);
+    
+    // Submit form
+    $.ajax({
+      url: '/admin/radius/restore',
+      method: 'POST',
+      data: formData,
+      processData: false,
+      contentType: false,
+      success: function(response) {
+        // Redirect will happen, but show message first
+        resultDiv.html('<div class="alert alert-success">Restore berhasil! Halaman akan dimuat ulang...</div>');
+        setTimeout(function() {
+          window.location.reload();
+        }, 2000);
+      },
+      error: function(xhr) {
+        btn.prop('disabled', false);
+        btn.html('<i class="bi bi-upload"></i> Restore Backup');
+        const errorMsg = xhr.responseJSON?.message || xhr.responseText || 'Unknown error';
+        resultDiv.html('<div class="alert alert-danger">Gagal restore: ' + errorMsg + '</div>');
+      }
+    });
+  });
+
+  // Check password sync status on page load
+  function checkPasswordSyncStatus() {
+    $.ajax({
+      url: '/admin/radius/check-password-sync',
+      method: 'GET',
+      success: function(response) {
+        const statusDiv = $('#passwordSyncStatus');
+        const statusText = $('#passwordSyncStatusText');
+        
+        if (response.success) {
+          statusDiv.show();
+          if (response.synced) {
+            statusDiv.removeClass('alert-warning alert-danger').addClass('alert-success');
+            statusText.html('<i class="bi bi-check-circle me-2"></i>Password sudah sinkron. Tidak perlu tindakan.');
+          } else {
+            statusDiv.removeClass('alert-success alert-danger').addClass('alert-warning');
+            statusText.html('<i class="bi bi-exclamation-triangle me-2"></i>Password tidak sinkron! Klik tombol "Sinkronkan Password" untuk memperbaikinya.');
+          }
+        } else {
+          statusDiv.removeClass('alert-success alert-warning').addClass('alert-danger');
+          statusText.html('<i class="bi bi-x-circle me-2"></i>Gagal memeriksa status: ' + (response.message || 'Unknown error'));
+        }
+      },
+      error: function(xhr) {
+        const statusDiv = $('#passwordSyncStatus');
+        statusDiv.show().removeClass('alert-success alert-warning').addClass('alert-danger');
+        $('#passwordSyncStatusText').html('<i class="bi bi-x-circle me-2"></i>Error: ' + (xhr.responseJSON?.message || 'Unknown error'));
+      }
+    });
+  }
+
+  // Check password sync button
+  $('#checkPasswordSyncBtn').on('click', function() {
+    const btn = $(this);
+    btn.prop('disabled', true);
+    btn.html('<span class="spinner-border spinner-border-sm"></span> Memeriksa...');
+    
+    checkPasswordSyncStatus();
+    
+    setTimeout(function() {
+      btn.prop('disabled', false);
+      btn.html('<i class="bi bi-search"></i> Cek Status Sinkronisasi');
+    }, 1000);
+  });
+
+  // Sync password button
+  $('#syncPasswordBtn').on('click', function() {
+    const btn = $(this);
+    const resultDiv = $('#passwordSyncResult');
+    
+    if (!confirm('Apakah Anda yakin ingin menyinkronkan password FreeRADIUS dengan password database billing? FreeRADIUS akan direstart setelah proses ini.')) {
+      return;
+    }
+    
+    btn.prop('disabled', true);
+    btn.html('<span class="spinner-border spinner-border-sm"></span> Menyinkronkan...');
+    resultDiv.html('<div class="alert alert-info">Sedang menyinkronkan password, mohon tunggu...</div>');
+    
+    $.ajax({
+      url: '/admin/radius/sync-password',
+      method: 'POST',
+      success: function(response) {
+        btn.prop('disabled', false);
+        btn.html('<i class="bi bi-arrow-repeat"></i> Sinkronkan Password');
+        
+        if (response.success) {
+          resultDiv.html(`
+            <div class="alert alert-success">
+              <h6><i class="bi bi-check-circle"></i> Sinkronisasi Berhasil!</h6>
+              <hr>
+              <p>${response.message}</p>
+              <p class="mb-0"><small class="text-muted">FreeRADIUS telah direstart dengan password baru.</small></p>
+            </div>
+          `);
+          // Refresh status
+          setTimeout(checkPasswordSyncStatus, 2000);
+        } else {
+          resultDiv.html(`
+            <div class="alert alert-danger">
+              <h6><i class="bi bi-x-circle"></i> Sinkronisasi Gagal!</h6>
+              <hr>
+              <p>${response.message}</p>
+            </div>
+          `);
+        }
+      },
+      error: function(xhr) {
+        btn.prop('disabled', false);
+        btn.html('<i class="bi bi-arrow-repeat"></i> Sinkronkan Password');
+        
+        const errorMsg = xhr.responseJSON?.message || 'Unknown error';
+        resultDiv.html(`
+          <div class="alert alert-danger">
+            <h6><i class="bi bi-x-circle"></i> Error!</h6>
+            <p>${errorMsg}</p>
+          </div>
+        `);
+      }
+    });
+  });
+
+  // Auto-check on page load
+  checkPasswordSyncStatus();
 });
 </script>
 </body>

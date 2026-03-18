@@ -5,6 +5,9 @@ const logger = require('./logger');
 const { getMikrotikConnection } = require('./mikrotik');
 const { getSetting, setSetting } = require('./settingsManager');
 
+// Path to settings.json
+const settingsPath = path.join(__dirname, '../settings.json');
+
 // Default settings
 const defaultSettings = {
     enabled: true,
@@ -12,7 +15,7 @@ const defaultSettings = {
     logoutNotifications: true,
     includeOfflineList: true,
     maxOfflineListCount: 20,
-    monitorInterval: 60000, // 1 menit
+    monitorInterval: 300000, // 5 menit (dioptimasi untuk mengurangi beban API MikroTik)
     lastActiveUsers: []
 };
 
@@ -35,7 +38,7 @@ function getPPPoENotificationSettings() {
         logoutNotifications: true,
         includeOfflineList: true,
         maxOfflineListCount: 20,
-        monitorInterval: 60000
+        monitorInterval: 300000 // 5 menit (dioptimasi untuk mengurangi beban API MikroTik)
     });
 }
 
@@ -249,12 +252,18 @@ async function checkWhatsAppConnection() {
 
     try {
         // Cek apakah socket masih terhubung
+        // Untuk Baileys, cek user.id untuk memastikan terhubung
+        if (sock.user && sock.user.id) {
+            return true;
+        }
+        
+        // Fallback: cek ws jika tersedia
         if (sock.ws && sock.ws.readyState === sock.ws.OPEN) {
             return true;
-        } else {
-            logger.warn('WhatsApp connection is not open');
-            return false;
         }
+        
+        logger.warn('WhatsApp connection is not open');
+        return false;
     } catch (error) {
         logger.error(`Error checking WhatsApp connection: ${error.message}`);
         return false;
@@ -397,17 +406,25 @@ async function getActivePPPoEConnections() {
         const conn = await getMikrotikConnection();
         if (!conn) {
             logger.error('No Mikrotik connection available for PPPoE monitoring');
-            return { success: false, data: [] };
+            return { success: false, message: 'Koneksi ke Mikrotik gagal. Pastikan Mikrotik sudah dikonfigurasi di Admin → Connection Settings.', data: [] };
         }
         
         const pppConnections = await conn.write('/ppp/active/print');
+        
+        if (!pppConnections || !Array.isArray(pppConnections)) {
+            logger.warn('Invalid response from Mikrotik for PPPoE connections');
+            return { success: true, data: [] };
+        }
+        
+        logger.debug(`Found ${pppConnections.length} active PPPoE connections`);
         return {
             success: true,
             data: pppConnections
         };
     } catch (error) {
         logger.error(`Error getting active PPPoE connections: ${error.message}`);
-        return { success: false, data: [] };
+        logger.error(`Error stack: ${error.stack}`);
+        return { success: false, message: `Gagal mengambil koneksi PPPoE: ${error.message}`, data: [] };
     }
 }
 
@@ -416,12 +433,22 @@ async function getOfflinePPPoEUsers(activeUsers) {
     try {
         const conn = await getMikrotikConnection();
         if (!conn) {
+            logger.warn('No Mikrotik connection available for getting offline users');
             return [];
         }
         
         const pppSecrets = await conn.write('/ppp/secret/print');
-        const offlineUsers = pppSecrets.filter(secret => !activeUsers.includes(secret.name));
-        return offlineUsers.map(user => user.name);
+        
+        if (!pppSecrets || !Array.isArray(pppSecrets)) {
+            logger.warn('Invalid response from Mikrotik for PPPoE secrets');
+            return [];
+        }
+        
+        const offlineUsers = pppSecrets.filter(secret => secret.name && !activeUsers.includes(secret.name));
+        const offlineUserNames = offlineUsers.map(user => user.name).filter(Boolean);
+        
+        logger.debug(`Found ${offlineUserNames.length} offline PPPoE users`);
+        return offlineUserNames;
     } catch (error) {
         logger.error(`Error getting offline PPPoE users: ${error.message}`);
         return [];

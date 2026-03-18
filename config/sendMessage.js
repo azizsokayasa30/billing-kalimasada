@@ -1,9 +1,23 @@
 let sock = null;
 const { getSetting } = require('./settingsManager');
+const { getProviderManager } = require('./whatsapp-provider-manager');
+const logger = require('./logger');
 
-// Fungsi untuk set instance sock
+// Fungsi untuk set instance sock (untuk backward compatibility)
 function setSock(sockInstance) {
     sock = sockInstance;
+    // Update BaileysProvider jika provider manager sudah initialized
+    try {
+        const providerManager = getProviderManager();
+        if (providerManager && providerManager.isInitialized()) {
+            const provider = providerManager.getProvider();
+            if (provider && provider.setSock) {
+                provider.setSock(sockInstance);
+            }
+        }
+    } catch (error) {
+        // Ignore jika provider manager belum tersedia
+    }
 }
 
 // Helper function untuk format nomor telepon
@@ -61,13 +75,64 @@ function formatMessageWithHeaderFooter(message, includeHeader = true, includeFoo
     return formattedMessage;
 }
 
-// Fungsi untuk mengirim pesan
+// Fungsi untuk mengirim pesan (menggunakan provider manager)
 async function sendMessage(number, message) {
-    console.log(`📱 Attempting to send WhatsApp message to: ${number}`);
-    console.log(`📱 Message preview: ${typeof message === 'string' ? message.substring(0, 100) + '...' : 'Object message'}`);
+    logger.info(`📱 Attempting to send WhatsApp message to: ${number}`);
+    logger.debug(`📱 Message preview: ${typeof message === 'string' ? message.substring(0, 100) + '...' : 'Object message'}`);
     
+    try {
+        // Coba gunakan provider manager dulu (untuk Wablas/Baileys)
+        const providerManager = getProviderManager();
+        if (providerManager && providerManager.isInitialized()) {
+            const provider = providerManager.getProvider();
+            if (provider) {
+                // Format nomor telepon
+                let formattedNumber = number;
+                
+                // Jika JID (untuk group), extract nomor
+                if (typeof number === 'string' && number.includes('@')) {
+                    if (number.endsWith('@g.us')) {
+                        // Group JID - untuk Wablas, kita perlu format khusus
+                        formattedNumber = number.split('@')[0];
+                    } else {
+                        formattedNumber = formatPhoneNumber(number.split('@')[0]);
+                    }
+                } else {
+                    formattedNumber = formatPhoneNumber(number);
+                }
+                
+                // Format pesan dengan header dan footer
+                let messageText = message;
+                if (typeof message === 'string') {
+                    messageText = formatMessageWithHeaderFooter(message);
+                } else if (message && message.text) {
+                    messageText = formatMessageWithHeaderFooter(message.text);
+                }
+                
+                logger.info(`📱 Sending message via provider (${providerManager.getProviderType()}) to: ${formattedNumber}`);
+                const result = await provider.sendMessage(formattedNumber, messageText);
+                
+                if (result && result.success) {
+                    logger.info(`✅ WhatsApp message sent successfully to ${number} via ${providerManager.getProviderType()}`);
+                    return { 
+                        success: true, 
+                        message: 'Pesan berhasil dikirim',
+                        messageId: result.messageId || null,
+                        provider: providerManager.getProviderType()
+                    };
+                } else {
+                    logger.warn(`⚠️ Provider failed to send message: ${result?.error || 'Unknown error'}`);
+                    // Fallback ke sock jika ada
+                }
+            }
+        }
+    } catch (providerError) {
+        logger.warn(`⚠️ Provider error, falling back to sock: ${providerError.message}`);
+    }
+    
+    // Fallback ke sock langsung untuk backward compatibility
     if (!sock) {
-        console.error('❌ WhatsApp belum terhubung - sock instance is null');
+        logger.error('❌ WhatsApp belum terhubung - sock instance is null and provider not available');
         return { success: false, error: 'WhatsApp belum terhubung' };
     }
     
@@ -81,7 +146,7 @@ async function sendMessage(number, message) {
             jid = `${formattedNumber}@s.whatsapp.net`;
         }
         
-        console.log(`📱 Formatted JID: ${jid}`);
+        logger.debug(`📱 Formatted JID: ${jid}`);
         
         // Format pesan dengan header dan footer
         let formattedMessage;
@@ -93,24 +158,25 @@ async function sendMessage(number, message) {
             formattedMessage = message;
         }
         
-        console.log(`📱 Sending message to ${jid}...`);
-        await sock.sendMessage(jid, formattedMessage);
-        console.log(`✅ WhatsApp message sent successfully to ${number}`);
-        return { success: true, message: 'Pesan berhasil dikirim' };
+        logger.info(`📱 Sending message to ${jid} via sock (fallback)...`);
+        const result = await sock.sendMessage(jid, formattedMessage);
+        logger.info(`✅ WhatsApp message sent successfully to ${number} via sock`);
+        
+        // Handle response dari Baileys (bisa memiliki key.id)
+        return { 
+            success: true, 
+            message: 'Pesan berhasil dikirim',
+            messageId: result?.key?.id || null
+        };
     } catch (error) {
-        console.error('❌ Error sending message:', error);
+        logger.error('❌ Error sending message:', error);
         return { success: false, error: error.message || 'Gagal mengirim pesan' };
     }
 }
 
-// Fungsi untuk mengirim pesan ke grup nomor
+// Fungsi untuk mengirim pesan ke grup nomor (menggunakan provider manager)
 async function sendGroupMessage(numbers, message) {
     try {
-        if (!sock) {
-            console.error('Sock instance not set');
-            return { success: false, sent: 0, failed: 0, results: [] };
-        }
-
         const results = [];
         let sent = 0;
         let failed = 0;
@@ -119,6 +185,76 @@ async function sendGroupMessage(numbers, message) {
         let numberArray = numbers;
         if (typeof numbers === 'string') {
             numberArray = numbers.split(',').map(n => n.trim());
+        }
+
+        // Coba gunakan provider manager dulu
+        try {
+            const providerManager = getProviderManager();
+            if (providerManager && providerManager.isInitialized()) {
+                const provider = providerManager.getProvider();
+                if (provider) {
+                    logger.info(`📱 Sending group message via provider (${providerManager.getProviderType()})`);
+                    
+                    for (const number of numberArray) {
+                        try {
+                            // Validasi dan format nomor
+                            let cleanNumber = number.replace(/\D/g, '');
+                            
+                            // Jika dimulai dengan 0, ganti dengan 62
+                            if (cleanNumber.startsWith('0')) {
+                                cleanNumber = '62' + cleanNumber.substring(1);
+                            }
+                            
+                            // Jika tidak dimulai dengan 62, tambahkan
+                            if (!cleanNumber.startsWith('62')) {
+                                cleanNumber = '62' + cleanNumber;
+                            }
+                            
+                            // Validasi panjang nomor (minimal 10 digit setelah 62)
+                            if (cleanNumber.length < 12) {
+                                logger.warn(`Skipping invalid WhatsApp number: ${number} (too short)`);
+                                failed++;
+                                results.push({ number, success: false, error: 'Invalid number format' });
+                                continue;
+                            }
+
+                            // Kirim pesan via provider
+                            const result = await provider.sendMessage(cleanNumber, formatMessageWithHeaderFooter(message));
+                            if (result && result.success) {
+                                logger.info(`✅ Message sent to: ${cleanNumber} via provider`);
+                                sent++;
+                                results.push({ number: cleanNumber, success: true });
+                            } else {
+                                logger.warn(`⚠️ Failed to send to ${cleanNumber}: ${result?.error || 'Unknown error'}`);
+                                failed++;
+                                results.push({ number: cleanNumber, success: false, error: result?.error || 'Failed to send' });
+                            }
+                            
+                            // Delay antar pesan untuk rate limiting
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        } catch (error) {
+                            logger.error(`Error sending message to ${number}:`, error.message);
+                            failed++;
+                            results.push({ number, success: false, error: error.message });
+                        }
+                    }
+                    
+                    return {
+                        success: sent > 0,
+                        sent,
+                        failed,
+                        results
+                    };
+                }
+            }
+        } catch (providerError) {
+            logger.warn(`⚠️ Provider error, falling back to sock: ${providerError.message}`);
+        }
+
+        // Fallback ke sock langsung untuk backward compatibility
+        if (!sock) {
+            logger.error('Sock instance not set and provider not available');
+            return { success: false, sent: 0, failed: numberArray.length, results: [] };
         }
 
         for (const number of numberArray) {
@@ -138,29 +274,31 @@ async function sendGroupMessage(numbers, message) {
                 
                 // Validasi panjang nomor (minimal 10 digit setelah 62)
                 if (cleanNumber.length < 12) {
-                    console.warn(`Skipping invalid WhatsApp number: ${number} (too short)`);
+                    logger.warn(`Skipping invalid WhatsApp number: ${number} (too short)`);
                     failed++;
                     results.push({ number, success: false, error: 'Invalid number format' });
                     continue;
                 }
 
-                // Cek apakah nomor terdaftar di WhatsApp
-                const [result] = await sock.onWhatsApp(cleanNumber);
-                if (!result || !result.exists) {
-                    console.warn(`Skipping invalid WhatsApp number: ${cleanNumber} (not registered)`);
-                    failed++;
-                    results.push({ number: cleanNumber, success: false, error: 'Not registered on WhatsApp' });
-                    continue;
+                // Cek apakah nomor terdaftar di WhatsApp (hanya untuk Baileys)
+                if (sock.onWhatsApp) {
+                    const [result] = await sock.onWhatsApp(cleanNumber);
+                    if (!result || !result.exists) {
+                        logger.warn(`Skipping invalid WhatsApp number: ${cleanNumber} (not registered)`);
+                        failed++;
+                        results.push({ number: cleanNumber, success: false, error: 'Not registered on WhatsApp' });
+                        continue;
+                    }
                 }
 
                 // Kirim pesan
                 await sock.sendMessage(`${cleanNumber}@s.whatsapp.net`, { text: formatMessageWithHeaderFooter(message) });
-                console.log(`Message sent to: ${cleanNumber}`);
+                logger.info(`✅ Message sent to: ${cleanNumber} via sock`);
                 sent++;
                 results.push({ number: cleanNumber, success: true });
 
             } catch (error) {
-                console.error(`Error sending message to ${number}:`, error.message);
+                logger.error(`Error sending message to ${number}:`, error.message);
                 failed++;
                 results.push({ number, success: false, error: error.message });
             }
@@ -173,7 +311,7 @@ async function sendGroupMessage(numbers, message) {
             results
         };
     } catch (error) {
-        console.error('Error in sendGroupMessage:', error);
+        logger.error('Error in sendGroupMessage:', error);
         return { success: false, sent: 0, failed: numberArray ? numberArray.length : 0, results: [] };
     }
 }

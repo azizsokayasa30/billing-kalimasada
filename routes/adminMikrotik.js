@@ -29,7 +29,6 @@ const {
     getHotspotServerDetail,
     getMikrotikConnectionForRouter
 } = require('../config/mikrotik');
-const { kickPPPoEUser } = require('../config/mikrotik2');
 const fs = require('fs');
 const path = require('path');
 const { getSettingsWithCache } = require('../config/settingsManager');
@@ -81,17 +80,26 @@ router.get('/mikrotik', adminAuth, async (req, res) => {
         
         const activeNames = new Set(activeConnections.map(a => a.name));
         
-        combined = users.map(user => ({
-          id: user.name, // Use username as ID for RADIUS
-          name: user.name,
-          password: user.password,
-          profile: user.profile || 'default',
-          active: activeNames.has(user.name),
-          nas_name: 'RADIUS',
-          nas_ip: 'RADIUS Server'
-        }));
+        // PENTING: Gunakan Map untuk menghindari duplikasi berdasarkan username
+        // Jika ada duplikasi dari query, hanya ambil yang pertama
+        const userMap = new Map();
+        users.forEach(user => {
+          if (!userMap.has(user.name)) {
+            userMap.set(user.name, {
+              id: user.name, // Use username as ID for RADIUS
+              name: user.name,
+              password: user.password,
+              profile: user.profile || 'default',
+              active: activeNames.has(user.name),
+              nas_name: 'RADIUS',
+              nas_ip: 'RADIUS Server'
+            });
+          }
+        });
         
-        logger.info(`Mapped ${combined.length} users for display`);
+        combined = Array.from(userMap.values());
+        
+        logger.info(`Mapped ${combined.length} unique users for display (from ${users.length} total users)`);
       } catch (radiusError) {
         logger.error(`Error loading users from RADIUS: ${radiusError.message}`, radiusError);
         // Return empty array but log the error
@@ -108,8 +116,10 @@ router.get('/mikrotik', adminAuth, async (req, res) => {
 
       logger.info(`Found ${routers.length} routers configured`);
 
-      // Aggregate across all NAS
-      for (const r of routers) {
+      // OPTIMASI: Query semua router secara parallel (bukan sequential)
+      // Sebelum: 5 router × 2 detik = 10 detik
+      // Sesudah: Max(2 detik) = 2 detik (5x lebih cepat)
+      const routerQueries = routers.map(async (r) => {
         try {
           const conn = await getMikrotikConnectionForRouter(r);
           const [secrets, active] = await Promise.all([
@@ -117,23 +127,29 @@ router.get('/mikrotik', adminAuth, async (req, res) => {
             conn.write('/ppp/active/print')
           ]);
           const activeNames = new Set((active || []).map(a => a.name));
-          (secrets || []).forEach(sec => {
-            combined.push({
-              id: sec['.id'],
-              name: sec.name,
-              password: sec.password,
-              profile: sec.profile,
-              active: activeNames.has(sec.name),
-              nas_name: r.name,
-              nas_ip: r.nas_ip
-            });
-          });
-          logger.info(`Loaded ${secrets?.length || 0} users from router ${r.name}`);
+          const routerUsers = (secrets || []).map(sec => ({
+            id: sec['.id'],
+            name: sec.name,
+            password: sec.password,
+            profile: sec.profile,
+            active: activeNames.has(sec.name),
+            nas_name: r.name,
+            nas_ip: r.nas_ip
+          }));
+          logger.info(`Loaded ${routerUsers.length} users from router ${r.name}`);
+          return routerUsers;
         } catch (e) {
           logger.error(`Error getting users from router ${r.name}:`, e.message);
-          // Skip this NAS on error
+          // Return empty array jika router gagal, bukan throw error
+          return [];
         }
-      }
+      });
+
+      // Tunggu semua query selesai secara parallel
+      const allRouterResults = await Promise.all(routerQueries);
+      
+      // Flatten hasil dari semua router
+      combined = allRouterResults.flat();
     }
     
     logger.info(`Total users to display: ${combined.length}`);
@@ -547,6 +563,13 @@ router.post('/mikrotik/edit-profile', adminAuth, async (req, res) => {
     if (authMode === 'radius') {
       // RADIUS mode: Update in radgroupreply
       logger.info('RADIUS mode: Updating profile in RADIUS database');
+      logger.info(`📝 Data yang diterima untuk edit profile:`, {
+        name: profileData.name,
+        'remote-address': profileData['remote-address'],
+        'local-address': profileData['local-address'],
+        'rate-limit': profileData['rate-limit'],
+        'dns-server': profileData['dns-server']
+      });
       const result = await editPPPoEProfile(profileData);
       if (result.success) {
         return res.json({ success: true, message: result.message });
@@ -626,19 +649,10 @@ router.post('/mikrotik/delete-profile', adminAuth, async (req, res) => {
 });
 
 // GET: List Profile Hotspot
+// Catatan: Selalu ambil langsung dari Mikrotik (RouterOS),
+// tidak lagi menggunakan profile dari RADIUS.
 router.get('/mikrotik/hotspot-profiles', adminAuth, async (req, res) => {
   try {
-    // Check auth mode - RADIUS atau Mikrotik API
-    const { getUserAuthModeAsync } = require('../config/mikrotik');
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
-
     const sqlite3 = require('sqlite3').verbose();
     const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
     const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
@@ -651,46 +665,7 @@ router.get('/mikrotik/hotspot-profiles', adminAuth, async (req, res) => {
     }));
     db.close();
 
-    // Store userAuthMode untuk digunakan di render
-    const userAuthModeForRender = userAuthMode;
-
-    // Untuk mode RADIUS, tidak perlu router - ambil dari RADIUS database
-    if (userAuthMode === 'radius') {
-      try {
-        const { getHotspotProfilesRadius } = require('../config/mikrotik');
-        logger.info('RADIUS mode: Loading hotspot profiles from RADIUS database');
-        const result = await getHotspotProfilesRadius();
-        if (result.success) {
-          const profiles = result.data || [];
-          const settings = getSettingsWithCache();
-          return res.render('adminMikrotikHotspotProfiles', { 
-            profiles: profiles, 
-            routers: [],
-            error: null,
-            settings,
-            versionInfo: getVersionInfo(),
-            versionBadge: getVersionBadge(),
-            userAuthMode: 'radius'
-          });
-        } else {
-          throw new Error(result.message || 'Failed to get hotspot profiles');
-        }
-      } catch (radiusError) {
-        logger.error('Error fetching hotspot profiles from RADIUS:', radiusError);
-        const settings = getSettingsWithCache();
-        return res.render('adminMikrotikHotspotProfiles', { 
-          profiles: [], 
-          routers: [],
-          error: `Gagal mengambil data profile hotspot dari RADIUS: ${radiusError.message}`, 
-          settings,
-          versionInfo: getVersionInfo(),
-          versionBadge: getVersionBadge(),
-          userAuthMode: 'radius'
-        });
-      }
-    }
-
-    // Untuk mode Mikrotik API, perlu router
+    // Untuk halaman Mikrotik API, router wajib ada
     if (!routers || routers.length === 0) {
       console.warn('No routers found in database');
       const settings = getSettingsWithCache();
@@ -762,7 +737,7 @@ router.get('/mikrotik/hotspot-profiles', adminAuth, async (req, res) => {
       error: errorMessages.length > 0 ? `Beberapa router gagal: ${errorMessages.join('; ')}` : null,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge(),
-      userAuthMode: userAuthModeForRender
+      userAuthMode: 'mikrotik'
     });
   } catch (err) {
     console.error('Error in hotspot profiles GET route:', err);
@@ -833,35 +808,9 @@ router.get('/mikrotik/hotspot-profiles/api', adminAuth, async (req, res) => {
     }));
     db.close();
     
-    // Check auth mode untuk API endpoint juga
-    const { getUserAuthModeAsync } = require('../config/mikrotik');
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
-
-    // Untuk mode RADIUS, ambil dari RADIUS database (hotspot profiles)
-    if (userAuthMode === 'radius') {
-      try {
-        const { getHotspotProfilesRadius } = require('../config/mikrotik');
-        logger.info('RADIUS mode: Loading hotspot profiles from RADIUS database (API)');
-        const result = await getHotspotProfilesRadius();
-        if (result.success) {
-          return res.json({ success: true, profiles: result.data || [] });
-        } else {
-          throw new Error(result.message || 'Failed to get hotspot profiles');
-        }
-      } catch (radiusError) {
-        logger.error('Error fetching hotspot profiles from RADIUS (API):', radiusError);
-        return res.json({ success: false, profiles: [], message: `Gagal mengambil data profile hotspot dari RADIUS: ${radiusError.message}` });
-      }
-    }
-
-    // Untuk mode Mikrotik API, perlu router
+    // Untuk endpoint API ini, selalu ambil profile langsung dari Mikrotik (RouterOS),
+    // tidak lagi menggunakan profile dari RADIUS.
+    // Router wajib ada.
     if (!routers || routers.length === 0) {
       return res.json({ success: false, profiles: [], message: 'Tidak ada router/NAS yang dikonfigurasi' });
     }
@@ -941,140 +890,7 @@ router.get('/mikrotik/hotspot-profiles/detail/:id', adminAuth, async (req, res) 
 // POST: Tambah Profile Hotspot
 router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
   try {
-    // Check auth mode
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
-
-    const { router_id, id, name, rateLimit, rateLimitUnit, burstLimit, burstLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, limitUptime, limitUptimeUnit, validity, validityUnit, sharedUsers, comment, localAddress, remoteAddress, dnsServer, parentQueue, addressList } = req.body;
-
-    // Untuk mode RADIUS, simpan ke RADIUS database
-    if (userAuthMode === 'radius') {
-      if (!name) {
-        return res.json({ success: false, message: 'Nama profile harus diisi' });
-      }
-
-      try {
-        const { getRadiusConnection } = require('../config/mikrotik');
-        const conn = await getRadiusConnection();
-        const groupname = name.toLowerCase().replace(/\s+/g, '_');
-
-        // Build rate limit string dengan burst limit (jika ada)
-        const sanitize = (value) => {
-          if (value === undefined || value === null) return null;
-          const trimmed = String(value).trim();
-          return trimmed === '' ? null : trimmed;
-        };
-
-        const normalizedRateValue = sanitize(rateLimit);
-        const normalizedRateUnit = sanitize(rateLimitUnit) ? sanitize(rateLimitUnit).toUpperCase() : null;
-        const normalizedBurstValue = sanitize(burstLimit);
-        const normalizedBurstUnit = sanitize(burstLimitUnit) ? sanitize(burstLimitUnit).toUpperCase() : null;
-        const normalizedSessionValue = sanitize(sessionTimeout);
-        const normalizedSessionUnit = sanitize(sessionTimeoutUnit) ? sanitize(sessionTimeoutUnit).toLowerCase() : null;
-        const normalizedIdleValue = sanitize(idleTimeout);
-        const normalizedIdleUnit = sanitize(idleTimeoutUnit) ? sanitize(idleTimeoutUnit).toLowerCase() : null;
-        const normalizedLimitUptimeValue = sanitize(limitUptime);
-        const normalizedLimitUptimeUnit = sanitize(limitUptimeUnit) ? sanitize(limitUptimeUnit).toLowerCase() : null;
-        const normalizedValidityValue = sanitize(validity);
-        const normalizedValidityUnit = sanitize(validityUnit) ? sanitize(validityUnit).toLowerCase() : null;
-        const normalizedSharedUsers = sanitize(sharedUsers);
-
-        let rateLimitStr = '';
-        if (normalizedRateValue && normalizedRateUnit) {
-          const download = `${normalizedRateValue}${normalizedRateUnit}`;
-          const upload = `${normalizedRateValue}${normalizedRateUnit}`;
-          rateLimitStr = `${download}/${upload}`;
-          
-          // Tambahkan burst limit jika ada
-          if (normalizedBurstValue && normalizedBurstUnit) {
-            const burstDownload = `${normalizedBurstValue}${normalizedBurstUnit}`;
-            const burstUpload = `${normalizedBurstValue}${normalizedBurstUnit}`;
-            rateLimitStr += `:${burstDownload}/${burstUpload}`;
-          }
-        }
-
-        // Insert rate limit ke radgroupreply
-        if (rateLimitStr) {
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'MikroTik-Rate-Limit', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, rateLimitStr, rateLimitStr]
-          );
-        }
-
-        // Session timeout - konversi ke detik untuk RADIUS
-        if (normalizedSessionValue && normalizedSessionUnit) {
-          const timeoutValue = convertToSeconds(normalizedSessionValue, normalizedSessionUnit);
-          if (timeoutValue > 0) {
-            await conn.execute(
-              "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-              [groupname, timeoutValue.toString(), timeoutValue.toString()]
-            );
-          }
-        } else {
-          await conn.execute(
-            "DELETE FROM radgroupreply WHERE groupname = ? AND attribute = 'Session-Timeout'",
-            [groupname]
-          );
-        }
-
-        // Idle timeout - konversi ke detik untuk RADIUS
-        if (normalizedIdleValue && normalizedIdleUnit) {
-          const timeoutValue = convertToSeconds(normalizedIdleValue, normalizedIdleUnit);
-          if (timeoutValue > 0) {
-            await conn.execute(
-              "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Idle-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-              [groupname, timeoutValue.toString(), timeoutValue.toString()]
-            );
-          }
-        }
-
-        // Shared users (Simultaneous-Use & Mikrotik-Shared-Users)
-        const sharedUsersValid = normalizedSharedUsers && !isNaN(parseInt(normalizedSharedUsers)) && parseInt(normalizedSharedUsers) > 0;
-        if (sharedUsersValid) {
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Simultaneous-Use', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, normalizedSharedUsers, normalizedSharedUsers]
-          );
-        }
-
-        await saveHotspotProfileMetadata(conn, {
-          groupname,
-          displayName: sanitize(name) || groupname,
-          comment: sanitize(comment),
-          rateLimitValue: normalizedRateValue,
-          rateLimitUnit: normalizedRateUnit,
-          burstLimitValue: normalizedBurstValue,
-          burstLimitUnit: normalizedBurstUnit,
-          sessionTimeoutValue: normalizedSessionValue || null,
-          sessionTimeoutUnit: normalizedSessionUnit || null,
-          idleTimeoutValue: normalizedIdleValue || null,
-          idleTimeoutUnit: normalizedIdleUnit || null,
-          limitUptimeValue: normalizedLimitUptimeValue || null,
-          limitUptimeUnit: normalizedLimitUptimeUnit || null,
-          validityValue: normalizedValidityValue || null,
-          validityUnit: normalizedValidityUnit || null,
-          sharedUsers: sharedUsersValid ? normalizedSharedUsers : null,
-          localAddress: sanitize(localAddress),
-          remoteAddress: sanitize(remoteAddress),
-          dnsServer: sanitize(dnsServer),
-          parentQueue: sanitize(parentQueue),
-          addressList: sanitize(addressList)
-        });
-
-        await conn.end();
-        return res.json({ success: true, message: 'Profile hotspot berhasil ditambahkan ke RADIUS' });
-      } catch (radiusError) {
-        console.error('Error adding hotspot profile to RADIUS:', radiusError);
-        return res.json({ success: false, message: `Gagal menambah profile ke RADIUS: ${radiusError.message}` });
-      }
-    }
-
+    const { router_id } = req.body;
     // Untuk mode Mikrotik API, perlu router
     if (!router_id) {
       return res.json({ success: false, message: 'Pilih NAS (router) terlebih dahulu' });
@@ -1117,155 +933,10 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
 // POST: Edit Profile Hotspot
 router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
   try {
-    // Check auth mode
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
+    const { id, router_id } = req.body;
 
-    const { router_id, id, name, rateLimit, rateLimitUnit, burstLimit, burstLimitUnit, sessionTimeout, sessionTimeoutUnit, idleTimeout, idleTimeoutUnit, limitUptime, limitUptimeUnit, validity, validityUnit, sharedUsers, comment, localAddress, remoteAddress, dnsServer, parentQueue, addressList } = req.body;
-
-    // Untuk mode RADIUS, update di RADIUS database
-    if (userAuthMode === 'radius') {
-      if (!id && !name) {
-        return res.json({ success: false, message: 'ID atau nama profile tidak ditemukan' });
-      }
-
-      try {
-        const { getRadiusConnection } = require('../config/mikrotik');
-        const conn = await getRadiusConnection();
-        // Gunakan id (yang adalah name) atau name sebagai groupname
-        const groupname = (id || name).toLowerCase().replace(/\s+/g, '_');
-
-        // Build rate limit string dengan burst limit (jika ada)
-        const sanitize = (value) => {
-          if (value === undefined || value === null) return null;
-          const trimmed = String(value).trim();
-          return trimmed === '' ? null : trimmed;
-        };
-
-        const normalizedRateValue = sanitize(rateLimit);
-        const normalizedRateUnit = sanitize(rateLimitUnit) ? sanitize(rateLimitUnit).toUpperCase() : null;
-        const normalizedBurstValue = sanitize(burstLimit);
-        const normalizedBurstUnit = sanitize(burstLimitUnit) ? sanitize(burstLimitUnit).toUpperCase() : null;
-        const normalizedSessionValue = sanitize(sessionTimeout);
-        const normalizedSessionUnit = sanitize(sessionTimeoutUnit) ? sanitize(sessionTimeoutUnit).toLowerCase() : null;
-        const normalizedIdleValue = sanitize(idleTimeout);
-        const normalizedIdleUnit = sanitize(idleTimeoutUnit) ? sanitize(idleTimeoutUnit).toLowerCase() : null;
-        const normalizedLimitUptimeValue = sanitize(limitUptime);
-        const normalizedLimitUptimeUnit = sanitize(limitUptimeUnit) ? sanitize(limitUptimeUnit).toLowerCase() : null;
-        const normalizedValidityValue = sanitize(validity);
-        const normalizedValidityUnit = sanitize(validityUnit) ? sanitize(validityUnit).toLowerCase() : null;
-        const normalizedSharedUsers = sanitize(sharedUsers);
-
-        let rateLimitStr = '';
-        if (normalizedRateValue && normalizedRateUnit) {
-          const download = `${normalizedRateValue}${normalizedRateUnit}`;
-          const upload = `${normalizedRateValue}${normalizedRateUnit}`;
-          rateLimitStr = `${download}/${upload}`;
-          
-          // Tambahkan burst limit jika ada
-          if (normalizedBurstValue && normalizedBurstUnit) {
-            const burstDownload = `${normalizedBurstValue}${normalizedBurstUnit}`;
-            const burstUpload = `${normalizedBurstValue}${normalizedBurstUnit}`;
-            rateLimitStr += `:${burstDownload}/${burstUpload}`;
-          }
-        }
-        if (rateLimitStr) {
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'MikroTik-Rate-Limit', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, rateLimitStr, rateLimitStr]
-          );
-        } else {
-          // Hapus rate limit jika tidak diisi
-          await conn.execute(
-            "DELETE FROM radgroupreply WHERE groupname = ? AND attribute = 'MikroTik-Rate-Limit'",
-            [groupname]
-          );
-        }
-
-        // Session timeout - konversi ke detik untuk RADIUS
-        if (normalizedSessionValue && normalizedSessionUnit) {
-          const timeoutValue = convertToSeconds(normalizedSessionValue, normalizedSessionUnit);
-          if (timeoutValue > 0) {
-            await conn.execute(
-              "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-              [groupname, timeoutValue.toString(), timeoutValue.toString()]
-            );
-          }
-        } else {
-          await conn.execute(
-            "DELETE FROM radgroupreply WHERE groupname = ? AND attribute = 'Session-Timeout'",
-            [groupname]
-          );
-        }
-
-        // Idle timeout - konversi ke detik untuk RADIUS
-        if (normalizedIdleValue && normalizedIdleUnit) {
-          const timeoutValue = convertToSeconds(normalizedIdleValue, normalizedIdleUnit);
-          if (timeoutValue > 0) {
-            await conn.execute(
-              "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Idle-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-              [groupname, timeoutValue.toString(), timeoutValue.toString()]
-            );
-          }
-        } else {
-          await conn.execute(
-            "DELETE FROM radgroupreply WHERE groupname = ? AND attribute = 'Idle-Timeout'",
-            [groupname]
-          );
-        }
-
-        const sharedUsersValid = normalizedSharedUsers && !isNaN(parseInt(normalizedSharedUsers)) && parseInt(normalizedSharedUsers) > 0;
-        if (sharedUsersValid) {
-          await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Simultaneous-Use', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-            [groupname, normalizedSharedUsers, normalizedSharedUsers]
-          );
-        } else {
-          await conn.execute(
-            "DELETE FROM radgroupreply WHERE groupname = ? AND attribute IN ('Simultaneous-Use', 'Mikrotik-Shared-Users', 'MikroTik-Shared-Users')",
-            [groupname]
-          );
-        }
-
-        await saveHotspotProfileMetadata(conn, {
-          groupname,
-          displayName: sanitize(name) || groupname,
-          comment: sanitize(comment),
-          rateLimitValue: normalizedRateValue,
-          rateLimitUnit: normalizedRateUnit,
-          burstLimitValue: normalizedBurstValue,
-          burstLimitUnit: normalizedBurstUnit,
-          sessionTimeoutValue: normalizedSessionValue || null,
-          sessionTimeoutUnit: normalizedSessionUnit || null,
-          idleTimeoutValue: normalizedIdleValue || null,
-          idleTimeoutUnit: normalizedIdleUnit || null,
-          limitUptimeValue: normalizedLimitUptimeValue || null,
-          limitUptimeUnit: normalizedLimitUptimeUnit || null,
-          validityValue: normalizedValidityValue || null,
-          validityUnit: normalizedValidityUnit || null,
-          sharedUsers: sharedUsersValid ? normalizedSharedUsers : null,
-          localAddress: sanitize(localAddress),
-          remoteAddress: sanitize(remoteAddress),
-          dnsServer: sanitize(dnsServer),
-          parentQueue: sanitize(parentQueue),
-          addressList: sanitize(addressList)
-        });
-
-        await conn.end();
-        return res.json({ success: true, message: 'Profile hotspot berhasil diupdate di RADIUS' });
-      } catch (radiusError) {
-        console.error('Error updating hotspot profile in RADIUS:', radiusError);
-        return res.json({ success: false, message: `Gagal update profile di RADIUS: ${radiusError.message}` });
-      }
-    }
-
-    // Untuk mode Mikrotik API, perlu router
+    // Untuk halaman Mikrotik, semua operasi edit dilakukan langsung ke router (RouterOS),
+    // tidak lagi ke database RADIUS.
     if (!router_id) {
       return res.json({ success: false, message: 'Pilih NAS (router) terlebih dahulu' });
     }
@@ -1287,7 +958,7 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
     const cleanProfileData = {};
     const unsupportedParams = ['local-address', 'remote-address', 'dns-server', 'parent-queue', 'address-list', 'limitUptime', 'limitUptimeUnit', 'validity', 'validityUnit'];
     Object.keys(req.body).forEach(key => {
-      if (key === 'router_id') return;
+      if (key === 'router_id') return; // router_id tidak dikirim ke Mikrotik
       const value = req.body[key];
       // Skip unsupported parameters and null/undefined values
       if (value !== undefined && value !== null && !unsupportedParams.includes(key)) {
@@ -1309,70 +980,7 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
 // POST: Hapus Profile Hotspot
 router.post('/mikrotik/hotspot-profiles/delete', adminAuth, async (req, res) => {
   try {
-    // Check auth mode
-    const { getRadiusConfigValue } = require('../config/radiusConfig');
-    let userAuthMode = 'mikrotik';
-    try {
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
-
     const { id, router_id, name } = req.body;
-
-    // Untuk mode RADIUS, hapus dari RADIUS database
-    if (userAuthMode === 'radius') {
-      if (!id && !name) {
-        return res.json({ success: false, message: 'ID atau nama profile tidak ditemukan' });
-      }
-
-      let conn;
-      try {
-        const { getRadiusConnection } = require('../config/mikrotik');
-        conn = await getRadiusConnection();
-
-        const rawIdentifier = id || name;
-        const groupname = typeof rawIdentifier === 'string'
-          ? rawIdentifier.trim().toLowerCase().replace(/\s+/g, '_')
-          : '';
-
-        if (!groupname) {
-          return res.json({ success: false, message: 'Nama profile tidak valid' });
-        }
-
-        // Hapus semua attributes untuk groupname ini dari radgroupreply & radgroupcheck
-        await conn.execute(
-          "DELETE FROM radgroupreply WHERE groupname = ?",
-          [groupname]
-        );
-        await conn.execute(
-          "DELETE FROM radgroupcheck WHERE groupname = ?",
-          [groupname]
-        );
-
-        // Bersihkan assignment user yang masih menunjuk ke profile ini
-        await conn.execute(
-          "DELETE FROM radusergroup WHERE groupname = ?",
-          [groupname]
-        );
-
-        await deleteHotspotProfileMetadata(conn, groupname);
-
-        return res.json({ success: true, message: 'Profile hotspot berhasil dihapus dari RADIUS' });
-      } catch (radiusError) {
-        console.error('Error deleting hotspot profile from RADIUS:', radiusError);
-        return res.json({ success: false, message: `Gagal hapus profile dari RADIUS: ${radiusError.message}` });
-      } finally {
-        if (conn) {
-          try {
-            await conn.end();
-          } catch (closeError) {
-            logger.warn(`Gagal menutup koneksi RADIUS setelah hapus profile: ${closeError.message}`);
-          }
-        }
-      }
-    }
 
     // Untuk mode Mikrotik API, perlu router
     if (!router_id) {
@@ -1406,10 +1014,60 @@ router.post('/mikrotik/disconnect-session', adminAuth, async (req, res) => {
   try {
     const { username } = req.body;
     if (!username) return res.json({ success: false, message: 'Username tidak boleh kosong' });
-    const result = await kickPPPoEUser(username);
-    res.json(result);
+    
+    // Check auth mode
+    const { getUserAuthModeAsync, disconnectPPPoEUser, getMikrotikConnectionForRouter } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    logger.info(`${authMode} mode: Disconnecting session for user ${username}`);
+    
+    // Ambil daftar router
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
+    db.close();
+    
+    if (!routers || routers.length === 0) {
+      return res.json({ success: false, message: 'Tidak ada router yang dikonfigurasi' });
+    }
+    
+    // Cari router yang memiliki user aktif
+    let foundRouter = null;
+    let foundActiveSession = false;
+    
+    for (const router of routers) {
+      try {
+        const conn = await getMikrotikConnectionForRouter(router);
+        const activeSessions = await conn.write('/ppp/active/print', [`?name=${username}`]);
+        
+        if (activeSessions && activeSessions.length > 0) {
+          foundRouter = router;
+          foundActiveSession = true;
+          logger.info(`Found active session for ${username} on router ${router.name}`);
+          break;
+        }
+      } catch (routerError) {
+        logger.warn(`Error checking router ${router.name}: ${routerError.message}`);
+        // Continue to next router
+      }
+    }
+    
+    // Jika tidak ditemukan user aktif di router manapun, return success dengan message
+    if (!foundActiveSession) {
+      logger.info(`No active session found for ${username} on any router`);
+      return res.json({ 
+        success: true, 
+        message: `User ${username} tidak sedang online`, 
+        disconnected: 0 
+      });
+    }
+    
+    // Disconnect menggunakan router yang ditemukan (hanya jika ada session aktif)
+    const result = await disconnectPPPoEUser(username, foundRouter);
+    return res.json(result);
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    logger.error(`Error disconnecting session for ${req.body.username}:`, err);
+    res.json({ success: false, message: err.message || 'Gagal memutuskan sesi' });
   }
 });
 
@@ -1500,33 +1158,110 @@ router.post('/mikrotik/restart', adminAuth, async (req, res) => {
 // ============================================
 
 // GET: List Server Hotspot dan Server Profile Hotspot (Mikrotik API Only)
+// Helper function untuk membuat table hotspot_servers jika belum ada
+function ensureHotspotServersTable(db) {
+  return new Promise((resolve, reject) => {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS hotspot_servers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+// Helper function untuk mendapatkan semua server hotspot dari database
+function getHotspotServersFromDB(db) {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM hotspot_servers ORDER BY name', [], (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows || []);
+    });
+  });
+}
+
 router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
+  let db = null;
   try {
+    // Check auth mode
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
     const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
-    const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
-      if (err) {
-        console.error('Error fetching routers:', err);
-        resolve([]);
-      } else {
-        resolve(rows || []);
-      }
-    }));
-    db.close();
+    db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    
+    // Pastikan table hotspot_servers ada
+    await ensureHotspotServersTable(db);
+    
+    // Ambil daftar server hotspot dari database
+    let hotspotServersDB = [];
+    try {
+      hotspotServersDB = await getHotspotServersFromDB(db);
+    } catch (dbErr) {
+      console.error('Error fetching hotspot servers from DB:', dbErr);
+      hotspotServersDB = [];
+    }
+    
+    if (authMode === 'radius') {
+      // Mode RADIUS: Hanya tampilkan daftar server hotspot dari database (tidak perlu API)
+      const settings = getSettingsWithCache();
+      if (db) db.close();
+      return res.render('admin/mikrotik/hotspot-server-profiles', {
+        servers: [],
+        profiles: [],
+        routers: [],
+        hotspotServersDB: hotspotServersDB || [], // Server hotspot dari database
+        error: null,
+        settings: settings || getSettingsWithCache(),
+        versionInfo: getVersionInfo(),
+        versionBadge: getVersionBadge(),
+        userAuthMode: 'radius',
+        radiusMode: true // Flag untuk view
+      });
+    }
+    
+    // Mode Mikrotik API: Ambil routers
+    const routers = await new Promise((resolve) => {
+      db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
+        if (err) {
+          console.error('Error fetching routers:', err);
+          resolve([]);
+        } else {
+          resolve(rows || []);
+        }
+      });
+    });
 
     // Untuk mode Mikrotik API, perlu router
     if (!routers || routers.length === 0) {
       console.warn('No routers found in database');
       const settings = getSettingsWithCache();
+      // Ambil server hotspot dari database sebelum menutup db
+      let hotspotServersDBFinal = [];
+      try {
+        hotspotServersDBFinal = await getHotspotServersFromDB(db);
+      } catch (dbErr) {
+        console.error('Error fetching hotspot servers from DB:', dbErr);
+        hotspotServersDBFinal = [];
+      }
+      if (db) db.close();
       return res.render('admin/mikrotik/hotspot-server-profiles', {
         servers: [],
         profiles: [], 
         routers: [],
+        hotspotServersDB: hotspotServersDBFinal || [], // Server hotspot dari database
         error: 'Tidak ada router/NAS yang dikonfigurasi. Silakan tambahkan router terlebih dahulu di menu NAS (RADIUS).', 
-        settings,
+        settings: settings || getSettingsWithCache(),
         versionInfo: getVersionInfo(),
         versionBadge: getVersionBadge(),
-        userAuthMode: 'mikrotik'
+        userAuthMode: 'mikrotik',
+        radiusMode: false
       });
     }
 
@@ -1587,6 +1322,16 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
     const allErrors = [...serverErrors, ...profileErrors];
     const settings = getSettingsWithCache();
     
+    // Ambil daftar server hotspot dari database untuk mode Mikrotik API juga
+    let hotspotServersDBFinal = [];
+    try {
+      hotspotServersDBFinal = await getHotspotServersFromDB(db);
+    } catch (dbErr) {
+      console.error('Error fetching hotspot servers from DB (Mikrotik API mode):', dbErr);
+      hotspotServersDBFinal = [];
+    }
+    if (db) db.close();
+    
     // Sanitize data untuk memastikan JSON valid (menghilangkan undefined, null, circular references)
     const sanitizedServers = servers.map(server => ({
       id: server.id || server['.id'] || '',
@@ -1617,32 +1362,85 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
     return res.render('admin/mikrotik/hotspot-server-profiles', {
       servers: sanitizedServers,
       profiles: sanitizedProfiles, 
-      routers,
-      settings,
+      routers: routers || [],
+      hotspotServersDB: hotspotServersDBFinal || [], // Server hotspot dari database
+      settings: settings || getSettingsWithCache(),
       error: allErrors.length > 0 ? `Beberapa router gagal: ${allErrors.join('; ')}` : null,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge(),
-      userAuthMode: 'mikrotik'
+      userAuthMode: 'mikrotik',
+      radiusMode: false
     });
   } catch (err) {
     console.error('Error in hotspot server/profiles GET route:', err);
+    console.error('Error stack:', err.stack);
+    
+    // Pastikan database ditutup jika masih terbuka
+    if (db) {
+      try {
+        db.close();
+      } catch (closeErr) {
+        console.error('Error closing database:', closeErr);
+      }
+    }
+    
     const settings = getSettingsWithCache();
-    return res.render('admin/mikrotik/hotspot-server-profiles', {
-      servers: [],
-      profiles: [], 
-      routers: [],
-      error: `Gagal mengambil data: ${err.message}`, 
-      settings,
-      versionInfo: getVersionInfo(),
-      versionBadge: getVersionBadge(),
-      userAuthMode: 'mikrotik'
-    });
+    // Check auth mode untuk error handler juga
+    let userAuthMode = 'mikrotik';
+    let hotspotServersDB = [];
+    try {
+      const { getUserAuthModeAsync } = require('../config/mikrotik');
+      userAuthMode = await getUserAuthModeAsync();
+      
+      // Coba ambil server hotspot dari database jika memungkinkan
+      try {
+        const sqlite3 = require('sqlite3').verbose();
+        const errorDb = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+        await ensureHotspotServersTable(errorDb);
+        hotspotServersDB = await getHotspotServersFromDB(errorDb);
+        errorDb.close();
+      } catch (dbErr) {
+        console.error('Error fetching hotspot servers from DB in error handler:', dbErr);
+      }
+    } catch (e) {
+      console.error('Error in error handler:', e);
+    }
+    
+    try {
+      return res.render('admin/mikrotik/hotspot-server-profiles', {
+        servers: [],
+        profiles: [], 
+        routers: [],
+        hotspotServersDB: hotspotServersDB || [], // Server hotspot dari database
+        error: `Gagal mengambil data: ${err.message}`, 
+        settings: settings || getSettingsWithCache(),
+        versionInfo: getVersionInfo(),
+        versionBadge: getVersionBadge(),
+        userAuthMode: userAuthMode,
+        radiusMode: userAuthMode === 'radius'
+      });
+    } catch (renderErr) {
+      console.error('Error rendering error page:', renderErr);
+      return res.status(500).send(`Error: ${err.message}<br><pre>${err.stack}</pre>`);
+    }
   }
 });
 
 // GET: API Daftar Server Profile Hotspot (Mikrotik API Only)
 router.get('/mikrotik/hotspot-server-profiles/api', adminAuth, async (req, res) => {
   try {
+    // Check auth mode - fitur ini hanya untuk mode Mikrotik API
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      return res.json({ 
+        success: false, 
+        profiles: [], 
+        message: 'Fitur ini tidak tersedia di mode RADIUS. Server Profile Hotspot harus dikonfigurasi langsung di Mikrotik router.' 
+      });
+    }
+    
     const { router_id } = req.query;
 
     // Untuk mode Mikrotik API, ambil dari Mikrotik router
@@ -1733,6 +1531,17 @@ router.get('/mikrotik/hotspot-server-profiles/api', adminAuth, async (req, res) 
 // POST: Tambah Server Profile Hotspot (Mikrotik API Only)
 router.post('/mikrotik/hotspot-server-profiles/add', adminAuth, async (req, res) => {
   try {
+    // Check auth mode - fitur ini hanya untuk mode Mikrotik API
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      return res.json({ 
+        success: false, 
+        message: 'Fitur ini tidak tersedia di mode RADIUS. Server Profile Hotspot harus dikonfigurasi langsung di Mikrotik router.' 
+      });
+    }
+    
     const profileData = req.body;
     const { router_id } = req.body;
     
@@ -1762,6 +1571,17 @@ router.post('/mikrotik/hotspot-server-profiles/add', adminAuth, async (req, res)
 // POST: Edit Server Profile Hotspot (Mikrotik API Only)
 router.post('/mikrotik/hotspot-server-profiles/edit', adminAuth, async (req, res) => {
   try {
+    // Check auth mode - fitur ini hanya untuk mode Mikrotik API
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      return res.json({ 
+        success: false, 
+        message: 'Fitur ini tidak tersedia di mode RADIUS. Server Profile Hotspot harus dikonfigurasi langsung di Mikrotik router.' 
+      });
+    }
+    
     const { id } = req.body;
     const profileData = req.body;
     const { router_id } = req.body;
@@ -1796,6 +1616,17 @@ router.post('/mikrotik/hotspot-server-profiles/edit', adminAuth, async (req, res
 // POST: Hapus Server Profile Hotspot (Mikrotik API Only)
 router.post('/mikrotik/hotspot-server-profiles/delete', adminAuth, async (req, res) => {
   try {
+    // Check auth mode - fitur ini hanya untuk mode Mikrotik API
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      return res.json({ 
+        success: false, 
+        message: 'Fitur ini tidak tersedia di mode RADIUS. Server Profile Hotspot harus dikonfigurasi langsung di Mikrotik router.' 
+      });
+    }
+    
     const { id } = req.body;
     const { router_id } = req.body;
     
@@ -1822,6 +1653,237 @@ router.post('/mikrotik/hotspot-server-profiles/delete', adminAuth, async (req, r
     return res.json(result);
   } catch (err) {
     console.error('Error deleting server profile:', err);
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// ============================================
+// HOTSPOT SERVER DATABASE ROUTES (Untuk semua mode)
+// ============================================
+
+// GET: API untuk mengambil daftar server hotspot dari semua Mikrotik
+router.get('/mikrotik/hotspot-server-profiles/api-servers-from-mikrotik', adminAuth, async (req, res) => {
+  try {
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    
+    // Ambil semua router yang terdaftar
+    const routers = await new Promise((resolve) => {
+      db.all('SELECT * FROM routers ORDER BY name', (err, rows) => {
+        db.close();
+        if (err) {
+          console.error('Error fetching routers:', err);
+          resolve([]);
+        } else {
+          resolve(rows || []);
+        }
+      });
+    });
+    
+    if (routers.length === 0) {
+      return res.json({ 
+        success: true, 
+        servers: [], 
+        message: 'Tidak ada router/NAS yang terdaftar. Silakan tambahkan router terlebih dahulu di menu NAS (RADIUS).' 
+      });
+    }
+    
+    // Ambil server hotspot dari semua router
+    let allServers = [];
+    let errors = [];
+    
+    for (const router of routers) {
+      try {
+        const result = await getHotspotServers(router);
+        if (result.success && Array.isArray(result.data)) {
+          result.data.forEach(server => {
+            // Hanya ambil nama server (unique)
+            if (server.name && !allServers.find(s => s.name === server.name)) {
+              allServers.push({
+                name: server.name,
+                router_name: router.name,
+                router_ip: router.nas_ip,
+                router_id: router.id
+              });
+            }
+          });
+        } else {
+          errors.push(`${router.name}: ${result.message || 'Gagal mengambil server'}`);
+        }
+      } catch (e) {
+        console.error(`Error getting servers from ${router.name}:`, e.message);
+        errors.push(`${router.name}: ${e.message}`);
+      }
+    }
+    
+    // Sort by name
+    allServers.sort((a, b) => a.name.localeCompare(b.name));
+    
+    res.json({ 
+      success: true, 
+      servers: allServers,
+      total_routers: routers.length,
+      errors: errors.length > 0 ? errors : null
+    });
+  } catch (err) {
+    console.error('Error in hotspot servers from Mikrotik API:', err);
+    res.json({ success: false, servers: [], message: err.message });
+  }
+});
+
+// POST: Tambah Server Hotspot ke Database
+router.post('/mikrotik/hotspot-server-profiles/add-server', adminAuth, async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    
+    if (!name || !name.trim()) {
+      return res.json({ success: false, message: 'Nama server hotspot harus diisi' });
+    }
+    
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    
+    // Pastikan table ada
+    await ensureHotspotServersTable(db);
+    
+    // Cek apakah nama sudah ada
+    const existing = await new Promise((resolve, reject) => {
+      db.get('SELECT id FROM hotspot_servers WHERE name = ?', [name.trim()], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+    
+    if (existing) {
+      db.close();
+      return res.json({ success: false, message: 'Nama server hotspot sudah ada' });
+    }
+    
+    // Insert server hotspot baru
+    await new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO hotspot_servers (name, description) VALUES (?, ?)',
+        [name.trim(), description ? description.trim() : null],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.lastID);
+        }
+      );
+    });
+    
+    db.close();
+    return res.json({ success: true, message: 'Server hotspot berhasil ditambahkan' });
+  } catch (err) {
+    console.error('Error adding hotspot server:', err);
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// POST: Edit Server Hotspot di Database
+router.post('/mikrotik/hotspot-server-profiles/edit-server', adminAuth, async (req, res) => {
+  try {
+    const { id, name, description } = req.body;
+    
+    if (!id) {
+      return res.json({ success: false, message: 'ID server hotspot harus diisi' });
+    }
+    
+    if (!name || !name.trim()) {
+      return res.json({ success: false, message: 'Nama server hotspot harus diisi' });
+    }
+    
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    
+    // Pastikan table ada
+    await ensureHotspotServersTable(db);
+    
+    // Cek apakah server dengan ID ini ada
+    const existing = await new Promise((resolve, reject) => {
+      db.get('SELECT id FROM hotspot_servers WHERE id = ?', [parseInt(id)], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+    
+    if (!existing) {
+      db.close();
+      return res.json({ success: false, message: 'Server hotspot tidak ditemukan' });
+    }
+    
+    // Cek apakah nama sudah digunakan oleh server lain
+    const nameExists = await new Promise((resolve, reject) => {
+      db.get('SELECT id FROM hotspot_servers WHERE name = ? AND id != ?', [name.trim(), parseInt(id)], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+    
+    if (nameExists) {
+      db.close();
+      return res.json({ success: false, message: 'Nama server hotspot sudah digunakan oleh server lain' });
+    }
+    
+    // Update server hotspot
+    await new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE hotspot_servers SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [name.trim(), description ? description.trim() : null, parseInt(id)],
+        function(err) {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+    
+    db.close();
+    return res.json({ success: true, message: 'Server hotspot berhasil diupdate' });
+  } catch (err) {
+    console.error('Error editing hotspot server:', err);
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// POST: Hapus Server Hotspot dari Database
+router.post('/mikrotik/hotspot-server-profiles/delete-server', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.body;
+    
+    if (!id) {
+      return res.json({ success: false, message: 'ID server hotspot harus diisi' });
+    }
+    
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    
+    // Pastikan table ada
+    await ensureHotspotServersTable(db);
+    
+    // Cek apakah server dengan ID ini ada
+    const existing = await new Promise((resolve, reject) => {
+      db.get('SELECT id FROM hotspot_servers WHERE id = ?', [parseInt(id)], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+    
+    if (!existing) {
+      db.close();
+      return res.json({ success: false, message: 'Server hotspot tidak ditemukan' });
+    }
+    
+    // Hapus server hotspot
+    await new Promise((resolve, reject) => {
+      db.run('DELETE FROM hotspot_servers WHERE id = ?', [parseInt(id)], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    
+    db.close();
+    return res.json({ success: true, message: 'Server hotspot berhasil dihapus' });
+  } catch (err) {
+    console.error('Error deleting hotspot server:', err);
     res.json({ success: false, message: err.message });
   }
 });
@@ -1898,9 +1960,102 @@ router.get('/mikrotik/address-pools/api', adminAuth, async (req, res) => {
   }
 });
 
+// GET: API Address Pools dari semua router yang terdaftar
+router.get('/mikrotik/address-pools/api/all', adminAuth, async (req, res) => {
+  try {
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(path.join(process.cwd(), 'data/billing.db'));
+    
+    // Get all routers
+    const routers = await new Promise((resolve) => {
+      db.all('SELECT * FROM routers ORDER BY name', (err, rows) => {
+        db.close();
+        resolve(rows || []);
+      });
+    });
+
+    if (!routers || routers.length === 0) {
+      return res.json({ success: true, pools: [], message: 'Tidak ada router yang terdaftar' });
+    }
+
+    const { getAddressPoolsForRouter } = require('../config/mikrotik');
+    const poolMap = new Map(); // Untuk deduplikasi berdasarkan nama pool
+
+    // Get pools from all routers in parallel
+    const poolPromises = routers.map(async (router) => {
+      try {
+        const result = await getAddressPoolsForRouter(router);
+        if (result.success && Array.isArray(result.data)) {
+          result.data.forEach(pool => {
+            // Deduplikasi: jika pool dengan nama yang sama sudah ada, gabungkan info router
+            if (poolMap.has(pool.name)) {
+              const existing = poolMap.get(pool.name);
+              if (!existing.routers) {
+                existing.routers = [existing.router];
+              }
+              if (!existing.routers.some(r => r.id === router.id)) {
+                existing.routers.push({
+                  id: router.id,
+                  name: router.name,
+                  nas_ip: router.nas_ip
+                });
+              }
+            } else {
+              poolMap.set(pool.name, {
+                name: pool.name,
+                ranges: pool.ranges || '',
+                comment: pool.comment || '',
+                router: {
+                  id: router.id,
+                  name: router.name,
+                  nas_ip: router.nas_ip
+                },
+                routers: [{
+                  id: router.id,
+                  name: router.name,
+                  nas_ip: router.nas_ip
+                }]
+              });
+            }
+          });
+        }
+      } catch (err) {
+        logger.warn(`Error getting pools from router ${router.name}: ${err.message}`);
+        // Continue dengan router lain
+      }
+    });
+
+    await Promise.all(poolPromises);
+
+    // Convert map to array
+    const uniquePools = Array.from(poolMap.values());
+
+    return res.json({ 
+      success: true, 
+      pools: uniquePools.sort((a, b) => a.name.localeCompare(b.name)),
+      message: `Ditemukan ${uniquePools.length} pool dari ${routers.length} router` 
+    });
+  } catch (err) {
+    logger.error('Error in all address pools API:', err);
+    res.json({ success: false, pools: [], message: err.message });
+  }
+});
+
 // GET: API Daftar Server Hotspot
 router.get('/mikrotik/hotspot-servers/api', adminAuth, async (req, res) => {
   try {
+    // Check auth mode - fitur ini hanya untuk mode Mikrotik API
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      return res.json({ 
+        success: false, 
+        servers: [], 
+        message: 'Fitur ini tidak tersedia di mode RADIUS. Server Hotspot harus dikonfigurasi langsung di Mikrotik router.' 
+      });
+    }
+    
     const { router_id } = req.query;
     
     const sqlite3 = require('sqlite3').verbose();
@@ -1978,6 +2133,17 @@ router.get('/mikrotik/hotspot-servers/api', adminAuth, async (req, res) => {
 // POST: Tambah Server Hotspot
 router.post('/mikrotik/hotspot-servers/add', adminAuth, async (req, res) => {
   try {
+    // Check auth mode - fitur ini hanya untuk mode Mikrotik API
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      return res.json({ 
+        success: false, 
+        message: 'Fitur ini tidak tersedia di mode RADIUS. Server Hotspot harus dikonfigurasi langsung di Mikrotik router.' 
+      });
+    }
+    
     const serverData = req.body;
     const { router_id } = req.body;
     
@@ -2007,6 +2173,17 @@ router.post('/mikrotik/hotspot-servers/add', adminAuth, async (req, res) => {
 // POST: Edit Server Hotspot
 router.post('/mikrotik/hotspot-servers/edit', adminAuth, async (req, res) => {
   try {
+    // Check auth mode - fitur ini hanya untuk mode Mikrotik API
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      return res.json({ 
+        success: false, 
+        message: 'Fitur ini tidak tersedia di mode RADIUS. Server Hotspot harus dikonfigurasi langsung di Mikrotik router.' 
+      });
+    }
+    
     const { id } = req.body;
     const serverData = req.body;
     const { router_id } = req.body;
@@ -2041,6 +2218,17 @@ router.post('/mikrotik/hotspot-servers/edit', adminAuth, async (req, res) => {
 // POST: Hapus Server Hotspot
 router.post('/mikrotik/hotspot-servers/delete', adminAuth, async (req, res) => {
   try {
+    // Check auth mode - fitur ini hanya untuk mode Mikrotik API
+    const { getUserAuthModeAsync } = require('../config/mikrotik');
+    const authMode = await getUserAuthModeAsync();
+    
+    if (authMode === 'radius') {
+      return res.json({ 
+        success: false, 
+        message: 'Fitur ini tidak tersedia di mode RADIUS. Server Hotspot harus dikonfigurasi langsung di Mikrotik router.' 
+      });
+    }
+    
     const { id } = req.body;
     const { router_id } = req.body;
     

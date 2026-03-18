@@ -8,6 +8,12 @@ const fs = require('fs');
 const session = require('express-session');
 const { getSetting } = require('./config/settingsManager');
 
+// Set timezone aplikasi sesuai dengan timezone server
+const { getServerTimezone } = require('./config/settingsManager');
+const serverTimezone = getServerTimezone();
+process.env.TZ = serverTimezone;
+logger.info(`⏰ Application timezone set to: ${serverTimezone} (matching server timezone)`);
+
 // Import invoice scheduler
 const invoiceScheduler = require('./config/scheduler');
 
@@ -53,9 +59,23 @@ const app = express();
 
 // Import route adminAuth
 const { router: adminAuthRouter, adminAuth } = require('./routes/adminAuth');
+const cors = require('cors');
 
 // Import license route
 const licenseRouter = require('./routes/license');
+const { router: apiAuthRouter } = require('./routes/api/auth');
+const apiCustomersRouter = require('./routes/api/customers');
+const apiRoutersRouter = require('./routes/api/routers');
+const apiPackagesRouter = require('./routes/api/packages');
+const apiTroubleRouter = require('./routes/api/trouble-reports');
+const apiAgentsRouter = require('./routes/api/agents');
+const apiInstallationsRouter = require('./routes/api/installations');
+const apiTechniciansRouter = require('./routes/api/technicians');
+const apiVouchersRouter = require('./routes/api/vouchers');
+const apiSettingsRouter = require('./routes/api/settings');
+const apiCollectorsRouter = require('./routes/api/collectors');
+const apiSystemRouter = require('./routes/api/system');
+const unifiedAuthRouter = require('./routes/unifiedAuth');
 
 // Import middleware untuk access control (harus diimport sebelum digunakan)
 const { blockTechnicianAccess } = require('./middleware/technicianAccessControl');
@@ -63,6 +83,13 @@ const { blockTechnicianAccess } = require('./middleware/technicianAccessControl'
 // Middleware dasar - Optimized
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Enable CORS for mobile app access - Enhanced for Web Development
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Static files dengan cache
 app.use('/public', express.static(path.join(__dirname, 'public'), {
@@ -206,9 +233,21 @@ app.use('/admin', blockTechnicianAccess, adminRoutersRouter);
 const adminGenieacsServersRouter = require('./routes/adminGenieacsServers');
 app.use('/admin', blockTechnicianAccess, adminGenieacsServersRouter);
 
+// Import dan gunakan route adminConnectionSettings (Setting Mikrotik - NAS/Routers only)
+const adminConnectionSettingsRouter = require('./routes/adminConnectionSettings');
+app.use('/admin', blockTechnicianAccess, adminConnectionSettingsRouter);
+
+// Import dan gunakan route adminGenieacsSetting (GenieACS Setting)
+const adminGenieacsSettingRouter = require('./routes/adminGenieacsSetting');
+app.use('/admin', blockTechnicianAccess, adminGenieacsSettingRouter);
+
 // Import dan gunakan route adminHotspot
 const adminHotspotRouter = require('./routes/adminHotspot');
 app.use('/admin/hotspot', blockTechnicianAccess, adminHotspotRouter);
+
+// Import dan gunakan route adminMember
+const adminMemberRouter = require('./routes/adminMember');
+app.use('/admin/member', blockTechnicianAccess, adminMemberRouter);
 
 // Import dan gunakan route adminSetting
 const { router: adminSettingRouter } = require('./routes/adminSetting');
@@ -266,10 +305,6 @@ app.use('/admin/cache', blockTechnicianAccess, cacheManagementRouter);
 const paymentRouter = require('./routes/payment');
 app.use('/payment', paymentRouter);
 
-// Import dan gunakan route testTroubleReport untuk debugging
-const testTroubleReportRouter = require('./routes/testTroubleReport');
-app.use('/test/trouble', testTroubleReportRouter);
-
 // Import dan gunakan route trouble report untuk pelanggan
 const troubleReportRouter = require('./routes/troubleReport');
 app.use('/customer/trouble', troubleReportRouter);
@@ -281,6 +316,10 @@ app.use('/voucher', publicVoucherRouter);
 // Import dan gunakan route public tools
 const publicToolsRouter = require('./routes/publicTools');
 app.use('/tools', publicToolsRouter);
+
+// Import dan gunakan route hotspot error (untuk menampilkan Reply-Message)
+const hotspotErrorRouter = require('./routes/hotspotError');
+app.use('/', hotspotErrorRouter);
 
 // Tambahkan webhook endpoint untuk voucher payment
 app.use('/webhook/voucher', publicVoucherRouter);
@@ -325,10 +364,13 @@ app.get('/whatsapp/status', (req, res) => {
     });
 });
 
-// Redirect root ke portal pelanggan
+// Redirect root ke portal login terpusat
 app.get('/', (req, res) => {
-  res.redirect('/customer/login');
+  res.redirect('/login');
 });
+
+// Route Login Terpusat
+app.use('/login', unifiedAuthRouter);
 
 // Import PPPoE monitoring modules
 const pppoeMonitor = require('./config/pppoe-monitor');
@@ -358,6 +400,28 @@ try {
 // Import dan gunakan route API dashboard traffic
 const apiDashboardRouter = require('./routes/apiDashboard');
 app.use('/api', apiDashboardRouter);
+app.use('/api/auth', apiAuthRouter);
+app.use('/login', unifiedAuthRouter);
+app.use('/api/customers', apiCustomersRouter);
+app.use('/api/routers', apiRoutersRouter);
+app.use('/api/packages', apiPackagesRouter);
+app.use('/api/trouble-reports', apiTroubleRouter);
+app.use('/api/agents', apiAgentsRouter);
+app.use('/api/installations', apiInstallationsRouter);
+app.use('/api/technicians', apiTechniciansRouter);
+app.use('/api/vouchers', apiVouchersRouter);
+app.use('/api/settings', apiSettingsRouter);
+app.use('/api/collectors', apiCollectorsRouter);
+app.use('/api', apiSystemRouter);
+
+// Import dan gunakan route Wablas webhook
+try {
+  const wablasWebhookRouter = require('./routes/wablas-webhook');
+  app.use('/', wablasWebhookRouter);
+  logger.info('✅ Wablas webhook route loaded');
+} catch (e) {
+  logger.warn('Wablas webhook route not loaded:', e.message);
+}
 
 // Mount customer portal
 const customerPortal = require('./routes/customerPortal');
@@ -460,9 +524,69 @@ app.use('/collector', collectorAuthRouter);
 const collectorDashboardRouter = require('./routes/collectorDashboard');
 app.use('/collector', collectorDashboardRouter);
 
+// Inisialisasi WhatsApp Provider Manager (untuk Wablas/Baileys)
+try {
+    const { getProviderManager } = require('./config/whatsapp-provider-manager');
+    const { isWablasEnabled } = require('./config/wablas-config');
+    const providerManager = getProviderManager();
+    
+    // Initialize provider manager saat startup
+    (async () => {
+        try {
+            if (isWablasEnabled()) {
+                // Initialize WablasProvider jika enabled
+                await providerManager.initialize({ forceProvider: 'wablas' });
+                logger.info('✅ WablasProvider initialized at startup');
+                
+                // Setup message listener untuk Wablas (PENTING untuk command bot!)
+                try {
+                    const WhatsAppCore = require('./config/whatsapp-core');
+                    const WhatsAppCommands = require('./config/whatsapp-commands');
+                    const WhatsAppMessageHandlers = require('./config/whatsapp-message-handlers');
+                    
+                    const whatsappCore = new WhatsAppCore();
+                    const whatsappCommands = new WhatsAppCommands(whatsappCore);
+                    const messageHandlers = new WhatsAppMessageHandlers(whatsappCore, whatsappCommands);
+                    
+                    const provider = providerManager.getProvider();
+                    if (provider) {
+                        provider.onMessage(async (message) => {
+                            logger.debug('📥 Wablas message received, routing to handler');
+                            await messageHandlers.handleIncomingMessage(provider, message);
+                        });
+                        logger.info('✅ Wablas message listener registered for command bot');
+                    }
+                } catch (listenerError) {
+                    logger.error('❌ Error setting up Wablas message listener:', listenerError);
+                }
+            } else {
+                // Cek apakah Baileys enabled sebelum initialize
+                const { isBaileysEnabled } = require('./config/baileys-config');
+                if (isBaileysEnabled()) {
+                    // Initialize BaileysProvider (socket akan di-set nanti saat connect)
+                    await providerManager.initialize({ forceProvider: 'baileys' });
+                    logger.info('✅ BaileysProvider initialized at startup (socket will be set on connect)');
+                } else {
+                    logger.info('🚫 Baileys disabled, skipping BaileysProvider initialization');
+                }
+            }
+        } catch (error) {
+            logger.error('❌ Error initializing WhatsApp Provider Manager:', error);
+        }
+    })();
+} catch (error) {
+    logger.warn('⚠️ WhatsApp Provider Manager not available:', error.message);
+}
+
 // Inisialisasi WhatsApp dan PPPoE monitoring
 try {
-    whatsapp.connectToWhatsApp().then(sock => {
+    // Cek apakah Baileys enabled sebelum connect
+    const { isBaileysEnabled } = require('./config/baileys-config');
+    const { isWablasEnabled } = require('./config/wablas-config');
+    
+    // Hanya connect jika Baileys enabled atau Wablas tidak enabled
+    if (isBaileysEnabled() || !isWablasEnabled()) {
+        whatsapp.connectToWhatsApp().then(sock => {
         if (sock) {
             // Set sock instance untuk whatsapp
             whatsapp.setSock(sock);
@@ -547,9 +671,12 @@ try {
                 logger.error('Error loading License Manager:', err);
             }
         }
-    }).catch(err => {
-        logger.error('Error connecting to WhatsApp:', err);
-    });
+        }).catch(err => {
+            logger.error('Error connecting to WhatsApp:', err);
+        });
+    } else {
+        logger.info('🚫 Baileys disabled and Wablas enabled, skipping Baileys WhatsApp connection');
+    }
 
     // Mulai monitoring PPPoE lama jika dikonfigurasi (fallback)
     if (getSetting('mikrotik_host') && getSetting('mikrotik_user') && getSetting('mikrotik_password')) {
@@ -577,10 +704,12 @@ function startServer(portToUse) {
     logger.info(`Port diambil dari settings.json - tidak ada fallback ke port alternatif`);
     
     // Hanya gunakan port dari settings.json, tidak ada fallback
+    // Listen di semua interface (0.0.0.0) agar bisa diakses dari network
     try {
         const server = app.listen(port, () => {
             logger.info(`✅ Server berhasil berjalan pada port ${port}`);
-            logger.info(`🌐 Web Portal tersedia di: http://localhost:${port}`);
+            logger.info(`🌐 Web Portal tersedia di: http://0.0.0.0:${port} (semua interface)`);
+            logger.info(`🌐 Akses lokal: http://localhost:${port}`);
             logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
             // Update global.appSettings.port dengan port yang berhasil digunakan
             // global.appSettings.port = port.toString(); // Hapus ini

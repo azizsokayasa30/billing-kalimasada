@@ -136,6 +136,22 @@ router.post('/webhook/tripay', async (req, res) => {
     }
 });
 
+// Duitku webhook handler
+router.post('/webhook/duitku', async (req, res) => {
+    try {
+        console.log('🔍 Duitku webhook received:', JSON.stringify(req.body, null, 2));
+        const result = await billingManager.handlePaymentWebhook({ body: req.body, headers: req.headers }, 'duitku');
+        console.log('✅ Duitku webhook processed successfully:', result);
+        res.status(200).json(result);
+    } catch (error) {
+        console.error('❌ Duitku webhook error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
 // Manual payment processing (fallback for failed webhooks)
 router.post('/manual-process', async (req, res) => {
     try {
@@ -181,14 +197,66 @@ router.post('/manual-process', async (req, res) => {
             // Update invoice status
             await billingManager.updateInvoiceStatus(invoice_id, 'paid', payment_method || 'manual');
             
-            // Get customer info for notification
-            const customer = await billingManager.getCustomerById(invoice.customer_id);
+            // Check if this is a member invoice or customer invoice
+            const isMemberInvoice = invoice.member_id !== null && invoice.member_id !== undefined;
             
-            // Send WhatsApp notification
-            try {
-                await billingManager.sendPaymentSuccessNotification(customer, invoice);
-            } catch (notificationError) {
-                console.error('Error sending notification:', notificationError);
+            if (isMemberInvoice) {
+                // Handle member payment
+                const member = await billingManager.getMemberById(invoice.member_id);
+                
+                // Send WhatsApp notification for member (using customer notification for now)
+                try {
+                    // Create a member-like customer object for notification
+                    const memberForNotification = {
+                        name: member.name,
+                        phone: member.phone,
+                        username: member.hotspot_username || member.username
+                    };
+                    await billingManager.sendPaymentSuccessNotification(memberForNotification, invoice);
+                } catch (notificationError) {
+                    console.error('Error sending member payment notification:', notificationError);
+                }
+                
+                // Attempt immediate restore for member if eligible
+                try {
+                    const refreshedMember = await billingManager.getMemberById(invoice.member_id);
+                    const memberInvoices = await billingManager.getInvoices(refreshedMember.hotspot_username || refreshedMember.username);
+                    const unpaid = memberInvoices.filter(i => i.status === 'unpaid');
+                    
+                    console.log(`🔄 [PAYMENT] Member ${refreshedMember.name} (${refreshedMember.hotspot_username}) - Status: ${refreshedMember.status}, Unpaid invoices: ${unpaid.length}`);
+                    
+                    if (refreshedMember && (refreshedMember.status === 'isolir' || refreshedMember.status === 'suspend') && unpaid.length === 0) {
+                        console.log(`✅ [PAYMENT] Restoring member service for ${refreshedMember.name} (${refreshedMember.hotspot_username})`);
+                        const restoreResult = await serviceSuspension.restoreMemberService(refreshedMember, `Payment via web (${payment_method || 'manual'})`);
+                        console.log(`✅ [PAYMENT] Member restore result:`, restoreResult);
+                    } else {
+                        console.log(`⚠️ [PAYMENT] Member not eligible for restore - Status: ${refreshedMember?.status}, Unpaid: ${unpaid.length}`);
+                    }
+                } catch (restoreErr) {
+                    console.error('❌ [PAYMENT] Member restore check failed:', restoreErr);
+                }
+            } else {
+                // Handle customer payment
+                const customer = await billingManager.getCustomerById(invoice.customer_id);
+                
+                // Send WhatsApp notification
+                try {
+                    await billingManager.sendPaymentSuccessNotification(customer, invoice);
+                } catch (notificationError) {
+                    console.error('Error sending notification:', notificationError);
+                }
+                
+                // Attempt immediate restore if eligible
+                try {
+                    const refreshedCustomer = await billingManager.getCustomerById(invoice.customer_id);
+                    const customerInvoices = await billingManager.getInvoicesByCustomer(invoice.customer_id);
+                    const unpaid = customerInvoices.filter(i => i.status === 'unpaid');
+                    if (refreshedCustomer && refreshedCustomer.status === 'suspended' && unpaid.length === 0) {
+                        await serviceSuspension.restoreCustomerService(refreshedCustomer);
+                    }
+                } catch (restoreErr) {
+                    console.error('Immediate restore check failed:', restoreErr);
+                }
             }
             
             res.json({
@@ -198,21 +266,10 @@ router.post('/manual-process', async (req, res) => {
                     payment_id: paymentResult.id,
                     invoice_id: invoice_id,
                     status: 'paid',
-                    payment_method: payment_method || 'manual'
+                    payment_method: payment_method || 'manual',
+                    is_member: isMemberInvoice
                 }
             });
-
-            // Attempt immediate restore if eligible
-            try {
-                const refreshedCustomer = await billingManager.getCustomerById(invoice.customer_id);
-                const customerInvoices = await billingManager.getInvoicesByCustomer(invoice.customer_id);
-                const unpaid = customerInvoices.filter(i => i.status === 'unpaid');
-                if (refreshedCustomer && refreshedCustomer.status === 'suspended' && unpaid.length === 0) {
-                    await serviceSuspension.restoreCustomerService(refreshedCustomer);
-                }
-            } catch (restoreErr) {
-                console.error('Immediate restore check failed:', restoreErr);
-            }
         } else {
             res.status(500).json({
                 success: false,

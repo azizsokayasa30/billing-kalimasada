@@ -8,6 +8,8 @@ const { getSettingsWithCache, deleteSetting } = require('../config/settingsManag
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const logger = require('../config/logger');
 const { spawn } = require('child_process');
+const { adminAuth } = require('./adminAuth');
+const dns = require('dns').promises;
 
 // Konfigurasi penyimpanan file
 const imageFileFilter = function (req, file, cb) {
@@ -146,7 +148,6 @@ router.post('/save', async (req, res) => {
             console.warn('Gagal membaca settings.json lama, menggunakan default:', e.message);
             // Jika file tidak ada atau corrupt, gunakan default
             oldSettings = {
-                user_auth_mode: 'mikrotik',
                 logo_filename: 'logo.png'
             };
         }
@@ -159,9 +160,10 @@ router.post('/save', async (req, res) => {
         const mergedSettings = { ...oldSettings, ...newSettings };
         removePaymentGatewayEntries(mergedSettings);
         
-        // Pastikan user_auth_mode selalu ada
-        if (!('user_auth_mode' in mergedSettings)) {
-            mergedSettings.user_auth_mode = 'mikrotik';
+        // Hapus user_auth_mode dari settings.json karena sudah dialihkan ke /admin/radius
+        // Mode autentikasi sekarang dikelola di /admin/radius dan disimpan di database
+        if ('user_auth_mode' in mergedSettings) {
+            delete mergedSettings.user_auth_mode;
         }
 
         // Validasi dan sanitasi data sebelum simpan
@@ -544,20 +546,46 @@ router.get('/wa-status', async (req, res) => {
         const { getWhatsAppStatus } = require('../config/whatsapp');
         const status = getWhatsAppStatus();
         
+        // Debug: Log status untuk troubleshooting
+        console.log('WhatsApp Status Request:', {
+            hasStatus: !!status,
+            connected: status?.connected,
+            hasQrCode: !!status?.qrCode,
+            hasQr: !!status?.qr,
+            status: status?.status,
+            globalStatus: global.whatsappStatus ? {
+                connected: global.whatsappStatus.connected,
+                hasQrCode: !!global.whatsappStatus.qrCode,
+                status: global.whatsappStatus.status
+            } : null
+        });
+        
+        // Cek global.whatsappStatus terlebih dahulu (ini yang di-update saat QR code diterima)
+        if (global.whatsappStatus && global.whatsappStatus.qrCode) {
+            console.log('Using QR code from global.whatsappStatus');
+            return res.json({
+                connected: false,
+                qr: global.whatsappStatus.qrCode,
+                phoneNumber: null,
+                status: global.whatsappStatus.status || 'qr_code',
+                connectedSince: null
+            });
+        }
+        
         // Pastikan QR code dalam format yang benar
         let qrCode = null;
-        if (status.qrCode) {
+        if (status && status.qrCode) {
             qrCode = status.qrCode;
-        } else if (status.qr) {
+        } else if (status && status.qr) {
             qrCode = status.qr;
         }
         
         res.json({
-            connected: status.connected || false,
+            connected: status?.connected || false,
             qr: qrCode,
-            phoneNumber: status.phoneNumber || null,
-            status: status.status || 'disconnected',
-            connectedSince: status.connectedSince || null
+            phoneNumber: status?.phoneNumber || null,
+            status: status?.status || 'disconnected',
+            connectedSince: status?.connectedSince || null
         });
     } catch (e) {
         console.error('Error getting WhatsApp status:', e);
@@ -1574,6 +1602,206 @@ function runConsoleScript(option, additionalInput = '') {
         child.stdin.end();
     });
 }
+
+// POST: Execute Isolir Script ke Mikrotik
+router.post('/execute-isolir-script', adminAuth, async (req, res) => {
+    try {
+        const { script, router_id, ros_version } = req.body;
+        
+        if (!script || typeof script !== 'string') {
+            return res.json({ success: false, message: 'Script tidak valid' });
+        }
+        
+        const { executeMikrotikScript, getMikrotikConnectionForRouter } = require('../config/mikrotik');
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        let routerObj = null;
+        
+        // Get router object
+        if (router_id) {
+            routerObj = await new Promise((resolve, reject) => {
+                db.get('SELECT * FROM routers WHERE id = ?', [router_id], (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row || null);
+                });
+            });
+            
+            if (!routerObj) {
+                db.close();
+                return res.json({ success: false, message: 'Router tidak ditemukan' });
+            }
+        } else {
+            // Auto: get first router
+            routerObj = await new Promise((resolve, reject) => {
+                db.get('SELECT * FROM routers ORDER BY id LIMIT 1', [], (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row || null);
+                });
+            });
+            
+            if (!routerObj) {
+                db.close();
+                return res.json({ success: false, message: 'Tidak ada router yang dikonfigurasi. Silakan tambahkan router di /admin/routers' });
+            }
+        }
+        
+        db.close();
+        
+        // Execute script
+        const result = await executeMikrotikScript(script, routerObj, ros_version);
+        
+        if (result.success) {
+            res.json({
+                success: true,
+                router_name: routerObj.name,
+                router_ip: routerObj.nas_ip,
+                ros_version: result.ros_version || ros_version || 'Auto-detect',
+                commands_executed: result.commands_executed || 0,
+                message: 'Script berhasil dijalankan ke Mikrotik'
+            });
+        } else {
+            res.json({
+                success: false,
+                message: result.message || 'Gagal menjalankan script ke Mikrotik'
+            });
+        }
+    } catch (error) {
+        logger.error('Error executing isolir script:', error);
+        res.json({
+            success: false,
+            message: error.message || 'Gagal menjalankan script ke Mikrotik'
+        });
+    }
+});
+
+// POST: Test Wablas Connection
+router.post('/test-wablas', async (req, res) => {
+    try {
+        const { getProviderManager } = require('../config/whatsapp-provider-manager');
+        const { getWablasConfig, validateWablasConfig, isWablasEnabled } = require('../config/wablas-config');
+        
+        // Reload settings untuk mendapatkan konfigurasi terbaru
+        const { getSettingsWithCache } = require('../config/settingsManager');
+        const settings = getSettingsWithCache();
+        
+        // Cek apakah Wablas enabled
+        if (!isWablasEnabled()) {
+            return res.json({
+                success: false,
+                message: 'Wablas tidak diaktifkan. Pastikan wablas_enabled = true dan API key sudah diisi.'
+            });
+        }
+        
+        // Validasi konfigurasi
+        if (!validateWablasConfig()) {
+            return res.json({
+                success: false,
+                message: 'Konfigurasi Wablas tidak valid. Pastikan API URL dan API Key sudah diisi.'
+            });
+        }
+        
+        const config = getWablasConfig();
+        
+        // Test dengan mengirim pesan test ke nomor sendiri atau nomor test
+        // Untuk test, kita hanya cek apakah provider bisa diinisialisasi
+        try {
+            const providerManager = getProviderManager();
+            
+            // Initialize provider dengan Wablas
+            if (!providerManager.isInitialized() || providerManager.getProviderType() !== 'wablas') {
+                await providerManager.initialize({ forceProvider: 'wablas' });
+            }
+            
+            const provider = providerManager.getProvider();
+            
+            if (!provider) {
+                return res.json({
+                    success: false,
+                    message: 'Gagal menginisialisasi WablasProvider'
+                });
+            }
+            
+            // Cek status provider
+            const status = provider.getStatus();
+            
+            if (status.connected) {
+                return res.json({
+                    success: true,
+                    message: 'Koneksi Wablas berhasil! Provider siap digunakan.',
+                    config: {
+                        apiUrl: config.apiUrl,
+                        deviceId: config.deviceId || 'not configured',
+                        provider: 'Wablas'
+                    },
+                    status: status
+                });
+            } else {
+                return res.json({
+                    success: false,
+                    message: 'WablasProvider terinisialisasi tapi status disconnected. Pastikan API key valid dan device sudah dipair di dashboard Wablas.',
+                    config: {
+                        apiUrl: config.apiUrl,
+                        deviceId: config.deviceId || 'not configured'
+                    },
+                    status: status
+                });
+            }
+        } catch (error) {
+            logger.error('Error testing Wablas connection:', error);
+            return res.json({
+                success: false,
+                message: 'Error saat test koneksi: ' + error.message,
+                error: error.message
+            });
+        }
+    } catch (error) {
+        logger.error('Error in test-wablas endpoint:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Terjadi kesalahan saat test koneksi Wablas',
+            error: error.message
+        });
+    }
+});
+
+// API endpoint untuk resolve DNS domain ke IP
+router.get('/api/resolve-dns', adminAuth, async (req, res) => {
+    try {
+        const domain = req.query.domain;
+        
+        if (!domain) {
+            return res.json({ success: false, message: 'Domain tidak boleh kosong' });
+        }
+        
+        // Validasi format domain (basic)
+        const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+        if (!domainRegex.test(domain)) {
+            return res.json({ success: false, message: 'Format domain tidak valid' });
+        }
+        
+        try {
+            // Resolve domain ke IPv4
+            const addresses = await dns.resolve4(domain);
+            
+            if (addresses && addresses.length > 0) {
+                // Ambil IP pertama
+                const ip = addresses[0];
+                logger.info(`DNS resolve: ${domain} -> ${ip}`);
+                return res.json({ success: true, ip: ip, domain: domain, addresses: addresses });
+            } else {
+                return res.json({ success: false, message: 'Domain tidak memiliki IP address' });
+            }
+        } catch (dnsError) {
+            logger.warn(`DNS resolve error for ${domain}: ${dnsError.message}`);
+            return res.json({ success: false, message: `Gagal resolve domain: ${dnsError.message}` });
+        }
+    } catch (error) {
+        logger.error('Error in resolve-dns endpoint:', error);
+        return res.json({ success: false, message: error.message || 'Gagal resolve domain' });
+    }
+});
 
 // Export fungsi untuk testing
 module.exports = {

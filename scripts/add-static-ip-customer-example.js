@@ -5,10 +5,8 @@
  * Menunjukkan cara menambah pelanggan dengan berbagai tipe koneksi
  */
 
-const BillingManager = require('../config/billing');
+const billingManager = require('../config/billing');
 const { getSetting } = require('../config/settingsManager');
-
-const billingManager = new BillingManager();
 
 // Contoh data pelanggan untuk berbagai scenario
 const customerExamples = {

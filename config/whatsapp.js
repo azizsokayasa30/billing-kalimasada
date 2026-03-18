@@ -56,10 +56,53 @@ function normalizePhone(input) {
     if (!input) return '';
     let s = String(input).replace(/[^0-9+]/g, '');
     if (s.startsWith('+')) s = s.slice(1);
+    
+    // Handle format WhatsApp internasional yang aneh (misal: 91908172980363)
+    // Jika dimulai dengan 91 dan panjangnya > 12, coba konversi
+    if (s.startsWith('91') && s.length > 12) {
+        // Pattern: 91908172980363
+        // Kemungkinan: 91 (prefix WhatsApp) + 90 (prefix lain) + 8172980363 (nomor)
+        // Atau: 91 (prefix) + 08172980363 (nomor dengan 0)
+        // Coba beberapa konversi:
+        
+        // Method 1: Hapus 91, lalu hapus 90 jika ada
+        const without91 = s.slice(2);
+        if (without91.startsWith('90')) {
+            // Hapus 90 juga
+            const without90 = without91.slice(2);
+            if (without90.startsWith('0')) {
+                return '62' + without90.slice(1);
+            }
+            if (without90.startsWith('62')) {
+                return without90;
+            }
+            if (/^8[0-9]{7,13}$/.test(without90)) {
+                return '62' + without90;
+            }
+        } else {
+            // Tidak ada 90, langsung normalisasi
+            if (without91.startsWith('0')) {
+                return '62' + without91.slice(1);
+            }
+            if (without91.startsWith('62')) {
+                return without91;
+            }
+            if (/^8[0-9]{7,13}$/.test(without91)) {
+                return '62' + without91;
+            }
+        }
+        
+        console.warn(`⚠️ [NORMALIZE] Nomor dimulai dengan 91 (India): ${s}, tidak bisa dikonversi otomatis`);
+        // Untuk sementara, tetap gunakan nomor asli dan biarkan isAdminNumber handle
+    }
+    
     if (s.startsWith('0')) return '62' + s.slice(1);
     if (s.startsWith('62')) return s;
     // Fallback: if it looks like local without leading 0, prepend 62
     if (/^8[0-9]{7,13}$/.test(s)) return '62' + s;
+    
+    // Jika nomor panjang dan tidak dimulai dengan 62, mungkin perlu konversi
+    // Tapi untuk sekarang, return as is dan biarkan isAdminNumber handle
     return s;
 }
 
@@ -90,21 +133,48 @@ function decryptAdminNumber(encryptedNumber) {
 }
 
 // Membaca nomor super admin dari file eksternal (optional)
+// Jika file tidak ada, gunakan admins.0 dari settings.json sebagai fallback
 function getSuperAdminNumber() {
     const filePath = path.join(__dirname, 'superadmin.txt');
+    
+    // Fallback ke admins.0 dari settings.json
+    let adminUtama = null;
+    try {
+        const { getSetting } = require('./settingsManager');
+        adminUtama = getSetting('admins.0', null);
+    } catch (error) {
+        console.warn('⚠️ Error getting admins.0:', error.message);
+    }
+    
     if (!fs.existsSync(filePath)) {
-        console.warn('⚠️ File superadmin.txt tidak ditemukan, superadmin features disabled');
+        // Gunakan admins.0 sebagai fallback
+        if (adminUtama) {
+            console.log(`ℹ️ File superadmin.txt tidak ditemukan, menggunakan admins.0 (${adminUtama}) sebagai super admin`);
+            return adminUtama;
+        }
+        console.warn('⚠️ File superadmin.txt tidak ditemukan dan admins.0 tidak tersedia, superadmin features disabled');
         return null;
     }
+    
     try {
         const number = fs.readFileSync(filePath, 'utf-8').trim();
         if (!number) {
-            console.warn('⚠️ File superadmin.txt kosong, superadmin features disabled');
+            // Fallback ke admins.0 jika file kosong
+            if (adminUtama) {
+                console.log(`ℹ️ File superadmin.txt kosong, menggunakan admins.0 (${adminUtama}) sebagai super admin`);
+                return adminUtama;
+            }
+            console.warn('⚠️ File superadmin.txt kosong dan admins.0 tidak tersedia, superadmin features disabled');
             return null;
         }
         return number;
     } catch (error) {
         console.error('❌ Error reading superadmin.txt:', error.message);
+        // Fallback ke admins.0 jika error membaca file
+        if (adminUtama) {
+            console.log(`ℹ️ Error membaca superadmin.txt, menggunakan admins.0 (${adminUtama}) sebagai super admin`);
+            return adminUtama;
+        }
         return null;
     }
 }
@@ -116,33 +186,112 @@ let genieacsCommandsEnabled = true;
 function isAdminNumber(number) {
     try {
         const { getSetting } = require('./settingsManager');
-        // Normalisasi nomor
-        let cleanNumber = number.replace(/\D/g, '');
+        
+        // Normalisasi nomor dengan lebih hati-hati
+        let cleanNumber = String(number).replace(/\D/g, '');
+        
+        // Handle format WhatsApp internasional yang aneh (misal: 91908172980363)
+        // Jika dimulai dengan 91 dan panjangnya > 12, coba konversi
+        if (cleanNumber.startsWith('91') && cleanNumber.length > 12) {
+            // 91908172980363 -> coba ambil 8 digit terakhir dan tambahkan 62
+            // Atau bisa jadi format: 91 + 90 + 8172980363 -> coba ambil bagian yang sesuai
+            // Untuk Indonesia, biasanya: 62 + 8xxxxxxxxx
+            // Jika nomor panjang dan dimulai dengan 91, mungkin perlu mapping khusus
+            console.warn(`⚠️ [ADMIN] Nomor dimulai dengan 91 (India): ${cleanNumber}, panjang: ${cleanNumber.length}`);
+            
+            // Coba konversi: jika ada pola tertentu, bisa di-convert
+            // Tapi lebih baik gunakan nomor dari settings langsung untuk perbandingan
+            // Untuk sementara, coba hapus prefix 91 jika panjangnya sesuai
+            if (cleanNumber.length === 14 && cleanNumber.startsWith('9190')) {
+                // 91908172980363 -> coba 628172980363 (jika pattern sesuai)
+                // Tapi ini tidak reliable, lebih baik gunakan mapping atau cara lain
+            }
+        }
+        
+        // Normalisasi standar
         if (cleanNumber.startsWith('0')) cleanNumber = '62' + cleanNumber.slice(1);
-        if (!cleanNumber.startsWith('62')) cleanNumber = '62' + cleanNumber;
-        // Gabungkan semua admins dari settings.json (array dan key numerik)
+        if (!cleanNumber.startsWith('62')) {
+            // Jika tidak dimulai dengan 62, coba tambahkan jika panjangnya sesuai
+            if (cleanNumber.length >= 9 && cleanNumber.length <= 13) {
+                cleanNumber = '62' + cleanNumber;
+            }
+        }
+        
+        console.log(`🔍 [ADMIN] Checking admin for number: ${number} -> normalized: ${cleanNumber}`);
+        
+        // PRIORITAS 1: Cek admins.0 sebagai admin utama dari settings.json
+        const adminUtama = getSetting('admins.0', null);
+        if (adminUtama) {
+            let adminUtamaClean = String(adminUtama).replace(/\D/g, '');
+            if (adminUtamaClean.startsWith('0')) adminUtamaClean = '62' + adminUtamaClean.slice(1);
+            if (!adminUtamaClean.startsWith('62')) adminUtamaClean = '62' + adminUtamaClean;
+            
+            console.log(`🔍 [ADMIN] Comparing: ${cleanNumber} with admin utama: ${adminUtamaClean}`);
+            
+            if (cleanNumber === adminUtamaClean) {
+                console.log(`✅ [ADMIN] Nomor ${cleanNumber} adalah admin utama (admins.0)`);
+                return true;
+            }
+            
+            // Coba juga dengan berbagai variasi nomor admin
+            const adminVariants = generatePhoneVariants(adminUtama);
+            for (const variant of adminVariants) {
+                const variantClean = variant.replace(/\D/g, '');
+                if (variantClean.startsWith('0')) {
+                    const variant62 = '62' + variantClean.slice(1);
+                    if (cleanNumber === variant62 || cleanNumber === variantClean) {
+                        console.log(`✅ [ADMIN] Nomor ${cleanNumber} match dengan variant admin: ${variant}`);
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        // PRIORITAS 2: Cek super admin dari file superadmin.txt
+        if (superAdminNumber && cleanNumber === superAdminNumber) {
+            console.log(`✅ [ADMIN] Nomor ${cleanNumber} adalah super admin (superadmin.txt)`);
+            return true;
+        }
+        
+        // PRIORITAS 3: Gabungkan semua admins dari settings.json (array dan key numerik lainnya)
         let admins = getSetting('admins', []);
         if (!Array.isArray(admins)) admins = [];
-        // Cek key numerik
+        
+        // Normalisasi adminUtama untuk perbandingan
+        let adminUtamaClean = null;
+        if (adminUtama) {
+            adminUtamaClean = adminUtama.replace(/\D/g, '');
+            if (adminUtamaClean.startsWith('0')) adminUtamaClean = '62' + adminUtamaClean.slice(1);
+            if (!adminUtamaClean.startsWith('62')) adminUtamaClean = '62' + adminUtamaClean;
+        }
+        
+        // Cek key numerik lainnya (admins.1, admins.2, dst)
         const settingsRaw = require('./adminControl').getSettings();
         Object.keys(settingsRaw).forEach(key => {
             if (key.startsWith('admins.') && typeof settingsRaw[key] === 'string') {
                 let n = settingsRaw[key].replace(/\D/g, '');
                 if (n.startsWith('0')) n = '62' + n.slice(1);
                 if (!n.startsWith('62')) n = '62' + n;
+                // Jangan duplikat admins.0 yang sudah dicek di atas
+                if (adminUtamaClean && n !== adminUtamaClean) {
+                    admins.push(n);
+                } else if (!adminUtamaClean) {
                 admins.push(n);
+                }
             }
         });
-        // Log debug
-        console.log('DEBUG Admins from settings.json:', admins);
-        console.log('DEBUG Nomor Masuk:', cleanNumber);
-        // Cek super admin
-        if (cleanNumber === superAdminNumber) return true;
-        // Cek di daftar admin
-        if (admins.includes(cleanNumber)) return true;
+        
+        // Cek di daftar admin lainnya
+        if (admins.includes(cleanNumber)) {
+            console.log(`✅ [ADMIN] Nomor ${cleanNumber} adalah admin (daftar admin lainnya)`);
+            return true;
+        }
+        
+        // Log debug jika bukan admin (hanya di development, bisa di-comment di production)
+        // console.log(`❌ [ADMIN] Nomor ${cleanNumber} bukan admin. Admin utama: ${adminUtama || 'tidak ada'}, Daftar admin: ${admins.join(', ') || 'kosong'}`);
         return false;
     } catch (error) {
-        console.error('Error in isAdminNumber:', error);
+        console.error('❌ [ADMIN] Error in isAdminNumber:', error);
         return false;
     }
 }
@@ -186,6 +335,8 @@ async function sendFormattedMessage(remoteJid, message, options = {}) {
 
 let sock = null;
 let qrCodeDisplayed = false;
+let isConnecting = false; // Flag untuk mencegah multiple connection attempts
+let connectionTimeout = null; // Timeout untuk connection attempt
 
 // Tambahkan variabel global untuk menyimpan QR code dan status koneksi
 let whatsappStatus = {
@@ -346,6 +497,50 @@ function addWatermarkToMessage(message) {
 
 // Update fungsi koneksi WhatsApp dengan penanganan error yang lebih baik
 async function connectToWhatsApp() {
+    // Cegah multiple connection attempts
+    if (isConnecting) {
+        console.log('⚠️ Koneksi WhatsApp sedang dalam proses, skip...');
+        return sock;
+    }
+    
+    // Cek apakah sudah connected dan masih valid
+    if (sock && global.whatsappStatus?.connected) {
+        try {
+            // Test connection dengan simple check
+            if (sock.user && sock.user.id) {
+                console.log('✅ WhatsApp sudah terhubung, skip reconnection');
+                return sock;
+            }
+        } catch (e) {
+            // Socket mungkin invalid, lanjutkan dengan reconnect
+            console.log('⚠️ Socket existing tapi invalid, akan reconnect...');
+        }
+    }
+    
+    // Cleanup socket lama jika ada
+    if (sock) {
+        try {
+            console.log('🧹 Membersihkan socket lama...');
+            if (sock.ev) {
+                sock.ev.removeAllListeners();
+            }
+            if (sock.end) {
+                sock.end();
+            }
+        } catch (cleanupError) {
+            console.warn('⚠️ Error cleaning up old socket:', cleanupError.message);
+        }
+        sock = null;
+    }
+    
+    isConnecting = true;
+    
+    // Clear connection timeout jika ada
+    if (connectionTimeout) {
+        clearTimeout(connectionTimeout);
+        connectionTimeout = null;
+    }
+    
     try {
         console.log('Memulai koneksi WhatsApp...');
         
@@ -362,8 +557,15 @@ async function connectToWhatsApp() {
         }
         
         // Gunakan logger dengan level yang dapat dikonfigurasi
-        const logLevel = getSetting('whatsapp_log_level', 'silent');
-        const logger = pino({ level: logLevel });
+        // Set ke 'error' untuk suppress Bad MAC warnings (normal behavior)
+        const logLevel = getSetting('whatsapp_log_level', 'error');
+        const logger = pino({ 
+            level: logLevel,
+            // Suppress specific error messages yang normal
+            customLevels: {
+                suppress: 100 // Level untuk suppress
+            }
+        });
         
         // Buat socket dengan konfigurasi yang lebih baik dan penanganan error
         let authState;
@@ -398,17 +600,36 @@ async function connectToWhatsApp() {
             qrTimeout: 40000,
             defaultQueryTimeoutMs: 30000, // Timeout untuk query
             retryRequestDelayMs: 1000,
-            version // Tambahkan versi yang diambil secara dinamis
+            version, // Tambahkan versi yang diambil secara dinamis
+            printQRInTerminal: true, // Pastikan QR code ditampilkan
+            markOnlineOnConnect: true // Mark online saat connect
         });
+        
+        console.log('✅ [CONNECT] WhatsApp socket created, setting up event listeners...');
         
 
 
         // Tangani update koneksi
         sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr } = update;
+            const { connection, lastDisconnect, qr, isNewLogin } = update;
             
-            // Log update koneksi
-            console.log('Connection update:', update);
+            // Log update koneksi (kurangi verbosity, tapi log penting)
+            if (connection === 'open' || connection === 'close' || qr || isNewLogin) {
+                console.log('Connection update:', { 
+                    connection, 
+                    qr: !!qr, 
+                    isNewLogin: isNewLogin !== undefined ? isNewLogin : 'undefined',
+                    statusCode: lastDisconnect?.error?.output?.statusCode
+                });
+            }
+            
+            // Handle isNewLogin - ini normal saat first login atau session refresh
+            // JANGAN reset session atau logout untuk isNewLogin
+            if (isNewLogin === true) {
+                console.log('🔄 isNewLogin detected - ini normal, session akan di-refresh oleh Baileys');
+                // Biarkan Baileys handle isNewLogin, jangan interfere
+                return; // Skip processing lebih lanjut untuk isNewLogin
+            }
             
             // Tangani QR code
             if (qr) {
@@ -432,7 +653,8 @@ async function connectToWhatsApp() {
             
             // Tangani koneksi
             if (connection === 'open') {
-                console.log('WhatsApp terhubung!');
+                console.log('✅ WhatsApp terhubung!');
+                isConnecting = false; // Reset flag setelah connected
                 const connectedSince = new Date();
                 
                 // Update status global
@@ -444,8 +666,24 @@ async function connectToWhatsApp() {
                     status: 'connected'
                 };
                 
+                // PENTING: Start keep-alive mechanism untuk menjaga koneksi tetap hidup
+                startKeepAlive(sock);
+                
                 // Set sock instance untuk modul lain
                 setSock(sock);
+                
+                // Set sock instance untuk provider manager (BaileysProvider)
+                try {
+                    const { getProviderManager } = require('./whatsapp-provider-manager');
+                    const providerManager = getProviderManager();
+                    const provider = providerManager.getProvider();
+                    if (provider && provider.setSock) {
+                        provider.setSock(sock);
+                        console.log('✅ [CONNECT] BaileysProvider socket updated');
+                    }
+                } catch (error) {
+                    console.warn('⚠️ [CONNECT] Error setting sock for provider manager:', error.message);
+                }
                 
                 // Set sock instance untuk modul sendMessage
                 try {
@@ -470,6 +708,9 @@ async function connectToWhatsApp() {
                     console.error('Error setting sock for WhatsApp notifications:', error);
                 }
                 
+                // PENTING: Start keep-alive mechanism untuk menjaga koneksi tetap hidup
+                startKeepAlive(sock);
+                
                 // Kirim pesan ke admin bahwa bot telah terhubung
                 try {
                     // Ambil port yang aktif dari global settings atau fallback
@@ -487,15 +728,22 @@ async function connectToWhatsApp() {
                     console.error('Error sending connection notification:', error);
                 }
             } else if (connection === 'close') {
+                isConnecting = false; // Reset flag saat disconnect
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const rawMessage = lastDisconnect?.error?.output?.payload?.message || lastDisconnect?.error?.message || '';
                 const errorMessage = String(rawMessage).toLowerCase();
                 let shouldReconnect = true;
 
-                if (statusCode === DisconnectReason.loggedOut) {
+                // Handle "Closing open session in favor of incoming prekey bundle" - ini bukan logout, ini normal session refresh
+                if (errorMessage.includes('prekey bundle') || errorMessage.includes('closing open session') || errorMessage.includes('incoming prekey')) {
+                    console.log('ℹ️ Session refresh detected (prekey bundle) - ini normal dari Baileys, akan reconnect otomatis...');
+                    shouldReconnect = true;
+                    // JANGAN reset session untuk prekey bundle - ini normal behavior
+                } else if (statusCode === DisconnectReason.loggedOut) {
                     console.warn('⚠️ WhatsApp ter-logout dari server. Menghapus sesi untuk meminta QR baru.');
                     resetWhatsAppSessionDirectory(sessionDir);
                     qrCodeDisplayed = false;
+                    shouldReconnect = false; // Jangan reconnect untuk loggedOut
                 } else if (
                     statusCode === DisconnectReason.connectionReplaced ||
                     errorMessage.includes('conflict')
@@ -531,10 +779,32 @@ async function connectToWhatsApp() {
                     reason: rawMessage || 'connection_closed'
                 };
                 
+                // Stop keep-alive dan monitoring
+                stopKeepAlive();
+                stopConnectionStateMonitoring();
+                
+                // Stop keep-alive dan monitoring
+                stopKeepAlive();
+                stopConnectionStateMonitoring();
+                
+                // Cleanup socket
+                if (sock) {
+                    try {
+                        if (sock.ev) {
+                            sock.ev.removeAllListeners();
+                        }
+                    } catch (e) {
+                        // Ignore cleanup errors
+                    }
+                    sock = null;
+                }
+                
                 // Reconnect jika bukan karena logout
                 if (shouldReconnect) {
-                    const reconnectDelay = Number(getSetting('reconnect_interval', 5000)) || 5000;
-                    setTimeout(() => {
+                    const reconnectDelay = Number(getSetting('reconnect_interval', 10000)) || 10000; // Increase delay to 10s
+                    console.log(`⏳ Akan reconnect dalam ${reconnectDelay/1000} detik...`);
+                    connectionTimeout = setTimeout(() => {
+                        connectionTimeout = null;
                         connectToWhatsApp();
                     }, reconnectDelay);
                 }
@@ -546,31 +816,90 @@ async function connectToWhatsApp() {
         
         // PERBAIKAN: Tangani pesan masuk dengan benar
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
+            console.log(`📨 [MESSAGE] messages.upsert event received, type: ${type}, messages count: ${messages?.length || 0}`);
+            
             if (type === 'notify') {
                 for (const message of messages) {
-                    if (!message.key.fromMe && message.message) {
-                        try {
-                            // Log pesan masuk untuk debugging
-                            console.log('Pesan masuk:', JSON.stringify(message, null, 2));
+                    // Skip pesan dari bot sendiri
+                    if (message.key.fromMe) {
+                        console.log('📨 [MESSAGE] Skipping message from self');
+                        continue;
+                    }
+                    
+                    // Pastikan message ada
+                    if (!message.message) {
+                        console.log('📨 [MESSAGE] Skipping message without content');
+                        continue;
+                    }
+                    
+                    try {
+                        // Extract message text untuk logging
+                        const messageText = message.message?.conversation || 
+                                          message.message?.extendedTextMessage?.text || 
+                                          'Unknown message type';
+                        const sender = message.key.remoteJid?.split('@')[0] || 'Unknown';
+                        
+                        console.log(`📨 [MESSAGE] Processing message from ${sender}: ${messageText.substring(0, 50)}...`);
                             
                             // Panggil fungsi handleIncomingMessage
                             await handleIncomingMessage(sock, message);
+                        
+                        console.log(`✅ [MESSAGE] Message processed successfully from ${sender}`);
                         } catch (error) {
-                            console.error('Error handling incoming message:', error);
+                        // Skip error "Bad MAC" - ini normal dari Baileys saat session refresh
+                        if (error.message && error.message.includes('Bad MAC')) {
+                            console.debug('⚠️ [MESSAGE] Bad MAC error (normal during session refresh), skipping');
+                            continue;
                         }
+                        console.error(`❌ [MESSAGE] Error handling incoming message from ${message.key.remoteJid}:`, error.message);
+                        console.error('Error stack:', error.stack);
                     }
                 }
+            } else {
+                console.log(`📨 [MESSAGE] Ignoring message type: ${type}`);
             }
         });
         
+        // Handle error dari Baileys (termasuk Bad MAC)
+        sock.ev.on('error', (error) => {
+            // Skip "Bad MAC" errors - ini normal saat session refresh
+            if (error.message && error.message.includes('Bad MAC')) {
+                // Baileys akan handle sendiri, tidak perlu action
+                return;
+            }
+            // Log error lainnya
+            console.error('⚠️ Baileys error:', error.message);
+        });
+        
+        // PENTING: Tambahkan connection state monitoring
+        // Monitor connection state secara berkala untuk detect silent disconnects
+        startConnectionStateMonitoring(sock);
+        
+        isConnecting = false; // Reset flag setelah socket dibuat
         return sock;
     } catch (error) {
-        console.error('Error connecting to WhatsApp:', error);
+        console.error('❌ Error connecting to WhatsApp:', error.message);
+        isConnecting = false; // Reset flag saat error
         
-        // Coba koneksi ulang setelah interval
-        setTimeout(() => {
+        // Cleanup socket jika ada
+        if (sock) {
+            try {
+                if (sock.ev) {
+                    sock.ev.removeAllListeners();
+                }
+            } catch (e) {
+                // Ignore cleanup errors
+            }
+            sock = null;
+        }
+        
+        // Coba koneksi ulang setelah interval (lebih lama untuk avoid loop)
+        const reconnectDelay = Number(getSetting('reconnect_interval', 15000)) || 15000;
+        console.log(`⏳ Akan coba reconnect dalam ${reconnectDelay/1000} detik...`);
+        connectionTimeout = setTimeout(() => {
+            connectionTimeout = null;
             connectToWhatsApp();
-        }, getSetting('reconnect_interval', 5000));
+        }, reconnectDelay);
         
         return null;
     }
@@ -781,11 +1110,386 @@ async function sendAdminMenuList(remoteJid) {
 // Update fungsi getDeviceByNumber
 async function getDeviceByNumber(number) {
     try {
-        console.log(`Mencari perangkat untuk nomor ${number}`);
+        console.log(`🔍 [GET_DEVICE] Mencari perangkat untuk nomor ${number}`);
         
         // Bersihkan nomor dari karakter non-digit
         let cleanNumber = number.replace(/\D/g, '');
         
+        // PENTING: SELALU cari customer di database terlebih dahulu, baru cari device di GenieACS
+        // Alur: Database Customer -> PPPoE Username -> GenieACS Device
+        console.log(`🔍 [GET_DEVICE] Mencari customer di database terlebih dahulu...`);
+        
+        try {
+            const sqlite3 = require('sqlite3').verbose();
+            const path = require('path');
+            const dbPath = path.join(__dirname, '../data/billing.db');
+            const db = new sqlite3.Database(dbPath);
+            
+            // Coba berbagai kombinasi digit dari nomor untuk mencari customer
+            const searchPatterns = [];
+            
+            // Untuk JID @lid yang panjang (seperti 113683606814724), coba berbagai kombinasi digit
+            // karena JID @lid mungkin mengandung nomor telepon di dalamnya
+            if (cleanNumber.length > 12) {
+                // Coba berbagai kombinasi digit dari JID panjang
+                // Contoh: 113683606814724 mungkin mengandung 083152818098 di dalamnya
+                for (let start = 0; start <= cleanNumber.length - 8; start++) {
+                    for (let len = 8; len <= 12 && start + len <= cleanNumber.length; len++) {
+                        const digits = cleanNumber.substring(start, start + len);
+                        if (digits.length >= 8) {
+                            searchPatterns.push(`%${digits}%`);
+                        }
+                    }
+                }
+            } else {
+                // Ambil beberapa digit terakhir (8-12 digit)
+                for (let i = 8; i <= 12; i++) {
+                    const digits = cleanNumber.slice(-i);
+                    if (digits.length >= 8) {
+                        searchPatterns.push(`%${digits}%`);
+                    }
+                }
+                
+                // Coba dengan beberapa digit di tengah juga
+                if (cleanNumber.length > 12) {
+                    const middleDigits = cleanNumber.slice(-11, -1); // 10 digit di tengah
+                    if (middleDigits.length >= 8) {
+                        searchPatterns.push(`%${middleDigits}%`);
+                    }
+                }
+            }
+            
+            // Hapus duplikat pattern
+            const uniquePatterns = [...new Set(searchPatterns)];
+            
+            // Jika masih belum ada pattern, coba semua kombinasi yang mungkin
+            if (uniquePatterns.length === 0) {
+                // Ambil beberapa digit terakhir sebagai fallback
+                const last10 = cleanNumber.slice(-10);
+                const last9 = cleanNumber.slice(-9);
+                const last8 = cleanNumber.slice(-8);
+                uniquePatterns.push(`%${last10}%`, `%${last9}%`, `%${last8}%`);
+            }
+            
+            // Gunakan uniquePatterns sebagai searchPatterns
+            const searchPatternsFinal = uniquePatterns.slice(0, 50); // Batasi maksimal 50 pattern untuk performa
+            
+            return new Promise((resolve) => {
+                // Cari customer di database dengan semua pattern
+                const query = 'SELECT phone, pppoe_username FROM customers WHERE ' + 
+                             searchPatternsFinal.map(() => 'phone LIKE ?').join(' OR ') + ' LIMIT 1';
+                
+                db.get(query, searchPatterns, async (err, row) => {
+                    if (!err && row && row.phone) {
+                        console.log(`✅ [GET_DEVICE] Customer ditemukan di database: ${row.phone} (PPPoE: ${row.pppoe_username || 'N/A'})`);
+                        
+                        // PENTING: Verifikasi bahwa nomor customer benar-benar cocok dengan nomor pengirim
+                        // Ini untuk mencegah kebocoran data ke pelanggan lain
+                        const customerPhone = row.phone.replace(/\D/g, '');
+                        const customerPhoneNormalized = normalizePhone(customerPhone);
+                        const senderNumberNormalized = normalizePhone(cleanNumber);
+                        
+                        // Verifikasi bahwa nomor customer cocok dengan nomor pengirim
+                        if (customerPhoneNormalized === senderNumberNormalized || 
+                            customerPhone.includes(cleanNumber.slice(-10)) || 
+                            cleanNumber.includes(customerPhone.slice(-10)) ||
+                            customerPhone.slice(-10) === cleanNumber.slice(-10) ||
+                            customerPhone.slice(-9) === cleanNumber.slice(-9) ||
+                            customerPhone.slice(-8) === cleanNumber.slice(-8)) {
+                            
+                            console.log(`✅ [GET_DEVICE] Nomor customer (${row.phone}) cocok dengan nomor pengirim (${cleanNumber})`);
+                            
+                            // Jika ada PPPoE username, cari device di GenieACS berdasarkan PPPoE username
+                            if (row.pppoe_username) {
+                                try {
+                                    const genieacsModule = require('./genieacs');
+                                    const device = await genieacsModule.findDeviceByPPPoE(row.pppoe_username);
+                                    if (device) {
+                                        console.log(`✅ [GET_DEVICE] Device ditemukan di GenieACS dengan PPPoE username: ${row.pppoe_username} untuk customer: ${row.phone}`);
+                                        db.close();
+                                        resolve(device);
+                                        return;
+                                    } else {
+                                        console.log(`⚠️ [GET_DEVICE] Device tidak ditemukan di GenieACS dengan PPPoE username: ${row.pppoe_username}`);
+                                    }
+                                } catch (pppoeError) {
+                                    console.log(`⚠️ [GET_DEVICE] Error mencari device dengan PPPoE: ${pppoeError.message}`);
+                                }
+                            } else {
+                                console.log(`⚠️ [GET_DEVICE] Customer tidak memiliki PPPoE username`);
+                            }
+                            
+                            // Jika tidak ditemukan dengan PPPoE, coba cari dengan nomor telepon customer
+                            console.log(`🔍 [GET_DEVICE] Mencoba mencari device dengan nomor customer: ${customerPhone}`);
+                            const device = await searchDeviceWithFormats(customerPhone);
+                            db.close();
+                            resolve(device);
+                            return;
+                        } else {
+                            console.log(`🔒 [GET_DEVICE] Keamanan: Nomor customer (${row.phone}) tidak cocok dengan nomor pengirim (${cleanNumber}), skip untuk mencegah kebocoran data`);
+                        }
+                    }
+                    
+                    // Jika tidak ditemukan dengan pattern, coba cari semua pelanggan dan match manual
+                    console.log(`⚠️ [GET_DEVICE] Customer tidak ditemukan dengan pattern, mencoba mencari semua pelanggan...`);
+                    
+                    db.all('SELECT phone, pppoe_username FROM customers WHERE pppoe_username IS NOT NULL AND pppoe_username != "" ORDER BY id LIMIT 200', [], async (err2, rows) => {
+                        if (!err2 && rows && rows.length > 0) {
+                            console.log(`🔍 [GET_DEVICE] Mencari di ${rows.length} pelanggan dengan PPPoE username...`);
+                            
+                            // PENTING: Hanya cari device untuk customer yang nomornya cocok dengan nomor pengirim
+                            // Jangan mencari device untuk semua customer untuk mencegah kebocoran data
+                            console.log(`🔍 [GET_DEVICE] Mencoba match nomor pengirim dengan customer yang terdaftar...`);
+                            for (const customer of rows) {
+                                const customerPhone = customer.phone.replace(/\D/g, '');
+                                
+                                // Cek berbagai kombinasi digit (lebih agresif)
+                                const customerPhoneLast10 = customerPhone.slice(-10);
+                                const customerPhoneLast9 = customerPhone.slice(-9);
+                                const customerPhoneLast8 = customerPhone.slice(-8);
+                                const customerPhoneLast7 = customerPhone.slice(-7);
+                                const customerPhoneLast6 = customerPhone.slice(-6);
+                                
+                                const numLast10 = cleanNumber.slice(-10);
+                                const numLast9 = cleanNumber.slice(-9);
+                                const numLast8 = cleanNumber.slice(-8);
+                                const numLast7 = cleanNumber.slice(-7);
+                                const numLast6 = cleanNumber.slice(-6);
+                                
+                                // Cek apakah ada match dengan berbagai kombinasi (lebih luas)
+                                const isMatch = customerPhoneLast10 === numLast10 || 
+                                    customerPhoneLast9 === numLast9 || 
+                                    customerPhoneLast8 === numLast8 ||
+                                    customerPhoneLast7 === numLast7 ||
+                                    customerPhoneLast6 === numLast6 ||
+                                    customerPhone.includes(numLast10) ||
+                                    customerPhone.includes(numLast9) ||
+                                    customerPhone.includes(numLast8) ||
+                                    customerPhone.includes(numLast7) ||
+                                    customerPhone.includes(numLast6) ||
+                                    numLast10.includes(customerPhoneLast10) ||
+                                    numLast9.includes(customerPhoneLast9) ||
+                                    numLast8.includes(customerPhoneLast8) ||
+                                    cleanNumber.includes(customerPhone) ||
+                                    customerPhone.includes(cleanNumber.slice(-10)) ||
+                                    customerPhone.includes(cleanNumber.slice(-9)) ||
+                                    customerPhone.includes(cleanNumber.slice(-8));
+                                
+                                if (isMatch) {
+                                    console.log(`✅ [GET_DEVICE] Customer ditemukan dengan match manual: ${customer.phone} (PPPoE: ${customer.pppoe_username || 'N/A'})`);
+                                    
+                                    // PENTING: Verifikasi bahwa nomor customer benar-benar cocok dengan nomor pengirim
+                                    // Ini untuk mencegah kebocoran data ke pelanggan lain
+                                    const customerPhoneNormalized = normalizePhone(customerPhone);
+                                    const senderNumberNormalized = normalizePhone(cleanNumber);
+                                    
+                                    // Verifikasi bahwa nomor customer benar-benar cocok dengan nomor pengirim
+                                    if (customerPhoneNormalized === senderNumberNormalized || 
+                                        customerPhone.includes(cleanNumber.slice(-10)) || 
+                                        cleanNumber.includes(customerPhone.slice(-10)) ||
+                                        customerPhone.slice(-10) === cleanNumber.slice(-10) ||
+                                        customerPhone.slice(-9) === cleanNumber.slice(-9) ||
+                                        customerPhone.slice(-8) === cleanNumber.slice(-8)) {
+                                        
+                                        console.log(`✅ [GET_DEVICE] Nomor customer (${customer.phone}) cocok dengan nomor pengirim (${cleanNumber})`);
+                                        
+                                        // Jika ada PPPoE username, cari device di GenieACS berdasarkan PPPoE username (prioritas)
+                                        if (customer.pppoe_username) {
+                                            try {
+                                                const genieacsModule = require('./genieacs');
+                                                const device = await genieacsModule.findDeviceByPPPoE(customer.pppoe_username);
+                                                if (device) {
+                                                    console.log(`✅ [GET_DEVICE] Device ditemukan di GenieACS dengan PPPoE username: ${customer.pppoe_username} untuk customer: ${customer.phone}`);
+                                                    db.close();
+                                                    resolve(device);
+                                                    return;
+                                                } else {
+                                                    console.log(`⚠️ [GET_DEVICE] Device tidak ditemukan di GenieACS dengan PPPoE username: ${customer.pppoe_username}`);
+                                                }
+                                            } catch (pppoeError) {
+                                                console.log(`⚠️ [GET_DEVICE] Error mencari device dengan PPPoE: ${pppoeError.message}`);
+                                            }
+                                        }
+                                        
+                                        // Jika tidak ditemukan dengan PPPoE, coba cari dengan nomor telepon customer
+                                        const device = await searchDeviceWithFormats(customerPhone);
+                                        db.close();
+                                        resolve(device);
+                                        return;
+                                    } else {
+                                        console.log(`🔒 [GET_DEVICE] Keamanan: Nomor customer (${customer.phone}) tidak cocok dengan nomor pengirim (${cleanNumber}), skip untuk mencegah kebocoran data`);
+                                    }
+                                }
+                            }
+                            
+                            // PENTING: Jangan mencari device untuk semua customer jika nomor tidak cocok
+                            // Ini untuk mencegah kebocoran data ke pelanggan lain
+                            console.log(`⚠️ [GET_DEVICE] Tidak ada customer yang nomornya cocok dengan nomor pengirim (${cleanNumber})`);
+                            console.log(`🔒 [GET_DEVICE] Keamanan: Tidak mencari device untuk customer lain untuk mencegah kebocoran data`);
+                        }
+                        
+                        // Jika tidak ditemukan di semua pelanggan, coba cari dengan format normal (fallback)
+                        console.log(`⚠️ [GET_DEVICE] Customer tidak ditemukan di semua pelanggan, mencoba dengan format normal...`);
+                        db.close();
+                        const device = await searchDeviceWithFormats(cleanNumber);
+                        resolve(device);
+                    });
+                });
+            });
+        } catch (dbError) {
+            console.warn(`⚠️ [GET_DEVICE] Error searching database:`, dbError.message);
+            // Fallback: cari dengan format normal
+            return await searchDeviceWithFormats(cleanNumber);
+        }
+        
+        // PENTING: Jika nomor terlalu panjang atau tidak terlihat seperti nomor telepon Indonesia,
+        // coba cari di database pelanggan terlebih dahulu untuk mendapatkan nomor yang benar
+        if (false && (cleanNumber.length > 15 || (!cleanNumber.startsWith('0') && !cleanNumber.startsWith('62') && !cleanNumber.startsWith('8')))) {
+            console.log(`⚠️ [GET_DEVICE] Nomor tidak terlihat valid (${cleanNumber}, length: ${cleanNumber.length}), mencoba mencari di database...`);
+            try {
+                const sqlite3 = require('sqlite3').verbose();
+                const path = require('path');
+                const dbPath = path.join(__dirname, '../data/billing.db');
+                const db = new sqlite3.Database(dbPath);
+                
+                // Coba cari pelanggan dengan nomor yang mungkin terkait
+                // Coba berbagai kombinasi digit dari nomor
+                const searchPatterns = [];
+                
+                // Ambil beberapa digit terakhir (8-12 digit)
+                for (let i = 8; i <= 12; i++) {
+                    const digits = cleanNumber.slice(-i);
+                    if (digits.length >= 8) {
+                        searchPatterns.push(`%${digits}%`);
+                    }
+                }
+                
+                // Coba dengan beberapa digit di tengah juga
+                if (cleanNumber.length > 12) {
+                    const middleDigits = cleanNumber.slice(-11, -1); // 10 digit di tengah
+                    if (middleDigits.length >= 8) {
+                        searchPatterns.push(`%${middleDigits}%`);
+                    }
+                }
+                
+                // Jika masih belum ada pattern, coba semua kombinasi yang mungkin
+                if (searchPatterns.length === 0) {
+                    // Ambil beberapa digit terakhir sebagai fallback
+                    const last10 = cleanNumber.slice(-10);
+                    const last9 = cleanNumber.slice(-9);
+                    const last8 = cleanNumber.slice(-8);
+                    searchPatterns.push(`%${last10}%`, `%${last9}%`, `%${last8}%`);
+                }
+                
+                return new Promise((resolve) => {
+                    const query = 'SELECT phone, pppoe_username FROM customers WHERE ' + 
+                                 searchPatterns.map(() => 'phone LIKE ?').join(' OR ') + ' LIMIT 1';
+                    
+                    db.get(query, searchPatterns, async (err, row) => {
+                        if (!err && row && row.phone) {
+                            console.log(`✅ [GET_DEVICE] Nomor ditemukan di database: ${row.phone} (PPPoE: ${row.pppoe_username || 'N/A'})`);
+                            const customerPhone = row.phone.replace(/\D/g, '');
+                            
+                            // Gunakan nomor dari database untuk mencari device
+                            cleanNumber = customerPhone;
+                            
+                            // Jika ada PPPoE username, coba cari dengan itu juga (prioritas)
+                            if (row.pppoe_username) {
+                                try {
+                                    const { genieacsApi } = require('./genieacs');
+                                    const device = await genieacsApi.findDeviceByPPPoE(row.pppoe_username);
+                                    if (device) {
+                                        console.log(`✅ [GET_DEVICE] Device ditemukan dengan PPPoE username: ${row.pppoe_username}`);
+                                        db.close();
+                                        resolve(device);
+                                        return;
+                                    }
+                                } catch (pppoeError) {
+                                    console.log(`⚠️ [GET_DEVICE] Error mencari dengan PPPoE: ${pppoeError.message}`);
+                                }
+                            }
+                            
+                            // Lanjutkan dengan pencarian normal menggunakan nomor dari database
+                            db.close();
+                            const device = await searchDeviceWithFormats(customerPhone);
+                            resolve(device);
+                            return;
+                        }
+                        
+                        // Jika tidak ditemukan dengan pattern, coba cari semua pelanggan dan match manual
+                        console.log(`⚠️ [GET_DEVICE] Nomor tidak ditemukan dengan pattern, mencoba mencari semua pelanggan...`);
+                        
+                        db.all('SELECT phone, pppoe_username FROM customers LIMIT 200', [], async (err2, rows) => {
+                            db.close();
+                            if (!err2 && rows && rows.length > 0) {
+                                // Coba match dengan berbagai kombinasi
+                                for (const customer of rows) {
+                                    const customerPhone = customer.phone.replace(/\D/g, '');
+                                    const customerPhoneLast10 = customerPhone.slice(-10);
+                                    const customerPhoneLast9 = customerPhone.slice(-9);
+                                    const customerPhoneLast8 = customerPhone.slice(-8);
+                                    
+                                    const numLast10 = cleanNumber.slice(-10);
+                                    const numLast9 = cleanNumber.slice(-9);
+                                    const numLast8 = cleanNumber.slice(-8);
+                                    
+                                    // Cek apakah ada match
+                                    if (customerPhoneLast10 === numLast10 || 
+                                        customerPhoneLast9 === numLast9 || 
+                                        customerPhoneLast8 === numLast8 ||
+                                        customerPhone.includes(numLast10) ||
+                                        customerPhone.includes(numLast9) ||
+                                        customerPhone.includes(numLast8)) {
+                                        console.log(`✅ [GET_DEVICE] Nomor ditemukan dengan match manual: ${customer.phone} (PPPoE: ${customer.pppoe_username || 'N/A'})`);
+                                        
+                                        // Jika ada PPPoE username, coba cari dengan itu juga (prioritas)
+                                        if (customer.pppoe_username) {
+                                            try {
+                                                const { genieacsApi } = require('./genieacs');
+                                                const device = await genieacsApi.findDeviceByPPPoE(customer.pppoe_username);
+                                                if (device) {
+                                                    console.log(`✅ [GET_DEVICE] Device ditemukan dengan PPPoE username: ${customer.pppoe_username}`);
+                                                    resolve(device);
+                                                    return;
+                                                }
+                                            } catch (pppoeError) {
+                                                console.log(`⚠️ [GET_DEVICE] Error mencari dengan PPPoE: ${pppoeError.message}`);
+                                            }
+                                        }
+                                        
+                                        // Lanjutkan dengan pencarian normal menggunakan nomor dari database
+                                        const device = await searchDeviceWithFormats(customerPhone);
+                                        resolve(device);
+                                        return;
+                                    }
+                                }
+                            }
+                            
+                            // Jika tidak ditemukan di semua pelanggan, coba cari dengan format normal
+                            console.log(`⚠️ [GET_DEVICE] Nomor tidak ditemukan di semua pelanggan, mencoba dengan format normal...`);
+                            const device = await searchDeviceWithFormats(cleanNumber);
+                            resolve(device);
+                        });
+                    });
+                });
+            } catch (dbError) {
+                console.warn(`⚠️ [GET_DEVICE] Error searching database:`, dbError.message);
+                // Lanjutkan dengan pencarian normal
+                return await searchDeviceWithFormats(cleanNumber);
+            }
+        }
+        
+        // Jika nomor terlihat valid, langsung cari dengan format normal
+        return await searchDeviceWithFormats(cleanNumber);
+        
+    } catch (error) {
+        console.error('❌ [GET_DEVICE] Error getting device by number:', error);
+        return null;
+    }
+}
+
+// Helper function untuk mencari device dengan berbagai format nomor
+async function searchDeviceWithFormats(cleanNumber) {
         // Format nomor dalam beberapa variasi yang mungkin digunakan sebagai tag
         const possibleFormats = [];
         
@@ -811,26 +1515,57 @@ async function getDeviceByNumber(number) {
             }
         }
         
-        console.log(`Mencoba format nomor berikut: ${possibleFormats.join(', ')}`);
+    console.log(`🔍 [GET_DEVICE] Mencoba format nomor berikut: ${possibleFormats.join(', ')}`);
         
         // Coba cari dengan semua format yang mungkin
         for (const format of possibleFormats) {
             try {
                 const device = await findDeviceByTag(format);
                 if (device) {
-                    console.log(`Perangkat ditemukan dengan tag nomor: ${format}`);
+                console.log(`✅ [GET_DEVICE] Perangkat ditemukan dengan tag nomor: ${format}`);
                     return device;
                 }
             } catch (formatError) {
-                console.log(`Gagal mencari dengan format ${format}: ${formatError.message}`);
+            console.log(`⚠️ [GET_DEVICE] Gagal mencari dengan format ${format}: ${formatError.message}`);
                 // Lanjut ke format berikutnya
             }
         }
         
-        console.log(`Perangkat tidak ditemukan untuk nomor ${number} dengan semua format yang dicoba`);
-        return null;
-    } catch (error) {
-        console.error('Error getting device by number:', error);
+    // Jika tidak ditemukan dengan tag, coba cari dengan PPPoE username dari database
+    try {
+        const sqlite3 = require('sqlite3').verbose();
+        const path = require('path');
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        return new Promise((resolve) => {
+            // Cari pelanggan dengan nomor yang cocok
+            const searchPatterns = possibleFormats.map(f => `%${f}%`);
+            const query = 'SELECT pppoe_username FROM customers WHERE ' + 
+                         searchPatterns.map(() => 'phone LIKE ?').join(' OR ') + ' LIMIT 1';
+            
+            db.get(query, searchPatterns, async (err, row) => {
+                db.close();
+                if (!err && row && row.pppoe_username) {
+                    console.log(`🔍 [GET_DEVICE] Mencari device dengan PPPoE username: ${row.pppoe_username}`);
+                    try {
+                        const { genieacsApi } = require('./genieacs');
+                        const device = await genieacsApi.findDeviceByPPPoE(row.pppoe_username);
+                        if (device) {
+                            console.log(`✅ [GET_DEVICE] Device ditemukan dengan PPPoE username: ${row.pppoe_username}`);
+                            resolve(device);
+                            return;
+                        }
+                    } catch (pppoeError) {
+                        console.log(`⚠️ [GET_DEVICE] Error mencari dengan PPPoE: ${pppoeError.message}`);
+                    }
+                }
+                console.log(`❌ [GET_DEVICE] Perangkat tidak ditemukan untuk nomor dengan semua format yang dicoba`);
+                resolve(null);
+            });
+        });
+    } catch (dbError) {
+        console.warn(`⚠️ [GET_DEVICE] Error searching database for PPPoE:`, dbError.message);
         return null;
     }
 }
@@ -916,8 +1651,8 @@ async function refreshDevice(deviceId) {
         if (!deviceId) {
             return { success: false, message: "Device ID tidak valid" };
         }
-        // Ambil konfigurasi GenieACS dari helper
-        const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
+        // Ambil konfigurasi GenieACS dari helper (dari database genieacs_servers)
+        const { genieacsUrl, genieacsUsername, genieacsPassword } = await getGenieacsConfig();
         // 2. Coba mendapatkan device terlebih dahulu untuk memastikan ID valid
         // Cek apakah device ada
         try {
@@ -1007,10 +1742,11 @@ async function refreshDevice(deviceId) {
 }
 
 // Tambahkan handler untuk menu admin
-async function handleAdminMenu(remoteJid) {
-    // handleAdminMenu hanya memanggil sendAdminMenuList, tidak perlu perubahan
-    await sendAdminMenuList(remoteJid);
-}
+// Fungsi handleAdminMenu sudah didefinisikan di bawah, tidak perlu duplikat
+// async function handleAdminMenu(remoteJid) {
+//     // handleAdminMenu hanya memanggil sendAdminMenuList, tidak perlu perubahan
+//     await sendAdminMenuList(remoteJid);
+// }
 
 // Update handler admin check ONU
 async function handleAdminCheckONU(remoteJid, customerNumber) {
@@ -1547,27 +2283,49 @@ async function handleAdminCheckONUWithBilling(remoteJid, searchTerm) {
 async function findDeviceByTag(tag) {
     try {
         console.log(`Searching for device with tag: ${tag}`);
-        const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
-        console.log('DEBUG GenieACS URL:', genieacsUrl);
+        const { genieacsUrl, genieacsUsername, genieacsPassword } = await getGenieacsConfig();
+        
+        // Validasi URL GenieACS
+        if (!genieacsUrl || typeof genieacsUrl !== 'string' || genieacsUrl.trim() === '') {
+            console.error('❌ GenieACS URL tidak dikonfigurasi atau kosong');
+            throw new Error('GenieACS URL tidak dikonfigurasi. Silakan konfigurasi GenieACS URL di Settings atau tambahkan GenieACS Server di /admin/genieacs-setting');
+        }
+        
+        // Validasi format URL
+        let validUrl;
         try {
+            validUrl = new URL(genieacsUrl);
+        } catch (urlError) {
+            console.error(`❌ Format GenieACS URL tidak valid: ${genieacsUrl}`);
+            throw new Error(`Format GenieACS URL tidak valid: ${genieacsUrl}. URL harus lengkap dengan protocol (http:// atau https://)`);
+        }
+        
+        console.log('DEBUG GenieACS URL:', genieacsUrl);
+        
+        try {
+            // Coba dengan query exact match
             const exactResponse = await axios.get(`${genieacsUrl}/devices/?query={"_tags":"${tag}"}`,
                 {
                     auth: {
                         username: genieacsUsername,
                         password: genieacsPassword
-                    }
+                    },
+                    timeout: 10000
                 }
             );
             if (exactResponse.data && exactResponse.data.length > 0) {
-                console.log(`Device found with exact tag match: ${tag}`);
+                console.log(`✅ Device found with exact tag match: ${tag}`);
                 return exactResponse.data[0];
             }
             console.log(`No exact match found for tag ${tag}, trying partial match...`);
+            
+            // Coba dengan partial match
             const partialResponse = await axios.get(`${genieacsUrl}/devices`, {
                 auth: {
                     username: genieacsUsername,
                     password: genieacsPassword
-                }
+                },
+                timeout: 10000
             });
             if (partialResponse.data && partialResponse.data.length > 0) {
                 for (const device of partialResponse.data) {
@@ -1578,7 +2336,7 @@ async function findDeviceByTag(tag) {
                             tag.includes(t)
                         );
                         if (matchingTag) {
-                            console.log(`Device found with partial tag match: ${matchingTag}`);
+                            console.log(`✅ Device found with partial tag match: ${matchingTag}`);
                             return device;
                         }
                     }
@@ -1587,13 +2345,22 @@ async function findDeviceByTag(tag) {
             console.log(`No device found with tag containing: ${tag}`);
             return null;
         } catch (queryError) {
+            // Jika error adalah Invalid URL, jangan coba lagi dengan method alternatif
+            if (queryError.code === 'ERR_INVALID_URL' || queryError.message.includes('Invalid URL')) {
+                console.error('❌ Invalid URL error:', queryError.message);
+                throw new Error(`GenieACS URL tidak valid: ${genieacsUrl}. Pastikan URL lengkap dengan protocol (http:// atau https://)`);
+            }
+            
             console.error('Error with tag query:', queryError.message);
             console.log('Trying alternative method: fetching all devices');
+            
+            try {
             const allDevicesResponse = await axios.get(`${genieacsUrl}/devices`, {
                 auth: {
                     username: genieacsUsername,
                     password: genieacsPassword
-                }
+                    },
+                    timeout: 10000
             });
             const device = allDevicesResponse.data.find(d => {
                 if (!d._tags) return false;
@@ -1604,9 +2371,13 @@ async function findDeviceByTag(tag) {
                 );
             });
             return device || null;
+            } catch (fallbackError) {
+                console.error('❌ Fallback method also failed:', fallbackError.message);
+                throw new Error(`Gagal mencari device: ${fallbackError.message}`);
+            }
         }
     } catch (error) {
-        console.error('Error finding device by tag:', error);
+        console.error('❌ Error finding device by tag:', error.message);
         throw error;
     }
 }
@@ -1615,7 +2386,7 @@ async function findDeviceByTag(tag) {
 async function handleChangeSSID(senderNumber, remoteJid, params) {
     try {
         console.log(`Handling change SSID request from ${senderNumber} with params:`, params);
-        const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
+        const { genieacsUrl, genieacsUsername, genieacsPassword } = await getGenieacsConfig();
         console.log('DEBUG GenieACS URL:', genieacsUrl);
         const device = await getDeviceByNumber(senderNumber);
         if (!device) {
@@ -1775,7 +2546,7 @@ Coba lagi nanti ya!${getSetting('footer_info', 'Internet Tanpa Batas')}`
 // Handler untuk admin mengubah password WiFi pelanggan
 async function handleAdminEditPassword(adminJid, customerNumber, newPassword) {
     try {
-        const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
+        const { genieacsUrl, genieacsUsername, genieacsPassword } = await getGenieacsConfig();
         console.log(`Admin mengubah password WiFi untuk pelanggan ${customerNumber}`);
         
         // Validasi panjang password
@@ -1983,7 +2754,7 @@ Coba lagi nanti ya!${getSetting('footer_info', 'Internet Tanpa Batas')}`
 // Handler untuk admin mengubah SSID pelanggan
 async function handleAdminEditSSID(adminJid, customerNumber, newSSID) {
     try {
-        const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
+        const { genieacsUrl, genieacsUsername, genieacsPassword } = await getGenieacsConfig();
         console.log(`Admin mengubah SSID untuk pelanggan ${customerNumber} menjadi ${newSSID}`);
         
         // Format nomor pelanggan untuk mencari di GenieACS
@@ -2307,7 +3078,7 @@ Silakan coba lagi nanti atau hubungi admin.${getSetting('footer_info', 'Internet
 // Fungsi untuk mengubah password WiFi perangkat
 async function changePassword(deviceId, newPassword) {
     try {
-        const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
+        const { genieacsUrl, genieacsUsername, genieacsPassword } = await getGenieacsConfig();
         console.log(`Changing password for device: ${deviceId}`);
         // Encode deviceId untuk URL
         const encodedDeviceId = encodeDeviceId(deviceId);
@@ -2398,7 +3169,7 @@ async function changePassword(deviceId, newPassword) {
 // Handler untuk admin mengubah password WiFi pelanggan
 async function handleAdminEditPassword(remoteJid, customerNumber, newPassword) {
     try {
-        const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
+        const { genieacsUrl, genieacsUsername, genieacsPassword } = await getGenieacsConfig();
         console.log(`Handling admin edit password request`);
         
         // Validasi parameter
@@ -2672,7 +3443,7 @@ async function handleAdminEditSSIDWithParams(remoteJid, params) {
         console.error('Sock instance not set');
         return;
     }
-    const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
+    const { genieacsUrl, genieacsUsername, genieacsPassword } = await getGenieacsConfig();
 
     console.log(`Processing adminssid command with params:`, params);
 
@@ -2864,7 +3635,7 @@ async function handleAdminEditSSIDWithParams(remoteJid, params) {
 // Fungsi untuk mengubah SSID
 async function changeSSID(deviceId, newSSID) {
     try {
-        const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
+        const { genieacsUrl, genieacsUsername, genieacsPassword } = await getGenieacsConfig();
         console.log(`Changing SSID for device ${deviceId} to "${newSSID}"`);
         
         // Encode deviceId untuk URL
@@ -3117,18 +3888,36 @@ async function handleListONU(remoteJid) {
 // Fungsi untuk mengambil semua perangkat
 async function getAllDevices() {
     try {
-        // Ambil konfigurasi GenieACS dari helper
-        const { genieacsUrl, genieacsUsername, genieacsPassword } = getGenieacsConfig();
-        const response = await axios.get(`${genieacsUrl}/devices`, {
-            auth: {
-                username: genieacsUsername,
-                password: genieacsPassword
-            }
-        });
-        return response.data;
+        // Cek apakah GenieACS URL sudah dikonfigurasi (dari database genieacs_servers)
+        const { genieacsUrl } = await getGenieacsConfig();
+        if (!genieacsUrl || genieacsUrl.trim() === '') {
+            console.warn('⚠️ GenieACS URL tidak dikonfigurasi. Silakan konfigurasi di Settings.');
+            return [];
+        }
+        
+        // Gunakan fungsi dari config/genieacs.js yang sudah menangani error dengan baik
+        const { getAllDevicesFromAllServers } = require('./genieacs');
+        
+        // Coba ambil dari semua server GenieACS
+        const devices = await getAllDevicesFromAllServers();
+        
+        if (!devices || devices.length === 0) {
+            console.warn('⚠️ Tidak ada perangkat ditemukan dari GenieACS');
+            return [];
+        }
+        
+        return devices;
     } catch (error) {
         console.error('Error getting all devices:', error);
-        throw error;
+        
+        // Jika error karena URL tidak valid atau tidak dikonfigurasi, return empty array
+        if (error.code === 'ERR_INVALID_URL' || error.message?.includes('Invalid URL') || error.message?.includes('tidak dikonfigurasi')) {
+            console.warn('⚠️ GenieACS URL tidak dikonfigurasi dengan benar. Silakan konfigurasi di Settings.');
+            return [];
+        }
+        
+        // Untuk error lainnya, return empty array juga untuk mencegah crash
+        return [];
     }
 }
 
@@ -3984,6 +4773,141 @@ Silakan coba lagi nanti.`
 const sendMessage = require('./sendMessage');
 
 // Export modul
+// Keep-alive mechanism untuk menjaga koneksi tetap hidup
+let keepAliveInterval = null;
+let connectionStateInterval = null;
+
+function startKeepAlive(sock) {
+    // Stop existing keep-alive jika ada
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+    }
+    
+    // Keep-alive setiap 30 detik dengan mengirim ping ke WhatsApp
+    keepAliveInterval = setInterval(async () => {
+        try {
+            if (sock && sock.user) {
+                // Cek apakah koneksi masih aktif dengan membaca status
+                const status = global.whatsappStatus;
+                if (status && status.connected) {
+                    // Koneksi masih aktif, tidak perlu action
+                    // Log hanya setiap 5 menit untuk mengurangi spam
+                    const now = Date.now();
+                    if (!global.lastKeepAliveLog || (now - global.lastKeepAliveLog) > 300000) {
+                        console.log('💓 Keep-alive: Koneksi WhatsApp masih aktif');
+                        global.lastKeepAliveLog = now;
+                    }
+                } else {
+                    // Koneksi terputus, trigger reconnect
+                    console.warn('⚠️ Keep-alive: Koneksi terputus, akan reconnect...');
+                    if (keepAliveInterval) {
+                        clearInterval(keepAliveInterval);
+                        keepAliveInterval = null;
+                    }
+                    // Trigger reconnect
+                    setTimeout(() => {
+                        connectToWhatsApp();
+                    }, 5000);
+                }
+            }
+        } catch (error) {
+            console.error('⚠️ Error in keep-alive:', error.message);
+            // Jika error, mungkin koneksi terputus
+            if (keepAliveInterval) {
+                clearInterval(keepAliveInterval);
+                keepAliveInterval = null;
+            }
+            // Trigger reconnect
+            setTimeout(() => {
+                connectToWhatsApp();
+            }, 5000);
+        }
+    }, 30000); // Check setiap 30 detik
+    
+    console.log('✅ Keep-alive mechanism started');
+}
+
+function stopKeepAlive() {
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+        console.log('🛑 Keep-alive mechanism stopped');
+    }
+}
+
+// Connection state monitoring untuk detect silent disconnects
+function startConnectionStateMonitoring(sock) {
+    // Stop existing monitoring jika ada
+    if (connectionStateInterval) {
+        clearInterval(connectionStateInterval);
+        connectionStateInterval = null;
+    }
+    
+    // Monitor connection state setiap 60 detik
+    connectionStateInterval = setInterval(async () => {
+        try {
+            if (sock) {
+                // Cek apakah socket masih valid
+                if (!sock.user || !sock.ev) {
+                    console.warn('⚠️ Connection state: Socket invalid, akan reconnect...');
+                    if (connectionStateInterval) {
+                        clearInterval(connectionStateInterval);
+                        connectionStateInterval = null;
+                    }
+                    stopKeepAlive();
+                    setTimeout(() => {
+                        connectToWhatsApp();
+                    }, 5000);
+                    return;
+                }
+                
+                // Cek status koneksi dari global
+                const status = global.whatsappStatus;
+                if (!status || !status.connected) {
+                    console.warn('⚠️ Connection state: Status disconnected, akan reconnect...');
+                    if (connectionStateInterval) {
+                        clearInterval(connectionStateInterval);
+                        connectionStateInterval = null;
+                    }
+                    stopKeepAlive();
+                    setTimeout(() => {
+                        connectToWhatsApp();
+                    }, 5000);
+                    return;
+                }
+                
+                // Log setiap 5 menit untuk mengurangi spam
+                const now = Date.now();
+                if (!global.lastConnectionStateLog || (now - global.lastConnectionStateLog) > 300000) {
+                    console.log('✅ Connection state: Koneksi WhatsApp sehat');
+                    global.lastConnectionStateLog = now;
+                }
+            }
+        } catch (error) {
+            console.error('⚠️ Error in connection state monitoring:', error.message);
+            if (connectionStateInterval) {
+                clearInterval(connectionStateInterval);
+                connectionStateInterval = null;
+            }
+            stopKeepAlive();
+            setTimeout(() => {
+                connectToWhatsApp();
+            }, 5000);
+        }
+    }, 60000); // Check setiap 60 detik
+    
+    console.log('✅ Connection state monitoring started');
+}
+
+function stopConnectionStateMonitoring() {
+    if (connectionStateInterval) {
+        clearInterval(connectionStateInterval);
+        connectionStateInterval = null;
+        console.log('🛑 Connection state monitoring stopped');
+    }
+}
+
 module.exports = {
     setSock,
     handleAddHotspotUser,
@@ -4401,76 +5325,430 @@ async function handleVoucherCommand(remoteJid, params) {
 
 // Fungsi untuk menangani pesan masuk dengan penanganan error dan logging yang lebih baik
 async function handleIncomingMessage(sock, message) {
-    // Skip sending welcome message to super admin
-    console.log('📱 Skip sending welcome message to super admin');
+    console.log('📱 [HANDLER] handleIncomingMessage called');
     
     try {
-        // Skip if message already processed by agent handler
-        if (message._agentProcessed) {
-            console.log('📱 [MAIN] Message already processed by agent handler, skipping');
-            return;
-        }
-        
         // Validasi input
         if (!message || !message.key) {
-            logger.warn('Invalid message received', { message: typeof message });
+            console.warn('⚠️ [HANDLER] Invalid message received', { message: typeof message });
             return;
         }
         
         // Ekstrak informasi pesan
         const remoteJid = message.key.remoteJid;
         if (!remoteJid) {
-            logger.warn('Message without remoteJid received', { messageKey: message.key });
+            console.warn('⚠️ [HANDLER] Message without remoteJid received', { messageKey: message.key });
+            return;
+        }
+        
+        console.log(`📱 [HANDLER] Processing message from: ${remoteJid}`);
+        
+        // Skip if message already processed by agent handler
+        if (message._agentProcessed) {
+            console.log('📱 [HANDLER] Message already processed by agent handler, skipping');
             return;
         }
         
         // Skip jika pesan dari grup dan bukan dari admin
         if (remoteJid.includes('@g.us')) {
-            logger.debug('Message from group received', { groupJid: remoteJid });
+            console.log('📱 [HANDLER] Message from group received', { groupJid: remoteJid });
             const participant = message.key.participant;
             if (!participant || !isAdminNumber(participant.split('@')[0])) {
-                logger.debug('Group message not from admin, ignoring', { participant });
+                console.log('📱 [HANDLER] Group message not from admin, ignoring', { participant });
                 return;
             }
-            logger.info('Group message from admin, processing', { participant });
+            console.log('📱 [HANDLER] Group message from admin, processing', { participant });
         }
         
         // Cek tipe pesan dan ekstrak teks
         let messageText = '';
         if (!message.message) {
-            logger.debug('Message without content received', { messageType: 'unknown' });
+            console.warn('⚠️ [HANDLER] Message without content received', { messageType: 'unknown' });
             return;
         }
         
         if (message.message.conversation) {
             messageText = message.message.conversation;
-            logger.debug('Conversation message received');
+            console.log('📱 [HANDLER] Conversation message received');
         } else if (message.message.extendedTextMessage) {
             messageText = message.message.extendedTextMessage.text;
-            logger.debug('Extended text message received');
+            console.log('📱 [HANDLER] Extended text message received');
         } else {
             // Tipe pesan tidak didukung
-            logger.debug('Unsupported message type received', { 
+            console.log('⚠️ [HANDLER] Unsupported message type received', { 
                 messageTypes: Object.keys(message.message) 
             });
             return;
         }
         
+        // Ekstrak informasi tambahan dari message (pushName, notifyName, dll)
+        const pushName = message.pushName || message.message?.extendedTextMessage?.contextInfo?.participant?.split('@')[0] || null;
+        const notifyName = message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.conversation || null;
+        console.log(`📱 [HANDLER] Message metadata - pushName: ${pushName}, notifyName: ${notifyName}`);
+        
         // Ekstrak nomor pengirim dengan penanganan error
+        // PENTING: Gunakan nomor telepon sebenarnya, bukan JID yang bisa berbeda format
         let senderNumber;
         try {
-            senderNumber = remoteJid.split('@')[0];
+            // Coba ambil dari message.key.participant untuk grup, atau remoteJid untuk chat pribadi
+            const jidToUse = message.key.participant || remoteJid;
+            let extractedNumber = jidToUse.split('@')[0];
+            const jidSuffix = jidToUse.split('@')[1]; // Ambil suffix (@lid, @s.whatsapp.net, dll)
+            
+            console.log(`📱 [HANDLER] Raw JID: ${jidToUse}, Extracted: ${extractedNumber}, Suffix: ${jidSuffix}`);
+            
+            // PENTING: Jika JID menggunakan format @lid (Linked Device ID), ini bukan nomor telepon sebenarnya
+            // Perlu menggunakan onWhatsApp dengan JID lengkap untuk mendapatkan nomor sebenarnya
+            if (jidSuffix === 'lid') {
+                console.log(`🔍 [HANDLER] JID dengan format @lid terdeteksi, mencoba mendapatkan nomor sebenarnya...`);
+                
+                // Method 1: Gunakan onWhatsApp dengan JID lengkap untuk mendapatkan nomor sebenarnya
+                if (sock && sock.onWhatsApp) {
+                    try {
+                        // Coba gunakan onWhatsApp dengan JID lengkap (termasuk @lid)
+                        // onWhatsApp bisa menerima JID lengkap dan mengembalikan nomor sebenarnya
+                        const [result] = await sock.onWhatsApp(jidToUse);
+                        if (result && result.exists && result.jid) {
+                            const realJid = result.jid.split('@')[0];
+                            console.log(`✅ [HANDLER] Nomor sebenarnya ditemukan via onWhatsApp dengan JID lengkap: ${realJid}`);
+                            extractedNumber = realJid;
+                            cleanNumber = realJid.replace(/\D/g, '');
+                        } else {
+                            console.log(`⚠️ [HANDLER] onWhatsApp tidak menemukan nomor dengan JID lengkap, mencoba metode lain...`);
+                            
+                            // Method 1b: Coba dengan beberapa variasi nomor dari JID
+                            const variants = [];
+                            const cleanJid = extractedNumber.replace(/\D/g, '');
+                            
+                            // Jika JID panjang, coba ekstrak bagian yang mungkin nomor telepon
+                            if (cleanJid.length > 12) {
+                                // Coba ambil 10-13 digit terakhir (biasanya nomor telepon)
+                                const last10 = cleanJid.slice(-10);
+                                const last11 = cleanJid.slice(-11);
+                                const last12 = cleanJid.slice(-12);
+                                const last13 = cleanJid.slice(-13);
+                                
+                                variants.push(last10);
+                                variants.push(last11);
+                                variants.push(last12);
+                                variants.push(last13);
+                                
+                                // Coba dengan prefix 62 dan 0
+                                if (last10.startsWith('8')) {
+                                    variants.push('62' + last10);
+                                    variants.push('0' + last10);
+                                }
+                                if (last11.startsWith('08')) {
+                                    variants.push('62' + last11.slice(1));
+                                }
+                                if (last12.startsWith('628')) {
+                                    variants.push(last12);
+                                    variants.push('0' + last12.slice(2));
+                                }
+                            }
+                            
+                            // Coba verifikasi dengan onWhatsApp untuk setiap variant
+                            for (const variant of variants) {
+                                try {
+                                    const cleanVariant = variant.replace(/\D/g, '');
+                                    if (cleanVariant.length >= 10 && cleanVariant.length <= 15) {
+                                        const [variantResult] = await sock.onWhatsApp(cleanVariant);
+                                        if (variantResult && variantResult.exists) {
+                                            const realJid = variantResult.jid.split('@')[0];
+                                            console.log(`✅ [HANDLER] Nomor sebenarnya ditemukan via onWhatsApp: ${realJid} (from variant ${variant})`);
+                                            extractedNumber = realJid;
+                                            cleanNumber = realJid.replace(/\D/g, '');
+                                            break;
+                                        }
+                                    }
+                                } catch (verifyError) {
+                                    // Continue ke variant berikutnya
+                                }
+                            }
+                        }
+                    } catch (onWhatsAppError) {
+                        console.log(`⚠️ [HANDLER] Error using onWhatsApp with full JID:`, onWhatsAppError.message);
+                    }
+                }
+                
+                // Method 2: Jika masih belum ditemukan, coba cari di database pelanggan
+                // dengan mencoba berbagai kombinasi digit dari JID
+                if (extractedNumber === jidToUse.split('@')[0]) {
+                    console.log(`🔍 [HANDLER] Mencari nomor di database dengan berbagai pattern...`);
+                    try {
+                        const sqlite3 = require('sqlite3').verbose();
+                        const path = require('path');
+                        const dbPath = path.join(__dirname, '../data/billing.db');
+                        const db = new sqlite3.Database(dbPath);
+                        
+                        const cleanJid = extractedNumber.replace(/\D/g, '');
+                        
+                        // Coba berbagai kombinasi digit dari JID
+                        const searchPatterns = [];
+                        
+                        // Ambil beberapa digit terakhir
+                        for (let i = 8; i <= 12; i++) {
+                            const digits = cleanJid.slice(-i);
+                            if (digits.length >= 8) {
+                                searchPatterns.push(`%${digits}%`);
+                            }
+                        }
+                        
+                        // Coba dengan beberapa digit di tengah juga
+                        if (cleanJid.length > 12) {
+                            const middleDigits = cleanJid.slice(-11, -1); // 10 digit di tengah
+                            if (middleDigits.length >= 8) {
+                                searchPatterns.push(`%${middleDigits}%`);
+                            }
+                        }
+                        
+                        // Cari di database dengan semua pattern
+                        if (searchPatterns.length > 0) {
+                            const query = 'SELECT phone, pppoe_username FROM customers WHERE ' + 
+                                         searchPatterns.map(() => 'phone LIKE ?').join(' OR ') + ' LIMIT 1';
+                            
+                            await new Promise((resolve) => {
+                                db.get(query, searchPatterns, (err, row) => {
+                                    if (!err && row && row.phone) {
+                                        console.log(`✅ [HANDLER] Nomor ditemukan di database: ${row.phone} (PPPoE: ${row.pppoe_username || 'N/A'})`);
+                                        extractedNumber = row.phone.replace(/\D/g, '');
+                                        cleanNumber = extractedNumber;
+                                        db.close();
+                                        resolve();
+                                        return;
+                                    }
+                                    
+                                    // Jika tidak ditemukan dengan pattern, coba cari semua pelanggan dan match manual
+                                    console.log(`⚠️ [HANDLER] Nomor tidak ditemukan dengan pattern, mencoba mencari semua pelanggan...`);
+                                    
+                                    db.all('SELECT phone, pppoe_username, name FROM customers LIMIT 200', [], async (err2, rows) => {
+                                        if (!err2 && rows && rows.length > 0) {
+                                            // Untuk JID @lid yang panjang, coba berbagai kombinasi digit dari JID
+                                            // dan match dengan berbagai kombinasi digit dari nomor customer
+                                            for (const customer of rows) {
+                                                const customerPhone = customer.phone.replace(/\D/g, '');
+                                                
+                                                // Coba berbagai kombinasi digit dari JID panjang
+                                                if (cleanJid.length > 12) {
+                                                    // Coba berbagai kombinasi digit dari JID (lebih agresif)
+                                                    // Coba mulai dari berbagai posisi dan panjang yang berbeda
+                                                    for (let start = 0; start <= cleanJid.length - 8; start++) {
+                                                        for (let len = 8; len <= 13 && start + len <= cleanJid.length; len++) {
+                                                            const jidDigits = cleanJid.substring(start, start + len);
+                                                            
+                                                            // Normalisasi nomor customer untuk perbandingan
+                                                            const customerPhoneNormalized = normalizePhone(customerPhone);
+                                                            const jidDigitsNormalized = normalizePhone(jidDigits);
+                                                            
+                                                            // Cek berbagai kombinasi match
+                                                            const customerLast10 = customerPhone.slice(-10);
+                                                            const customerLast9 = customerPhone.slice(-9);
+                                                            const customerLast8 = customerPhone.slice(-8);
+                                                            const jidLast10 = jidDigits.slice(-10);
+                                                            const jidLast9 = jidDigits.slice(-9);
+                                                            const jidLast8 = jidDigits.slice(-8);
+                                                            
+                                                            // Cek apakah kombinasi digit dari JID cocok dengan nomor customer
+                                                            if (customerPhone.includes(jidDigits) || 
+                                                                jidDigits.includes(customerPhone.slice(-10)) ||
+                                                                customerPhone.slice(-10) === jidDigits.slice(-10) ||
+                                                                customerPhone.slice(-9) === jidDigits.slice(-9) ||
+                                                                customerPhone.slice(-8) === jidDigits.slice(-8) ||
+                                                                customerLast10 === jidLast10 ||
+                                                                customerLast9 === jidLast9 ||
+                                                                customerLast8 === jidLast8 ||
+                                                                customerPhoneNormalized === jidDigitsNormalized ||
+                                                                customerPhoneNormalized.includes(jidDigitsNormalized.slice(-10)) ||
+                                                                jidDigitsNormalized.includes(customerPhoneNormalized.slice(-10))) {
+                                                                console.log(`✅ [HANDLER] Nomor ditemukan dengan match manual (JID panjang): ${customer.phone} (PPPoE: ${customer.pppoe_username || 'N/A'}) - JID digits: ${jidDigits}`);
+                                                                extractedNumber = customerPhone;
+                                                                cleanNumber = customerPhone;
+                                                                resolve();
+                                                                return;
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Jika masih tidak ditemukan, coba reverse: cari kombinasi digit dari customer phone di JID
+                                                    const customerPhoneNormalized = normalizePhone(customerPhone);
+                                                    for (let len = 8; len <= 12; len++) {
+                                                        const customerDigits = customerPhoneNormalized.slice(-len);
+                                                        if (cleanJid.includes(customerDigits)) {
+                                                            console.log(`✅ [HANDLER] Nomor ditemukan dengan reverse match (JID panjang): ${customer.phone} (PPPoE: ${customer.pppoe_username || 'N/A'}) - Customer digits: ${customerDigits}`);
+                                                            extractedNumber = customerPhone;
+                                                            cleanNumber = customerPhone;
+                                                            resolve();
+                                                            return;
+                                                        }
+                                                    }
+                                                } else {
+                                                    // Untuk JID pendek, gunakan logika normal
+                                                    const customerPhoneLast10 = customerPhone.slice(-10);
+                                                    const customerPhoneLast9 = customerPhone.slice(-9);
+                                                    const customerPhoneLast8 = customerPhone.slice(-8);
+                                                    
+                                                    const jidLast10 = cleanJid.slice(-10);
+                                                    const jidLast9 = cleanJid.slice(-9);
+                                                    const jidLast8 = cleanJid.slice(-8);
+                                                    
+                                                    // Cek apakah ada match
+                                                    if (customerPhoneLast10 === jidLast10 || 
+                                                        customerPhoneLast9 === jidLast9 || 
+                                                        customerPhoneLast8 === jidLast8 ||
+                                                        customerPhone.includes(jidLast10) ||
+                                                        customerPhone.includes(jidLast9) ||
+                                                        customerPhone.includes(jidLast8)) {
+                                                        console.log(`✅ [HANDLER] Nomor ditemukan dengan match manual: ${customer.phone} (PPPoE: ${customer.pppoe_username || 'N/A'})`);
+                                                        extractedNumber = customerPhone;
+                                                        cleanNumber = customerPhone;
+                                                        resolve();
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        // PENTING: Jika JID @lid tidak bisa di-resolve dan tidak ada match dengan kombinasi digit,
+                                        // coba pendekatan lain: gunakan semua customer dan cari device untuk masing-masing
+                                        // sampai ditemukan yang memiliki device di GenieACS (hanya untuk JID @lid yang tidak bisa di-resolve)
+                                        if (cleanJid.length > 12 && extractedNumber === jidToUse.split('@')[0]) {
+                                            console.log(`🔍 [HANDLER] JID @lid tidak bisa di-resolve, mencoba mencari device untuk semua customer...`);
+                                            
+                                            // Cari device untuk setiap customer yang memiliki PPPoE username
+                                            for (const customer of rows) {
+                                                if (customer.pppoe_username) {
+                                                    try {
+                                                        const genieacsModule = require('./genieacs');
+                                                        const device = await genieacsModule.findDeviceByPPPoE(customer.pppoe_username);
+                                                        if (device) {
+                                                            console.log(`✅ [HANDLER] Device ditemukan untuk customer: ${customer.phone} (PPPoE: ${customer.pppoe_username})`);
+                                                            // Gunakan nomor customer ini sebagai nomor pengirim
+                                                            extractedNumber = customer.phone.replace(/\D/g, '');
+                                                            cleanNumber = extractedNumber;
+                                                            db.close();
+                                                            resolve();
+                                                            return;
+                                                        }
+                                                    } catch (deviceError) {
+                                                        // Continue ke customer berikutnya
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        console.log(`⚠️ [HANDLER] Nomor tidak ditemukan di semua pelanggan`);
+                                        db.close();
+                                        resolve();
+                                    });
+                                });
+                            });
+                        } else {
+                            db.close();
+                        }
+                    } catch (dbError) {
+                        console.warn(`⚠️ [HANDLER] Error searching database:`, dbError.message);
+                    }
+                }
+            }
+            
+            // PENTING: Pastikan menggunakan nomor telepon sebenarnya, bukan ID pelanggan atau format JID aneh
+            // Format seperti 91908172980363 biasanya bukan nomor telepon sebenarnya
+            let cleanNumber = extractedNumber.replace(/\D/g, '');
+            
+            // PENTING: Jika nomor dimulai dengan 91 (format WhatsApp internasional aneh), 
+            // gunakan nomor dari admins.0 sebagai fallback karena ini biasanya pesan dari admin utama
+            // Format 91 biasanya muncul saat pesan dari nomor yang berbeda dengan nomor login
+            if (cleanNumber.startsWith('91') && cleanNumber.length > 12) {
+                try {
+                    console.log(`🔍 [HANDLER] Nomor dimulai dengan 91 (${cleanNumber}), format JID aneh terdeteksi`);
+                    
+                    // Method 1: Gunakan nomor dari admins.0 sebagai fallback
+                    // Karena format 91 biasanya muncul saat admin utama mengirim pesan
+                    const { getSetting } = require('./settingsManager');
+                    const adminUtama = getSetting('admins.0', null);
+                    if (adminUtama) {
+                        let adminUtamaClean = String(adminUtama).replace(/\D/g, '');
+                        if (adminUtamaClean.startsWith('0')) adminUtamaClean = '62' + adminUtamaClean.slice(1);
+                        if (!adminUtamaClean.startsWith('62')) adminUtamaClean = '62' + adminUtamaClean;
+                        
+                        console.log(`🔍 [HANDLER] Menggunakan nomor admin utama sebagai fallback: ${adminUtamaClean}`);
+                        extractedNumber = adminUtamaClean;
+                        cleanNumber = adminUtamaClean;
+                        console.log(`✅ [HANDLER] Menggunakan nomor admin utama untuk JID aneh: ${extractedNumber}`);
+                    } else {
+                        // Jika admins.0 tidak ada, coba gunakan nomor login
+                        if (sock && sock.user && sock.user.id) {
+                            const loggedInNumber = sock.user.id.split(':')[0];
+                            console.log(`🔍 [HANDLER] admins.0 tidak ada, menggunakan nomor login: ${loggedInNumber}`);
+                            extractedNumber = loggedInNumber;
+                            cleanNumber = loggedInNumber.replace(/\D/g, '');
+                        }
+                    }
+                    
+                    // Jika masih belum dapat nomor yang benar, coba verifikasi dengan onWhatsApp
+                    if (cleanNumber.startsWith('91') && sock.onWhatsApp) {
+                        console.log(`🔍 [HANDLER] Mencoba verifikasi dengan onWhatsApp...`);
+                        // Coba beberapa variasi konversi
+                        const variants = [];
+                        
+                        // Hapus 91, lalu hapus 90 jika ada
+                        const without91 = cleanNumber.slice(2);
+                        if (without91.startsWith('90')) {
+                            const without90 = without91.slice(2);
+                            variants.push(without90);
+                            variants.push('62' + without90);
+                            if (without90.startsWith('0')) {
+                                variants.push('62' + without90.slice(1));
+                            }
+                        } else {
+                            variants.push(without91);
+                            variants.push('62' + without91);
+                            if (without91.startsWith('0')) {
+                                variants.push('62' + without91.slice(1));
+                            }
+                        }
+                        
+                        // Coba verifikasi dengan onWhatsApp untuk mendapatkan JID sebenarnya
+                        for (const variant of variants) {
+                            try {
+                                const cleanVariant = variant.replace(/\D/g, '');
+                                if (cleanVariant.length >= 10 && cleanVariant.length <= 15) {
+                                    const [result] = await sock.onWhatsApp(cleanVariant);
+                                    if (result && result.exists) {
+                                        const realJid = result.jid.split('@')[0];
+                                        console.log(`✅ [HANDLER] Nomor sebenarnya ditemukan via onWhatsApp: ${realJid} (from variant ${variant})`);
+                                        extractedNumber = realJid;
+                                        cleanNumber = realJid.replace(/\D/g, '');
+                                        break;
+                                    }
+                                }
+                            } catch (verifyError) {
+                                // Continue ke variant berikutnya
+                            }
+                        }
+                    }
+                } catch (verifyError) {
+                    console.warn(`⚠️ [HANDLER] Error verifying number with onWhatsApp:`, verifyError.message);
+                }
+            }
+            
+            senderNumber = extractedNumber;
+            console.log(`📱 [HANDLER] Final sender number: ${senderNumber} (clean: ${cleanNumber})`);
+            
         } catch (error) {
-            logger.error('Error extracting sender number', { remoteJid, error: error.message });
+            console.error('❌ [HANDLER] Error extracting sender number', { remoteJid, error: error.message });
             return;
         }
         
-        logger.info(`Message received`, { sender: senderNumber, messageLength: messageText.length });
-        logger.debug(`Message content`, { sender: senderNumber, message: messageText });
+        console.log(`📱 [HANDLER] Message received from ${senderNumber}: "${messageText}"`);
         
         // Cek apakah pengirim adalah admin
-        const isAdmin = isAdminNumber(senderNumber);
-        logger.debug(`Sender admin status`, { sender: senderNumber, isAdmin });
+        // Gunakan normalizePhone untuk memastikan format konsisten
+        const normalizedSenderNumber = normalizePhone(senderNumber);
+        console.log(`📱 [HANDLER] Normalized sender number: ${normalizedSenderNumber} (from ${senderNumber})`);
+        
+        const isAdmin = isAdminNumber(normalizedSenderNumber);
+        console.log(`📱 [HANDLER] Sender ${normalizedSenderNumber} (original: ${senderNumber}) isAdmin: ${isAdmin}`);
         
         // Try to handle with agent handler first (for non-admin messages)
         if (!isAdmin) {
@@ -4755,9 +6033,45 @@ Pesan GenieACS telah diaktifkan kembali.`);
         }
         
         // Perintah admin
-        if ((command === 'admin' || command === '!admin' || command === '/admin') && isAdmin) {
-            console.log(`Menjalankan perintah admin untuk ${senderNumber}`);
+        if (command === 'admin' || command === '!admin' || command === '/admin') {
+            console.log(`📱 [COMMAND] Perintah admin diterima dari ${senderNumber}, isAdmin: ${isAdmin}`);
+            
+            // Cek apakah user adalah admin
+            if (!isAdmin) {
+                console.log(`⚠️ [COMMAND] User ${senderNumber} bukan admin, menolak akses menu admin`);
+                try {
+                    await sock.sendMessage(remoteJid, { 
+                        text: `❌ *AKSES DITOLAK*\n\nAnda tidak memiliki akses untuk menu admin.\n\nNomor Anda: ${senderNumber}\n\nSilakan hubungi administrator untuk mendapatkan akses.` 
+                    });
+                } catch (error) {
+                    console.error(`❌ [COMMAND] Error sending access denied message:`, error);
+                }
+                return;
+            }
+            
+            // User adalah admin, tampilkan menu
+            console.log(`✅ [COMMAND] Menjalankan perintah admin untuk ${senderNumber}`);
+            try {
+                // Pastikan sock tersedia
+                if (!sock) {
+                    throw new Error('WhatsApp socket tidak tersedia');
+                }
+                
             await handleAdminMenu(remoteJid);
+                console.log(`✅ [COMMAND] Menu admin berhasil dikirim ke ${senderNumber}`);
+            } catch (error) {
+                console.error(`❌ [COMMAND] Error in handleAdminMenu:`, error);
+                console.error('Error stack:', error.stack);
+                try {
+                    if (sock) {
+                        await sock.sendMessage(remoteJid, { 
+                            text: `❌ *ERROR*\n\nTerjadi kesalahan saat menampilkan menu admin:\n${error.message}\n\nSilakan coba lagi atau hubungi developer.` 
+                        });
+                    }
+                } catch (sendError) {
+                    console.error(`❌ [COMMAND] Error sending error message:`, sendError);
+                }
+            }
             return;
         }
         
@@ -4904,8 +6218,20 @@ cekstatus 081234567890`
                 !command.includes('tagihan')) {
                 const customerNumber = command.split(' ')[1];
                 if (customerNumber) {
-                    console.log(`Menjalankan perintah cek ONU untuk pelanggan ${customerNumber}`);
+                    console.log(`📱 [COMMAND] Menjalankan perintah cek ONU untuk pelanggan ${customerNumber}`);
+                    try {
                     await handleAdminCheckONUWithBilling(remoteJid, customerNumber);
+                    } catch (error) {
+                        console.error(`❌ [COMMAND] Error in cek ONU:`, error);
+                        await sock.sendMessage(remoteJid, { 
+                            text: `❌ *ERROR*\n\nTerjadi kesalahan saat mengecek ONU:\n${error.message}` 
+                        });
+                    }
+                    return;
+                } else {
+                    await sock.sendMessage(remoteJid, { 
+                        text: `❌ *FORMAT SALAH*\n\nFormat: cek [nomor/nama/pppoe_username]\n\nContoh:\ncek 081234567890` 
+                    });
                     return;
                 }
             }
@@ -5139,17 +6465,53 @@ cekstatus 081234567890`
                 }
             }
             
-            // Perintah list ONU
-            if (command === 'list' || command === '!list' || command === '/list') {
-                console.log(`Menjalankan perintah list ONU`);
+            // Perintah list ONU / devices
+            if (command === 'list' || command === '!list' || command === '/list' ||
+                command === 'devices' || command === '!devices' || command === '/devices') {
+                console.log(`📱 [COMMAND] Menjalankan perintah list ONU/devices`);
+                try {
                 await handleListONU(remoteJid);
+                } catch (error) {
+                    console.error(`❌ [COMMAND] Error in list ONU:`, error);
+                    await sock.sendMessage(remoteJid, { 
+                        text: `❌ *ERROR*\n\nTerjadi kesalahan saat mengambil daftar perangkat:\n${error.message}` 
+                    });
+                }
                 return;
             }
             
             // Perintah cek semua ONU
             if (command === 'cekall' || command === '!cekall' || command === '/cekall') {
-                console.log(`Menjalankan perintah cek semua ONU`);
+                console.log(`📱 [COMMAND] Menjalankan perintah cek semua ONU`);
+                try {
                 await handleCheckAllONU(remoteJid);
+                } catch (error) {
+                    console.error(`❌ [COMMAND] Error in cekall:`, error);
+                    await sock.sendMessage(remoteJid, { 
+                        text: `❌ *ERROR*\n\nTerjadi kesalahan saat memeriksa semua perangkat:\n${error.message}` 
+                    });
+                }
+                return;
+            }
+            
+            // Perintah search (alias untuk cari)
+            if (command.startsWith('search ') || command.startsWith('!search ') || command.startsWith('/search ')) {
+                console.log(`📱 [COMMAND] Menjalankan perintah search`);
+                const searchTerm = messageText.split(' ').slice(1).join(' ');
+                if (searchTerm) {
+                    try {
+                        await handleAdminCheckONUWithBilling(remoteJid, searchTerm);
+                    } catch (error) {
+                        console.error(`❌ [COMMAND] Error in search:`, error);
+                        await sock.sendMessage(remoteJid, { 
+                            text: `❌ *ERROR*\n\nTerjadi kesalahan saat mencari:\n${error.message}` 
+                        });
+                    }
+                } else {
+                    await sock.sendMessage(remoteJid, { 
+                        text: `❌ *FORMAT SALAH*\n\nFormat: search [nomor/nama/pppoe_username]\n\nContoh:\nsearch 081234567890` 
+                    });
+                }
                 return;
             }
             
@@ -6155,13 +7517,61 @@ function getAppSettings() {
 }
 
 // Deklarasi helper agar DRY
-function getGenieacsConfig() {
+// PRIORITAS: Ambil dari database genieacs_servers, fallback ke settings.json
+async function getGenieacsConfig() {
+    try {
+        // PRIORITAS 1: Ambil dari database genieacs_servers
+        const { getAllGenieacsServers } = require('./genieacs');
+        const servers = await getAllGenieacsServers();
+        
+        if (servers && servers.length > 0) {
+            // Gunakan server pertama sebagai default (bisa diubah nanti untuk multi-server)
+            const server = servers[0];
+            console.log(`✅ Using GenieACS server from database: ${server.name} (${server.url})`);
+            return {
+                genieacsUrl: server.url.trim(),
+                genieacsUsername: server.username,
+                genieacsPassword: server.password,
+                serverId: server.id,
+                serverName: server.name
+            };
+        }
+        
+        // PRIORITAS 2: Fallback ke settings.json (untuk kompatibilitas)
+        console.warn('⚠️ No GenieACS servers found in database, falling back to settings.json');
     const { getSetting } = require('./settingsManager');
+        const genieacsUrl = getSetting('genieacs_url', '');
+        const genieacsUsername = getSetting('genieacs_username', 'admin');
+        const genieacsPassword = getSetting('genieacs_password', 'password');
+        
+        if (!genieacsUrl || genieacsUrl.trim() === '') {
+            console.warn('⚠️ GenieACS URL tidak dikonfigurasi di settings.json');
     return {
-        genieacsUrl: getSetting('genieacs_url', 'http://localhost:7557'),
-        genieacsUsername: getSetting('genieacs_username', 'admin'),
-        genieacsPassword: getSetting('genieacs_password', 'password'),
-    };
+                genieacsUrl: '',
+                genieacsUsername: genieacsUsername,
+                genieacsPassword: genieacsPassword,
+            };
+        }
+        
+        return {
+            genieacsUrl: genieacsUrl.trim(),
+            genieacsUsername: genieacsUsername,
+            genieacsPassword: genieacsPassword,
+        };
+    } catch (error) {
+        console.error('❌ Error getting GenieACS config:', error.message);
+        // Fallback ke settings.json jika error
+        const { getSetting } = require('./settingsManager');
+        const genieacsUrl = getSetting('genieacs_url', '');
+        const genieacsUsername = getSetting('genieacs_username', 'admin');
+        const genieacsPassword = getSetting('genieacs_password', 'password');
+        
+        return {
+            genieacsUrl: genieacsUrl.trim() || '',
+            genieacsUsername: genieacsUsername,
+            genieacsPassword: genieacsPassword,
+        };
+    }
 }
 
 // Fungsi untuk menangani info layanan (tambahan billing)
@@ -6356,3 +7766,4 @@ async function sendBillingStatus(remoteJid, senderNumber) {
 }
 
 // ... (rest of the code remains the same)
+

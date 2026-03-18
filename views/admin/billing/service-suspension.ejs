@@ -151,7 +151,7 @@
                                     <input type="text" id="isolirProfileSelect" class="form-control" value="isolir" readonly>
                                     <small class="text-muted">
                                         <i class="bi bi-info-circle"></i> Di mode RADIUS, sistem menggunakan groupname <strong>'isolir'</strong> di tabel <code>radusergroup</code>. 
-                                        Pastikan group 'isolir' sudah ada di <code>radgroupreply</code> dengan rate-limit yang sesuai (misalnya 1k/1k).
+                                        Pastikan group 'isolir' sudah ada di <code>radgroupreply</code>. Profile isolir tidak menggunakan rate-limit (biarkan loss) untuk redirect web isolir.
                                     </small>
                                 <% } else { %>
                                     <select id="isolirProfileSelect" class="form-select">

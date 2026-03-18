@@ -602,6 +602,14 @@
                     <h6 class="card-title text-primary">
                       <i class="bi bi-person-circle me-2"></i>Data Pelanggan
                     </h6>
+                    <% if (billingData.customer.customer_id) { %>
+                    <div class="mb-2">
+                      <strong>ID Pelanggan:</strong> 
+                      <span class="badge bg-primary" style="font-family: monospace; font-size: 0.9rem;">
+                        <%= billingData.customer.customer_id %>
+                      </span>
+                    </div>
+                    <% } %>
                     <div class="mb-2">
                       <strong>Nama:</strong> <%= billingData.customer.name %>
                     </div>
@@ -616,6 +624,18 @@
                         </span>
                       <% } else { %>
                         <span class="text-muted">Belum ada paket</span>
+                      <% } %>
+                    </div>
+                    <div class="mb-2">
+                      <strong>Status Pelanggan:</strong>
+                      <% if (billingData.customer.status === 'active') { %>
+                        <span class="badge bg-success">Aktif</span>
+                      <% } else if (billingData.customer.status === 'suspended') { %>
+                        <span class="badge bg-danger">Isolir</span>
+                      <% } else if (billingData.customer.status === 'register' || billingData.customer.status === 'Register') { %>
+                        <span class="badge" style="background-color: #9900CC; color: white;">Register</span>
+                      <% } else { %>
+                        <span class="badge bg-secondary">Nonaktif</span>
                       <% } %>
                     </div>
                     <div class="mb-2">
@@ -756,8 +776,10 @@
                       <div class="stat-value">
                         <% if (customer.status === 'Online') { %>
                           <span class="badge bg-success stat-badge"><i class="bi bi-check-circle-fill"></i> Online</span>
+                        <% } else if (customer.status === 'Offline') { %>
+                          <span class="badge bg-danger stat-badge"><i class="bi bi-x-circle-fill"></i> Offline</span>
                         <% } else { %>
-                          <span class="badge bg-secondary stat-badge"><i class="bi bi-x-circle-fill"></i> <%= customer.status %></span>
+                          <span class="badge bg-secondary stat-badge"><i class="bi bi-question-circle-fill"></i> <%= customer.status %></span>
                         <% } %>
                       </div>
                     </div>

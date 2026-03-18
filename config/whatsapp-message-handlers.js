@@ -84,26 +84,57 @@ class WhatsAppMessageHandlers {
         return Array.from(new Set([raw, norm, local, plus, shortLocal].filter(Boolean)));
     }
 
-    // Main message handler
-    async handleIncomingMessage(sock, message) {
+    // Main message handler (supports both Baileys format and Provider format)
+    async handleIncomingMessage(sockOrProvider, message) {
         try {
-            // Validasi input
-            if (!message || !message.key) {
-                logger.warn('Invalid message received', { message: typeof message });
-                return;
-            }
+            let remoteJid, senderNumber, messageText, isGroup = false;
             
-            // Ekstrak informasi pesan
-            const remoteJid = message.key.remoteJid;
-            if (!remoteJid) {
-                logger.warn('Message without remoteJid received', { messageKey: message.key });
+            // Check if message is from provider (Wablas format) or Baileys format
+            if (message.remoteJid && message.senderNumber && message.messageText) {
+                // Provider format (Wablas)
+                remoteJid = message.remoteJid;
+                senderNumber = message.senderNumber;
+                messageText = message.messageText;
+                isGroup = message.isGroup || false;
+                
+                logger.debug('Message received from provider', { sender: senderNumber, isGroup });
+            } else if (message.key && message.key.remoteJid) {
+                // Baileys format (legacy)
+                remoteJid = message.key.remoteJid;
+                senderNumber = remoteJid.split('@')[0];
+                isGroup = remoteJid.includes('@g.us');
+                
+                // Cek tipe pesan dan ekstrak teks
+                if (!message.message) {
+                    logger.debug('Message without content received', { messageType: 'unknown' });
+                    return;
+                }
+                
+                if (message.message.conversation) {
+                    messageText = message.message.conversation;
+                    logger.debug('Conversation message received');
+                } else if (message.message.extendedTextMessage) {
+                    messageText = message.message.extendedTextMessage.text;
+                    logger.debug('Extended text message received');
+                } else {
+                    logger.debug('Unsupported message type received', { 
+                        messageTypes: Object.keys(message.message) 
+                    });
+                    return;
+                }
+                
+                logger.debug('Message received from Baileys', { sender: senderNumber, isGroup });
+            } else {
+                logger.warn('Invalid message format received', { message: typeof message });
                 return;
             }
             
             // Skip jika pesan dari grup dan bukan dari admin
-            if (remoteJid.includes('@g.us')) {
+            if (isGroup) {
                 logger.debug('Message from group received', { groupJid: remoteJid });
-                const participant = message.key.participant;
+                // Untuk provider format, cek senderNumber langsung
+                // Untuk Baileys format, cek participant
+                const participant = message.key?.participant || senderNumber;
                 if (!participant || !this.core.isAdminNumber(participant.split('@')[0])) {
                     logger.debug('Group message not from admin, ignoring', { participant });
                     return;
@@ -111,33 +142,14 @@ class WhatsAppMessageHandlers {
                 logger.info('Group message from admin, processing', { participant });
             }
             
-            // Cek tipe pesan dan ekstrak teks
-            let messageText = '';
-            if (!message.message) {
-                logger.debug('Message without content received', { messageType: 'unknown' });
-                return;
-            }
-            
-            if (message.message.conversation) {
-                messageText = message.message.conversation;
-                logger.debug('Conversation message received');
-            } else if (message.message.extendedTextMessage) {
-                messageText = message.message.extendedTextMessage.text;
-                logger.debug('Extended text message received');
-            } else {
-                logger.debug('Unsupported message type received', { 
-                    messageTypes: Object.keys(message.message) 
-                });
-                return;
-            }
-            
-            // Ekstrak nomor pengirim
-            let senderNumber;
-            try {
-                senderNumber = remoteJid.split('@')[0];
-            } catch (error) {
-                logger.error('Error extracting sender number', { remoteJid, error: error.message });
-                return;
+            // senderNumber sudah diekstrak di atas, tidak perlu diekstrak lagi
+            if (!senderNumber) {
+                try {
+                    senderNumber = remoteJid.split('@')[0];
+                } catch (error) {
+                    logger.error('Error extracting sender number', { remoteJid, error: error.message });
+                    return;
+                }
             }
             
             logger.info(`Message received`, { sender: senderNumber, messageLength: messageText.length });

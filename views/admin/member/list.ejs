@@ -1,0 +1,330 @@
+<!-- Halaman List Member dengan Status Online/Offline -->
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>List Member</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/responsive/2.5.0/css/dataTables.responsive.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css" rel="stylesheet">
+    <link href="/css/responsive-admin.css" rel="stylesheet">
+    <style>
+        body { background: #f5f6fa; }
+        .form-label { font-weight: 600; }
+
+        .main-content {
+            padding: 32px 24px;
+        }
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .dataTables_wrapper .dataTables_filter input {
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            padding: 4px 10px;
+        }
+        /* Mobile responsive table styles */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        @media (max-width: 768px) {
+            .table td, .table th {
+                white-space: nowrap;
+                min-width: 100px;
+            }
+            .table .btn {
+                padding: 0.25rem 0.5rem;
+                font-size: 0.75rem;
+            }
+        }
+        /* Modern Metric Cards Styling */
+        .metric-card {
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            border: none;
+            position: relative;
+            overflow: hidden;
+            background: var(--card-bg-color);
+            color: #ffffff;
+            min-height: auto;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.15);
+        }
+        
+        .metric-card-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            font-size: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .metric-card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 6px 0;
+            line-height: 1.2;
+        }
+        
+        .metric-card-label {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+            margin-top: 2px;
+        }
+        
+        .metric-card-subtext {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 4px;
+        }
+        
+        /* Card Colors */
+        .metric-card-primary {
+            --card-bg-color: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        }
+        
+        .metric-card-success {
+            --card-bg-color: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+        }
+        
+        .metric-card-danger {
+            --card-bg-color: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+        }
+        
+        .metric-card-info {
+            --card-bg-color: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+            background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+        }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <!-- Include Responsive Admin Sidebar -->
+        <%- include('../../partials/admin-responsive-sidebar', { page: 'member-list', settings: settings }) %>
+        
+        <main class="col-md-10 main-content ms-sm-auto">
+            <h3 class="mb-4">Daftar Member</h3>
+            
+            <% if (error) { %>
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <%= error %>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            <% } %>
+            
+            <% if (success) { %>
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <%= success %>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            <% } %>
+            
+            <!-- Statistik Member -->
+            <div class="row mb-4">
+                <div class="col-md-3 mb-3">
+                    <div class="metric-card metric-card-primary">
+                        <div class="metric-card-icon">
+                            <i class="bi bi-people"></i>
+                        </div>
+                        <div class="metric-card-value"><%= stats.total || 0 %></div>
+                        <div class="metric-card-label">Total Member</div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="metric-card metric-card-success">
+                        <div class="metric-card-icon">
+                            <i class="bi bi-person-check"></i>
+                        </div>
+                        <div class="metric-card-value"><%= stats.active || 0 %></div>
+                        <div class="metric-card-label">Member Aktif</div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="metric-card metric-card-danger">
+                        <div class="metric-card-icon">
+                            <i class="bi bi-person-x"></i>
+                        </div>
+                        <div class="metric-card-value"><%= stats.offline || 0 %></div>
+                        <div class="metric-card-label">Member Offline</div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="metric-card metric-card-info">
+                        <div class="metric-card-icon">
+                            <i class="bi bi-wifi"></i>
+                        </div>
+                        <div class="metric-card-value">RADIUS</div>
+                        <div class="metric-card-label">Auth Mode</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <a href="/admin/member/data" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Tambah Member
+                    </a>
+                    <button class="btn btn-outline-secondary ms-2" id="btnRefreshStats">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh Stats
+                    </button>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="memberTable" style="width:100%">
+                    <thead class="table-light">
+                        <tr>
+                            <th>No</th>
+                            <th>Nama</th>
+                            <th>Hotspot Username</th>
+                            <th>Phone</th>
+                            <th>Paket</th>
+                            <th>Profile</th>
+                            <th>Status</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (members && members.length > 0) { %>
+                            <% members.forEach(function(member, i) { %>
+                                <tr>
+                                    <td><%= i+1 %></td>
+                                    <td><%= member.name %></td>
+                                    <td><%= member.hotspot_username || member.username || 'N/A' %></td>
+                                    <td><%= member.phone || 'N/A' %></td>
+                                    <td>
+                                        <span class="badge bg-info">
+                                            <%= member.package_name || 'N/A' %>
+                                        </span>
+                                    </td>
+                                    <td><%= member.hotspot_profile || 'default' %></td>
+                                    <td>
+                                        <% if (member.active) { %>
+                                            <span class="badge bg-success">Aktif</span>
+                                        <% } else { %>
+                                            <span class="badge bg-danger">Offline</span>
+                                        <% } %>
+                                        <br>
+                                        <small class="text-muted">
+                                            <% if (member.status === 'active') { %>
+                                                <span class="badge bg-primary">Active</span>
+                                            <% } else if (member.status === 'isolir') { %>
+                                                <span class="badge bg-danger">Isolir</span>
+                                            <% } else if (member.status === 'suspend') { %>
+                                                <span class="badge bg-warning">Suspend</span>
+                                            <% } else { %>
+                                                <span class="badge bg-secondary"><%= member.status || 'N/A' %></span>
+                                            <% } %>
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <a href="/admin/member/data/<%= member.id %>/update" class="btn btn-sm btn-warning me-1 mb-1">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </a>
+                                        <% if (member.active) { %>
+                                            <button class="btn btn-sm btn-info disconnect-member-btn mb-1" data-username="<%= member.hotspot_username || member.username %>">
+                                                <i class="bi bi-x-circle"></i> Putuskan Sesi
+                                            </button>
+                                        <% } %>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="8" class="text-center text-muted">Tidak ada data member</td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Initialize DataTable
+    $('#memberTable').DataTable({
+        responsive: true,
+        pageLength: 10,
+        lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Semua"]],
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json'
+        },
+        order: [[0, 'asc']]
+    });
+    
+    // Refresh stats button
+    $('#btnRefreshStats').on('click', function() {
+        location.reload();
+    });
+    
+    // Disconnect member session
+    $('.disconnect-member-btn').on('click', function() {
+        const username = $(this).data('username');
+        if (!username) {
+            alert('Username tidak ditemukan');
+            return;
+        }
+        
+        if (!confirm(`Apakah Anda yakin ingin memutuskan sesi untuk member "${username}"?`)) {
+            return;
+        }
+        
+        const btn = $(this);
+        const originalText = btn.html();
+        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Memproses...');
+        
+        $.ajax({
+            url: '/admin/member/disconnect',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ username: username }),
+            success: function(response) {
+                if (response.success) {
+                    alert('Sesi berhasil diputuskan');
+                    location.reload();
+                } else {
+                    alert('Gagal memutuskan sesi: ' + (response.message || 'Unknown error'));
+                    btn.prop('disabled', false).html(originalText);
+                }
+            },
+            error: function() {
+                alert('Error: Gagal menghubungi server');
+                btn.prop('disabled', false).html(originalText);
+            }
+        });
+    });
+});
+</script>
+</body>
+</html>

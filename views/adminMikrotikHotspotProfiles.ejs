@@ -195,8 +195,7 @@
                                     <th>Rate Limit</th>
                                     <th>Session Timeout</th>
                                     <th>Idle Timeout</th>
-                                    <th>Limit Uptime</th>
-                                    <th>Validity</th>
+                                    <th>Shared Users</th>
                                     <th>Status</th>
                                     <th>Aksi</th>
                                 </tr>
@@ -224,13 +223,7 @@
                 <div class="modal-body">
                     <input type="hidden" id="profileId" name="id">
                     
-                    <!-- NAS Selection - Hidden jika mode RADIUS -->
-                    <% if (typeof userAuthMode !== 'undefined' && userAuthMode === 'radius') { %>
-                        <input type="hidden" id="profileRouterId" name="router_id" value="">
-                        <div class="alert alert-info mb-3">
-                            <i class="bi bi-info-circle"></i> Mode RADIUS aktif - Profile akan disimpan ke database RADIUS
-                        </div>
-                    <% } else { %>
+                    <!-- NAS Selection - selalu ditampilkan, karena profile sekarang disimpan langsung di Mikrotik -->
                     <div class="mb-3">
                         <label for="profileRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
                         <select class="form-select" id="profileRouterId" name="router_id" required>
@@ -243,7 +236,6 @@
                             <% } %>
                         </select>
                     </div>
-                    <% } %>
                     
                     <!-- Basic Settings -->
                     <div class="row">
@@ -263,35 +255,16 @@
 
                     <!-- Rate Limit Settings -->
                     <div class="row">
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="rateLimit" class="form-label">Rate Limit</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="rateLimit" name="rateLimit" placeholder="0">
-                                    <select class="form-select" id="rateLimitUnit" name="rateLimitUnit" style="max-width: 80px;">
-                                        <option value="k">k</option>
-                                        <option value="M">M</option>
-                                        <option value="G">G</option>
-                                    </select>
-                                </div>
-                                <small class="form-text text-muted">k=kbps, M=Mbps, G=Gbps</small>
+                                <input type="text" class="form-control" id="rateLimit" name="rateLimit" placeholder="contoh: 2M/5M atau 5M/10M">
+                                <small class="form-text text-muted">
+                                    Masukkan format asli Mikrotik, misalnya: <code>2M/5M</code>, <code>5M/10M</code>, <code>1M/2M</code>, <code>10M/10M</code>.
+                                </small>
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="burstLimit" class="form-label">Burst Limit</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="burstLimit" name="burstLimit" placeholder="0">
-                                    <select class="form-select" id="burstLimitUnit" name="burstLimitUnit" style="max-width: 80px;">
-                                        <option value="k">k</option>
-                                        <option value="M">M</option>
-                                        <option value="G">G</option>
-                                    </select>
-                                </div>
-                                <small class="form-text text-muted">Burst limit untuk traffic burst (opsional) - k=kbps, M=Mbps, G=Gbps</small>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="sessionTimeout" class="form-label">Session Timeout</label>
                                 <div class="input-group">
@@ -303,7 +276,9 @@
                                         <option value="d">d</option>
                                     </select>
                                 </div>
-                                <small class="form-text text-muted">S=detik, m=menit, h=jam, d=hari</small>
+                                <small class="form-text text-muted">
+                                    S=detik, m=menit, h=jam, d=hari
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -320,85 +295,25 @@
                                         <option value="d">d</option>
                                     </select>
                                 </div>
-                                <small class="form-text text-muted">S=detik, m=menit, h=jam, d=hari</small>
+                                <small class="form-text text-muted">
+                                    S=detik, m=menit, h=jam, d=hari
+                                </small>
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="limitUptime" class="form-label">Limit Uptime (Total Waktu)</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="limitUptime" name="limitUptime" placeholder="0">
-                                    <select class="form-select" id="limitUptimeUnit" name="limitUptimeUnit" style="max-width: 80px;">
-                                        <option value="s">S</option>
-                                        <option value="m">m</option>
-                                        <option value="h">h</option>
-                                        <option value="d">d</option>
-                                    </select>
-                                </div>
-                                <small class="form-text text-muted">Batasi total akumulasi pemakaian. Kosongkan jika tidak dibatasi.</small>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="validity" class="form-label">Validity (Sejak Login Pertama)</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="validity" name="validity" placeholder="0">
-                                    <select class="form-select" id="validityUnit" name="validityUnit" style="max-width: 80px;">
-                                        <option value="s">S</option>
-                                        <option value="m">m</option>
-                                        <option value="h">h</option>
-                                        <option value="d">d</option>
-                                    </select>
-                                </div>
-                                <small class="form-text text-muted">Masa aktif setelah login pertama. Kosongkan jika tidak dibatasi.</small>
-                            </div>
-                        </div>
+                        <% if (typeof userAuthMode === 'undefined' || userAuthMode !== 'radius') { %>
+                        <% } %>
                     </div>
 
-                    <!-- Address Settings -->
+                    <!-- Shared Users -->
                     <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="localAddress" class="form-label">Local Address</label>
-                                <input type="text" class="form-control" id="localAddress" name="localAddress" placeholder="0.0.0.0/0">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="remoteAddress" class="form-label">Remote Address</label>
-                                <input type="text" class="form-control" id="remoteAddress" name="remoteAddress" placeholder="0.0.0.0/0">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- DNS Settings -->
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="dnsServer" class="form-label">DNS Server</label>
-                                <input type="text" class="form-control" id="dnsServer" name="dnsServer" placeholder="8.8.8.8,8.8.4.4">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="parentQueue" class="form-label">Parent Queue</label>
-                                <input type="text" class="form-control" id="parentQueue" name="parentQueue" placeholder="default">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Advanced Settings -->
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="addressList" class="form-label">Address List</label>
-                                <input type="text" class="form-control" id="addressList" name="addressList" placeholder="whitelist">
-                            </div>
-                        </div>
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="sharedUsers" class="form-label">Shared Users</label>
                                 <input type="number" class="form-control" id="sharedUsers" name="sharedUsers" placeholder="1" min="1">
+                                <small class="form-text text-muted">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Jumlah user yang bisa login bersamaan dengan profile ini.
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -407,12 +322,12 @@
                     <div class="mb-3">
                         <label class="form-label">Preset Rate Limit</label>
                         <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="512" data-unit="k">512k</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="1" data-unit="M">1M</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="2" data-unit="M">2M</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="5" data-unit="M">5M</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="10" data-unit="M">10M</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="20" data-unit="M">20M</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="512k/512k">512k</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="1M/1M">1M</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="2M/2M">2M</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="5M/5M">5M</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="10M/10M">10M</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm preset-btn" data-rate="20M/20M">20M</button>
                         </div>
                     </div>
                 </div>
@@ -478,118 +393,169 @@
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
 <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/js/sweetalert-helper.js"></script>
 
 <script>
+// Pass userAuthMode from EJS to JavaScript
+<% if (typeof userAuthMode !== 'undefined') { %>
+    const userAuthMode = '<%= userAuthMode %>';
+<% } else { %>
+    const userAuthMode = 'mikrotik';
+<% } %>
+
 $(function() {
     let profiles = [];
     let dataTable;
+    
+    // Check if mode RADIUS
+    const isRadiusMode = userAuthMode === 'radius';
 
     // Initialize DataTable
     function initDataTable() {
-        dataTable = $('#profileTable').DataTable({
-            data: profiles,
-            columns: [
-                { 
-                    data: null,
-                    render: function(data, type, row, meta) {
-                        return meta.row + 1;
+        // Build columns array based on mode
+        const columns = [
+            { 
+                data: null,
+                render: function(data, type, row, meta) {
+                    return meta.row + 1;
+                }
+            },
+            { data: 'name' },
+            { 
+                data: null,
+                render: function(data, type, row) {
+                    const nasName = row.nas_name || 'RADIUS';
+                    const nasIp = row.nas_ip || 'RADIUS Server';
+                    return nasName + ' (' + nasIp + ')';
+                }
+            },
+            { 
+                data: null,
+                render: function(data, type, row) {
+                    // Try different possible field names for rate limit
+                    const rateLimit = row['rate-limit'] || row.rateLimit || row['rx-rate'] || null;
+                    if (rateLimit && rateLimit !== '0' && rateLimit !== '') {
+                        return rateLimit;
                     }
-                },
-                { data: 'name' },
-                { 
-                    data: null,
-                    render: function(data, type, row) {
-                        const nasName = row.nas_name || 'N/A';
-                        const nasIp = row.nas_ip || 'N/A';
-                        return nasName + ' (' + nasIp + ')';
-                    }
-                },
-                { 
-                    data: null,
-                    render: function(data, type, row) {
-                        // Try different possible field names for rate limit
-                        const rateLimit = row['rate-limit'] || row.rateLimit || row['rx-rate'] || null;
-                        if (rateLimit && rateLimit !== '0' && rateLimit !== '') {
-                            return rateLimit;
-                        }
-                        return '-';
-                    }
-                },
-                { 
-                    data: null,
-                    render: function(data, type, row) {
-                        // Try different possible field names for session timeout
-                        const sessionTimeout = row['session-timeout'] || row.sessionTimeout || null;
-                        if (sessionTimeout && sessionTimeout !== '0' && sessionTimeout !== '') {
+                    return '-';
+                }
+            },
+            { 
+                data: null,
+                render: function(data, type, row) {
+                    // Try different possible field names for session timeout
+                    // For RADIUS, convert seconds to readable format
+                    let sessionTimeout = row['session-timeout'] || row.sessionTimeout || null;
+                    if (sessionTimeout) {
+                        // If it's already a formatted string (e.g., "2h", "30m"), return as is
+                        if (typeof sessionTimeout === 'string' && sessionTimeout.match(/^\d+[smhdSMHD]$/)) {
                             return sessionTimeout;
                         }
-                        return '-';
+                        // If it's a number (seconds from RADIUS), convert to readable format
+                        if (typeof sessionTimeout === 'number' || (!isNaN(parseInt(sessionTimeout)) && String(sessionTimeout).match(/^\d+$/))) {
+                            const seconds = parseInt(sessionTimeout);
+                            if (seconds > 0) {
+                                if (seconds < 60) return seconds + 's';
+                                if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+                                if (seconds < 86400) return Math.floor(seconds / 3600) + 'h';
+                                return Math.floor(seconds / 86400) + 'd';
+                            }
+                        } else if (sessionTimeout !== '0' && sessionTimeout !== '') {
+                            return sessionTimeout;
+                        }
                     }
-                },
-                { 
-                    data: null,
-                    render: function(data, type, row) {
-                        // Try different possible field names for idle timeout
-                        const idleTimeout = row['idle-timeout'] || row.idleTimeout || null;
-                        if (idleTimeout && idleTimeout !== '0' && idleTimeout !== '') {
+                    return '-';
+                }
+            },
+            { 
+                data: null,
+                render: function(data, type, row) {
+                    // Try different possible field names for idle timeout
+                    // For RADIUS, convert seconds to readable format
+                    let idleTimeout = row['idle-timeout'] || row.idleTimeout || null;
+                    if (idleTimeout) {
+                        // If it's already a formatted string (e.g., "3m", "30s"), return as is
+                        if (typeof idleTimeout === 'string' && idleTimeout.match(/^\d+[smhdSMHD]$/)) {
                             return idleTimeout;
                         }
-                        return '-';
-                    }
-                },
-                { 
-                    data: null,
-                    render: function(data, type, row) {
-                        // Try different possible field names for limit uptime
-                        const limitUptime = row['limit-uptime'] || row.limitUptimeString || row.limitUptime || row.limitUptimeValue || null;
-                        if (limitUptime && limitUptime !== '0' && limitUptime !== '') {
-                            return limitUptime;
+                        // If it's a number (seconds from RADIUS), convert to readable format
+                        if (typeof idleTimeout === 'number' || (!isNaN(parseInt(idleTimeout)) && String(idleTimeout).match(/^\d+$/))) {
+                            const seconds = parseInt(idleTimeout);
+                            if (seconds > 0) {
+                                if (seconds < 60) return seconds + 's';
+                                if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+                                if (seconds < 86400) return Math.floor(seconds / 3600) + 'h';
+                                return Math.floor(seconds / 86400) + 'd';
+                            }
+                        } else if (idleTimeout !== '0' && idleTimeout !== '') {
+                            return idleTimeout;
                         }
-                        return '-';
                     }
-                },
-                { 
-                    data: null,
-                    render: function(data, type, row) {
-                        // Try different possible field names for validity
-                        const validity = row['validity-period'] || row.validityString || row.validity || row.validityValue || null;
-                        if (validity && validity !== '0' && validity !== '') {
-                            return validity;
-                        }
-                        return '-';
-                    }
-                },
-                { 
-                    "data": null, // Prevent error if 'disabled' is not in data
-                    "width": "10%",
-                    "render": function(data, type, row) {
-                        // Mikrotik API might return 'true'/'false' as strings or boolean
-                        const isDisabled = row.disabled === 'true' || row.disabled === true;
-                        return isDisabled 
-                            ? '<span class="badge bg-danger">Tidak Aktif</span>' 
-                            : '<span class="badge bg-success">Aktif</span>';
-                    }
-                },
-                {
-                    data: null,
-                    render: function(data, type, row) {
-                        const routerId = row.nas_id || '';
-                        return `
-                            <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-info btn-detail" data-id="${row['.id']}" data-router-id="${routerId}" title="Detail">
-                                    <i class="bi bi-eye"></i>
-                                </button>
-                                <button type="button" class="btn btn-warning btn-edit" data-id="${row['.id']}" data-router-id="${routerId}" title="Edit">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                <button type="button" class="btn btn-danger btn-delete" data-id="${row['.id']}" data-name="${row.name}" data-router-id="${routerId}" title="Hapus">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                        `;
-                    }
+                    return '-';
                 }
-            ],
+            }
+        ];
+        
+        // Add Shared Users column
+        columns.push(
+            { 
+                data: null,
+                render: function(data, type, row) {
+                    // Try different possible field names for shared users
+                    const sharedUsers = row['shared-users'] || row.sharedUsers || row['simultaneous-use'] || row.simultaneousUse || null;
+                    if (sharedUsers && sharedUsers !== '0' && sharedUsers !== '' && sharedUsers !== '1') {
+                        return sharedUsers;
+                    }
+                    return sharedUsers === '1' || sharedUsers === 1 ? '1' : '-';
+                }
+            }
+        );
+        
+        // Add Status column
+        columns.push(
+            { 
+                "data": null,
+                "width": "10%",
+                "render": function(data, type, row) {
+                    // Mikrotik API might return 'true'/'false' as strings or boolean
+                    const isDisabled = row.disabled === 'true' || row.disabled === true;
+                    return isDisabled 
+                        ? '<span class="badge bg-danger">Tidak Aktif</span>' 
+                        : '<span class="badge bg-success">Aktif</span>';
+                }
+            }
+        );
+        
+        // Add Action column
+        columns.push(
+            {
+                data: null,
+                render: function(data, type, row) {
+                    // For RADIUS mode, use name as ID; for Mikrotik API, use .id
+                    const profileId = row['.id'] || row.name || '';
+                    const routerId = row.nas_id || '';
+                    return `
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-info btn-detail" data-id="${profileId}" data-router-id="${routerId}" title="Detail">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <button type="button" class="btn btn-warning btn-edit" data-id="${profileId}" data-router-id="${routerId}" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" class="btn btn-danger btn-delete" data-id="${profileId}" data-name="${row.name}" data-router-id="${routerId}" title="Hapus">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+        );
+        
+        dataTable = $('#profileTable').DataTable({
+            data: profiles,
+            columns: columns,
             responsive: true,
             scrollX: true,
             columnDefs: [
@@ -643,10 +609,10 @@ $(function() {
                     initDataTable();
                 }
             } else {
-                alert('Gagal memuat data profile: ' + (res.message || 'Unknown error'));
+                showErrorAlert('Gagal Memuat', 'Gagal memuat data profile: ' + (res.message || 'Unknown error'));
             }
         }).fail(function() {
-            alert('Gagal memuat data profile hotspot');
+            showErrorAlert('Error', 'Gagal memuat data profile hotspot');
         }).always(function() {
             $('#btnRefresh').prop('disabled', false).html('<i class="bi bi-arrow-clockwise"></i> Refresh');
         });
@@ -709,7 +675,7 @@ $(function() {
             $('#profileModalLabel').text('Edit Profile Hotspot');
             $('#profileModal').modal('show');
         } else {
-            alert('Profile tidak ditemukan!');
+            showErrorAlert('Error', 'Profile tidak ditemukan!');
             console.error('Profile not found:', id, 'Available profiles:', profiles.map(p => ({ id: p['.id'], name: p.name, is_radius: p.is_radius })));
         }
     });
@@ -727,17 +693,21 @@ $(function() {
         const name = $(this).data('name') || id; // Fallback ke id jika name tidak ada
         const routerId = $(this).data('router-id');
         
-        if (confirm(`Yakin ingin menghapus profile "${name}"?`)) {
-            deleteProfile(id, routerId, name);
-        }
+        showConfirmAlert(
+            'Konfirmasi Hapus',
+            `Yakin ingin menghapus profile "${name}"?`,
+            'Ya, Hapus',
+            'Batal',
+            function() {
+                deleteProfile(id, routerId, name);
+            }
+        );
     });
 
     // Preset buttons
     $('.preset-btn').on('click', function() {
         const rate = $(this).data('rate');
-        const unit = $(this).data('unit');
         $('#rateLimit').val(rate);
-        $('#rateLimitUnit').val(unit);
     });
 
     // Form submission
@@ -750,8 +720,6 @@ $(function() {
     function resetForm() {
         $('#profileForm')[0].reset();
         $('#profileId').val('');
-        $('#limitUptimeUnit').val('h');
-        $('#validityUnit').val('d');
     }
 
     function fillForm(profile) {
@@ -767,26 +735,9 @@ $(function() {
         $('#profileName').val(profile.name);
         $('#profileComment').val(profile.comment || '');
         
-        // Parse rate limit from Mikrotik format (e.g., "5M/5M" or "5M")
+        // Tampilkan rate limit persis seperti di Mikrotik (mis. "5M/5M" atau "5M/5M 10M/10M")
         const rateLimitRaw = profile['rate-limit'] || profile.rateLimit || '';
-        if (rateLimitRaw) {
-            // Parse format like "5M/5M" or "5M" - extract number and unit
-            const match = rateLimitRaw.match(/^(\d+)([kKmMgG])(?:\/\d+[kKmMgG])?$/);
-            if (match) {
-                $('#rateLimit').val(match[1]); // Number part
-                const unit = match[2].toLowerCase();
-                // Map Mikrotik unit to form unit
-                if (unit === 'k') $('#rateLimitUnit').val('k');
-                else if (unit === 'm') $('#rateLimitUnit').val('M');
-                else if (unit === 'g') $('#rateLimitUnit').val('G');
-            } else {
-                $('#rateLimit').val('');
-                $('#rateLimitUnit').val('k');
-            }
-        } else {
-            $('#rateLimit').val('');
-            $('#rateLimitUnit').val('k');
-        }
+        $('#rateLimit').val(rateLimitRaw || '');
         
         // Parse session timeout from Mikrotik format (e.g., "2h", "30m", "60s", "1d")
         const sessionTimeoutRaw = profile['session-timeout'] || profile.sessionTimeout || '';
@@ -832,89 +783,86 @@ $(function() {
             $('#idleTimeoutUnit').val('m');
         }
         
-        // Limit uptime total
-        if (profile.limitUptimeValue && profile.limitUptimeUnit) {
-            $('#limitUptime').val(profile.limitUptimeValue);
-            $('#limitUptimeUnit').val(profile.limitUptimeUnit);
-        } else if (profile['limit-uptime']) {
-            const match = String(profile['limit-uptime']).match(/^(\d+)([smhdSMHD])$/);
-            if (match) {
-                $('#limitUptime').val(match[1]);
-                $('#limitUptimeUnit').val(match[2].toLowerCase());
+        // Check if mode RADIUS
+        const isRadiusMode = profile.is_radius || $('#profileRouterId').is(':hidden') || $('#profileRouterId').length === 0;
+        
+        // Limit uptime total - hanya untuk mode Mikrotik API
+        if (!isRadiusMode) {
+            if (profile.limitUptimeValue && profile.limitUptimeUnit) {
+                $('#limitUptime').val(profile.limitUptimeValue);
+                $('#limitUptimeUnit').val(profile.limitUptimeUnit);
+            } else if (profile['limit-uptime']) {
+                const match = String(profile['limit-uptime']).match(/^(\d+)([smhdSMHD])$/);
+                if (match) {
+                    $('#limitUptime').val(match[1]);
+                    $('#limitUptimeUnit').val(match[2].toLowerCase());
+                } else {
+                    $('#limitUptime').val('');
+                    $('#limitUptimeUnit').val('h');
+                }
             } else {
                 $('#limitUptime').val('');
                 $('#limitUptimeUnit').val('h');
             }
-        } else {
-            $('#limitUptime').val('');
-            $('#limitUptimeUnit').val('h');
-        }
-        
-        // Validity sejak login pertama
-        if (profile.validityValue && profile.validityUnit) {
-            $('#validity').val(profile.validityValue);
-            $('#validityUnit').val(profile.validityUnit);
-        } else if (profile.validityString || profile['validity-period']) {
-            const validityRaw = profile.validityString || profile['validity-period'];
-            const match = String(validityRaw).match(/^(\d+)([smhdSMHD])$/);
-            if (match) {
-                $('#validity').val(match[1]);
-                $('#validityUnit').val(match[2].toLowerCase());
+            
+            // Validity sejak login pertama - hanya untuk mode Mikrotik API
+            if (profile.validityValue && profile.validityUnit) {
+                $('#validity').val(profile.validityValue);
+                $('#validityUnit').val(profile.validityUnit);
+            } else if (profile.validityString || profile['validity-period']) {
+                const validityRaw = profile.validityString || profile['validity-period'];
+                const match = String(validityRaw).match(/^(\d+)([smhdSMHD])$/);
+                if (match) {
+                    $('#validity').val(match[1]);
+                    $('#validityUnit').val(match[2].toLowerCase());
+                } else {
+                    $('#validity').val('');
+                    $('#validityUnit').val('d');
+                }
             } else {
                 $('#validity').val('');
                 $('#validityUnit').val('d');
             }
-        } else {
-            $('#validity').val('');
-            $('#validityUnit').val('d');
+            
+            // Handle address fields - hanya untuk mode Mikrotik API
+            $('#localAddress').val(profile['local-address'] || profile.localAddress || '');
+            $('#remoteAddress').val(profile['remote-address'] || profile.remoteAddress || '');
+            $('#dnsServer').val(profile['dns-server'] || profile.dnsServer || '');
+            $('#parentQueue').val(profile['parent-queue'] || profile.parentQueue || '');
+            $('#addressList').val(profile['address-list'] || profile.addressList || '');
         }
         
-        // Handle address fields
-        $('#localAddress').val(profile['local-address'] || profile.localAddress || '');
-        $('#remoteAddress').val(profile['remote-address'] || profile.remoteAddress || '');
-        $('#dnsServer').val(profile['dns-server'] || profile.dnsServer || '');
-        $('#parentQueue').val(profile['parent-queue'] || profile.parentQueue || '');
-        $('#addressList').val(profile['address-list'] || profile.addressList || '');
         $('#sharedUsers').val(profile['shared-users'] || profile.sharedUsers || '1');
     }
 
     function saveProfile() {
         // Check if mode RADIUS (field router_id is hidden)
-        const isRadiusMode = $('#profileRouterId').is(':hidden') || $('#profileRouterId').length === 0 || $('#profileRouterId').val() === '';
+        const isRadiusMode = false; // Profil hotspot sekarang selalu disimpan ke Mikrotik, bukan RADIUS
         
         const formData = {
             id: $('#profileId').val(),
             router_id: isRadiusMode ? '' : $('#profileRouterId').val(), // Empty jika mode RADIUS
             name: $('#profileName').val(),
             comment: $('#profileComment').val(),
+            // Rate limit sekarang dikirim langsung dalam format string Mikrotik (mis. "2M/5M 5M/10M")
             rateLimit: $('#rateLimit').val(),
-            rateLimitUnit: $('#rateLimitUnit').val(),
             sessionTimeout: $('#sessionTimeout').val(),
             sessionTimeoutUnit: $('#sessionTimeoutUnit').val(),
             idleTimeout: $('#idleTimeout').val(),
             idleTimeoutUnit: $('#idleTimeoutUnit').val(),
-            limitUptime: $('#limitUptime').val(),
-            limitUptimeUnit: $('#limitUptimeUnit').val(),
-            validity: $('#validity').val(),
-            validityUnit: $('#validityUnit').val(),
-            localAddress: $('#localAddress').val(),
-            remoteAddress: $('#remoteAddress').val(),
-            dnsServer: $('#dnsServer').val(),
-            parentQueue: $('#parentQueue').val(),
-            addressList: $('#addressList').val(),
             sharedUsers: $('#sharedUsers').val()
         };
 
         // Validation: nama profile wajib
         if (!formData.name || formData.name.trim() === '') {
-            alert('Nama profile harus diisi!');
+            showWarningAlert('Peringatan', 'Nama profile harus diisi!');
             $('#profileName').focus();
             return;
         }
 
         // Validation: router_id wajib hanya jika bukan mode RADIUS
         if (!isRadiusMode && (!formData.router_id || formData.router_id === '')) {
-            alert('Pilih NAS (router) terlebih dahulu!');
+            showWarningAlert('Peringatan', 'Pilih NAS (router) terlebih dahulu!');
             $('#profileRouterId').focus();
             return;
         }
@@ -933,18 +881,19 @@ $(function() {
         
         $.post(url, formData, function(res) {
             if (res.success) {
-                alert('Profile berhasil disimpan!');
-                $('#profileModal').modal('hide');
-                resetForm(); // Reset form sebelum reload
-                loadProfiles(); // Reload data untuk menampilkan profile baru
+                showSuccessAlert('Berhasil!', 'Profile berhasil disimpan!', function() {
+                    $('#profileModal').modal('hide');
+                    resetForm(); // Reset form sebelum reload
+                    loadProfiles(); // Reload data untuk menampilkan profile baru
+                });
             } else {
-                alert('Gagal menyimpan profile: ' + (res.message || 'Unknown error'));
+                showErrorAlert('Gagal Menyimpan', 'Gagal menyimpan profile: ' + (res.message || 'Unknown error'));
                 console.error('Save error:', res);
             }
         }).fail(function(xhr, status, error) {
             console.error('AJAX Error:', status, error);
             const errorMsg = xhr.responseJSON?.message || error;
-            alert('Gagal menyimpan profile: ' + errorMsg);
+            showErrorAlert('Error', 'Gagal menyimpan profile: ' + errorMsg);
         });
     }
 
@@ -953,14 +902,15 @@ $(function() {
         const deleteData = { id: id || name, router_id: routerId || '', name: name || id };
         $.post('/admin/mikrotik/hotspot-profiles/delete', deleteData, function(res) {
             if (res.success) {
-                alert('Profile berhasil dihapus!');
-                loadProfiles();
+                showSuccessAlert('Berhasil!', 'Profile berhasil dihapus!', function() {
+                    loadProfiles();
+                });
             } else {
-                alert('Gagal menghapus profile: ' + (res.message || 'Unknown error'));
+                showErrorAlert('Gagal Menghapus', 'Gagal menghapus profile: ' + (res.message || 'Unknown error'));
             }
         }).fail(function(xhr) {
             const errorMsg = xhr.responseJSON?.message || 'Unknown error';
-            alert('Gagal menghapus profile: ' + errorMsg);
+            showErrorAlert('Error', 'Gagal menghapus profile: ' + errorMsg);
         });
     }
 
@@ -985,13 +935,11 @@ $(function() {
                             </table>
                         </div>
                         <div class="col-md-6">
-                            <h6>Rate Limit</h6>
+                            <h6>Rate Limit & Timeout</h6>
                             <table class="table table-sm">
-                                <tr><td>Rate Limit</td><td>: ${profile.rateLimit ? profile.rateLimit + (profile.rateLimitUnit || '') : '-'}</td></tr>
-                                <tr><td>Session Timeout</td><td>: ${profile.sessionTimeout ? profile.sessionTimeout + (profile.sessionTimeoutUnit || '') : '-'}</td></tr>
-                                <tr><td>Idle Timeout</td><td>: ${profile.idleTimeout ? profile.idleTimeout + (profile.idleTimeoutUnit || '') : '-'}</td></tr>
-                                <tr><td>Limit Uptime</td><td>: ${profile.limitUptimeValue ? profile.limitUptimeValue + (profile.limitUptimeUnit || '') : (profile['limit-uptime'] || '-')}</td></tr>
-                                <tr><td>Validity</td><td>: ${profile.validityValue ? profile.validityValue + (profile.validityUnit || '') : (profile.validityString || profile['validity-period'] || '-')}</td></tr>
+                                <tr><td>Rate Limit</td><td>: ${profile['rate-limit'] || profile.rateLimit || '-'}</td></tr>
+                                <tr><td>Session Timeout</td><td>: ${profile['session-timeout'] || profile.sessionTimeout || '-'}</td></tr>
+                                <tr><td>Idle Timeout</td><td>: ${profile['idle-timeout'] || profile.idleTimeout || '-'}</td></tr>
                             </table>
                         </div>
                     </div>
@@ -1005,11 +953,9 @@ $(function() {
                             </table>
                         </div>
                         <div class="col-md-6">
-                            <h6>Advanced Settings</h6>
+                            <h6>Informasi Lain</h6>
                             <table class="table table-sm">
-                                <tr><td>Parent Queue</td><td>: ${profile.parentQueue || '-'}</td></tr>
-                                <tr><td>Address List</td><td>: ${profile.addressList || '-'}</td></tr>
-                                <tr><td>Shared Users</td><td>: ${profile.sharedUsers || '1'}</td></tr>
+                                <tr><td>Shared Users</td><td>: ${profile['shared-users'] || profile.sharedUsers || '1'}</td></tr>
                             </table>
                         </div>
                     </div>

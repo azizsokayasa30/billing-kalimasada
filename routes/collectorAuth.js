@@ -16,34 +16,24 @@ const collectorAuth = (req, res, next) => {
     const token = req.session.collectorToken;
     
     if (!token) {
-        return res.redirect('/collector/login');
+        return res.redirect('/login');
     }
     
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const secret = getSetting('jwt_secret', 'alijaya-billing-secret-2025');
+        const decoded = jwt.verify(token, secret);
         req.collector = decoded;
         next();
     } catch (error) {
+        console.error('Collector auth verification failed:', error);
         req.session.collectorToken = null;
-        return res.redirect('/collector/login');
+        return res.redirect('/login');
     }
 };
 
 // Login page
 router.get('/login', async (req, res) => {
-    try {
-        const appSettings = await getAppSettings();
-        res.render('collector/login', {
-            title: 'Login Tukang Tagih',
-            appSettings: appSettings
-        });
-    } catch (error) {
-        console.error('Error loading collector login:', error);
-        res.status(500).render('error', { 
-            message: 'Error loading login page',
-            error: process.env.NODE_ENV === 'development' ? error : {}
-        });
-    }
+    res.redirect('/login');
 });
 
 // Login process
@@ -89,6 +79,7 @@ router.post('/login', async (req, res) => {
         }
         
         // Create JWT token
+        const secret = getSetting('jwt_secret', 'alijaya-billing-secret-2025');
         const token = jwt.sign(
             { 
                 id: collector.id, 
@@ -96,7 +87,7 @@ router.post('/login', async (req, res) => {
                 phone: collector.phone,
                 role: 'collector'
             },
-            process.env.JWT_SECRET || 'your-secret-key',
+            secret,
             { expiresIn: '24h' }
         );
         
@@ -136,7 +127,7 @@ router.post('/logout', (req, res) => {
 // Logout redirect
 router.get('/logout', (req, res) => {
     req.session.collectorToken = null;
-    res.redirect('/collector/login');
+    res.redirect('/login');
 });
 
 // Helper function to get app settings

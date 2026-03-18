@@ -11,6 +11,9 @@ let sock = null;
 let mikrotikConnection = null;
 let monitorInterval = null;
 
+// Connection pool untuk router (reuse koneksi per router)
+const routerConnections = new Map();
+
 // Fungsi untuk set instance sock
 function setSock(sockInstance) {
     sock = sockInstance;
@@ -96,24 +99,70 @@ async function getMikrotikConnectionForRouter(routerObj) {
     const user = routerObj.user || routerObj.nas_user || routerObj.username;
     const password = routerObj.secret || routerObj.password;
     
+    // Buat key unik untuk router (untuk connection pooling)
+    const routerKey = `${routerObj.id}_${host}_${port}_${user}`;
+    
+    // Cek apakah koneksi sudah ada di pool dan masih aktif
+    if (routerConnections.has(routerKey)) {
+        const existingConn = routerConnections.get(routerKey);
+        try {
+            // Test koneksi dengan command sederhana (timeout pendek)
+            const testPromise = existingConn.write('/system/identity/print');
+            const testTimeout = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Connection test timeout')), 2000)
+            );
+            await Promise.race([testPromise, testTimeout]);
+            // Koneksi masih aktif, reuse
+            logger.debug(`[MIKROTIK] Reusing existing connection for router ${routerObj.id} (${host}:${port})`);
+            return existingConn;
+        } catch (error) {
+            // Koneksi terputus atau error, hapus dari pool dan buat baru
+            logger.warn(`[MIKROTIK] Existing connection for router ${routerObj.id} is dead, creating new one: ${error.message}`);
+            routerConnections.delete(routerKey);
+            try {
+                if (existingConn && typeof existingConn.close === 'function') {
+                    existingConn.close();
+                }
+            } catch (closeError) {
+                // Ignore close error
+            }
+        }
+    }
+    
     if (!host) throw new Error('Koneksi router gagal: IP address (nas_ip) tidak ditemukan');
     if (!user) throw new Error('Koneksi router gagal: Username tidak ditemukan');
     if (!password) throw new Error('Koneksi router gagal: Password tidak ditemukan');
     
-    logger.info(`Creating connection to ${host}:${port} with user ${user}`);
+    logger.info(`[MIKROTIK] Creating new connection to ${host}:${port} with user ${user}`);
     const conn = new RouterOSAPI({ host, port, user, password, keepalive: true, timeout: 10000 });
     
     try {
         await conn.connect();
-        logger.info(`✓ Successfully connected to ${host}:${port}`);
+        logger.info(`[MIKROTIK] ✓ Successfully connected to ${host}:${port}`);
+        
+        // Simpan koneksi ke pool
+        routerConnections.set(routerKey, conn);
+        
+        // Handle disconnect event untuk cleanup
+        conn.on('close', () => {
+            logger.debug(`[MIKROTIK] Connection closed for router ${routerObj.id}, removing from pool`);
+            routerConnections.delete(routerKey);
+        });
+        
+        conn.on('error', (error) => {
+            logger.warn(`[MIKROTIK] Connection error for router ${routerObj.id}: ${error.message}, removing from pool`);
+            routerConnections.delete(routerKey);
+        });
+        
         return conn;
     } catch (connectError) {
-        logger.error(`✗ Failed to connect to ${host}:${port}:`, connectError.message);
+        logger.error(`[MIKROTIK] ✗ Failed to connect to ${host}:${port}:`, connectError.message);
         throw new Error(`Gagal koneksi ke ${host}:${port} - ${connectError.message}`);
     }
 }
 
-async function getMikrotikConnectionForCustomer(customer) {
+// Fungsi untuk mendapatkan router object untuk customer (bukan connection)
+async function getRouterForCustomer(customer) {
     if (!customer || !customer.id) throw new Error('Customer tidak ditemukan');
     const sqlite3 = require('sqlite3').verbose();
     const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
@@ -125,6 +174,11 @@ async function getMikrotikConnectionForCustomer(customer) {
     });
     db.close();
     if (!router) throw new Error('Customer belum memilih router/NAS');
+    return router;
+}
+
+async function getMikrotikConnectionForCustomer(customer) {
+    const router = await getRouterForCustomer(customer);
     return await getMikrotikConnectionForRouter(router);
 }
 
@@ -154,65 +208,110 @@ async function getRadiusConnection() {
     return await mysql.createConnection({ host, user, password, database });
 }
 
-// Fungsi untuk mendapatkan seluruh user PPPoE dari RADIUS (BUKAN hotspot voucher)
+// Fungsi untuk mendapatkan seluruh user PPPoE dari RADIUS (BUKAN hotspot voucher DAN BUKAN member hotspot)
 async function getPPPoEUsersRadius() {
     const conn = await getRadiusConnection();
     try {
-        logger.info('Fetching PPPoE users from RADIUS database (excluding hotspot vouchers)...');
+        logger.info('Fetching PPPoE users from RADIUS database (excluding hotspot vouchers and members)...');
         
         // Ambil daftar username yang merupakan voucher dari tabel voucher_revenue
+        // DAN daftar username yang merupakan member hotspot dari tabel members
         const sqlite3 = require('sqlite3').verbose();
         const dbPath = require('path').join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
         
-        const voucherUsernames = await new Promise((resolve, reject) => {
-            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
-                if (err) {
-                    logger.warn(`Error getting voucher usernames: ${err.message}`);
-                    resolve([]);
-                } else {
-                    resolve(rows.map(r => r.username));
-                }
-            });
-        });
+        const [voucherUsernames, memberUsernames] = await Promise.all([
+            new Promise((resolve, reject) => {
+                db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                    if (err) {
+                        logger.warn(`Error getting voucher usernames: ${err.message}`);
+                        resolve([]);
+                    } else {
+                        resolve(rows.map(r => r.username));
+                    }
+                });
+            }),
+            new Promise((resolve, reject) => {
+                // Ambil semua hotspot_username dari members (bukan voucher)
+                db.all('SELECT DISTINCT hotspot_username FROM members WHERE hotspot_username IS NOT NULL AND hotspot_username != ""', [], (err, rows) => {
+                    if (err) {
+                        logger.warn(`Error getting member usernames: ${err.message}`);
+                        resolve([]);
+                    } else {
+                        const usernames = rows.map(r => r.hotspot_username).filter(Boolean);
+                        // Juga ambil username biasa jika hotspot_username tidak ada
+                        db.all('SELECT DISTINCT username FROM members WHERE (hotspot_username IS NULL OR hotspot_username = "") AND username IS NOT NULL AND username != ""', [], (err2, rows2) => {
+                            if (err2) {
+                                resolve(usernames);
+                            } else {
+                                const additionalUsernames = rows2.map(r => r.username).filter(Boolean);
+                                resolve([...usernames, ...additionalUsernames]);
+                            }
+                        });
+                    }
+                });
+            })
+        ]);
         db.close();
         
-        logger.info(`Found ${voucherUsernames.length} voucher usernames to exclude`);
+        // Gabungkan voucher dan member usernames untuk exclude
+        const excludeUsernames = [...new Set([...voucherUsernames, ...memberUsernames])];
         
-        // Query untuk mendapatkan PPPoE users (exclude voucher users)
+        logger.info(`Found ${voucherUsernames.length} voucher usernames and ${memberUsernames.length} member usernames to exclude (total: ${excludeUsernames.length})`);
+        
+        // Query untuk mendapatkan PPPoE users (exclude voucher users DAN member users)
+        // PENTING: Gunakan subquery untuk mengambil hanya satu profile per username
+        // untuk menghindari duplikasi jika satu username memiliki multiple entries di radusergroup
         let query = `
             SELECT 
                 rc.username, 
                 rc.value as password,
-                COALESCE(rug.groupname, 'default') as profile
+                COALESCE(
+                    (SELECT rug.groupname 
+                     FROM radusergroup rug 
+                     WHERE rug.username = rc.username 
+                     LIMIT 1),
+                    'default'
+                ) as profile
             FROM radcheck rc
-            LEFT JOIN radusergroup rug ON rc.username = rug.username
             WHERE rc.attribute = 'Cleartext-Password'
         `;
         
         const params = [];
-        if (voucherUsernames.length > 0) {
-            // Exclude voucher usernames
-            const placeholders = voucherUsernames.map(() => '?').join(',');
+        if (excludeUsernames.length > 0) {
+            // Exclude voucher usernames DAN member usernames
+            const placeholders = excludeUsernames.map(() => '?').join(',');
             query += ` AND rc.username NOT IN (${placeholders})`;
-            params.push(...voucherUsernames);
+            params.push(...excludeUsernames);
         }
         
         query += ` ORDER BY rc.username`;
         
         const [rows] = await conn.execute(query, params);
         
-        logger.info(`Found ${rows.length} PPPoE users in radcheck table (excluding ${voucherUsernames.length} vouchers)`);
+        logger.info(`Found ${rows.length} PPPoE users in radcheck table (excluding ${excludeUsernames.length} vouchers and members)`);
         
         await conn.end();
+        
+        // Ambil daftar user yang sedang aktif untuk menandai status
+        let activeUsernames = [];
+        try {
+            const activeConnections = await getActivePPPoEConnectionsRadius();
+            if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
+                activeUsernames = activeConnections.data.map(c => c.name || c.username);
+            }
+        } catch (activeError) {
+            logger.warn(`Failed to get active connections: ${activeError.message}`);
+        }
         
         const users = rows.map(row => ({ 
             name: row.username, 
             password: row.password,
-            profile: row.profile
+            profile: row.profile,
+            active: activeUsernames.includes(row.username)
         }));
         
-        logger.info(`Mapped ${users.length} PPPoE users successfully`);
+        logger.info(`Mapped ${users.length} PPPoE users successfully (${activeUsernames.length} active)`);
         return users;
     } catch (error) {
         await conn.end();
@@ -224,31 +323,71 @@ async function getPPPoEUsersRadius() {
             logger.info('Trying fallback query without join...');
             const conn2 = await getRadiusConnection();
             
-            // Get voucher usernames for fallback
+            // Get voucher usernames DAN member usernames for fallback
             const sqlite3 = require('sqlite3').verbose();
             const dbPath = require('path').join(__dirname, '../data/billing.db');
             const db = new sqlite3.Database(dbPath);
-            const voucherUsernames = await new Promise((resolve, reject) => {
-                db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
-                    if (err) resolve([]);
-                    else resolve(rows.map(r => r.username));
-                });
-            });
+            
+            const [voucherUsernames, memberUsernames] = await Promise.all([
+                new Promise((resolve, reject) => {
+                    db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                        if (err) resolve([]);
+                        else resolve(rows.map(r => r.username));
+                    });
+                }),
+                new Promise((resolve, reject) => {
+                    db.all('SELECT DISTINCT hotspot_username FROM members WHERE hotspot_username IS NOT NULL AND hotspot_username != ""', [], (err, rows) => {
+                        if (err) {
+                            resolve([]);
+                        } else {
+                            const usernames = rows.map(r => r.hotspot_username).filter(Boolean);
+                            db.all('SELECT DISTINCT username FROM members WHERE (hotspot_username IS NULL OR hotspot_username = "") AND username IS NOT NULL AND username != ""', [], (err2, rows2) => {
+                                if (err2) {
+                                    resolve(usernames);
+                                } else {
+                                    const additionalUsernames = rows2.map(r => r.username).filter(Boolean);
+                                    resolve([...usernames, ...additionalUsernames]);
+                                }
+                            });
+                        }
+                    });
+                })
+            ]);
             db.close();
+            
+            // Gabungkan untuk exclude
+            const excludeUsernames = [...new Set([...voucherUsernames, ...memberUsernames])];
             
             let fallbackQuery = "SELECT username, value as password FROM radcheck WHERE attribute='Cleartext-Password'";
             const params = [];
-            if (voucherUsernames.length > 0) {
-                const placeholders = voucherUsernames.map(() => '?').join(',');
+            if (excludeUsernames.length > 0) {
+                const placeholders = excludeUsernames.map(() => '?').join(',');
                 fallbackQuery += ` AND username NOT IN (${placeholders})`;
-                params.push(...voucherUsernames);
+                params.push(...excludeUsernames);
             }
             fallbackQuery += " ORDER BY username";
             
             const [rows] = await conn2.execute(fallbackQuery, params);
+            
+            // Ambil daftar user yang sedang aktif untuk fallback juga
+            let activeUsernames = [];
+            try {
+                const activeConnections = await getActivePPPoEConnectionsRadius();
+                if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
+                    activeUsernames = activeConnections.data.map(c => c.name || c.username);
+                }
+            } catch (activeError) {
+                logger.warn(`Failed to get active connections in fallback: ${activeError.message}`);
+            }
+            
             await conn2.end();
-            logger.info(`Fallback query found ${rows.length} PPPoE users`);
-            return rows.map(row => ({ name: row.username, password: row.password, profile: 'default' }));
+            logger.info(`Fallback query found ${rows.length} PPPoE users (excluding ${excludeUsernames.length} vouchers and members)`);
+            return rows.map(row => ({ 
+                name: row.username, 
+                password: row.password, 
+                profile: 'default',
+                active: activeUsernames.includes(row.username)
+            }));
         } catch (fallbackError) {
             logger.error(`Fallback query also failed: ${fallbackError.message}`);
             return [];
@@ -256,28 +395,55 @@ async function getPPPoEUsersRadius() {
     }
 }
 
-// Fungsi untuk mendapatkan active PPPoE connections dari RADIUS (BUKAN hotspot voucher)
+// Fungsi untuk mendapatkan active PPPoE connections dari RADIUS (BUKAN hotspot voucher DAN BUKAN member hotspot)
 async function getActivePPPoEConnectionsRadius() {
     const conn = await getRadiusConnection();
     try {
-        // Ambil daftar voucher usernames untuk exclude
+        // Ambil daftar voucher usernames DAN member usernames untuk exclude
         const sqlite3 = require('sqlite3').verbose();
         const dbPath = require('path').join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
         
-        const voucherUsernames = await new Promise((resolve, reject) => {
-            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
-                if (err) {
-                    logger.warn(`Error getting voucher usernames for active connections: ${err.message}`);
-                    resolve([]);
-                } else {
-                    resolve(rows.map(r => r.username));
-                }
-            });
-        });
+        const [voucherUsernames, memberUsernames] = await Promise.all([
+            new Promise((resolve, reject) => {
+                db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                    if (err) {
+                        logger.warn(`Error getting voucher usernames for active connections: ${err.message}`);
+                        resolve([]);
+                    } else {
+                        resolve(rows.map(r => r.username));
+                    }
+                });
+            }),
+            new Promise((resolve, reject) => {
+                // Ambil semua hotspot_username dari members (bukan voucher)
+                db.all('SELECT DISTINCT hotspot_username FROM members WHERE hotspot_username IS NOT NULL AND hotspot_username != ""', [], (err, rows) => {
+                    if (err) {
+                        logger.warn(`Error getting member usernames for active connections: ${err.message}`);
+                        resolve([]);
+                    } else {
+                        const usernames = rows.map(r => r.hotspot_username).filter(Boolean);
+                        // Juga ambil username biasa jika hotspot_username tidak ada
+                        db.all('SELECT DISTINCT username FROM members WHERE (hotspot_username IS NULL OR hotspot_username = "") AND username IS NOT NULL AND username != ""', [], (err2, rows2) => {
+                            if (err2) {
+                                resolve(usernames);
+                            } else {
+                                const additionalUsernames = rows2.map(r => r.username).filter(Boolean);
+                                resolve([...usernames, ...additionalUsernames]);
+                            }
+                        });
+                    }
+                });
+            })
+        ]);
         db.close();
         
-        // Get active sessions dari radacct (acctstoptime IS NULL), exclude vouchers
+        // Gabungkan voucher dan member usernames untuk exclude
+        const excludeUsernames = [...new Set([...voucherUsernames, ...memberUsernames])];
+        
+        logger.info(`Excluding ${voucherUsernames.length} vouchers and ${memberUsernames.length} members from active PPPoE connections (total: ${excludeUsernames.length})`);
+        
+        // Get active sessions dari radacct (acctstoptime IS NULL), exclude vouchers DAN members
         let query = `
             SELECT 
                 username,
@@ -293,10 +459,10 @@ async function getActivePPPoEConnectionsRadius() {
         `;
         
         const params = [];
-        if (voucherUsernames.length > 0) {
-            const placeholders = voucherUsernames.map(() => '?').join(',');
+        if (excludeUsernames.length > 0) {
+            const placeholders = excludeUsernames.map(() => '?').join(',');
             query += ` AND username NOT IN (${placeholders})`;
-            params.push(...voucherUsernames);
+            params.push(...excludeUsernames);
         }
         
         query += ` ORDER BY acctstarttime DESC`;
@@ -319,54 +485,77 @@ async function getActivePPPoEConnectionsRadius() {
     }
 }
 
-// Fungsi untuk mendapatkan statistik RADIUS (total users, active, offline) - HANYA PPPoE, BUKAN voucher
+// Fungsi untuk mendapatkan statistik RADIUS (total users, active, offline) - HANYA PPPoE, BUKAN voucher DAN BUKAN member
 async function getRadiusStatistics() {
     const conn = await getRadiusConnection();
     try {
-        // Ambil daftar voucher usernames untuk exclude
+        // Ambil daftar voucher usernames DAN member usernames untuk exclude
         const sqlite3 = require('sqlite3').verbose();
         const dbPath = require('path').join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
         
-        const voucherUsernames = await new Promise((resolve, reject) => {
-            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
-                if (err) {
-                    logger.warn(`Error getting voucher usernames for stats: ${err.message}`);
-                    resolve([]);
-                } else {
-                    resolve(rows.map(r => r.username));
-                }
-            });
-        });
+        const [voucherUsernames, memberUsernames] = await Promise.all([
+            new Promise((resolve, reject) => {
+                db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                    if (err) {
+                        logger.warn(`Error getting voucher usernames for stats: ${err.message}`);
+                        resolve([]);
+                    } else {
+                        resolve(rows.map(r => r.username));
+                    }
+                });
+            }),
+            new Promise((resolve, reject) => {
+                db.all('SELECT DISTINCT hotspot_username FROM members WHERE hotspot_username IS NOT NULL AND hotspot_username != ""', [], (err, rows) => {
+                    if (err) {
+                        logger.warn(`Error getting member usernames for stats: ${err.message}`);
+                        resolve([]);
+                    } else {
+                        const usernames = rows.map(r => r.hotspot_username).filter(Boolean);
+                        db.all('SELECT DISTINCT username FROM members WHERE (hotspot_username IS NULL OR hotspot_username = "") AND username IS NOT NULL AND username != ""', [], (err2, rows2) => {
+                            if (err2) {
+                                resolve(usernames);
+                            } else {
+                                const additionalUsernames = rows2.map(r => r.username).filter(Boolean);
+                                resolve([...usernames, ...additionalUsernames]);
+                            }
+                        });
+                    }
+                });
+            })
+        ]);
         db.close();
         
-        // Total PPPoE users (exclude vouchers)
+        // Gabungkan untuk exclude
+        const excludeUsernames = [...new Set([...voucherUsernames, ...memberUsernames])];
+        
+        // Total PPPoE users (exclude vouchers DAN members)
         let totalQuery = `
             SELECT COUNT(DISTINCT username) as total
             FROM radcheck
             WHERE attribute = 'Cleartext-Password'
         `;
         const params = [];
-        if (voucherUsernames.length > 0) {
-            const placeholders = voucherUsernames.map(() => '?').join(',');
+        if (excludeUsernames.length > 0) {
+            const placeholders = excludeUsernames.map(() => '?').join(',');
             totalQuery += ` AND username NOT IN (${placeholders})`;
-            params.push(...voucherUsernames);
+            params.push(...excludeUsernames);
         }
         
         const [totalRows] = await conn.execute(totalQuery, params);
         const totalUsers = totalRows[0]?.total || 0;
         
-        // Active PPPoE connections (dari radacct, exclude vouchers)
+        // Active PPPoE connections (dari radacct, exclude vouchers DAN members)
         let activeQuery = `
             SELECT COUNT(DISTINCT username) as active
             FROM radacct
             WHERE acctstoptime IS NULL
         `;
         const activeParams = [];
-        if (voucherUsernames.length > 0) {
-            const placeholders = voucherUsernames.map(() => '?').join(',');
+        if (excludeUsernames.length > 0) {
+            const placeholders = excludeUsernames.map(() => '?').join(',');
             activeQuery += ` AND username NOT IN (${placeholders})`;
-            activeParams.push(...voucherUsernames);
+            activeParams.push(...excludeUsernames);
         }
         
         const [activeRows] = await conn.execute(activeQuery, activeParams);
@@ -397,18 +586,29 @@ async function getRadiusStatistics() {
 
 // Fungsi untuk menambah user PPPoE ke RADIUS
 async function addPPPoEUserRadius({ username, password, profile = null }) {
-    const conn = await getRadiusConnection();
+    let conn = null;
     try {
+        conn = await getRadiusConnection();
+        if (!conn) {
+            logger.error(`[RADIUS] Failed to get RADIUS connection for user ${username}`);
+            return { success: false, message: 'Koneksi ke database RADIUS gagal', error: 'Connection failed' };
+        }
+
+        logger.info(`[RADIUS] Adding PPPoE user ${username} with profile ${profile || 'default'}`);
+        
         // Insert atau update password di radcheck
         await conn.execute(
             "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
             [username, password, password]
         );
+        logger.info(`[RADIUS] Password inserted/updated for user ${username}`);
         
         // Assign user ke group/package jika profile diberikan
         if (profile) {
             // Convert profile ke format groupname (misal: "paket_10mbps" atau "default")
             const groupname = profile.toLowerCase().replace(/\s+/g, '_');
+            
+            logger.info(`[RADIUS] Setting groupname ${groupname} for user ${username}`);
             
             // HAPUS SEMUA groupname untuk username ini terlebih dahulu untuk menghindari duplikasi
             await conn.execute(
@@ -421,14 +621,23 @@ async function addPPPoEUserRadius({ username, password, profile = null }) {
                 "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
                 [username, groupname]
             );
+            logger.info(`[RADIUS] Groupname ${groupname} assigned to user ${username}`);
         }
         
         await conn.end();
+        logger.info(`[RADIUS] Successfully added PPPoE user ${username} to RADIUS database`);
         return { success: true, message: 'User berhasil ditambahkan ke RADIUS' };
     } catch (error) {
-        await conn.end();
-        logger.error(`Error adding PPPoE user to RADIUS: ${error.message}`);
-        throw error;
+        if (conn) {
+            try {
+                await conn.end();
+            } catch (e) {
+                // Ignore connection close errors
+            }
+        }
+        logger.error(`[RADIUS] Error adding PPPoE user ${username} to RADIUS:`, error);
+        logger.error(`[RADIUS] Error stack:`, error.stack);
+        return { success: false, message: `Gagal menambahkan user ke RADIUS: ${error.message}`, error: error.message };
     }
 }
 
@@ -589,28 +798,207 @@ async function assignPackageRadius({ username, groupname }) {
     }
 }
 
+// Fungsi untuk memastikan profile isolir ada di RADIUS dengan konfigurasi yang benar
+async function ensureIsolirProfileRadius() {
+    const conn = await getRadiusConnection();
+    try {
+        // Cek apakah group 'isolir' sudah ada di radgroupreply
+        const [existing] = await conn.execute(
+            "SELECT COUNT(*) as count FROM radgroupreply WHERE groupname = 'isolir'"
+        );
+        
+        if (existing && existing.length > 0 && existing[0].count > 0) {
+            // Profile isolir sudah ada, hapus rate-limit jika ada (biarkan loss untuk redirect web isolir)
+            const [rateLimitRows] = await conn.execute(
+                "SELECT value FROM radgroupreply WHERE groupname = 'isolir' AND attribute = 'MikroTik-Rate-Limit'"
+            );
+            
+            // Hapus rate-limit jika ada (untuk isolir, biarkan loss saja untuk redirect web)
+            if (rateLimitRows.length > 0) {
+                logger.info('Profile isolir memiliki rate-limit, menghapus untuk biarkan loss (redirect web isolir)...');
+                await conn.execute(
+                    "DELETE FROM radgroupreply WHERE groupname = 'isolir' AND attribute = 'MikroTik-Rate-Limit'"
+                );
+                logger.info('✅ Rate-limit berhasil dihapus dari profile isolir');
+            }
+            
+            // Cek apakah ada Framed-Pool atau Framed-IP-Address
+            const [framedPoolRows] = await conn.execute(
+                "SELECT value FROM radgroupreply WHERE groupname = 'isolir' AND attribute = 'Framed-Pool'"
+            );
+            const [framedIPRows] = await conn.execute(
+                "SELECT value FROM radgroupreply WHERE groupname = 'isolir' AND attribute = 'Framed-IP-Address'"
+            );
+            
+            // Jika tidak ada Framed-Pool atau Framed-IP-Address, tambahkan Framed-Pool default
+            if (framedPoolRows.length === 0 && framedIPRows.length === 0) {
+                logger.warn('Profile isolir tidak punya Framed-Pool atau Framed-IP-Address, menambahkan Framed-Pool default...');
+                const isolirPool = getSetting('isolir_pool', 'isolir-pool');
+                await conn.execute(
+                    "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-Pool', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                    [isolirPool, isolirPool]
+                );
+                logger.info(`Profile isolir sekarang menggunakan Framed-Pool: ${isolirPool}`);
+            }
+            
+            await conn.end();
+            return { success: true, message: 'Profile isolir sudah ada dan konfigurasinya benar' };
+        }
+        
+        // Profile isolir belum ada, buat dengan konfigurasi yang benar
+        logger.info('Profile isolir belum ada di RADIUS, membuat profile isolir...');
+        
+        // 1. Insert Simultaneous-Use (required)
+        await conn.execute(
+            "INSERT INTO radgroupcheck (groupname, attribute, op, value) VALUES ('isolir', 'Simultaneous-Use', ':=', '1')"
+        );
+        
+        // 2. JANGAN set Rate-Limit untuk isolir (biarkan loss saja untuk redirect web isolir)
+        // Rate-limit tidak diperlukan karena isolir hanya untuk redirect web, bukan untuk limit speed
+        
+        // 3. JANGAN set Session-Timeout atau Idle-Timeout (biarkan kosong)
+        // Karena timeout yang terlalu kecil bisa menyebabkan disconnect
+        
+        // 4. Set Framed-Pool untuk isolir (default: isolir-pool)
+        // Pool ini biasanya dibuat dari script generator isolir Mikrotik
+        const isolirPool = getSetting('isolir_pool', 'isolir-pool');
+        await conn.execute(
+            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-Pool', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            [isolirPool, isolirPool]
+        );
+        logger.info(`Profile isolir menggunakan Framed-Pool: ${isolirPool}`);
+        
+        // 5. Atau set Framed-IP-Address jika ada setting isolir IP range (alternatif)
+        const isolirIpRange = getSetting('isolir_ip_range', null);
+        if (isolirIpRange) {
+            // Hapus Framed-Pool jika menggunakan IP range langsung
+            await conn.execute(
+                "DELETE FROM radgroupreply WHERE groupname = 'isolir' AND attribute = 'Framed-Pool'"
+            );
+            await conn.execute(
+                "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-IP-Address', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [isolirIpRange, isolirIpRange]
+            );
+            logger.info(`Profile isolir menggunakan Framed-IP-Address: ${isolirIpRange}`);
+        }
+        
+        await conn.end();
+        logger.info('✅ Profile isolir berhasil dibuat di RADIUS dengan konfigurasi yang benar');
+        return { success: true, message: 'Profile isolir berhasil dibuat di RADIUS' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error ensuring isolir profile in RADIUS: ${error.message}`);
+        throw error;
+    }
+}
+
 // Fungsi untuk suspend user (pindahkan ke group 'isolir')
 async function suspendUserRadius(username) {
     const conn = await getRadiusConnection();
     try {
+        // PENTING: Pastikan profile isolir ada di RADIUS sebelum suspend
+        await ensureIsolirProfileRadius();
+        
         // Simpan group sebelumnya (jika ada) untuk bisa restore nanti
+        // Ambil group yang BUKAN 'isolir' (untuk restore nanti)
         const [currentGroup] = await conn.execute(
-            "SELECT groupname FROM radusergroup WHERE username = ? LIMIT 1",
+            "SELECT groupname FROM radusergroup WHERE username = ? AND groupname != 'isolir' LIMIT 1",
             [username]
         );
         
-        // Pindahkan ke group isolir
-        await conn.execute(
-            "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, 'isolir', 1)",
-            [username]
-        );
+        let previousGroupToSave = null;
         
-        // Simpan group sebelumnya di radreply untuk restore nanti
+        // Jika ada group sebelumnya, simpan
         if (currentGroup && currentGroup.length > 0) {
+            previousGroupToSave = currentGroup[0].groupname;
+            logger.info(`[RADIUS] Saving previous group for ${username}: ${previousGroupToSave}`);
+        } else {
+            // Jika tidak ada group di radusergroup, coba ambil dari billing database
+            // untuk mendapatkan package yang seharusnya digunakan
+            try {
+                const billingManager = require('./billing');
+                let customer = null;
+                try {
+                    customer = await billingManager.getCustomerByUsername(username);
+                } catch (e) {
+                    // Jika tidak ditemukan, coba cari dengan query langsung
+                    try {
+                        const db = billingManager.db;
+                        customer = await new Promise((resolve, reject) => {
+                            db.get(`
+                                SELECT c.*, p.name as package_name, p.pppoe_profile as package_pppoe_profile
+                                FROM customers c
+                                LEFT JOIN packages p ON c.package_id = p.id
+                                WHERE c.pppoe_username = ? OR c.username = ?
+                                LIMIT 1
+                            `, [username, username], (err, row) => {
+                                if (err) reject(err);
+                                else resolve(row);
+                            });
+                        });
+                    } catch (dbError) {
+                        logger.warn(`[RADIUS] Failed to query billing DB during suspend: ${dbError.message}`);
+                    }
+                }
+                
+                if (customer) {
+                    // Prioritaskan pppoe_profile dari customer, lalu dari package, lalu package_name
+                    previousGroupToSave = customer.pppoe_profile || 
+                                         customer.package_pppoe_profile ||
+                                         (customer.package_name ? customer.package_name.toLowerCase().replace(/\s+/g, '-') : null) ||
+                                         customer.package_name ||
+                                         'default';
+                    logger.info(`[RADIUS] No group in radusergroup, using package from billing DB for ${username}: ${previousGroupToSave}`);
+                } else {
+                    previousGroupToSave = 'default';
+                    logger.warn(`[RADIUS] No group found and customer not in billing DB, using 'default' for ${username}`);
+                }
+            } catch (billingError) {
+                previousGroupToSave = 'default';
+                logger.warn(`[RADIUS] Failed to get package from billing DB during suspend: ${billingError.message}, using 'default'`);
+            }
+        }
+        
+        // HAPUS SEMUA group assignment untuk username ini (termasuk yang duplikat)
+        await conn.execute(
+            "DELETE FROM radusergroup WHERE username = ?",
+            [username]
+        );
+        
+        // Tambahkan group isolir
+        await conn.execute(
+            "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, 'isolir', 1)",
+            [username]
+        );
+        
+        // Simpan group sebelumnya di radcheck dengan attribute khusus untuk restore nanti
+        // Format: "PREVGROUP:groupname"
+        if (previousGroupToSave) {
+            // Hapus X-Previous-Group yang mungkin ada di radreply (jika ada)
             await conn.execute(
-                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'X-Previous-Group', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
-                [username, currentGroup[0].groupname, currentGroup[0].groupname]
+                "DELETE FROM radreply WHERE username = ? AND attribute = 'X-Previous-Group'",
+                [username]
             );
+            
+            // Hapus PREVGROUP yang mungkin ada sebelumnya
+            await conn.execute(
+                "DELETE FROM radcheck WHERE username = ? AND attribute = 'NT-Password' AND value LIKE 'PREVGROUP:%'",
+                [username]
+            );
+            
+            // Simpan previous group di radcheck
+            try {
+                await conn.execute(
+                    "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'NT-Password', ':=', ?)",
+                    [username, `PREVGROUP:${previousGroupToSave}`]
+                );
+                logger.info(`[RADIUS] Saved previous group for ${username}: ${previousGroupToSave}`);
+            } catch (e) {
+                logger.error(`[RADIUS] Failed to save previous group for ${username}: ${e.message}`);
+                // Jangan throw, karena suspend tetap harus berhasil
+            }
+        } else {
+            logger.warn(`[RADIUS] No previous group to save for ${username}`);
         }
         
         await conn.end();
@@ -621,42 +1009,263 @@ async function suspendUserRadius(username) {
         throw error;
     }
 }
+// Fungsi untuk disable hotspot user di RADIUS
+// Menggunakan kombinasi: hapus password dan tambahkan Auth-Type := Reject
+async function disableHotspotUserRadius(username) {
+    const conn = await getRadiusConnection();
+    try {
+        logger.info(`[RADIUS] Starting disable process for hotspot user: ${username}`);
+        
+        // Simpan password lama untuk restore nanti (simpan di radcheck dengan attribute khusus)
+        const [passwordRows] = await conn.execute(
+            "SELECT value FROM radcheck WHERE username = ? AND attribute = 'Cleartext-Password'",
+            [username]
+        );
+        
+        if (passwordRows && passwordRows.length > 0) {
+            const oldPassword = passwordRows[0].value;
+            // Simpan password lama dengan attribute khusus untuk restore nanti
+            await conn.execute(
+                "DELETE FROM radcheck WHERE username = ? AND attribute = 'X-Old-Password'",
+                [username]
+            );
+            await conn.execute(
+                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'X-Old-Password', ':=', ?)",
+                [username, oldPassword]
+            );
+            logger.info(`[RADIUS] Saved old password for ${username} (for restore later)`);
+        }
+        
+        // Hapus password untuk disable user (tanpa password, user tidak bisa login)
+        const [deletePasswordResult] = await conn.execute(
+            "DELETE FROM radcheck WHERE username = ? AND attribute = 'Cleartext-Password'",
+            [username]
+        );
+        logger.info(`[RADIUS] Deleted password for ${username} (${deletePasswordResult.affectedRows || 0} row(s) deleted)`);
+        
+        // Hapus Auth-Type yang mungkin sudah ada sebelumnya
+        await conn.execute(
+            "DELETE FROM radcheck WHERE username = ? AND attribute = 'Auth-Type'",
+            [username]
+        );
+        
+        // Tambahkan Auth-Type := Reject sebagai backup method
+        const [insertResult] = await conn.execute(
+            "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Auth-Type', ':=', 'Reject')",
+            [username]
+        );
+        logger.info(`[RADIUS] Inserted Auth-Type := Reject for ${username}, insert ID: ${insertResult.insertId || 'N/A'}`);
+        
+        // Verifikasi bahwa password sudah dihapus dan Auth-Type sudah ditambahkan
+        const [verifyResult] = await conn.execute(
+            "SELECT username, attribute, op, value FROM radcheck WHERE username = ? AND (attribute = 'Auth-Type' OR attribute = 'Cleartext-Password')",
+            [username]
+        );
+        
+        const hasPassword = verifyResult && verifyResult.some(row => row.attribute === 'Cleartext-Password');
+        const hasAuthTypeReject = verifyResult && verifyResult.some(row => row.attribute === 'Auth-Type' && row.value === 'Reject');
+        
+        if (!hasPassword && hasAuthTypeReject) {
+            logger.info(`[RADIUS] ✅ Verified: User ${username} disabled successfully (password removed, Auth-Type := Reject added)`);
+        } else {
+            logger.warn(`[RADIUS] ⚠️ Verification: password exists=${hasPassword}, Auth-Type Reject exists=${hasAuthTypeReject}`);
+        }
+        
+        await conn.end();
+        logger.info(`[RADIUS] Hotspot user ${username} disabled (password removed + Auth-Type := Reject)`);
+        return { success: true, message: 'Hotspot user disabled successfully' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error disabling hotspot user in RADIUS: ${error.message}`);
+        logger.error(`Error stack: ${error.stack}`);
+        throw error;
+    }
+}
+
+// Fungsi untuk enable hotspot user di RADIUS (restore password dan hapus Auth-Type := Reject)
+async function enableHotspotUserRadius(username) {
+    const conn = await getRadiusConnection();
+    try {
+        logger.info(`[RADIUS] Starting enable process for hotspot user: ${username}`);
+        
+        // Restore password dari X-Old-Password jika ada
+        const [oldPasswordRows] = await conn.execute(
+            "SELECT value FROM radcheck WHERE username = ? AND attribute = 'X-Old-Password'",
+            [username]
+        );
+        
+        if (oldPasswordRows && oldPasswordRows.length > 0) {
+            const oldPassword = oldPasswordRows[0].value;
+            // Restore password
+            await conn.execute(
+                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [username, oldPassword, oldPassword]
+            );
+            // Hapus X-Old-Password
+            await conn.execute(
+                "DELETE FROM radcheck WHERE username = ? AND attribute = 'X-Old-Password'",
+                [username]
+            );
+            logger.info(`[RADIUS] Restored password for ${username}`);
+        } else {
+            // Jika tidak ada password tersimpan, coba ambil dari billing database
+            try {
+                const billingManager = require('./billing');
+                const member = await billingManager.getMemberByHotspotUsername(username);
+                if (member && member.hotspot_username) {
+                    // Gunakan hotspot_username sebagai password default jika tidak ada password tersimpan
+                    const defaultPassword = member.hotspot_username;
+                    await conn.execute(
+                        "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                        [username, defaultPassword, defaultPassword]
+                    );
+                    logger.info(`[RADIUS] Restored password from billing DB for ${username}`);
+                } else {
+                    logger.warn(`[RADIUS] No password found for ${username}, user may need password reset`);
+                }
+            } catch (billingError) {
+                logger.warn(`[RADIUS] Failed to get password from billing DB: ${billingError.message}`);
+            }
+        }
+        
+        // Hapus Auth-Type := Reject
+        await conn.execute(
+            "DELETE FROM radcheck WHERE username = ? AND attribute = 'Auth-Type'",
+            [username]
+        );
+        
+        // Verifikasi bahwa password sudah ada dan Auth-Type sudah dihapus
+        const [verifyResult] = await conn.execute(
+            "SELECT username, attribute, op, value FROM radcheck WHERE username = ? AND (attribute = 'Auth-Type' OR attribute = 'Cleartext-Password')",
+            [username]
+        );
+        
+        const hasPassword = verifyResult && verifyResult.some(row => row.attribute === 'Cleartext-Password');
+        const hasAuthTypeReject = verifyResult && verifyResult.some(row => row.attribute === 'Auth-Type' && row.value === 'Reject');
+        
+        if (hasPassword && !hasAuthTypeReject) {
+            logger.info(`[RADIUS] ✅ Verified: User ${username} enabled successfully (password restored, Auth-Type Reject removed)`);
+        } else {
+            logger.warn(`[RADIUS] ⚠️ Verification: password exists=${hasPassword}, Auth-Type Reject exists=${hasAuthTypeReject}`);
+        }
+        
+        await conn.end();
+        logger.info(`[RADIUS] Hotspot user ${username} enabled (password restored + Auth-Type Reject removed)`);
+        return { success: true, message: 'Hotspot user enabled successfully' };
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error enabling hotspot user in RADIUS: ${error.message}`);
+        logger.error(`Error stack: ${error.stack}`);
+        throw error;
+    }
+}
+
 // Fungsi untuk unsuspend user (kembalikan ke package sebelumnya)
 async function unsuspendUserRadius(username) {
     const conn = await getRadiusConnection();
     try {
-        // Ambil group sebelumnya dari radreply
+        // Ambil group sebelumnya dari radcheck dengan format PREVGROUP:groupname
+        // (bukan dari radreply karena radreply tidak support custom attributes)
         const [prevGroup] = await conn.execute(
-            "SELECT value FROM radreply WHERE username = ? AND attribute = 'X-Previous-Group' LIMIT 1",
+            "SELECT value FROM radcheck WHERE username = ? AND attribute = 'NT-Password' AND value LIKE 'PREVGROUP:%' LIMIT 1",
             [username]
         );
         
-        if (!prevGroup || prevGroup.length === 0) {
-            // Jika tidak ada group sebelumnya, assign ke default
-            await conn.execute(
-                "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, 'default', 1)",
-                [username]
-            );
-            await conn.end();
-            return { success: true, message: 'User di-un suspend ke package default (tidak ada package sebelumnya)' };
+        // HAPUS SEMUA group assignment untuk username ini (termasuk 'isolir')
+        await conn.execute(
+            "DELETE FROM radusergroup WHERE username = ?",
+            [username]
+        );
+        
+        let previousGroup = null;
+        
+        if (prevGroup && prevGroup.length > 0) {
+            // Extract group name dari format "PREVGROUP:groupname"
+            const prevGroupValue = prevGroup[0].value;
+            if (prevGroupValue && prevGroupValue.startsWith('PREVGROUP:')) {
+                previousGroup = prevGroupValue.substring('PREVGROUP:'.length);
+            }
         }
         
-        const previousGroup = prevGroup[0].value;
+        if (!previousGroup) {
+            // Jika tidak ada group sebelumnya, coba ambil dari billing database
+            // untuk mendapatkan package yang seharusnya digunakan
+            try {
+                const billingManager = require('./billing');
+                // Cari customer berdasarkan pppoe_username atau username
+                let customer = null;
+                try {
+                    customer = await billingManager.getCustomerByUsername(username);
+                } catch (e) {
+                    // Jika tidak ditemukan, coba cari dengan query langsung
+                    try {
+                        const db = billingManager.db;
+                        customer = await new Promise((resolve, reject) => {
+                            db.get(`
+                                SELECT c.*, p.name as package_name, p.pppoe_profile as package_pppoe_profile
+                                FROM customers c
+                                LEFT JOIN packages p ON c.package_id = p.id
+                                WHERE c.pppoe_username = ? OR c.username = ?
+                                LIMIT 1
+                            `, [username, username], (err, row) => {
+                                if (err) reject(err);
+                                else resolve(row);
+                            });
+                        });
+                    } catch (dbError) {
+                        logger.warn(`[RADIUS] Failed to query billing DB: ${dbError.message}`);
+                    }
+                }
+                
+                if (customer) {
+                    // Prioritaskan pppoe_profile dari customer, lalu dari package, lalu package_name
+                    // Tapi jangan gunakan 'default' jika ada package_name yang valid
+                    previousGroup = customer.pppoe_profile || 
+                                   customer.package_pppoe_profile;
+                    
+                    // Jika masih null, coba dari package_name
+                    if (!previousGroup && customer.package_name) {
+                        // Convert package_name ke format yang sesuai (lowercase, replace space dengan dash)
+                        previousGroup = customer.package_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '');
+                    }
+                    
+                    // Jika masih null atau empty, gunakan package_name langsung
+                    if (!previousGroup && customer.package_name) {
+                        previousGroup = customer.package_name;
+                    }
+                    
+                    // Jika masih null, baru gunakan default
+                    if (!previousGroup) {
+                        previousGroup = 'default';
+                        logger.warn(`[RADIUS] No package/profile found in billing DB for ${username}, using 'default'`);
+                    } else {
+                        logger.info(`[RADIUS] Using package/profile from billing DB for ${username}: ${previousGroup}`);
+                    }
+                } else {
+                    // Fallback ke default jika tidak ada data di billing
+                    previousGroup = 'default';
+                    logger.warn(`[RADIUS] Customer not found in billing DB for ${username}, using 'default'`);
+                }
+            } catch (billingError) {
+                logger.warn(`[RADIUS] Failed to get package from billing DB for ${username}: ${billingError.message}`);
+                previousGroup = 'default';
+            }
+        }
         
         // Kembalikan ke group sebelumnya
         await conn.execute(
-            "REPLACE INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
+            "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
             [username, previousGroup]
         );
         
-        // Hapus record X-Previous-Group
+        // Hapus record previous group dari radcheck
         await conn.execute(
-            "DELETE FROM radreply WHERE username = ? AND attribute = 'X-Previous-Group'",
+            "DELETE FROM radcheck WHERE username = ? AND attribute = 'NT-Password' AND value LIKE 'PREVGROUP:%'",
             [username]
         );
         
         await conn.end();
-        return { success: true, message: `User di-un suspend ke package ${previousGroup}` };
+        return { success: true, message: `User di-un suspend ke package ${previousGroup}`, previousGroup: previousGroup };
     } catch (error) {
         await conn.end();
         logger.error(`Error unsuspending user in RADIUS: ${error.message}`);
@@ -1150,69 +1759,86 @@ async function getRouterResources(routerObj = null) {
 
         const resourceData = resources[0];
         
-        // Coba ambil temperature dari /system/health/print (jika tersedia)
-        let temperatureFromHealth = null;
+        // Coba ambil temperature dari berbagai sumber
+        let temperatureFound = null;
+        let temperatureSource = null;
+        
+        // 1. Coba dari /system/health/print (prioritas tertinggi)
         try {
             const health = await conn.write('/system/health/print');
             if (health && health.length > 0) {
                 const healthData = health[0];
                 // Prioritaskan cpu-temperature jika ada (lebih akurat untuk monitoring)
                 if (healthData['cpu-temperature'] !== undefined) {
-                    temperatureFromHealth = safeNumber(healthData['cpu-temperature']);
-                    logger.info(`[TEMP] CPU Temperature from /system/health: ${temperatureFromHealth}°C`);
-                } else if (healthData.temperature !== undefined) {
-                    temperatureFromHealth = safeNumber(healthData.temperature);
-                    logger.info(`[TEMP] Temperature from /system/health: ${temperatureFromHealth}°C`);
-                }
-                // Log semua temperature-related fields untuk debugging
-                Object.keys(healthData).forEach(key => {
-                    if (key.toLowerCase().includes('temp')) {
-                        logger.debug(`[TEMP] Health field ${key}: ${healthData[key]}`);
+                    const tempVal = safeNumber(healthData['cpu-temperature']);
+                    if (tempVal > 0 && tempVal < 150) {
+                        temperatureFound = tempVal;
+                        temperatureSource = '/system/health (cpu-temperature)';
                     }
-                });
+                } else if (healthData.temperature !== undefined) {
+                    const tempVal = safeNumber(healthData.temperature);
+                    if (tempVal > 0 && tempVal < 150) {
+                        temperatureFound = tempVal;
+                        temperatureSource = '/system/health (temperature)';
+                    }
+                }
             }
         } catch (e) {
-            logger.debug(`[TEMP] /system/health/print not available or error: ${e.message}`);
+            // /system/health/print tidak tersedia di semua router, ini normal
+            logger.debug(`[TEMP] /system/health/print not available: ${e.message}`);
         }
         
-        // Simpan temperature ke resourceData jika ditemukan dari health
-        if (temperatureFromHealth !== null) {
-            resourceData['temperature'] = temperatureFromHealth;
-            resourceData['cpu-temperature'] = temperatureFromHealth;
-            logger.info(`[TEMP] Final temperature set: ${temperatureFromHealth}°C (from /system/health)`);
-        }
-        
-        // Debug: Log untuk temperature fields
-        const tempRelatedFields = Object.keys(resourceData).filter(key => {
-            const keyLower = key.toLowerCase();
-            const val = resourceData[key];
-            return (keyLower.includes('temp') || keyLower.includes('thermal')) && 
-                   val !== undefined && val !== null && val !== '';
-        });
-        
-        if (tempRelatedFields.length > 0) {
-            logger.info(`[TEMP] Temperature-related fields found: ${tempRelatedFields.join(', ')}`);
-            tempRelatedFields.forEach(field => {
-                logger.info(`[TEMP] ${field} = ${resourceData[field]} (type: ${typeof resourceData[field]})`);
-            });
-        } else {
-            logger.warn('[TEMP] No temperature-related fields found in resource data');
-            // Log semua field untuk debugging (hanya jika tidak ada temp field) - dengan nilai
-            const allFields = Object.keys(resourceData).sort();
-            logger.info(`[TEMP] All available fields (${allFields.length}): ${allFields.join(', ')}`);
-            // Log beberapa field yang mungkin relevan untuk temperature
-            const possibleFields = allFields.filter(f => 
-                f.includes('thermal') || 
-                f.includes('sensor') ||
-                f.includes('board') ||
-                f.includes('cpu')
-            );
-            if (possibleFields.length > 0) {
-                logger.info(`[TEMP] Possible related fields: ${possibleFields.join(', ')}`);
-                possibleFields.forEach(f => {
-                    logger.info(`[TEMP]   ${f} = ${resourceData[f]}`);
-                });
+        // 2. Coba dari /system/routerboard/print (beberapa router menyimpan temperature di sini)
+        if (temperatureFound === null) {
+            try {
+                const rb = await conn.write('/system/routerboard/print');
+                if (rb && rb.length > 0) {
+                    const rbData = rb[0];
+                    // Cek berbagai field temperature yang mungkin ada
+                    const tempFields = ['temperature', 'cpu-temperature', 'board-temperature', 'thermal-temperature'];
+                    for (const field of tempFields) {
+                        if (rbData[field] !== undefined) {
+                            const tempVal = safeNumber(rbData[field]);
+                            if (tempVal > 0 && tempVal < 150) {
+                                temperatureFound = tempVal;
+                                temperatureSource = `/system/routerboard (${field})`;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                logger.debug(`[TEMP] /system/routerboard/print error: ${e.message}`);
             }
+        }
+        
+        // 3. Cek di resourceData untuk field temperature alternatif
+        if (temperatureFound === null) {
+            const tempFieldNames = [
+                'temperature', 'cpu-temperature', 'board-temperature', 
+                'thermal-temperature', 'sensor-temperature'
+            ];
+            for (const fieldName of tempFieldNames) {
+                if (resourceData[fieldName] !== undefined && resourceData[fieldName] !== null) {
+                    const tempVal = safeNumber(resourceData[fieldName]);
+                    if (tempVal > 0 && tempVal < 150) {
+                        temperatureFound = tempVal;
+                        temperatureSource = `/system/resource (${fieldName})`;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Simpan temperature ke resourceData jika ditemukan
+        if (temperatureFound !== null) {
+            resourceData['temperature'] = temperatureFound;
+            resourceData['cpu-temperature'] = temperatureFound;
+            logger.info(`[TEMP] Temperature found: ${temperatureFound}°C (from ${temperatureSource})`);
+        } else {
+            // Tidak ada temperature sensor - ini normal untuk beberapa model router
+            // Ubah dari warn ke debug untuk mengurangi log spam
+            logger.debug('[TEMP] No temperature sensor available on this router (this is normal for some models)');
         }
 
         return resourceData;
@@ -1675,12 +2301,17 @@ async function getActiveHotspotUsersRadius() {
     }
     
     // Ambil user yang sedang online dari radacct (acctstoptime IS NULL) HANYA untuk voucher
+    // Filter: hanya session yang masih aktif (acctstoptime IS NULL) dan tidak terlalu lama (max 24 jam)
+    // Ini untuk menghindari session yang "terjebak" karena acctstoptime tidak ter-update
+    // Untuk hotspot, session yang lebih dari 24 jam tanpa acctstoptime dianggap tidak valid
     const placeholders = voucherUsernames.map(() => '?').join(',');
     const [rows] = await conn.execute(`
         SELECT DISTINCT username 
         FROM radacct 
         WHERE acctstoptime IS NULL 
         AND username IN (${placeholders})
+        AND acctstarttime IS NOT NULL
+        AND acctstarttime >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
     `, voucherUsernames);
     
     await conn.end();
@@ -1690,6 +2321,91 @@ async function getActiveHotspotUsersRadius() {
         data: rows.map(row => ({ name: row.username, user: row.username }))
     };
 }
+
+// Fungsi untuk mendapatkan semua member dengan status online/offline dari RADIUS
+async function getMembersWithStatusRadius() {
+    const conn = await getRadiusConnection();
+    try {
+        logger.info('Fetching members with online/offline status from RADIUS database...');
+        
+        // Ambil semua member dari billing database
+        const billingManager = require('./billing');
+        const members = await billingManager.getAllMembers();
+        
+        logger.info(`Found ${members.length} members in billing database`);
+        
+        // Ambil daftar voucher usernames untuk exclude (karena kita hanya mau member, bukan voucher)
+        const sqlite3 = require('sqlite3').verbose();
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const voucherUsernames = await new Promise((resolve, reject) => {
+            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
+                if (err) {
+                    logger.warn(`Error getting voucher usernames: ${err.message}`);
+                    resolve([]);
+                } else {
+                    resolve(rows.map(r => r.username));
+                }
+            });
+        });
+        db.close();
+        
+        // Ambil active connections dari radacct (acctstoptime IS NULL)
+        // Exclude voucher usernames
+        let activeQuery = `
+            SELECT DISTINCT username
+            FROM radacct
+            WHERE acctstoptime IS NULL
+        `;
+        const activeParams = [];
+        if (voucherUsernames.length > 0) {
+            const placeholders = voucherUsernames.map(() => '?').join(',');
+            activeQuery += ` AND username NOT IN (${placeholders})`;
+            activeParams.push(...voucherUsernames);
+        }
+        
+        const [activeRows] = await conn.execute(activeQuery, activeParams);
+        const activeUsernames = new Set(activeRows.map(row => row.username));
+        
+        logger.info(`Found ${activeUsernames.size} active member connections in RADIUS`);
+        
+        // Map members dengan status online/offline
+        const membersWithStatus = members.map(member => {
+            const hotspotUsername = member.hotspot_username || member.username;
+            const isActive = hotspotUsername ? activeUsernames.has(hotspotUsername) : false;
+            
+            return {
+                id: member.id,
+                name: member.name,
+                username: member.username,
+                hotspot_username: hotspotUsername,
+                phone: member.phone,
+                email: member.email,
+                address: member.address,
+                package_id: member.package_id,
+                package_name: member.package_name || 'N/A',
+                package_speed: member.package_speed || 'N/A',
+                hotspot_profile: member.hotspot_profile || 'default',
+                status: member.status,
+                active: isActive,
+                nas_name: 'RADIUS',
+                nas_ip: 'RADIUS Server'
+            };
+        });
+        
+        await conn.end();
+        
+        logger.info(`Mapped ${membersWithStatus.length} members with status (${Array.from(activeUsernames).length} active)`);
+        return membersWithStatus;
+    } catch (error) {
+        await conn.end();
+        logger.error(`Error getting members with status from RADIUS: ${error.message}`);
+        logger.error(`Error stack: ${error.stack}`);
+        return [];
+    }
+}
+
 // Fungsi untuk mengambil semua hotspot users dari RADIUS (HANYA voucher hotspot, BUKAN PPPoE users)
 async function getHotspotUsersRadius() {
     const conn = await getRadiusConnection();
@@ -1794,6 +2510,14 @@ async function getHotspotUsersRadius() {
               AND attribute IN ('Max-All-Session', 'Expire-After')
         `, voucherUsernames);
 
+        // Ambil Called-Station-Id untuk server hotspot binding
+        const [serverRows] = await conn.execute(`
+            SELECT username, value
+            FROM radcheck
+            WHERE username IN (${placeholders})
+              AND attribute = 'Called-Station-Id'
+        `, voucherUsernames);
+
         const [sessionRows] = await conn.execute(`
             SELECT username, value
             FROM radreply
@@ -1810,7 +2534,13 @@ async function getHotspotUsersRadius() {
                    MIN(acctstarttime) AS start_time,
                    SUM(IFNULL(acctinputoctets,0)) AS total_input_octets,
                    SUM(IFNULL(acctoutputoctets,0)) AS total_output_octets,
-                   MAX(CASE WHEN acctstoptime IS NULL OR acctstoptime = '' OR acctstoptime = '0000-00-00 00:00:00' THEN framedipaddress ELSE NULL END) AS active_ip,
+                   MAX(CASE 
+                       WHEN (acctstoptime IS NULL OR acctstoptime = '' OR acctstoptime = '0000-00-00 00:00:00')
+                       AND acctstarttime IS NOT NULL
+                       AND acctstarttime >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                       THEN framedipaddress 
+                       ELSE NULL 
+                   END) AS active_ip,
                    MAX(framedipaddress) AS last_ip,
                    MAX(nasipaddress) AS router_ip,
                    MAX(calledstationid) AS server_identifier
@@ -1833,6 +2563,12 @@ async function getHotspotUsersRadius() {
                 const parsed = parseInt(row.value, 10);
                 limitMap[row.username].expireAfter = !isNaN(parsed) && parsed > 0 ? parsed : null;
             }
+        });
+
+        // Map server hotspot dari Called-Station-Id
+        const serverMap = {};
+        serverRows.forEach(row => {
+            serverMap[row.username] = row.value || null;
         });
 
         const sessionTimeoutMap = {};
@@ -1869,6 +2605,9 @@ async function getHotspotUsersRadius() {
                 const acct = acctMap[row.username] || {};
                 const serverMetadata = meta.server_metadata || null;
                 const serverNameFromMeta = meta.server_name || (serverMetadata && serverMetadata.name) || null;
+                // Ambil server hotspot dari Called-Station-Id (prioritas) atau dari metadata
+                const serverHotspotFromRadius = serverMap[row.username] || null;
+                const serverHotspot = serverHotspotFromRadius || serverNameFromMeta || null;
                 return {
                     name: row.username,
                     password: row.password || '',
@@ -1892,9 +2631,10 @@ async function getHotspotUsersRadius() {
                     total_download_mb: acct.total_download_mb || 0,
                     ip_address: acct.active_ip || acct.last_ip || null,
                     router_ip: acct.router_ip || null,
-                    server_identifier: acct.server_identifier || serverNameFromMeta || null,
+                    server_identifier: acct.server_identifier || serverHotspot || null,
                     server_metadata: serverMetadata,
-                    server_name: serverNameFromMeta
+                    server_name: serverNameFromMeta,
+                    server_hotspot: serverHotspot  // Server hotspot dari Called-Station-Id
                 };
             })
         };
@@ -1952,6 +2692,50 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
             "DELETE FROM radusergroup WHERE username = ?",
             [username]
         );
+        
+        // PENTING: Pastikan rate limit dari hotspot profile metadata sudah di-sync ke radgroupreply
+        // Cek apakah rate limit sudah ada di radgroupreply untuk groupname ini
+        const [existingRateLimit] = await conn.execute(
+            "SELECT value FROM radgroupreply WHERE groupname = ? AND attribute IN ('MikroTik-Rate-Limit', 'Mikrotik-Rate-Limit') LIMIT 1",
+            [profileToUse]
+        );
+        
+        // Jika rate limit belum ada, coba ambil dari hotspot_profiles metadata dan sync ke radgroupreply
+        if (existingRateLimit.length === 0) {
+            try {
+                const metadata = await getHotspotProfileMetadata(conn, profileToUse);
+                if (metadata && metadata.rate_limit_value && metadata.rate_limit_unit) {
+                    // Build rate limit string dari metadata
+                    const rateValue = metadata.rate_limit_value;
+                    const rateUnit = (metadata.rate_limit_unit || 'M').toUpperCase();
+                    const rateLimitStr = `${rateValue}${rateUnit}/${rateValue}${rateUnit}`;
+                    
+                    // Sync rate limit ke radgroupreply
+                    await conn.execute(
+                        "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'MikroTik-Rate-Limit', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                        [profileToUse, rateLimitStr, rateLimitStr]
+                    );
+                    
+                    logger.info(`✅ Synced rate limit from metadata to radgroupreply for profile ${profileToUse}: ${rateLimitStr}`);
+                } else {
+                    logger.warn(`⚠️ Profile ${profileToUse} has no rate limit in metadata, rate limit will not be applied`);
+                }
+            } catch (metadataError) {
+                logger.warn(`Failed to sync rate limit from metadata for profile ${profileToUse}: ${metadataError.message}`);
+            }
+        }
+
+        // Pastikan radgroupreply juga membawa Mikrotik-Group agar Mikrotik menggunakan hotspot profile yang benar.
+        // Gunakan nama profile asli dari Mikrotik (parameter "profile") jika tersedia,
+        // fallback ke profileToUse jika tidak ada.
+        const mikrotikProfileName = profile || profileToUse;
+        if (mikrotikProfileName) {
+            await conn.execute(
+                "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Group', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                [profileToUse, mikrotikProfileName, mikrotikProfileName]
+            );
+            logger.info(`✅ Ensured Mikrotik-Group=${mikrotikProfileName} for RADIUS profile/group ${profileToUse}`);
+        }
         
         // Insert groupname yang baru
         await conn.execute(
@@ -2504,6 +3288,75 @@ async function deletePPPoESecret(username) {
     }
 }
 
+// Fungsi helper untuk disconnect PPPoE user (dapat digunakan untuk router spesifik)
+async function disconnectPPPoEUser(username, routerObj = null) {
+    try {
+        let conn = null;
+        if (routerObj) {
+            conn = await getMikrotikConnectionForRouter(routerObj);
+        } else {
+            conn = await getMikrotikConnection();
+        }
+        
+        if (!conn) {
+            logger.error('No Mikrotik connection available');
+            return { success: false, message: 'Koneksi ke Mikrotik gagal', disconnected: 0 };
+        }
+        
+        // Cari sesi aktif user
+        const activeSessions = await conn.write('/ppp/active/print', [
+            `?name=${username}`
+        ]);
+        
+        if (!activeSessions || activeSessions.length === 0) {
+            return { success: true, message: `User ${username} tidak sedang online`, disconnected: 0 };
+        }
+        
+        // Hapus semua sesi aktif user ini
+        let disconnected = 0;
+        for (const session of activeSessions) {
+            try {
+                await conn.write('/ppp/active/remove', [
+                    `=.id=${session['.id']}`
+                ]);
+                disconnected++;
+            } catch (removeError) {
+                logger.warn(`Failed to remove session ${session['.id']} for ${username}: ${removeError.message}`);
+            }
+        }
+        
+        // Verifikasi bahwa semua session sudah terputus
+        // Tunggu sebentar untuk memastikan disconnect selesai
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Cek lagi apakah masih ada session aktif
+        const remainingSessions = await conn.write('/ppp/active/print', [
+            `?name=${username}`
+        ]);
+        
+        if (remainingSessions && remainingSessions.length > 0) {
+            logger.warn(`Some sessions still active for ${username} after disconnect attempt, retrying...`);
+            // Retry disconnect untuk session yang masih aktif
+            for (const session of remainingSessions) {
+                try {
+                    await conn.write('/ppp/active/remove', [
+                        `=.id=${session['.id']}`
+                    ]);
+                    disconnected++;
+                } catch (retryError) {
+                    logger.warn(`Failed to remove remaining session ${session['.id']} for ${username}: ${retryError.message}`);
+                }
+            }
+        }
+        
+        logger.info(`Disconnected ${disconnected} active PPPoE session(s) for ${username}`);
+        return { success: true, message: `User ${username} berhasil diputus dari ${disconnected} sesi aktif`, disconnected: disconnected };
+    } catch (error) {
+        logger.error(`Error disconnecting PPPoE user ${username}: ${error.message}`);
+        return { success: false, message: `Gagal memutus koneksi PPPoE: ${error.message}`, disconnected: 0 };
+    }
+}
+
 // Fungsi untuk mengubah profile PPPoE
 async function setPPPoEProfile(username, profile) {
     try {
@@ -3036,16 +3889,167 @@ async function pingHost(host, count = '4') {
             return { success: false, message: 'Koneksi ke Mikrotik gagal', data: null };
         }
 
-        const result = await conn.write('/ping', [
-            `=address=${host}`,
-            `=count=${count}`
-        ]);
-
-        return {
-            success: true,
-            message: `Ping ke ${host} selesai`,
-            data: result
-        };
+        const pingCount = parseInt(count) || 4;
+        const pingResults = [];
+        
+        // Untuk ping di Mikrotik, kita perlu menggunakan streaming karena ping mengembalikan multiple responses
+        logger.info(`Starting ping to ${host} with count ${pingCount}`);
+        
+        return new Promise((resolve, reject) => {
+            try {
+                // Gunakan stream untuk mendapatkan hasil ping real-time
+                const pingStream = conn.stream('/ping', [
+                    `=address=${host}`,
+                    `=count=${pingCount}`
+                ]);
+                
+                let receivedCount = 0;
+                const timeout = setTimeout(() => {
+                    pingStream.close();
+                    // Jika masih kurang dari count, tambahkan timeout untuk yang belum ada
+                    while (pingResults.length < pingCount) {
+                        pingResults.push({
+                            seq: pingResults.length + 1,
+                            host: host,
+                            status: 'timeout',
+                            time: 'N/A',
+                            ttl: 'N/A',
+                            size: 'N/A'
+                        });
+                    }
+                    resolve({
+                        success: true,
+                        message: `Ping ke ${host} selesai`,
+                        data: pingResults
+                    });
+                }, (pingCount * 2 + 2) * 1000); // Timeout: (count * 2 + 2) detik
+                
+                pingStream.on('data', (data) => {
+                    receivedCount++;
+                    logger.info(`Ping data received (${receivedCount}/${pingCount}):`, data);
+                    
+                    if (data && Array.isArray(data)) {
+                        data.forEach((pingData) => {
+                            // Parse hasil ping dari Mikrotik
+                            const time = pingData.time || pingData['avg-rtt'] || pingData['min-rtt'] || pingData.rtt || 'N/A';
+                            const ttl = pingData.ttl || 'N/A';
+                            const size = pingData.size || pingData['packet-size'] || '64';
+                            const seq = pingData.seq || (pingResults.length + 1);
+                            
+                            pingResults.push({
+                                seq: seq,
+                                host: pingData.host || pingData.address || host,
+                                time: typeof time === 'number' ? `${time}ms` : (typeof time === 'string' ? time : 'N/A'),
+                                ttl: String(ttl),
+                                size: String(size),
+                                status: 'ok'
+                            });
+                        });
+                    } else if (data) {
+                        // Jika data bukan array, parse sebagai single result
+                        const time = data.time || data['avg-rtt'] || data['min-rtt'] || data.rtt || 'N/A';
+                        const ttl = data.ttl || 'N/A';
+                        const size = data.size || data['packet-size'] || '64';
+                        
+                        pingResults.push({
+                            seq: pingResults.length + 1,
+                            host: data.host || data.address || host,
+                            time: typeof time === 'number' ? `${time}ms` : (typeof time === 'string' ? time : 'N/A'),
+                            ttl: String(ttl),
+                            size: String(size),
+                            status: 'ok'
+                        });
+                    }
+                    
+                    // Jika sudah menerima semua response
+                    if (receivedCount >= pingCount || pingResults.length >= pingCount) {
+                        clearTimeout(timeout);
+                        pingStream.close();
+                        // Jika masih kurang, tambahkan timeout
+                        while (pingResults.length < pingCount) {
+                            pingResults.push({
+                                seq: pingResults.length + 1,
+                                host: host,
+                                status: 'timeout',
+                                time: 'N/A',
+                                ttl: 'N/A',
+                                size: 'N/A'
+                            });
+                        }
+                        resolve({
+                            success: true,
+                            message: `Ping ke ${host} selesai`,
+                            data: pingResults
+                        });
+                    }
+                });
+                
+                pingStream.on('error', (error) => {
+                    clearTimeout(timeout);
+                    logger.error(`Error in ping stream: ${error.message}`);
+                    
+                    // Jika error tapi sudah ada beberapa hasil, return hasil yang ada
+                    if (pingResults.length > 0) {
+                        while (pingResults.length < pingCount) {
+                            pingResults.push({
+                                seq: pingResults.length + 1,
+                                host: host,
+                                status: 'timeout',
+                                time: 'N/A',
+                                ttl: 'N/A',
+                                size: 'N/A'
+                            });
+                        }
+                        resolve({
+                            success: true,
+                            message: `Ping ke ${host} selesai (beberapa timeout)`,
+                            data: pingResults
+                        });
+                    } else {
+                        // Jika tidak ada hasil sama sekali, semua timeout
+                        for (let i = 0; i < pingCount; i++) {
+                            pingResults.push({
+                                seq: i + 1,
+                                host: host,
+                                status: 'timeout',
+                                time: 'N/A',
+                                ttl: 'N/A',
+                                size: 'N/A',
+                                error: error.message
+                            });
+                        }
+                        resolve({
+                            success: true,
+                            message: `Ping ke ${host} selesai (semua timeout)`,
+                            data: pingResults
+                        });
+                    }
+                });
+                
+                pingStream.on('close', () => {
+                    clearTimeout(timeout);
+                    // Jika masih kurang dari count, tambahkan timeout untuk yang belum ada
+                    while (pingResults.length < pingCount) {
+                        pingResults.push({
+                            seq: pingResults.length + 1,
+                            host: host,
+                            status: 'timeout',
+                            time: 'N/A',
+                            ttl: 'N/A',
+                            size: 'N/A'
+                        });
+                    }
+                    resolve({
+                        success: true,
+                        message: `Ping ke ${host} selesai`,
+                        data: pingResults
+                    });
+                });
+            } catch (error) {
+                logger.error(`Error setting up ping stream: ${error.message}`);
+                reject(error);
+            }
+        });
     } catch (error) {
         logger.error(`Error pinging host: ${error.message}`);
         return { success: false, message: `Gagal ping ke ${host}: ${error.message}`, data: null };
@@ -3229,14 +4233,11 @@ async function getHotspotProfiles(routerObj = null) {
     }
 }
 // Fungsi untuk mendapatkan detail profile hotspot
+// Catatan PENTING:
+//   - Untuk halaman /admin/mikrotik/hotspot-profiles kita SELALU ambil langsung ke Mikrotik,
+//     tidak lagi mengacu ke RADIUS, terlepas dari user_auth_mode.
 async function getHotspotProfileDetail(id, routerObj = null) {
     try {
-        // Determine auth mode terlebih dahulu
-        const mode = await getUserAuthModeAsync();
-        if (mode === 'radius' || (typeof id === 'string' && id && !id.startsWith('*'))) {
-            return await getHotspotProfileDetailRadius(id);
-        }
-
         let conn = null;
         if (routerObj) {
             conn = await getMikrotikConnectionForRouter(routerObj);
@@ -3917,6 +4918,9 @@ async function addHotspotProfile(profileData, routerObj = null) {
         const {
             name,
             comment,
+            // rateLimit di sini boleh berupa:
+            // - string langsung format Mikrotik (contoh "2M/5M 5M/10M")
+            // - atau legacy: angka + unit yang akan diformat otomatis
             rateLimit,
             rateLimitUnit,
             sessionTimeout,
@@ -3954,21 +4958,29 @@ async function addHotspotProfile(profileData, routerObj = null) {
             params.push('=comment=' + String(comment).trim());
         }
         
-        // Rate limit: only add if both value and unit are valid
-        // Format Mikrotik: upload/download (e.g., "10M/10M") or just upload if same
-        if (rateLimit && rateLimitUnit && String(rateLimit).trim() !== '' && String(rateLimitUnit).trim() !== '') {
-            const rateLimitValue = String(rateLimit).trim();
-            let rateLimitUnitValue = String(rateLimitUnit).trim().toLowerCase();
-            if (['k', 'm', 'g'].includes(rateLimitUnitValue)) {
-                if (rateLimitUnitValue === 'm') rateLimitUnitValue = 'M';
-                if (rateLimitUnitValue === 'g') rateLimitUnitValue = 'G';
-                if (rateLimitUnitValue === 'k') rateLimitUnitValue = 'K';
-                const numValue = parseInt(rateLimitValue);
-                if (!isNaN(numValue) && numValue > 0) {
-                    // Format: upload/download (same value for both)
-                    const rateLimitFormatted = numValue + rateLimitUnitValue + '/' + numValue + rateLimitUnitValue;
-                    params.push('=rate-limit=' + rateLimitFormatted);
-                    logger.info(`Rate limit formatted: ${rateLimitFormatted}`);
+        // Rate limit
+        // - Jika user mengisi string langsung (mis. "2M/5M 5M/10M"), kirim apa adanya.
+        // - Jika tidak, fallback ke format legacy angka + unit.
+        if (rateLimit && String(rateLimit).trim() !== '') {
+            const rateLimitStr = String(rateLimit).trim();
+            // Jika kelihatan sudah dalam format Mikrotik (mengandung '/' atau huruf satuan), kirim langsung
+            if (/[kKmMgG]/.test(rateLimitStr) || rateLimitStr.includes('/')) {
+                params.push('=rate-limit=' + rateLimitStr);
+                logger.info(`Rate limit (raw) dikirim: ${rateLimitStr}`);
+            } else if (rateLimitUnit && String(rateLimitUnit).trim() !== '') {
+                // Legacy: angka + unit
+                const rateLimitValue = rateLimitStr;
+                let rateLimitUnitValue = String(rateLimitUnit).trim().toLowerCase();
+                if (['k', 'm', 'g'].includes(rateLimitUnitValue)) {
+                    if (rateLimitUnitValue === 'm') rateLimitUnitValue = 'M';
+                    if (rateLimitUnitValue === 'g') rateLimitUnitValue = 'G';
+                    if (rateLimitUnitValue === 'k') rateLimitUnitValue = 'K';
+                    const numValue = parseInt(rateLimitValue);
+                    if (!isNaN(numValue) && numValue > 0) {
+                        const rateLimitFormatted = numValue + rateLimitUnitValue + '/' + numValue + rateLimitUnitValue;
+                        params.push('=rate-limit=' + rateLimitFormatted);
+                        logger.info(`Rate limit formatted (legacy): ${rateLimitFormatted}`);
+                    }
                 }
             }
         }
@@ -4262,6 +5274,8 @@ async function editHotspotProfile(profileData, routerObj = null) {
             id,
             name,
             comment,
+            // rateLimit boleh berupa string langsung (mis. "2M/5M 5M/10M")
+            // atau legacy: angka + unit
             rateLimit,
             rateLimitUnit,
             sessionTimeout,
@@ -4290,28 +5304,33 @@ async function editHotspotProfile(profileData, routerObj = null) {
             params.push('=comment=' + String(comment).trim());
         }
         
-        // Rate limit: only add if both value and unit are valid, with proper unit mapping
-        // Format Mikrotik: upload/download (e.g., "10M/10M") or just upload if same
-        if (rateLimit && rateLimitUnit && String(rateLimit).trim() !== '' && String(rateLimitUnit).trim() !== '') {
-            const rateLimitValue = String(rateLimit).trim();
-            let rateLimitUnitValue = String(rateLimitUnit).trim().toLowerCase();
-            // Accept both lowercase and uppercase: k/K, m/M, g/G
-            if (['k', 'm', 'g', 'K', 'M', 'G'].includes(rateLimitUnitValue)) {
-                // Normalize to uppercase for Mikrotik
-                if (rateLimitUnitValue === 'm' || rateLimitUnitValue === 'M') rateLimitUnitValue = 'M';
-                else if (rateLimitUnitValue === 'g' || rateLimitUnitValue === 'G') rateLimitUnitValue = 'G';
-                else if (rateLimitUnitValue === 'k' || rateLimitUnitValue === 'K') rateLimitUnitValue = 'K';
-                const numValue = parseInt(rateLimitValue);
-                if (!isNaN(numValue) && numValue > 0) {
-                    // Format: upload/download (same value for both)
-                    const rateLimitFormatted = numValue + rateLimitUnitValue + '/' + numValue + rateLimitUnitValue;
-                    params.push('=rate-limit=' + rateLimitFormatted);
-                    logger.info(`Rate limit formatted (edit): ${rateLimitFormatted} (from input: ${rateLimitValue}${rateLimitUnit})`);
+        // Rate limit:
+        // - Jika user kirim string lengkap (mis. "2M/5M 5M/10M"), kirim apa adanya.
+        // - Jika tidak, fallback ke format legacy angka + unit.
+        if (rateLimit && String(rateLimit).trim() !== '') {
+            const rateLimitStr = String(rateLimit).trim();
+            if (/[kKmMgG]/.test(rateLimitStr) || rateLimitStr.includes('/')) {
+                // Sudah dalam format Mikrotik
+                params.push('=rate-limit=' + rateLimitStr);
+                logger.info(`Rate limit (raw edit) dikirim: ${rateLimitStr}`);
+            } else if (rateLimitUnit && String(rateLimitUnit).trim() !== '') {
+                const rateLimitValue = rateLimitStr;
+                let rateLimitUnitValue = String(rateLimitUnit).trim().toLowerCase();
+                if (['k', 'm', 'g'].includes(rateLimitUnitValue)) {
+                    if (rateLimitUnitValue === 'm') rateLimitUnitValue = 'M';
+                    if (rateLimitUnitValue === 'g') rateLimitUnitValue = 'G';
+                    if (rateLimitUnitValue === 'k') rateLimitUnitValue = 'K';
+                    const numValue = parseInt(rateLimitValue);
+                    if (!isNaN(numValue) && numValue > 0) {
+                        const rateLimitFormatted = numValue + rateLimitUnitValue + '/' + numValue + rateLimitUnitValue;
+                        params.push('=rate-limit=' + rateLimitFormatted);
+                        logger.info(`Rate limit formatted (edit legacy): ${rateLimitFormatted}`);
+                    } else {
+                        logger.warn(`Invalid rate limit value (edit): ${rateLimitValue} (not a valid number)`);
+                    }
                 } else {
-                    logger.warn(`Invalid rate limit value: ${rateLimitValue} (not a valid number)`);
+                    logger.warn(`Invalid rate limit unit (edit): ${rateLimitUnitValue} (expected k/m/g)`);
                 }
-            } else {
-                logger.warn(`Invalid rate limit unit: ${rateLimitUnitValue} (expected k/K, m/M, or g/G)`);
             }
         } else if (rateLimit === '' || rateLimit === null || rateLimit === undefined) {
             // Allow clearing rate limit
@@ -4319,7 +5338,8 @@ async function editHotspotProfile(profileData, routerObj = null) {
             logger.info('Rate limit cleared (empty value)');
         }
         
-        // Session timeout: only add if both value and unit are valid, with proper unit mapping
+        // Session timeout: hanya kirim jika nilai dan unit valid (>0)
+        // Jika input kosong, TIDAK mengirim parameter ini sama sekali (biarkan nilai lama di Mikrotik).
         if (sessionTimeout && sessionTimeoutUnit && String(sessionTimeout).trim() !== '' && String(sessionTimeoutUnit).trim() !== '') {
             const sessionTimeoutValue = String(sessionTimeout).trim();
             let sessionTimeoutUnitValue = String(sessionTimeoutUnit).trim().toLowerCase();
@@ -4331,12 +5351,10 @@ async function editHotspotProfile(profileData, routerObj = null) {
                     params.push('=session-timeout=' + numValue + sessionTimeoutUnitValue);
                 }
             }
-        } else if (sessionTimeout === '' || sessionTimeout === null || sessionTimeout === undefined) {
-            // Allow clearing session timeout
-            params.push('=session-timeout=');
         }
         
-        // Idle timeout: only add if both value and unit are valid, with proper unit mapping
+        // Idle timeout: hanya kirim jika nilai dan unit valid (>0)
+        // Jika input kosong, TIDAK mengirim parameter ini sama sekali.
         if (idleTimeout && idleTimeoutUnit && String(idleTimeout).trim() !== '' && String(idleTimeoutUnit).trim() !== '') {
             const idleTimeoutValue = String(idleTimeout).trim();
             let idleTimeoutUnitValue = String(idleTimeoutUnit).trim().toLowerCase();
@@ -4348,9 +5366,6 @@ async function editHotspotProfile(profileData, routerObj = null) {
                     params.push('=idle-timeout=' + numValue + idleTimeoutUnitValue);
                 }
             }
-        } else if (idleTimeout === '' || idleTimeout === null || idleTimeout === undefined) {
-            // Allow clearing idle timeout
-            params.push('=idle-timeout=');
         }
         // SKIP: local-address, remote-address, dns-server, parent-queue, address-list
         // These parameters are NOT supported for hotspot user profile in Mikrotik
@@ -4753,20 +5768,40 @@ async function getAllUsers() {
 // ...
 // Fungsi tambah user PPPoE (alias addPPPoESecret)
 async function addPPPoEUser({ username, password, profile, customer = null, routerObj = null }) {
-    const mode = await getUserAuthModeAsync();
-    if (mode === 'radius') {
-        return await addPPPoEUserRadius({ username, password, profile });
-    } else {
-        let conn = null;
-        if (customer) {
-          conn = await getMikrotikConnectionForCustomer(customer);
-        } else if (routerObj) {
-          conn = await getMikrotikConnectionForRouter(routerObj);
+    try {
+        const mode = await getUserAuthModeAsync();
+        logger.info(`[addPPPoEUser] Mode: ${mode}, username: ${username}, profile: ${profile}`);
+        
+        if (mode === 'radius') {
+            logger.info(`[addPPPoEUser] Using RADIUS mode for user ${username}`);
+            return await addPPPoEUserRadius({ username, password, profile });
         } else {
-          conn = await getMikrotikConnection(); // fallback lama ONLY for admin use
+            logger.info(`[addPPPoEUser] Using Mikrotik API mode for user ${username}`);
+            let conn = null;
+            if (customer) {
+                logger.info(`[addPPPoEUser] Getting connection for customer ID: ${customer.id}`);
+                conn = await getMikrotikConnectionForCustomer(customer);
+            } else if (routerObj) {
+                logger.info(`[addPPPoEUser] Getting connection for router: ${routerObj.name || routerObj.nas_ip}`);
+                conn = await getMikrotikConnectionForRouter(routerObj);
+            } else {
+                logger.info(`[addPPPoEUser] Using fallback connection`);
+                conn = await getMikrotikConnection(); // fallback lama ONLY for admin use
+            }
+            if (!conn) {
+                const errorMsg = 'Koneksi ke router gagal: Data router/NAS tidak ditemukan';
+                logger.error(`[addPPPoEUser] ${errorMsg}`);
+                return { success: false, message: errorMsg, error: errorMsg };
+            }
+            logger.info(`[addPPPoEUser] Connection established, calling addPPPoESecret`);
+            const result = await addPPPoESecret(username, password, profile, '', conn);
+            logger.info(`[addPPPoEUser] Result:`, JSON.stringify(result));
+            return result;
         }
-        if (!conn) throw new Error('Koneksi ke router gagal: Data router/NAS tidak ditemukan');
-        return await addPPPoESecret(username, password, profile, '', conn);
+    } catch (error) {
+        logger.error(`[addPPPoEUser] Error:`, error);
+        logger.error(`[addPPPoEUser] Error stack:`, error.stack);
+        return { success: false, message: `Gagal menambahkan user PPPoE: ${error.message}`, error: error.message };
     }
 }
 // Update user hotspot (password dan profile)
@@ -4828,13 +5863,87 @@ async function getHotspotProfilesRadius() {
             groupnames = groupRows.map(row => row.groupname);
         }
         
-        const [sessionTimeoutRows] = await conn.execute(`
-            SELECT DISTINCT groupname
-            FROM radgroupreply
-            WHERE attribute = 'Session-Timeout'
-            AND groupname IS NOT NULL AND groupname != ''
-        `);
+        // Ambil groupname yang digunakan oleh member hotspot users (BUKAN PPPoE customers)
+        let memberUsernames = [];
+        try {
+            const sqlite3 = require('sqlite3').verbose();
+            const dbPath = require('path').join(__dirname, '../data/billing.db');
+            const db = new sqlite3.Database(dbPath);
+            
+            memberUsernames = await new Promise((resolve, reject) => {
+                db.all('SELECT DISTINCT hotspot_username FROM members WHERE hotspot_username IS NOT NULL AND hotspot_username != ""', [], (err, rows) => {
+                    if (err) {
+                        logger.warn(`Error getting member usernames: ${err.message}`);
+                        resolve([]);
+                    } else {
+                        const usernames = rows.map(r => r.hotspot_username).filter(Boolean);
+                        // Juga ambil username biasa jika hotspot_username tidak ada
+                        db.all('SELECT DISTINCT username FROM members WHERE (hotspot_username IS NULL OR hotspot_username = "") AND username IS NOT NULL AND username != ""', [], (err2, rows2) => {
+                            if (err2) {
+                                resolve(usernames);
+                            } else {
+                                const additionalUsernames = rows2.map(r => r.username).filter(Boolean);
+                                resolve([...usernames, ...additionalUsernames]);
+                            }
+                        });
+                    }
+                });
+            });
+            db.close();
+        } catch (memberErr) {
+            logger.warn(`Error getting member usernames for hotspot profiles: ${memberErr.message}`);
+        }
         
+        // Ambil groupname yang digunakan oleh PPPoE customers untuk di-exclude
+        let pppoeUsernames = [];
+        try {
+            const sqlite3 = require('sqlite3').verbose();
+            const dbPath = require('path').join(__dirname, '../data/billing.db');
+            const db = new sqlite3.Database(dbPath);
+            
+            pppoeUsernames = await new Promise((resolve, reject) => {
+                db.all('SELECT DISTINCT username FROM customers WHERE username IS NOT NULL AND username != ""', [], (err, rows) => {
+                    if (err) {
+                        logger.warn(`Error getting PPPoE customer usernames: ${err.message}`);
+                        resolve([]);
+                    } else {
+                        resolve(rows.map(r => r.username).filter(Boolean));
+                    }
+                });
+            });
+            db.close();
+        } catch (pppoeErr) {
+            logger.warn(`Error getting PPPoE customer usernames: ${pppoeErr.message}`);
+        }
+        
+        // Ambil groupname yang digunakan oleh PPPoE users untuk di-exclude
+        let pppoeGroupnames = [];
+        if (pppoeUsernames.length > 0) {
+            const placeholders = pppoeUsernames.map(() => '?').join(',');
+            const [pppoeGroupRows] = await conn.execute(`
+                SELECT DISTINCT groupname
+                FROM radusergroup
+                WHERE username IN (${placeholders})
+                AND groupname IS NOT NULL AND groupname != ''
+            `, pppoeUsernames);
+            pppoeGroupnames = pppoeGroupRows.map(row => row.groupname);
+        }
+        
+        // Ambil groupname yang digunakan oleh member hotspot users
+        let memberGroupnames = [];
+        const allHotspotUsernames = [...new Set([...voucherUsernames, ...memberUsernames])];
+        if (allHotspotUsernames.length > 0) {
+            const placeholders = allHotspotUsernames.map(() => '?').join(',');
+            const [memberGroupRows] = await conn.execute(`
+                SELECT DISTINCT groupname
+                FROM radusergroup
+                WHERE username IN (${placeholders})
+                AND groupname IS NOT NULL AND groupname != ''
+            `, allHotspotUsernames);
+            memberGroupnames = memberGroupRows.map(row => row.groupname);
+        }
+        
+        // Ambil groupname dari hotspot_profiles metadata table (HANYA Hotspot Profile)
         let metadataGroupnames = [];
         try {
             if (await ensureHotspotProfilesMetadataTable(conn)) {
@@ -4848,14 +5957,100 @@ async function getHotspotProfilesRadius() {
         } catch (metaErr) {
             logger.warn(`Failed to load hotspot profile metadata groupnames: ${metaErr.message}`);
         }
-
-        const allGroupnames = [...new Set([
+        
+        // Ambil groupname yang memiliki attribute khas Hotspot (MikroTik-Rate-Limit atau Session-Timeout)
+        // Tapi exclude yang digunakan oleh PPPoE
+        const [hotspotAttributeRows] = await conn.execute(`
+            SELECT DISTINCT groupname
+            FROM radgroupreply
+            WHERE attribute IN ('MikroTik-Rate-Limit', 'Mikrotik-Rate-Limit', 'Session-Timeout')
+            AND groupname IS NOT NULL AND groupname != ''
+        `);
+        
+        // PENTING: Ambil semua groupname yang memiliki attribute khas PPPoE untuk di-exclude
+        // Attribute khas PPPoE: Service-Type = Framed-User, Framed-Protocol = PPP, Framed-Pool, Framed-IP-Address
+        const [pppoeAttributeRows] = await conn.execute(`
+            SELECT DISTINCT groupname
+            FROM radgroupreply
+            WHERE attribute IN ('Service-Type', 'Framed-Protocol', 'Framed-Pool', 'Framed-IP-Address')
+            AND (
+                (attribute = 'Service-Type' AND value = 'Framed-User')
+                OR (attribute = 'Framed-Protocol' AND value = 'PPP')
+                OR attribute = 'Framed-Pool'
+                OR attribute = 'Framed-IP-Address'
+            )
+            AND groupname IS NOT NULL AND groupname != ''
+        `);
+        const pppoeAttributeGroupnames = pppoeAttributeRows.map(r => r.groupname);
+        
+        // PENTING: Cek metadata pppoe_profiles untuk profil yang dibuat di /admin/mikrotik/profiles
+        // Profil PPPoE yang dibuat di admin panel akan tersimpan di tabel pppoe_profiles
+        let pppoeMetadataGroupnames = [];
+        try {
+            if (await ensurePPPoEProfilesMetadataTable(conn)) {
+                const [pppoeMetaRows] = await conn.execute(`
+                    SELECT DISTINCT groupname
+                    FROM pppoe_profiles
+                    WHERE groupname IS NOT NULL AND groupname != ''
+                `);
+                pppoeMetadataGroupnames = pppoeMetaRows.map(row => row.groupname);
+            }
+        } catch (pppoeMetaErr) {
+            logger.warn(`Failed to load PPPoE profile metadata: ${pppoeMetaErr.message}`);
+        }
+        
+        // PENTING: Gabungkan groupname yang digunakan oleh hotspot users (voucher + member)
+        // Ini adalah prioritas TERTINGGI - jika profile digunakan oleh voucher/member, maka itu adalah Hotspot Profile
+        const allHotspotUserGroupnames = [...new Set([...groupnames, ...memberGroupnames])];
+        
+        // Gabungkan semua groupname yang harus di-exclude (dari users + dari attributes + dari metadata)
+        // TAPI: Jangan exclude jika profile digunakan oleh hotspot users (prioritas tinggi)
+        const allPPPoEGroupnames = [...new Set([...pppoeGroupnames, ...pppoeAttributeGroupnames, ...pppoeMetadataGroupnames])].filter(groupname => {
+            // Jangan exclude jika profile digunakan oleh hotspot users (prioritas tinggi)
+            return !allHotspotUserGroupnames.includes(groupname);
+        });
+        
+        logger.info(`Found ${pppoeAttributeGroupnames.length} PPPoE profiles from attributes (Service-Type=Framed-User, Framed-Protocol=PPP, Framed-Pool, Framed-IP-Address), ${pppoeMetadataGroupnames.length} from pppoe_profiles metadata (excluding ${pppoeMetadataGroupnames.filter(g => allHotspotUserGroupnames.includes(g)).length} that are used by hotspot users)`);
+        
+        // Gabungkan groupname dari hotspot users (voucher + member) dan metadata
+        // PRIORITAS: Profile yang digunakan oleh hotspot users ATAU memiliki attribute khas Hotspot selalu include
+        const hotspotAttributeGroupnames = hotspotAttributeRows.map(r => r.groupname);
+        const hotspotGroupnames = [...new Set([
             ...groupnames,
-            ...sessionTimeoutRows.map(r => r.groupname),
-            ...metadataGroupnames
-        ])];
+            ...memberGroupnames,
+            ...metadataGroupnames,
+            ...hotspotAttributeGroupnames
+        ])].filter(groupname => {
+            // PRIORITAS 1: Jika digunakan oleh hotspot users (voucher/member), selalu include
+            // Meskipun ada di pppoe_profiles metadata, jika digunakan oleh hotspot users, tetap Hotspot Profile
+            if (allHotspotUserGroupnames.includes(groupname)) {
+                logger.debug(`Including profile "${groupname}" in hotspot profiles (used by hotspot users - priority)`);
+                return true;
+            }
+            // PRIORITAS 2: Jika ada di pppoe_profiles metadata, EXCLUDE dari Hotspot Profiles
+            // Profile yang dibuat di /admin/mikrotik/profiles adalah PPPoE Profile, bukan Hotspot Profile
+            // Ini adalah penanda yang paling kuat - jika dibuat di PPPoE profiles, maka itu PPPoE Profile
+            if (pppoeMetadataGroupnames.includes(groupname)) {
+                logger.debug(`Excluding profile "${groupname}" from hotspot profiles (created in /admin/mikrotik/profiles - PPPoE profile)`);
+                return false;
+            }
+            // PRIORITAS 3: Jika memiliki attribute khas Hotspot (MikroTik-Rate-Limit, Session-Timeout), include
+            // TAPI hanya jika TIDAK ada di pppoe_profiles metadata (sudah di-exclude di PRIORITAS 2)
+            if (hotspotAttributeGroupnames.includes(groupname)) {
+                logger.debug(`Including profile "${groupname}" in hotspot profiles (has hotspot attributes)`);
+                return true;
+            }
+            // Exclude jika digunakan oleh PPPoE users ATAU memiliki attribute khas PPPoE
+            if (allPPPoEGroupnames.includes(groupname)) {
+                logger.debug(`Excluding profile "${groupname}" from hotspot profiles (PPPoE profile)`);
+                return false;
+            }
+            return true;
+        });
+        
+        const allGroupnames = hotspotGroupnames;
 
-        logger.info(`Found ${allGroupnames.length} hotspot groupnames (${groupnames.length} from vouchers, ${sessionTimeoutRows.length} with Session-Timeout, ${metadataGroupnames.length} from metadata)`);
+        logger.info(`Found ${allGroupnames.length} Hotspot User Profile groupnames (${groupnames.length} from vouchers, ${memberGroupnames.length} from members, ${metadataGroupnames.length} from metadata, ${hotspotAttributeRows.length} with hotspot attributes, excluded ${allPPPoEGroupnames.length} PPPoE profiles: ${pppoeGroupnames.length} from users + ${pppoeAttributeGroupnames.length} from attributes + ${pppoeMetadataGroupnames.length} from pppoe_profiles metadata)`);
 
         const metadataMap = await getHotspotProfilesMetadata(conn, allGroupnames);
 
@@ -5172,8 +6367,8 @@ async function getHotspotServerProfiles(routerObj = null) {
     }
 }
 
-async function getHotspotServerProfilesRadius() {
-    const conn = await getRadiusConnection();
+// Fungsi untuk memastikan tabel hotspot_server_profiles ada
+async function ensureHotspotServerProfilesTable(conn) {
     try {
         const [tableCheck] = await conn.execute(`
             SELECT COUNT(*) as count
@@ -5183,14 +6378,44 @@ async function getHotspotServerProfilesRadius() {
         `);
         
         if (tableCheck.length === 0 || tableCheck[0].count === 0) {
-            await conn.end();
-            logger.warn('Tabel hotspot_server_profiles belum dibuat. Silakan jalankan: mysql -u root -p < setup_hotspot_server_profiles_table.sql');
-            return {
-                success: false,
-                message: 'Tabel hotspot_server_profiles belum dibuat. Silakan jalankan script setup: mysql -u root -p < setup_hotspot_server_profiles_table.sql',
-                data: []
-            };
+            logger.info('Tabel hotspot_server_profiles belum ada, mencoba membuat...');
+            try {
+                await conn.execute(`
+                    CREATE TABLE IF NOT EXISTS hotspot_server_profiles (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(128) NOT NULL UNIQUE,
+                        rate_limit VARCHAR(64) NULL,
+                        session_timeout INT NULL,
+                        idle_timeout INT NULL,
+                        shared_users INT DEFAULT 1,
+                        open_status_page BOOLEAN DEFAULT 1,
+                        http_cookie_lifetime INT NULL,
+                        split_user_domain BOOLEAN DEFAULT 0,
+                        status_autorefresh INT NULL,
+                        copy_from VARCHAR(128) NULL,
+                        disabled BOOLEAN DEFAULT 0,
+                        comment TEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                `);
+                logger.info('✅ Tabel hotspot_server_profiles berhasil dibuat');
+            } catch (createError) {
+                logger.error(`❌ Gagal membuat tabel hotspot_server_profiles: ${createError.message}`);
+                // Jangan throw error, biarkan fungsi tetap berjalan
+            }
         }
+    } catch (error) {
+        logger.error(`Error checking/creating hotspot_server_profiles table: ${error.message}`);
+        // Jangan throw error, biarkan fungsi tetap berjalan
+    }
+}
+
+async function getHotspotServerProfilesRadius() {
+    const conn = await getRadiusConnection();
+    try {
+        // Cek dan buat tabel jika belum ada
+        await ensureHotspotServerProfilesTable(conn);
         
         const [rows] = await conn.execute(`
             SELECT id, name, rate_limit, session_timeout, idle_timeout, shared_users,
@@ -5239,20 +6464,8 @@ async function getHotspotServerProfilesRadius() {
 async function addHotspotServerProfileRadius(profileData) {
     const conn = await getRadiusConnection();
     try {
-        const [tableCheck] = await conn.execute(`
-            SELECT COUNT(*) as count
-            FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-            AND table_name = 'hotspot_server_profiles'
-        `);
-        
-        if (tableCheck.length === 0 || tableCheck[0].count === 0) {
-            await conn.end();
-            return {
-                success: false,
-                message: 'Tabel hotspot_server_profiles belum dibuat. Silakan jalankan script setup terlebih dahulu: mysql -u root -p < setup_hotspot_server_profiles_table.sql'
-            };
-        }
+        // Cek dan buat tabel jika belum ada
+        await ensureHotspotServerProfilesTable(conn);
         
         const name = (profileData.name || '').trim().toLowerCase().replace(/\s+/g, '-');
         
@@ -5418,6 +6631,8 @@ async function getHotspotServerProfileDetailRadius(id) {
     }
 }
 let hotspotProfilesColumnsCache = null;
+let hotspotProfilesPermissionWarningLogged = false;
+let hotspotProfilesPermissionDenied = false; // Flag untuk menandai bahwa permission denied sudah terjadi
 
 async function ensureHotspotProfilesMetadataTable(conn) {
     try {
@@ -5429,8 +6644,54 @@ async function ensureHotspotProfilesMetadataTable(conn) {
         `);
 
         if (!tableCheck || tableCheck.length === 0 || tableCheck[0].count === 0) {
-            logger.warn('Tabel hotspot_profiles belum dibuat. Jalankan: mysql -u root -p < setup_hotspot_profiles_table.sql');
-            return false;
+            logger.info('Tabel hotspot_profiles belum ada, mencoba membuat...');
+            try {
+                // Buat tabel hotspot_profiles dengan struktur dasar
+                await conn.execute(`
+                    CREATE TABLE IF NOT EXISTS hotspot_profiles (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        groupname VARCHAR(128) NOT NULL UNIQUE,
+                        display_name VARCHAR(128) NOT NULL,
+                        comment TEXT NULL,
+                        rate_limit_value VARCHAR(32) NULL,
+                        rate_limit_unit VARCHAR(10) NULL,
+                        burst_limit_value VARCHAR(32) NULL,
+                        burst_limit_unit VARCHAR(10) NULL,
+                        session_timeout_value INT DEFAULT NULL,
+                        session_timeout_unit VARCHAR(10) NULL,
+                        idle_timeout_value INT DEFAULT NULL,
+                        idle_timeout_unit VARCHAR(10) NULL,
+                        limit_uptime_value INT DEFAULT NULL,
+                        limit_uptime_unit VARCHAR(10) NULL,
+                        validity_value INT DEFAULT NULL,
+                        validity_unit VARCHAR(10) NULL,
+                        shared_users INT DEFAULT 1,
+                        local_address VARCHAR(64) NULL,
+                        remote_address VARCHAR(64) NULL,
+                        dns_server VARCHAR(255) NULL,
+                        parent_queue VARCHAR(64) NULL,
+                        address_list VARCHAR(64) NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    )
+                `);
+                logger.info('✅ Tabel hotspot_profiles berhasil dibuat');
+                // Set cache untuk kolom yang baru dibuat
+                const [newColumnRows] = await conn.execute(`
+                    SELECT COLUMN_NAME
+                    FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'hotspot_profiles'
+                `);
+                hotspotProfilesColumnsCache = new Set(
+                    (newColumnRows || []).map(row => String(row.COLUMN_NAME).toLowerCase())
+                );
+                return true;
+            } catch (createError) {
+                logger.error(`❌ Gagal membuat tabel hotspot_profiles: ${createError.message}`);
+                logger.warn('⚠️ Metadata profil hotspot tidak akan disimpan, tapi profil tetap berfungsi di radgroupreply');
+                return false;
+            }
         }
 
         // Pastikan kolom-kolom terbaru tersedia (untuk kompatibilitas versi lama)
@@ -5467,6 +6728,13 @@ async function ensureHotspotProfilesMetadataTable(conn) {
         );
         hotspotProfilesColumnsCache = existingColumns;
 
+        // Skip penambahan kolom jika permission sudah pernah denied
+        if (hotspotProfilesPermissionDenied) {
+            // Jika permission sudah pernah denied, langsung return tanpa mencoba lagi
+            hotspotProfilesColumnsCache = existingColumns;
+            return true;
+        }
+
         for (const col of requiredColumns) {
             if (!existingColumns.has(col.name.toLowerCase())) {
                 try {
@@ -5474,8 +6742,26 @@ async function ensureHotspotProfilesMetadataTable(conn) {
                     logger.info(`Menambahkan kolom hotspot_profiles.${col.name} untuk kompatibilitas`);
                     existingColumns.add(col.name.toLowerCase());
                     hotspotProfilesColumnsCache = existingColumns;
+                    // Reset flag jika berhasil menambahkan kolom (berarti permission sudah ada)
+                    hotspotProfilesPermissionDenied = false;
                 } catch (alterError) {
-                    logger.warn(`Gagal menambahkan kolom hotspot_profiles.${col.name}: ${alterError.message}`);
+                    // Cek apakah error karena permission denied
+                    const errorMsg = alterError.message || '';
+                    if (errorMsg.includes('denied') || errorMsg.includes('permission') || errorMsg.includes('Access denied')) {
+                        // Set flag bahwa permission denied
+                        hotspotProfilesPermissionDenied = true;
+                        // Hanya log sekali untuk menghindari spam log
+                        if (!hotspotProfilesPermissionWarningLogged) {
+                            logger.warn(`User database tidak memiliki permission ALTER TABLE untuk hotspot_profiles. Kolom tidak dapat ditambahkan otomatis.`);
+                            logger.warn(`Untuk memperbaiki, jalankan: sudo bash scripts/grant_alter_permission.sh`);
+                            logger.warn(`Atau sebagai root MySQL: GRANT ALTER ON radius.hotspot_profiles TO 'billing'@'localhost'; FLUSH PRIVILEGES;`);
+                            hotspotProfilesPermissionWarningLogged = true;
+                        }
+                        // Break loop karena semua kolom akan gagal dengan alasan yang sama
+                        break;
+                    } else {
+                        logger.warn(`Gagal menambahkan kolom hotspot_profiles.${col.name}: ${alterError.message}`);
+                    }
                 }
             }
         }
@@ -5691,8 +6977,38 @@ async function ensurePPPoEProfilesMetadataTable(conn) {
         `);
 
         if (!tableCheck || tableCheck.length === 0 || tableCheck[0].count === 0) {
-            logger.warn('Tabel pppoe_profiles belum dibuat. Jalankan: mysql -u root -p < setup_pppoe_profiles_table.sql');
-            return false;
+            logger.info('Tabel pppoe_profiles belum ada, mencoba membuat...');
+            try {
+                await conn.execute(`
+                    CREATE TABLE IF NOT EXISTS pppoe_profiles (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        groupname VARCHAR(128) NOT NULL UNIQUE,
+                        display_name VARCHAR(128) NOT NULL,
+                        comment TEXT NULL,
+                        rate_limit VARCHAR(128) NULL,
+                        local_address VARCHAR(64) NULL,
+                        remote_address VARCHAR(64) NULL,
+                        dns_server VARCHAR(128) NULL,
+                        parent_queue VARCHAR(128) NULL,
+                        address_list VARCHAR(128) NULL,
+                        bridge_learning VARCHAR(16) NOT NULL DEFAULT 'default',
+                        use_mpls VARCHAR(16) NOT NULL DEFAULT 'default',
+                        use_compression VARCHAR(16) NOT NULL DEFAULT 'default',
+                        use_encryption VARCHAR(16) NOT NULL DEFAULT 'default',
+                        only_one VARCHAR(16) NOT NULL DEFAULT 'default',
+                        change_tcp_mss VARCHAR(16) NOT NULL DEFAULT 'default',
+                        use_upnp VARCHAR(16) NOT NULL DEFAULT 'default',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    )
+                `);
+                logger.info('✅ Tabel pppoe_profiles berhasil dibuat');
+                return true;
+            } catch (createError) {
+                logger.error(`❌ Gagal membuat tabel pppoe_profiles: ${createError.message}`);
+                logger.warn('⚠️ Metadata profil tidak akan disimpan, tapi profil tetap berfungsi di radgroupreply');
+                return false;
+            }
         }
 
         return true;
@@ -6084,11 +7400,12 @@ async function getPPPoEProfilesRadius() {
         }
         
         // Ambil semua groupname dari radgroupreply, exclude yang digunakan oleh voucher
+        // INCLUDE 'isolir' agar profil isolir ditampilkan di UI (dengan badge khusus)
         let query = `
             SELECT DISTINCT groupname
             FROM radgroupreply
             WHERE groupname IS NOT NULL AND groupname != ''
-            AND groupname NOT IN ('isolir', 'default')
+            AND groupname NOT IN ('default')
         `;
         
         const params = [];
@@ -6100,31 +7417,51 @@ async function getPPPoEProfilesRadius() {
         
         query += ` ORDER BY groupname ASC`;
         
+        logger.info(`Query untuk mendapatkan profil: ${query}`);
+        logger.info(`Params: ${JSON.stringify(params)}`);
+        
         const [groupRows] = await conn.execute(query, params);
+        
+        logger.info(`Ditemukan ${groupRows.length} groupname dari radgroupreply`);
 
         const groupnames = groupRows.map(row => row.groupname);
 
         // Jangan tampilkan profile yang dibuat untuk hotspot. Profile hotspot disimpan
         // di tabel metadata `hotspot_profiles`, jadi gunakan itu sebagai penanda.
+        // CRITICAL: Profil PPPoE harus dibedakan dengan profil Hotspot
         const hotspotMetadataMap = await getHotspotProfilesMetadata(conn, groupnames);
+        
+        logger.info(`🔍 Filtering: Ditemukan ${Object.keys(hotspotMetadataMap).length} profil hotspot dari ${groupnames.length} total profil`);
 
         const filteredGroupnames = groupnames.filter(name => {
+            // Jangan filter profil isolir (profil sistem)
+            if (name === 'isolir') {
+                logger.debug(`✅ Profile "${name}" adalah profil isolir (sistem), akan ditampilkan`);
+                return true;
+            }
             if (hotspotMetadataMap[name]) {
-                logger.debug(`Skipping hotspot profile "${name}" from PPPoE profile list`);
+                logger.info(`⏭️  SKIP: Profile "${name}" adalah profil HOTSPOT, tidak ditampilkan di daftar PPPoE`);
                 return false;
             }
+            logger.debug(`✅ Profile "${name}" adalah profil PPPoE, akan ditampilkan`);
             return true;
         });
+        
+        logger.info(`📋 Hasil filter: ${filteredGroupnames.length} profil PPPoE (dari ${groupnames.length} total, ${Object.keys(hotspotMetadataMap).length} adalah hotspot)`);
 
         const metadataMap = await getPPPoEProfilesMetadata(conn, filteredGroupnames);
 
         const profiles = [];
-        for (const row of groupRows) {
-            const groupname = row.groupname;
-
-            if (hotspotMetadataMap[groupname]) {
+        // Gunakan filteredGroupnames untuk memastikan hanya profil yang valid yang ditampilkan
+        logger.info(`Memproses ${filteredGroupnames.length} profil setelah filter hotspot`);
+        
+        for (const groupname of filteredGroupnames) {
+            // Double check: skip jika ini adalah hotspot profile (kecuali isolir)
+            if (groupname !== 'isolir' && hotspotMetadataMap[groupname]) {
+                logger.debug(`Skipping hotspot profile "${groupname}" dari loop`);
                 continue;
             }
+            
             const meta = metadataMap[groupname] || null;
             
             // Get all attributes for this group
@@ -6135,7 +7472,14 @@ async function getPPPoEProfilesRadius() {
                 ORDER BY attribute
             `, [groupname]);
             
+            // Jika tidak ada attribute sama sekali, skip profil ini
+            if (!attrRows || attrRows.length === 0) {
+                logger.warn(`⚠️ Profile ${groupname} tidak memiliki attribute di radgroupreply, skip`);
+                continue;
+            }
+            
             // Build profile object
+            const isIsolirProfile = groupname === 'isolir';
             const profile = {
                 name: meta?.display_name || groupname,
                 '.id': groupname, // Use groupname as ID for RADIUS
@@ -6145,7 +7489,7 @@ async function getPPPoEProfilesRadius() {
                 'idle-timeout': null,
                 'limit-uptime': null,
                 'shared-users': null,
-                comment: meta?.comment || '',
+                comment: meta?.comment || (isIsolirProfile ? 'Profile sistem untuk isolir/suspension' : ''),
                 localAddress: meta?.local_address || '',
                 remoteAddress: meta?.remote_address || '',
                 dnsServer: meta?.dns_server || '',
@@ -6154,6 +7498,8 @@ async function getPPPoEProfilesRadius() {
                 nas_name: 'RADIUS',
                 nas_ip: 'RADIUS Server',
                 is_radius: true,
+                is_isolir: isIsolirProfile, // Flag khusus untuk profil isolir
+                is_system_profile: isIsolirProfile, // Flag untuk profil sistem (tidak bisa diedit/dihapus)
                 limitUptimeValue: meta?.limit_uptime_value || null,
                 limitUptimeUnit: meta?.limit_uptime_unit || null,
                 limitUptimeSeconds: null,
@@ -6223,11 +7569,78 @@ async function getPPPoEProfilesRadius() {
                     case 'Simultaneous-Use':
                         profile['shared-users'] = attr.value;
                         break;
+                    case 'Framed-IP-Address':
+                        // Framed-IP-Address bisa untuk local address (single IP) atau remote address (IP range)
+                        // Deteksi: jika mengandung "-" berarti IP range (remote address)
+                        // Jika tidak mengandung "-" berarti single IP (local address)
+                        const ipRangePattern = /^\d+\.\d+\.\d+\.\d+-\d+\.\d+\.\d+\.\d+$/;
+                        const isIpRange = ipRangePattern.test(attr.value);
+                        
+                        if (isIpRange) {
+                            // IP range = remote address
+                            profile.remoteAddress = attr.value;
+                            logger.debug(`📝 Framed-IP-Address "${attr.value}" terdeteksi sebagai IP range (remote address)`);
+                        } else {
+                            // Single IP = local address
+                            if (!profile.localAddress || profile.localAddress === '') {
+                                profile.localAddress = attr.value;
+                                logger.debug(`📝 Framed-IP-Address "${attr.value}" terdeteksi sebagai single IP (local address)`);
+                            }
+                        }
+                        break;
+                    case 'Framed-Pool':
+                        // Framed-Pool adalah untuk remote address (pool name)
+                        // Selalu gunakan dari attribute karena ini sumber kebenaran untuk RADIUS
+                        profile.remoteAddress = attr.value;
+                        break;
+                    case 'MS-Primary-DNS-Server':
+                        // Combine dengan secondary DNS jika ada
+                        if (!profile.dnsServer || profile.dnsServer === '') {
+                            profile.dnsServer = attr.value;
+                        } else {
+                            profile.dnsServer = attr.value + ',' + (profile.dnsServer.split(',')[1] || '');
+                        }
+                        break;
+                    case 'MS-Secondary-DNS-Server':
+                        // Combine dengan primary DNS jika ada
+                        if (!profile.dnsServer || profile.dnsServer === '') {
+                            profile.dnsServer = attr.value;
+                        } else {
+                            const primary = profile.dnsServer.split(',')[0] || profile.dnsServer;
+                            profile.dnsServer = primary + ',' + attr.value;
+                        }
+                        break;
+                    case 'MikroTik-Address-List':
+                        profile.addressList = attr.value;
+                        break;
+                    case 'MikroTik-Parent-Queue':
+                        profile.parentQueue = attr.value;
+                        break;
                 }
             });
             
+            // Override dengan metadata hanya jika attribute tidak ada (fallback)
             if (meta && !profile['rate-limit'] && meta.rate_limit) {
                 profile['rate-limit'] = meta.rate_limit;
+            }
+            
+            // Override dengan metadata hanya jika attribute tidak ada (fallback)
+            if (meta) {
+                if (!profile.localAddress && meta.local_address) {
+                    profile.localAddress = meta.local_address;
+                }
+                if (!profile.remoteAddress && meta.remote_address) {
+                    profile.remoteAddress = meta.remote_address;
+                }
+                if (!profile.dnsServer && meta.dns_server) {
+                    profile.dnsServer = meta.dns_server;
+                }
+                if (!profile.parentQueue && meta.parent_queue) {
+                    profile.parentQueue = meta.parent_queue;
+                }
+                if (!profile.addressList && meta.address_list) {
+                    profile.addressList = meta.address_list;
+                }
             }
             
             if (profile['limit-uptime']) {
@@ -6236,9 +7649,31 @@ async function getPPPoEProfilesRadius() {
             if (profile.validityString) {
                 profile['validity-period'] = profile.validityString;
             }
+            
+            // CRITICAL: Map camelCase fields to kebab-case for UI compatibility
+            // UI menggunakan profile['remote-address'], tapi kita set remoteAddress
+            if (profile.remoteAddress) {
+                profile['remote-address'] = profile.remoteAddress;
+            }
+            if (profile.localAddress) {
+                profile['local-address'] = profile.localAddress;
+            }
+            if (profile.dnsServer) {
+                profile['dns-server'] = profile.dnsServer;
+            }
+            if (profile.parentQueue) {
+                profile['parent-queue'] = profile.parentQueue;
+            }
+            if (profile.addressList) {
+                profile['address-list'] = profile.addressList;
+            }
+            
+            logger.debug(`📋 Profile ${groupname} - remoteAddress: "${profile.remoteAddress}", 'remote-address': "${profile['remote-address']}"`);
 
             profiles.push(profile);
         }
+        
+        logger.info(`✅ Total ${profiles.length} profil PPPoE yang akan ditampilkan (dari ${filteredGroupnames.length} setelah filter)`);
         
         await conn.end();
         return {
@@ -6355,6 +7790,79 @@ async function addPPPoEProfileRadius(profileData) {
             `, [groupname, idleTimeout.toString()]);
         }
         
+        // Insert Local-Address (Framed-IP-Address) if provided
+        const localAddress = sanitize(profileData['local-address']);
+        if (localAddress) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'Framed-IP-Address', ':=', ?)
+            `, [groupname, localAddress]);
+        }
+        
+        // Insert Remote-Address (Framed-Pool) if provided
+        const remoteAddress = sanitize(profileData['remote-address']);
+        if (remoteAddress) {
+            // Deteksi apakah ini IP range/address atau pool name
+            // IP range format: 192.168.10.100-192.168.10.200 atau 192.168.10.50
+            // Pool name format: pool_pppoe, hs-pool-5, dhcp_vlan-GenieAcs, dll
+            const ipRangePattern = /^\d+\.\d+\.\d+\.\d+(-\d+\.\d+\.\d+\.\d+)?$/;
+            const isIpRange = ipRangePattern.test(remoteAddress);
+            
+            if (isIpRange) {
+                // IP range atau single IP - gunakan Framed-IP-Address
+                await conn.execute(`
+                    INSERT INTO radgroupreply (groupname, attribute, op, value)
+                    VALUES (?, 'Framed-IP-Address', ':=', ?)
+                `, [groupname, remoteAddress]);
+            } else {
+                // Pool name - gunakan Framed-Pool
+                await conn.execute(`
+                    INSERT INTO radgroupreply (groupname, attribute, op, value)
+                    VALUES (?, 'Framed-Pool', ':=', ?)
+                `, [groupname, remoteAddress]);
+            }
+        }
+        
+        // Insert DNS Server if provided
+        const dnsServer = sanitize(profileData['dns-server']);
+        if (dnsServer) {
+            // Split multiple DNS servers (comma or space separated)
+            const dnsServers = dnsServer.split(/[,\s]+/).filter(d => d.trim());
+            if (dnsServers.length > 0) {
+                // Primary DNS
+                await conn.execute(`
+                    INSERT INTO radgroupreply (groupname, attribute, op, value)
+                    VALUES (?, 'MS-Primary-DNS-Server', ':=', ?)
+                `, [groupname, dnsServers[0].trim()]);
+                
+                // Secondary DNS if provided
+                if (dnsServers.length > 1) {
+                    await conn.execute(`
+                        INSERT INTO radgroupreply (groupname, attribute, op, value)
+                        VALUES (?, 'MS-Secondary-DNS-Server', ':=', ?)
+                    `, [groupname, dnsServers[1].trim()]);
+                }
+            }
+        }
+        
+        // Insert Address-List (MikroTik-Address-List) if provided
+        const addressList = sanitize(profileData['address-list']);
+        if (addressList) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'MikroTik-Address-List', ':=', ?)
+            `, [groupname, addressList]);
+        }
+        
+        // Insert Parent-Queue (MikroTik-Parent-Queue) if provided
+        const parentQueue = sanitize(profileData['parent-queue']);
+        if (parentQueue) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'MikroTik-Parent-Queue', ':=', ?)
+            `, [groupname, parentQueue]);
+        }
+        
         await savePPPoEProfileMetadata(conn, {
             groupname,
             displayName: sanitize(profileData.name) || groupname,
@@ -6373,6 +7881,15 @@ async function addPPPoEProfileRadius(profileData) {
             changeTcpMss: sanitize(profileData['change-tcp-mss']) || 'default',
             useUpnp: sanitize(profileData['use-upnp']) || 'default'
         });
+        
+        // Verifikasi bahwa profil benar-benar tersimpan
+        const [verifyRows] = await conn.execute(`
+            SELECT COUNT(*) as count
+            FROM radgroupreply
+            WHERE groupname = ?
+        `, [groupname]);
+        const count = verifyRows && verifyRows.length > 0 ? verifyRows[0].count : 0;
+        logger.info(`✅ Verifikasi: Profile ${groupname} memiliki ${count} attribute(s) di radgroupreply`);
         
         await conn.end();
         logger.info(`✅ Profile RADIUS berhasil ditambahkan: ${groupname}`);
@@ -6442,7 +7959,10 @@ async function editPPPoEProfileRadius(profileData) {
             
             for (const row of oldReplyRows) {
                 // Skip attributes yang akan diupdate
-                if (['MikroTik-Rate-Limit', 'Mikrotik-Rate-Limit', 'Session-Timeout', 'Idle-Timeout'].includes(row.attribute)) {
+                if (['MikroTik-Rate-Limit', 'Mikrotik-Rate-Limit', 'Session-Timeout', 'Idle-Timeout',
+                     'Framed-IP-Address', 'Framed-Pool',
+                     'MS-Primary-DNS-Server', 'MS-Secondary-DNS-Server',
+                     'MikroTik-Address-List', 'MikroTik-Parent-Queue'].includes(row.attribute)) {
                     continue; // Akan diinsert dengan nilai baru nanti
                 }
                 
@@ -6487,7 +8007,13 @@ async function editPPPoEProfileRadius(profileData) {
         await conn.execute(`
             DELETE FROM radgroupreply
             WHERE groupname = ?
-            AND attribute IN ('MikroTik-Rate-Limit', 'Mikrotik-Rate-Limit', 'Session-Timeout', 'Idle-Timeout')
+            AND attribute IN (
+                'MikroTik-Rate-Limit', 'Mikrotik-Rate-Limit', 
+                'Session-Timeout', 'Idle-Timeout',
+                'Framed-IP-Address', 'Framed-Pool',
+                'MS-Primary-DNS-Server', 'MS-Secondary-DNS-Server',
+                'MikroTik-Address-List', 'MikroTik-Parent-Queue'
+            )
         `, [groupnameToUpdate]);
         
         // Build rate-limit string
@@ -6557,6 +8083,120 @@ async function editPPPoEProfileRadius(profileData) {
                 INSERT INTO radgroupcheck (groupname, attribute, op, value)
                 VALUES (?, 'Simultaneous-Use', ':=', ?)
             `, [groupnameToUpdate, profileData['simultaneous-use']]);
+        }
+        
+        // Insert/Update Local-Address (Framed-IP-Address) if provided
+        // Hapus dulu Framed-IP-Address yang mungkin untuk local address
+        // Tapi hati-hati: Framed-IP-Address juga bisa untuk remote address (IP range)
+        // Solusi: Hapus semua Framed-IP-Address, lalu insert ulang sesuai kebutuhan
+        const localAddress = sanitize(profileData['local-address']);
+        const remoteAddress = sanitize(profileData['remote-address']);
+        
+        logger.info(`🔍 Edit Profile - Remote Address: "${remoteAddress}" (type: ${typeof remoteAddress})`);
+        
+        // Deteksi remote address type
+        let remoteIsIpRange = false;
+        if (remoteAddress) {
+            const ipRangePattern = /^\d+\.\d+\.\d+\.\d+(-\d+\.\d+\.\d+\.\d+)?$/;
+            remoteIsIpRange = ipRangePattern.test(remoteAddress);
+            logger.info(`🔍 Remote Address Detection: "${remoteAddress}" -> isIpRange: ${remoteIsIpRange}`);
+        } else {
+            logger.warn(`⚠️  Remote Address kosong atau null!`);
+        }
+        
+        // Hapus Framed-IP-Address yang lama (untuk local address atau remote address IP range)
+        // Tapi hanya jika kita akan insert yang baru
+        if (localAddress || (remoteAddress && remoteIsIpRange)) {
+            // Hapus semua Framed-IP-Address yang ada
+            // Catatan: Ini akan menghapus baik yang untuk local maupun remote
+            // Tapi kita akan insert ulang sesuai kebutuhan
+            await conn.execute(`
+                DELETE FROM radgroupreply
+                WHERE groupname = ? AND attribute = 'Framed-IP-Address'
+            `, [groupnameToUpdate]);
+        }
+        
+        // Insert Local-Address jika ada
+        if (localAddress) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'Framed-IP-Address', ':=', ?)
+            `, [groupnameToUpdate, localAddress]);
+        }
+        
+        // Insert/Update Remote-Address
+        if (remoteAddress) {
+            if (remoteIsIpRange) {
+                // IP range atau single IP - gunakan Framed-IP-Address
+                // Catatan: Jika local address juga ada, ini akan menimpa
+                // Tapi biasanya local address dan remote address IP range tidak digunakan bersamaan
+                logger.info(`💾 Menyimpan remote address (IP range): ${remoteAddress} sebagai Framed-IP-Address`);
+                await conn.execute(`
+                    INSERT INTO radgroupreply (groupname, attribute, op, value)
+                    VALUES (?, 'Framed-IP-Address', ':=', ?)
+                `, [groupnameToUpdate, remoteAddress]);
+            } else {
+                // Pool name - gunakan Framed-Pool
+                // Hapus dulu Framed-Pool yang lama
+                logger.info(`💾 Menyimpan remote address (pool name): ${remoteAddress} sebagai Framed-Pool`);
+                await conn.execute(`
+                    DELETE FROM radgroupreply
+                    WHERE groupname = ? AND attribute = 'Framed-Pool'
+                `, [groupnameToUpdate]);
+                
+                await conn.execute(`
+                    INSERT INTO radgroupreply (groupname, attribute, op, value)
+                    VALUES (?, 'Framed-Pool', ':=', ?)
+                `, [groupnameToUpdate, remoteAddress]);
+                logger.info(`✅ Framed-Pool berhasil disimpan: ${groupnameToUpdate} = ${remoteAddress}`);
+            }
+        } else {
+            // Jika remote address kosong, hapus Framed-Pool yang ada
+            logger.info(`🗑️ Menghapus Framed-Pool karena remote address kosong`);
+            await conn.execute(`
+                DELETE FROM radgroupreply
+                WHERE groupname = ? AND attribute = 'Framed-Pool'
+            `, [groupnameToUpdate]);
+        }
+        
+        // Insert/Update DNS Server if provided
+        const dnsServer = sanitize(profileData['dns-server']);
+        if (dnsServer) {
+            // Split multiple DNS servers (comma or space separated)
+            const dnsServers = dnsServer.split(/[,\s]+/).filter(d => d.trim());
+            if (dnsServers.length > 0) {
+                // Primary DNS
+                await conn.execute(`
+                    INSERT INTO radgroupreply (groupname, attribute, op, value)
+                    VALUES (?, 'MS-Primary-DNS-Server', ':=', ?)
+                `, [groupnameToUpdate, dnsServers[0].trim()]);
+                
+                // Secondary DNS if provided
+                if (dnsServers.length > 1) {
+                    await conn.execute(`
+                        INSERT INTO radgroupreply (groupname, attribute, op, value)
+                        VALUES (?, 'MS-Secondary-DNS-Server', ':=', ?)
+                    `, [groupnameToUpdate, dnsServers[1].trim()]);
+                }
+            }
+        }
+        
+        // Insert/Update Address-List (MikroTik-Address-List) if provided
+        const addressList = sanitize(profileData['address-list']);
+        if (addressList) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'MikroTik-Address-List', ':=', ?)
+            `, [groupnameToUpdate, addressList]);
+        }
+        
+        // Insert/Update Parent-Queue (MikroTik-Parent-Queue) if provided
+        const parentQueue = sanitize(profileData['parent-queue']);
+        if (parentQueue) {
+            await conn.execute(`
+                INSERT INTO radgroupreply (groupname, attribute, op, value)
+                VALUES (?, 'MikroTik-Parent-Queue', ':=', ?)
+            `, [groupnameToUpdate, parentQueue]);
         }
 
         await savePPPoEProfileMetadata(conn, {
@@ -6664,6 +8304,7 @@ async function getPPPoEProfileDetailRadius(groupname) {
         }
         
         // Build profile object
+        // Inisialisasi dengan metadata, tapi attribute dari radgroupreply akan override
         const profile = {
             name: metadata?.display_name || groupname,
             '.id': groupname,
@@ -6681,11 +8322,12 @@ async function getPPPoEProfileDetailRadius(groupname) {
             validitySeconds: null,
             validityString: null,
             comment: metadata?.comment || '',
-            localAddress: metadata?.local_address || '',
-            remoteAddress: metadata?.remote_address || '',
-            dnsServer: metadata?.dns_server || '',
-            parentQueue: metadata?.parent_queue || '',
-            addressList: metadata?.address_list || '',
+            // Inisialisasi kosong, akan diisi dari attribute (prioritas utama untuk RADIUS)
+            localAddress: '',
+            remoteAddress: '',
+            dnsServer: '',
+            parentQueue: '',
+            addressList: '',
             nas_name: 'RADIUS',
             nas_ip: 'RADIUS Server',
             is_radius: true
@@ -6751,12 +8393,100 @@ async function getPPPoEProfileDetailRadius(groupname) {
                 case 'Simultaneous-Use':
                     profile['shared-users'] = attr.value;
                     break;
+                case 'Framed-IP-Address':
+                    // Framed-IP-Address bisa untuk local address (single IP) atau remote address (IP range)
+                    // Deteksi: jika mengandung "-" berarti IP range (remote address)
+                    // Jika tidak mengandung "-" berarti single IP (local address)
+                    const ipRangePatternDetail = /^\d+\.\d+\.\d+\.\d+-\d+\.\d+\.\d+\.\d+$/;
+                    const isIpRangeDetail = ipRangePatternDetail.test(attr.value);
+                    
+                    if (isIpRangeDetail) {
+                        // IP range = remote address
+                        profile.remoteAddress = attr.value;
+                        logger.debug(`📝 [Detail] Framed-IP-Address "${attr.value}" terdeteksi sebagai IP range (remote address)`);
+                    } else {
+                        // Single IP = local address
+                        if (!profile.localAddress || profile.localAddress === '') {
+                            profile.localAddress = attr.value;
+                            logger.debug(`📝 [Detail] Framed-IP-Address "${attr.value}" terdeteksi sebagai single IP (local address)`);
+                        } else {
+                            // Jika localAddress sudah ada, update dengan yang baru
+                            profile.localAddress = attr.value;
+                        }
+                    }
+                    break;
+                case 'Framed-Pool':
+                    // Framed-Pool adalah untuk remote address (pool name)
+                    // Selalu gunakan dari attribute karena ini sumber kebenaran untuk RADIUS
+                    profile.remoteAddress = attr.value;
+                    break;
+                case 'MS-Primary-DNS-Server':
+                    // Combine dengan secondary DNS jika ada
+                    if (!profile.dnsServer || profile.dnsServer === '') {
+                        profile.dnsServer = attr.value;
+                    } else {
+                        profile.dnsServer = attr.value + ',' + (profile.dnsServer.split(',')[1] || '');
+                    }
+                    break;
+                case 'MS-Secondary-DNS-Server':
+                    // Combine dengan primary DNS jika ada
+                    if (!profile.dnsServer || profile.dnsServer === '') {
+                        profile.dnsServer = attr.value;
+                    } else {
+                        const primary = profile.dnsServer.split(',')[0] || profile.dnsServer;
+                        profile.dnsServer = primary + ',' + attr.value;
+                    }
+                    break;
+                case 'MikroTik-Address-List':
+                    profile.addressList = attr.value;
+                    break;
+                case 'MikroTik-Parent-Queue':
+                    profile.parentQueue = attr.value;
+                    break;
             }
         });
 
+        // Override dengan metadata hanya jika attribute tidak ada
         if (!profile['rate-limit'] && metadata?.rate_limit) {
             profile['rate-limit'] = metadata.rate_limit;
         }
+        
+        // Override dengan metadata hanya jika attribute tidak ada (fallback)
+        if (!profile.localAddress && metadata?.local_address) {
+            profile.localAddress = metadata.local_address;
+        }
+        if (!profile.remoteAddress && metadata?.remote_address) {
+            profile.remoteAddress = metadata.remote_address;
+        }
+        if (!profile.dnsServer && metadata?.dns_server) {
+            profile.dnsServer = metadata.dns_server;
+        }
+        if (!profile.parentQueue && metadata?.parent_queue) {
+            profile.parentQueue = metadata.parent_queue;
+        }
+        if (!profile.addressList && metadata?.address_list) {
+            profile.addressList = metadata.address_list;
+        }
+        
+        // CRITICAL: Map camelCase fields to kebab-case for UI compatibility
+        // UI menggunakan profile['remote-address'], tapi kita set remoteAddress
+        if (profile.remoteAddress) {
+            profile['remote-address'] = profile.remoteAddress;
+        }
+        if (profile.localAddress) {
+            profile['local-address'] = profile.localAddress;
+        }
+        if (profile.dnsServer) {
+            profile['dns-server'] = profile.dnsServer;
+        }
+        if (profile.parentQueue) {
+            profile['parent-queue'] = profile.parentQueue;
+        }
+        if (profile.addressList) {
+            profile['address-list'] = profile.addressList;
+        }
+        
+        logger.debug(`📋 [Detail] Profile ${groupname} - remoteAddress: "${profile.remoteAddress}", 'remote-address': "${profile['remote-address']}"`);
         
         const idleUnit = metadata.idle_timeout_unit ? metadata.idle_timeout_unit.toLowerCase() : '';
         if (metadata.idle_timeout_value && idleUnit) {
@@ -7365,6 +9095,472 @@ async function ensureVoucherRevenueColumns() {
     }
 }
 
+// Fungsi untuk mendapatkan RouterOS version
+async function getRouterOSVersion(routerObj) {
+    try {
+        const conn = await getMikrotikConnectionForRouter(routerObj);
+        if (!conn) {
+            throw new Error('Gagal koneksi ke router');
+        }
+        
+        try {
+            const resources = await conn.write('/system/resource/print');
+            if (resources && resources[0] && resources[0].version) {
+                const version = resources[0].version;
+                // Parse version: "7.15" -> 7, "6.49.10" -> 6
+                const majorVersion = parseInt(version.split('.')[0]);
+                conn.close();
+                return { success: true, version: version, major: majorVersion };
+            }
+        } catch (e) {
+            logger.warn('Failed to get version from /system/resource:', e.message);
+        }
+        
+        conn.close();
+        return { success: false, version: null, major: null };
+    } catch (error) {
+        logger.error('Error getting RouterOS version:', error);
+        return { success: false, version: null, major: null, error: error.message };
+    }
+}
+
+// Fungsi untuk execute script Mikrotik (kompatibel ROS 6.x dan 7.x)
+async function executeMikrotikScript(script, routerObj, rosVersion = null) {
+    let conn = null;
+    try {
+        // Connect ke router
+        conn = await getMikrotikConnectionForRouter(routerObj);
+        if (!conn) {
+            throw new Error('Gagal koneksi ke router');
+        }
+        
+        // Detect ROS version jika tidak diberikan
+        let detectedVersion = null;
+        if (!rosVersion || rosVersion === 'auto') {
+            const versionInfo = await getRouterOSVersion(routerObj);
+            if (versionInfo.success && versionInfo.major) {
+                detectedVersion = versionInfo.major;
+                logger.info(`Detected RouterOS version: ${versionInfo.version} (major: ${detectedVersion})`);
+            } else {
+                // Default ke ROS 7 jika tidak bisa detect
+                detectedVersion = 7;
+                logger.warn('Could not detect ROS version, defaulting to ROS 7');
+            }
+        } else {
+            detectedVersion = parseInt(rosVersion);
+        }
+        
+        // Parse script menjadi commands
+        const lines = script.split('\n');
+        const commands = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i].trim();
+            
+            // Skip empty lines dan comments
+            if (!line || line.startsWith('#') || line.startsWith('//')) {
+                continue;
+            }
+            
+            // Handle multi-line commands (ending with \)
+            if (line.endsWith('\\')) {
+                let fullCommand = line.slice(0, -1).trim();
+                i++;
+                while (i < lines.length) {
+                    const nextLine = lines[i].trim();
+                    if (!nextLine || nextLine.startsWith('#')) {
+                        i--;
+                        break;
+                    }
+                    if (nextLine.endsWith('\\')) {
+                        fullCommand += ' ' + nextLine.slice(0, -1).trim();
+                        i++;
+                    } else {
+                        fullCommand += ' ' + nextLine.trim();
+                        break;
+                    }
+                }
+                line = fullCommand.trim();
+            }
+            
+            // Skip :put, :log, echo commands (tidak perlu execute)
+            if (line.startsWith(':put') || line.startsWith(':log') || line.startsWith('echo')) {
+                continue;
+            }
+            
+            // Skip print commands (hanya untuk melihat data, tidak perlu execute)
+            // Check berbagai format: /ip ... print, print where, etc.
+            if (line.includes('/print') || line.match(/\s+print\s+/i) || line.trim().endsWith('print')) {
+                logger.debug(`Skipping print/verification command: ${line}`);
+                continue;
+            }
+            
+            // Parse command: /ip firewall nat add chain=dstnat ...
+            // Extract path dan params
+            if (line.startsWith('/')) {
+                // Check jika line mengandung "print" SEBELUM split (untuk catch semua format)
+                // Command seperti "/ip firewall address-list print where" harus di-skip
+                if (line.includes(' print ') || line.includes(' print where') || line.match(/\s+print\s+/i) || line.toLowerCase().includes(' print')) {
+                    logger.debug(`Skipping print command (pre-check): ${line}`);
+                    continue;
+                }
+                
+                // Split line dengan regex yang lebih robust untuk handle multiple spaces
+                // Gunakan split dengan regex untuk handle multiple spaces/tabs
+                const parts = line.split(/\s+/).filter(p => p && p.trim() !== '');
+                
+                // Build full path: /ip firewall nat add -> /ip/firewall/nat/add
+                // Tapi stop jika menemukan "print" atau action (add, set, remove, etc.)
+                let pathParts = [];
+                let paramsStartIndex = 0;
+                let isPrintCommand = false;
+                
+                for (let j = 0; j < parts.length; j++) {
+                    const part = parts[j].toLowerCase();
+                    // Stop jika menemukan "print" atau action
+                    if (part === 'print' || part === 'add' || part === 'set' || part === 'remove' || part === 'enable' || part === 'disable') {
+                        if (part === 'print') {
+                            // Ini adalah print command, skip
+                            logger.debug(`Skipping print command (found 'print' in path): ${line}`);
+                            isPrintCommand = true;
+                            break; // Break dari loop j
+                        }
+                        // Ini adalah action, jadi path berakhir di sini
+                        pathParts.push(parts[j]);
+                        paramsStartIndex = j + 1;
+                        break;
+                    }
+                    pathParts.push(parts[j]);
+                }
+                
+                // Skip command ini jika adalah print command
+                if (isPrintCommand) {
+                    continue; // Continue ke line berikutnya (skip command ini)
+                }
+                
+                // Jika tidak ada action ditemukan, semua adalah path
+                if (paramsStartIndex === 0) {
+                    paramsStartIndex = pathParts.length;
+                }
+                
+                const path = pathParts.join('/');
+                const params = parts.slice(paramsStartIndex);
+                
+                // Normalize params: remove empty strings dan trim
+                const normalizedParams = params.filter(p => p && p.trim() !== '').map(p => p.trim());
+                
+                logger.info(`[PARSE] Parsed command - Path: ${path}, Params count: ${normalizedParams.length}, Params:`, normalizedParams);
+                
+                // Parse params menjadi object
+                // Handle parameter dengan format: key=value atau key="value with spaces"
+                // Value bisa mengandung = atau / (seperti IP dengan CIDR: 172.30.0.0/32)
+                const paramObj = {};
+                let currentKey = null;
+                let currentValue = '';
+                let inQuotes = false;
+                
+                // Iterate through normalized params
+                for (let j = 0; j < normalizedParams.length; j++) {
+                    const param = normalizedParams[j];
+                    const equalsIndex = param.indexOf('=');
+                    
+                    if (equalsIndex > 0 && !inQuotes) {
+                        // Save previous key-value
+                        if (currentKey) {
+                            paramObj[currentKey] = currentValue.trim() || true;
+                        }
+                        
+                        // New key-value pair
+                        currentKey = param.substring(0, equalsIndex);
+                        currentValue = param.substring(equalsIndex + 1);
+                        
+                        // Check if value starts with quote
+                        if (currentValue.startsWith('"')) {
+                            inQuotes = true;
+                            currentValue = currentValue.slice(1);
+                            // Check if quote ends in same param (e.g., list="isolir-users")
+                            // Perlu check length > 0 untuk handle kasus list="" (empty string dalam quotes)
+                            if (currentValue.endsWith('"')) {
+                                inQuotes = false;
+                                // Strip closing quote
+                                currentValue = currentValue.slice(0, -1);
+                            }
+                        }
+                    } else if (inQuotes) {
+                        // Continue building quoted value
+                        currentValue += ' ' + param;
+                        if (param.endsWith('"')) {
+                            inQuotes = false;
+                            currentValue = currentValue.slice(0, -1);
+                            // Setelah quotes ditutup, save currentKey dan reset untuk parameter berikutnya
+                            if (currentKey) {
+                                paramObj[currentKey] = currentValue.trim();
+                                currentKey = null;
+                                currentValue = '';
+                            }
+                            // Setelah quotes ditutup, parameter berikutnya akan di-parse di iterasi berikutnya
+                            // Tapi kita perlu handle kasus jika ada parameter lagi di iterasi yang sama
+                            // (tidak mungkin karena kita sudah di akhir param yang mengandung closing quote)
+                        }
+                    } else if (currentKey) {
+                        // Value continuation (untuk kasus seperti IP dengan CIDR: 172.30.0.0/32)
+                        // Hanya tambahkan jika bukan key baru (tidak mengandung =)
+                        if (equalsIndex < 0) {
+                            // Ini adalah continuation dari value sebelumnya (bukan key baru)
+                            currentValue += ' ' + param;
+                        } else {
+                            // Ini adalah key baru, save yang sebelumnya dulu
+                            paramObj[currentKey] = currentValue.trim() || true;
+                            currentKey = param.substring(0, equalsIndex);
+                            currentValue = param.substring(equalsIndex + 1);
+                            if (currentValue.startsWith('"')) {
+                                inQuotes = true;
+                                currentValue = currentValue.slice(1);
+                                if (currentValue.endsWith('"')) {
+                                    inQuotes = false;
+                                    currentValue = currentValue.slice(0, -1);
+                                }
+                            }
+                        }
+                    } else {
+                        // Tidak ada currentKey dan tidak dalam quotes, ini seharusnya key baru
+                        // Tapi jika tidak ada =, ini mungkin parameter flag (tanpa value)
+                        if (equalsIndex < 0) {
+                            // Parameter flag (tanpa value)
+                            paramObj[param] = true;
+                        } else {
+                            // Key-value pair baru
+                            currentKey = param.substring(0, equalsIndex);
+                            currentValue = param.substring(equalsIndex + 1);
+                            if (currentValue.startsWith('"')) {
+                                inQuotes = true;
+                                currentValue = currentValue.slice(1);
+                                if (currentValue.endsWith('"')) {
+                                    inQuotes = false;
+                                    currentValue = currentValue.slice(0, -1);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Save last key-value
+                if (currentKey) {
+                    const finalValue = currentValue.trim();
+                    // Jika value kosong atau hanya whitespace, set sebagai true (flag parameter)
+                    // Tapi jika value adalah string kosong setelah trim quotes, tetap set sebagai empty string
+                    paramObj[currentKey] = finalValue === '' ? true : finalValue;
+                }
+                
+                // Convert paramObj ke array format untuk RouterOSAPI
+                // Format node-routeros: =key=value atau =key (untuk flag)
+                const paramArray = [];
+                for (const [key, value] of Object.entries(paramObj)) {
+                    if (value === true || value === '') {
+                        // Flag parameter (tanpa value)
+                        paramArray.push(`=${key}`);
+                    } else {
+                        // Key-value parameter dengan format =key=value
+                        paramArray.push(`=${key}=${value}`);
+                    }
+                }
+                
+                // Debug: log parameter yang akan dikirim (gunakan info untuk visibility)
+                logger.info(`[PARSE] Command: ${path}`);
+                logger.info(`[PARSE] Normalized params (${normalizedParams.length}):`, normalizedParams);
+                logger.info(`[PARSE] Parsed paramObj:`, JSON.stringify(paramObj, null, 2));
+                logger.info(`[PARSE] Final paramArray (${paramArray.length}):`, paramArray);
+                
+                // Skip jika path mengandung /print (untuk verifikasi, tidak perlu execute)
+                // Check berbagai format: /ip ... print, print where, etc.
+                if (path.includes('/print') || path.endsWith('/print') || line.includes(' print ') || line.includes(' print where')) {
+                    logger.debug(`Skipping print command: ${line}`);
+                    continue;
+                }
+                
+                commands.push({ path, params: paramArray, original: line });
+            }
+        }
+        
+        logger.info(`Executing ${commands.length} commands to router ${routerObj.name} (${routerObj.nas_ip})`);
+        
+        // Filter out any print commands that might have slipped through
+        const executableCommands = commands.filter(cmd => {
+            // Check berbagai format print command
+            const isPrint = cmd.path.includes('/print') || 
+                           cmd.path.endsWith('/print') || 
+                           cmd.original.includes(' print ') || 
+                           cmd.original.includes(' print where') ||
+                           cmd.original.match(/\s+print\s+/i) ||
+                           cmd.original.toLowerCase().includes('print');
+            if (isPrint) {
+                logger.debug(`Filtering out print command: ${cmd.original} (path: ${cmd.path})`);
+                return false;
+            }
+            return true;
+        });
+        
+        logger.info(`After filtering print commands: ${executableCommands.length} commands to execute (filtered ${commands.length - executableCommands.length} print commands)`);
+        
+        // Execute commands
+        let executed = 0;
+        let failed = 0;
+        const errors = [];
+        
+        for (const cmd of executableCommands) {
+            try {
+                // Double check: skip print commands (seharusnya sudah di-skip di parsing, tapi untuk safety)
+                // Check berbagai format print command
+                if (cmd.path.includes('/print') || cmd.path.endsWith('/print') || 
+                    cmd.original.includes(' print ') || cmd.original.includes(' print where') ||
+                    cmd.original.match(/\s+print\s+/i)) {
+                    logger.debug(`Skipping print command: ${cmd.path} (original: ${cmd.original})`);
+                    continue;
+                }
+                
+                logger.info(`[EXEC] Executing command: ${cmd.path}`);
+                logger.info(`[EXEC] Command params (${cmd.params.length}):`, cmd.params);
+                logger.info(`[EXEC] Original command: ${cmd.original}`);
+                
+                // Handle different command types
+                if (cmd.path.includes('/remove')) {
+                    // Remove command: /ip firewall nat remove [find ...]
+                    // Extract find condition
+                    const findMatch = cmd.original.match(/\[find\s+(.+?)\]/);
+                    if (findMatch) {
+                        const findCondition = findMatch[1];
+                        // Parse find condition dan execute
+                        const findParams = [];
+                        if (findCondition.includes('where')) {
+                            // ROS 7 format: [find where ...]
+                            const whereMatch = findCondition.match(/where\s+(.+)/);
+                            if (whereMatch) {
+                                const whereClause = whereMatch[1];
+                                // Parse where clause
+                                if (whereClause.includes('comment~')) {
+                                    const commentMatch = whereClause.match(/comment~"(.+?)"/);
+                                    if (commentMatch) {
+                                        findParams.push(`?comment~${commentMatch[1]}`);
+                                    }
+                                } else if (whereClause.includes('name=')) {
+                                    const nameMatch = whereClause.match(/name="(.+?)"/);
+                                    if (nameMatch) {
+                                        findParams.push(`?name=${nameMatch[1]}`);
+                                    }
+                                }
+                            }
+                        } else {
+                            // ROS 6 format: [find ...]
+                            if (findCondition.includes('comment~')) {
+                                const commentMatch = findCondition.match(/comment~"(.+?)"/);
+                                if (commentMatch) {
+                                    findParams.push(`?comment~${commentMatch[1]}`);
+                                }
+                            }
+                        }
+                        
+                        const results = await conn.write(cmd.path.replace('/remove', '/print'), findParams);
+                        if (results && results.length > 0) {
+                            for (const item of results) {
+                                await conn.write(cmd.path, [`=.id=${item['.id']}`]);
+                            }
+                        }
+                    } else {
+                        // Simple remove with ID
+                        await conn.write(cmd.path, cmd.params);
+                    }
+                } else if (cmd.path.includes('/add')) {
+                    // Add command
+                    // Pastikan params adalah array dan tidak kosong
+                    const addParams = Array.isArray(cmd.params) ? cmd.params : [];
+                    if (addParams.length > 0) {
+                        await conn.write(cmd.path, addParams);
+                    } else {
+                        logger.warn(`Add command with no params, skipping: ${cmd.path}`);
+                        continue;
+                    }
+                } else if (cmd.path.includes('/set')) {
+                    // Set command - need .id
+                    const setParams = Array.isArray(cmd.params) ? cmd.params : [];
+                    if (setParams.length > 0) {
+                        await conn.write(cmd.path, setParams);
+                    } else {
+                        logger.warn(`Set command with no params, skipping: ${cmd.path}`);
+                        continue;
+                    }
+                } else {
+                    // Other commands - skip print commands (sudah di-skip di parsing)
+                    if (cmd.path.includes('/print')) {
+                        logger.debug(`Skipping print command: ${cmd.path}`);
+                        continue;
+                    }
+                    // Pastikan params adalah array
+                    const otherParams = Array.isArray(cmd.params) ? cmd.params : [];
+                    await conn.write(cmd.path, otherParams);
+                }
+                
+                executed++;
+            } catch (cmdError) {
+                // Check jika error adalah "already exists" atau "already have such entry"
+                // Error ini tidak fatal karena berarti settingan sudah ada
+                const errorMsg = cmdError.message || '';
+                const isNonFatalError = 
+                    errorMsg.includes('already have such entry') ||
+                    errorMsg.includes('already exists') ||
+                    errorMsg.includes('profile with the same name already exists') ||
+                    errorMsg.includes('entry already exists');
+                
+                if (isNonFatalError) {
+                    // Hanya log sebagai info, tidak dihitung sebagai failed
+                    logger.info(`⚠️  Command skipped (already exists): ${cmd.original} - ${errorMsg}`);
+                    executed++; // Tetap dihitung sebagai executed karena settingan sudah ada (tujuan tercapai)
+                } else {
+                    failed++;
+                    errors.push(`Command failed: ${cmd.original} - ${errorMsg}`);
+                    logger.warn(`Command failed: ${cmd.original}`, cmdError);
+                }
+                // Continue dengan command berikutnya
+            }
+        }
+        
+        conn.close();
+        
+        if (failed > 0) {
+            logger.warn(`Script execution completed with ${failed} failed commands out of ${executableCommands.length}`);
+            return {
+                success: true,
+                commands_executed: executed,
+                commands_failed: failed,
+                total_commands: executableCommands.length,
+                ros_version: detectedVersion,
+                warnings: errors
+            };
+        }
+        
+        return {
+            success: true,
+            commands_executed: executed,
+            commands_failed: 0,
+            total_commands: executableCommands.length,
+            ros_version: detectedVersion,
+            message: `Script berhasil dijalankan: ${executed} commands executed`
+        };
+    } catch (error) {
+        if (conn) {
+            try {
+                conn.close();
+            } catch (e) {
+                // Ignore
+            }
+        }
+        logger.error('Error executing Mikrotik script:', error);
+        return {
+            success: false,
+            message: error.message || 'Gagal menjalankan script ke Mikrotik'
+        };
+    }
+}
+
 // Export all functions
 module.exports = {
     setSock,
@@ -7372,6 +9568,7 @@ module.exports = {
     getMikrotikConnection,
     getMikrotikConnectionForRouter,
     getMikrotikConnectionForCustomer,
+    getRouterForCustomer,
     getPPPoEUsers,
     addPPPoEUser,
     editPPPoEUser,
@@ -7388,6 +9585,7 @@ module.exports = {
     addPPPoESecret,
     deletePPPoESecret,
     setPPPoEProfile,
+    disconnectPPPoEUser,
     monitorPPPoEConnections,
     getInterfaces,
     getInterfacesForRouter,
@@ -7397,6 +9595,13 @@ module.exports = {
     getIPAddresses,
     addIPAddress,
     deleteIPAddress,
+    getRoutes,
+    addRoute,
+    deleteRoute,
+    getDHCPLeases,
+    getDHCPServers,
+    pingHost,
+    getSystemLogs,
     // PPPoE/Hotspot profile helpers (needed by /admin/mikrotik)
     getPPPoEProfiles,
     getPPPoEProfileDetail,
@@ -7428,12 +9633,16 @@ module.exports = {
     editHotspotServerProfileMikrotik,
     deleteHotspotServerProfileMikrotik,
     getHotspotUsersRadius,
+    getMembersWithStatusRadius,
+    addHotspotUserRadius,
     getHotspotServers,
     addHotspotServer,
     editHotspotServer,
     deleteHotspotServer,
     getHotspotServerDetail,
     disconnectHotspotUser,
+    disableHotspotUserRadius,
+    enableHotspotUserRadius,
     generateHotspotVouchers,
     getInterfaceTraffic,
     // RADIUS functions
@@ -7444,11 +9653,14 @@ module.exports = {
     getActivePPPoEConnectionsRadius,
     updatePPPoEUserRadiusPassword,
     assignPackageRadius,
+    ensureIsolirProfileRadius,
     suspendUserRadius,
     unsuspendUserRadius,
     syncPackageLimitsToRadius,
     syncPackageLimitsToMikrotik,
     buildMikrotikRateLimit,
     formatSecondsToDuration,
-    durationToSeconds
+    durationToSeconds,
+    executeMikrotikScript,
+    getRouterOSVersion
 };

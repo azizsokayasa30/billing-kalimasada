@@ -345,6 +345,9 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="/js/sweetalert-helper.js"></script>
 <script>
     function refreshPage() {
         window.location.reload();
@@ -359,7 +362,7 @@
         // Get job data from the current page
         const jobElement = document.querySelector(`[data-job-id="${jobId}"]`);
         if (!jobElement) {
-            alert('Data job tidak ditemukan');
+            showErrorAlert('Error', 'Data job tidak ditemukan');
             return;
         }
         
@@ -536,21 +539,21 @@
         .then(data => {
             if (data.success) {
                 // Show success message
-                alert('Status instalasi berhasil diubah menjadi "' + getStatusText(newStatus) + '"');
-                
-                // Reset form and close modal
-                if (newStatus === 'completed') {
-                    document.getElementById('completionNotes').value = '';
-                    bootstrap.Modal.getInstance(document.getElementById('completeInstallationModal')).hide();
-                } else {
-                    bootstrap.Modal.getInstance(document.getElementById('startInstallationModal')).hide();
-                }
-                
-                // Refresh page to show updated status
-                refreshPage();
+                showSuccessAlert('Berhasil!', 'Status instalasi berhasil diubah menjadi "' + getStatusText(newStatus) + '"', function() {
+                    // Reset form and close modal
+                    if (newStatus === 'completed') {
+                        document.getElementById('completionNotes').value = '';
+                        bootstrap.Modal.getInstance(document.getElementById('completeInstallationModal')).hide();
+                    } else {
+                        bootstrap.Modal.getInstance(document.getElementById('startInstallationModal')).hide();
+                    }
+                    
+                    // Refresh page to show updated status
+                    refreshPage();
+                });
             } else {
                 // Show error message
-                alert('Gagal mengupdate status: ' + (data.message || 'Terjadi kesalahan'));
+                showErrorAlert('Gagal', 'Gagal mengupdate status: ' + (data.message || 'Terjadi kesalahan'));
                 
                 // Reset button state
                 btn.innerHTML = originalText;
@@ -559,7 +562,7 @@
         })
         .catch(error => {
             console.error('Error updating installation status:', error);
-            alert('Terjadi kesalahan saat mengupdate status instalasi');
+            showErrorAlert('Error', 'Terjadi kesalahan saat mengupdate status instalasi');
             
             // Reset button state
             btn.innerHTML = originalText;

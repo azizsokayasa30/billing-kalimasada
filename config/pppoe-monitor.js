@@ -15,7 +15,7 @@ async function startPPPoEMonitoring() {
         }
 
         const settings = pppoeNotifications.getSettings();
-        const interval = settings.monitorInterval || 60000; // Default 1 minute
+        const interval = settings.monitorInterval || 300000; // Default 5 menit (dioptimasi untuk mengurangi beban API MikroTik)
 
         // Clear any existing interval
         if (monitorInterval) {
@@ -89,6 +89,7 @@ async function checkPPPoEChanges() {
         
         // Skip if notifications are disabled
         if (!settings.enabled) {
+            logger.debug('PPPoE notifications are disabled, skipping check');
             return;
         }
 
@@ -96,11 +97,13 @@ async function checkPPPoEChanges() {
         const connectionsResult = await pppoeNotifications.getActivePPPoEConnections();
         if (!connectionsResult.success) {
             logger.warn(`Failed to get PPPoE connections: ${connectionsResult.message || 'Unknown error'}`);
+            // Jangan return, biarkan monitoring tetap berjalan meskipun ada error
+            // Hanya log warning dan skip notifikasi untuk kali ini
             return;
         }
 
-        const connections = connectionsResult.data;
-        const activeNow = connections.map(conn => conn.name);
+        const connections = connectionsResult.data || [];
+        const activeNow = connections.map(conn => conn.name).filter(Boolean); // Filter null/undefined
 
         // Detect login/logout events
         const loginUsers = activeNow.filter(user => !lastActivePPPoE.includes(user));
@@ -108,26 +111,46 @@ async function checkPPPoEChanges() {
 
         // Handle login notifications
         if (loginUsers.length > 0 && settings.loginNotifications) {
-            logger.info(`PPPoE LOGIN detected: ${loginUsers.join(', ')}`);
+            logger.info(`🔔 PPPoE LOGIN detected: ${loginUsers.join(', ')}`);
             
-            // Get offline users for the notification
-            const offlineUsers = await pppoeNotifications.getOfflinePPPoEUsers(activeNow);
-            
-            // Format and send login notification
-            const message = pppoeNotifications.formatLoginMessage(loginUsers, connections, offlineUsers);
-            await pppoeNotifications.sendNotification(message);
+            try {
+                // Get offline users for the notification
+                const offlineUsers = await pppoeNotifications.getOfflinePPPoEUsers(activeNow);
+                
+                // Format and send login notification
+                const message = pppoeNotifications.formatLoginMessage(loginUsers, connections, offlineUsers);
+                const sent = await pppoeNotifications.sendNotification(message);
+                
+                if (sent) {
+                    logger.info(`✅ Login notification sent successfully for: ${loginUsers.join(', ')}`);
+                } else {
+                    logger.warn(`⚠️ Failed to send login notification for: ${loginUsers.join(', ')}`);
+                }
+            } catch (notifError) {
+                logger.error(`❌ Error sending login notification: ${notifError.message}`);
+            }
         }
 
         // Handle logout notifications
         if (logoutUsers.length > 0 && settings.logoutNotifications) {
-            logger.info(`PPPoE LOGOUT detected: ${logoutUsers.join(', ')}`);
+            logger.info(`🚪 PPPoE LOGOUT detected: ${logoutUsers.join(', ')}`);
             
-            // Get offline users for the notification
-            const offlineUsers = await pppoeNotifications.getOfflinePPPoEUsers(activeNow);
-            
-            // Format and send logout notification
-            const message = pppoeNotifications.formatLogoutMessage(logoutUsers, offlineUsers);
-            await pppoeNotifications.sendNotification(message);
+            try {
+                // Get offline users for the notification
+                const offlineUsers = await pppoeNotifications.getOfflinePPPoEUsers(activeNow);
+                
+                // Format and send logout notification
+                const message = pppoeNotifications.formatLogoutMessage(logoutUsers, offlineUsers);
+                const sent = await pppoeNotifications.sendNotification(message);
+                
+                if (sent) {
+                    logger.info(`✅ Logout notification sent successfully for: ${logoutUsers.join(', ')}`);
+                } else {
+                    logger.warn(`⚠️ Failed to send logout notification for: ${logoutUsers.join(', ')}`);
+                }
+            } catch (notifError) {
+                logger.error(`❌ Error sending logout notification: ${notifError.message}`);
+            }
         }
 
         // Update last active users
@@ -135,11 +158,17 @@ async function checkPPPoEChanges() {
 
         // Log monitoring status
         if (loginUsers.length > 0 || logoutUsers.length > 0) {
-            logger.info(`PPPoE monitoring: ${connections.length} active connections, ${loginUsers.length} login, ${logoutUsers.length} logout`);
+            logger.info(`📊 PPPoE monitoring: ${connections.length} active connections, ${loginUsers.length} login, ${logoutUsers.length} logout`);
+        } else {
+            // Log periodic status (setiap 10 kali check untuk mengurangi spam log)
+            if (Math.random() < 0.1) { // 10% chance untuk log
+                logger.debug(`📊 PPPoE monitoring: ${connections.length} active connections, no changes`);
+            }
         }
 
     } catch (error) {
-        logger.error(`Error in PPPoE monitoring check: ${error.message}`);
+        logger.error(`❌ Error in PPPoE monitoring check: ${error.message}`);
+        logger.error(`Error stack: ${error.stack}`);
     }
 }
 
@@ -198,15 +227,76 @@ async function initializePPPoEMonitoring() {
     try {
         const settings = pppoeNotifications.getSettings();
         
+        // Cek apakah Mikrotik sudah dikonfigurasi dari database (routers table)
+        // Prioritas: database routers table, fallback ke settings.json
+        let hasMikrotikConfig = false;
+        let configSource = '';
+        
+        try {
+            // Cek dari database routers table (prioritas utama)
+            const sqlite3 = require('sqlite3').verbose();
+            const path = require('path');
+            const dbPath = path.join(__dirname, '../data/billing.db');
+            const db = new sqlite3.Database(dbPath);
+            
+            const router = await new Promise((resolve, reject) => {
+                db.get('SELECT * FROM routers ORDER BY id LIMIT 1', [], (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row || null);
+                });
+            });
+            db.close();
+            
+            if (router && router.nas_ip && router.user && (router.password || router.secret)) {
+                hasMikrotikConfig = true;
+                configSource = `database (router: ${router.name || router.nas_ip})`;
+                logger.info(`✅ Mikrotik config found in ${configSource}`);
+            }
+        } catch (dbError) {
+            logger.warn(`Database check failed: ${dbError.message}, trying settings.json fallback`);
+        }
+        
+        // Fallback: cek dari settings.json (untuk kompatibilitas)
+        if (!hasMikrotikConfig) {
+            try {
+                const { getSetting } = require('./settingsManager');
+                const mikrotikHost = getSetting('mikrotik_host', '');
+                const mikrotikUser = getSetting('mikrotik_user', '');
+                const mikrotikPassword = getSetting('mikrotik_password', '');
+                
+                if (mikrotikHost && mikrotikUser && mikrotikPassword) {
+                    hasMikrotikConfig = true;
+                    configSource = 'settings.json';
+                    logger.info(`✅ Mikrotik config found in ${configSource}`);
+                }
+            } catch (settingsError) {
+                logger.warn(`Settings.json check failed: ${settingsError.message}`);
+            }
+        }
+        
+        if (!hasMikrotikConfig) {
+            logger.warn('⚠️ PPPoE monitoring tidak dapat dimulai: Mikrotik belum dikonfigurasi');
+            logger.warn('⚠️ Silakan konfigurasi Mikrotik di Admin → Connection Settings');
+            return { success: false, message: 'Mikrotik belum dikonfigurasi' };
+        }
+        
         // Auto-start monitoring if enabled
         if (settings.enabled) {
-            await startPPPoEMonitoring();
-            logger.info('PPPoE monitoring auto-started on initialization');
+            const result = await startPPPoEMonitoring();
+            if (result.success) {
+                logger.info(`✅ PPPoE monitoring auto-started on initialization (using ${configSource})`);
+            } else {
+                logger.error(`❌ Failed to start PPPoE monitoring: ${result.message}`);
+            }
+            return result;
         } else {
-            logger.info('PPPoE monitoring disabled in settings');
+            logger.info('ℹ️ PPPoE monitoring disabled in settings');
+            return { success: true, message: 'PPPoE monitoring disabled in settings' };
         }
     } catch (error) {
-        logger.error(`Error initializing PPPoE monitoring: ${error.message}`);
+        logger.error(`❌ Error initializing PPPoE monitoring: ${error.message}`);
+        logger.error(`Error stack: ${error.stack}`);
+        return { success: false, message: error.message };
     }
 }
 

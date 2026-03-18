@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const billingManager = require('./billing');
 const logger = require('./logger');
+const { getServerTimezone } = require('./settingsManager');
 
 class InvoiceScheduler {
     constructor() {
@@ -19,7 +20,7 @@ class InvoiceScheduler {
             }
         }, {
             scheduled: true,
-            timezone: "Asia/Jakarta"
+            timezone: getServerTimezone()
         });
 
         logger.info('Invoice scheduler initialized - will run on 1st of every month at 08:00');
@@ -38,7 +39,7 @@ class InvoiceScheduler {
             }
         }, {
             scheduled: true,
-            timezone: "Asia/Jakarta"
+            timezone: getServerTimezone()
         });
         
         logger.info('Due date reminder scheduler initialized - will run daily at 09:00');
@@ -54,7 +55,7 @@ class InvoiceScheduler {
             }
         }, {
             scheduled: true,
-            timezone: "Asia/Jakarta"
+            timezone: getServerTimezone()
         });
         
         logger.info('Voucher cleanup scheduler initialized - will run every 6 hours');
@@ -70,7 +71,7 @@ class InvoiceScheduler {
             }
         }, {
             scheduled: true,
-            timezone: "Asia/Jakarta"
+            timezone: getServerTimezone()
         });
         
         logger.info('Monthly summary scheduler initialized - will run on 1st of every month at 23:59');
@@ -86,7 +87,7 @@ class InvoiceScheduler {
             }
         }, {
             scheduled: true,
-            timezone: "Asia/Jakarta"
+            timezone: getServerTimezone()
         });
         
         logger.info('Monthly reset scheduler initialized - will run on 1st of every month at 00:01');
@@ -97,13 +98,14 @@ class InvoiceScheduler {
                 logger.info('Starting daily service suspension check...');
                 const serviceSuspension = require('./serviceSuspension');
                 await serviceSuspension.checkAndSuspendOverdueCustomers();
+                await serviceSuspension.checkAndSuspendOverdueMembers();
                 logger.info('Daily service suspension check completed');
             } catch (error) {
                 logger.error('Error in daily service suspension check:', error);
             }
         }, {
             scheduled: true,
-            timezone: "Asia/Jakarta"
+            timezone: getServerTimezone()
         });
 
         // Schedule daily service restoration check at 11:00
@@ -118,8 +120,25 @@ class InvoiceScheduler {
             }
         }, {
             scheduled: true,
-            timezone: "Asia/Jakarta"
+            timezone: getServerTimezone()
         });
+
+        // Schedule sync suspended status to RADIUS every 30 minutes
+        cron.schedule('*/30 * * * *', async () => {
+            try {
+                logger.info('Starting sync suspended status to RADIUS...');
+                const serviceSuspension = require('./serviceSuspension');
+                const result = await serviceSuspension.syncSuspendedStatusToRadius();
+                logger.info(`Sync suspended status completed: synced=${result.synced}, alreadyIsolir=${result.alreadyIsolir}, errors=${result.errors}`);
+            } catch (error) {
+                logger.error('Error in sync suspended status to RADIUS:', error);
+            }
+        }, {
+            scheduled: true,
+            timezone: getServerTimezone()
+        });
+        
+        logger.info('Sync suspended status scheduler initialized - will run every 30 minutes');
 
         logger.info('Service suspension/restoration scheduler initialized - will run daily at 10:00 and 11:00');
 
@@ -175,7 +194,7 @@ class InvoiceScheduler {
             }
         }, {
             scheduled: true,
-            timezone: "Asia/Jakarta"
+            timezone: getServerTimezone()
         });
 
         logger.info('Voucher cleanup scheduler initialized - will run every 6 hours');
@@ -204,7 +223,12 @@ class InvoiceScheduler {
             
             for (const invoice of dueInvoices) {
                 try {
-                    await whatsappNotifications.sendDueDateReminder(invoice.id);
+                    // Check if this is a member invoice or customer invoice
+                    if (invoice.member_id) {
+                        await whatsappNotifications.sendMemberDueDateReminder(invoice.id);
+                    } else {
+                        await whatsappNotifications.sendDueDateReminder(invoice.id);
+                    }
                     logger.info(`Due date reminder sent for invoice ${invoice.invoice_number}`);
                 } catch (error) {
                     logger.error(`Error sending due date reminder for invoice ${invoice.invoice_number}:`, error);
@@ -289,7 +313,8 @@ class InvoiceScheduler {
                         tax_rate: taxRate, // Store tax rate for reference
                         due_date: dueDate.toISOString().split('T')[0],
                         notes: `Tagihan bulanan ${currentDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} - ${renewalType === 'fix_date' ? 'Fix Date' : 'Renewal'} type`,
-                        invoice_type: 'monthly'
+                        invoice_type: 'monthly',
+                        package_name: packageData.name
                     };
 
                     // Create the invoice
@@ -305,14 +330,131 @@ class InvoiceScheduler {
                         logger.error(`Failed to send WhatsApp notification for invoice ${newInvoice.invoice_number}:`, notificationError);
                         // Jangan stop proses invoice generation jika notifikasi gagal
                     }
+                    
+                    // Kirim notifikasi Email setelah invoice berhasil dibuat
+                    try {
+                        const emailNotifications = require('./email-notifications');
+                        await emailNotifications.sendInvoiceCreatedNotification(customer.id, newInvoice.id);
+                        logger.info(`Email notification sent for invoice ${newInvoice.invoice_number} to customer ${customer.username}`);
+                    } catch (notificationError) {
+                        logger.error(`Failed to send Email notification for invoice ${newInvoice.invoice_number}:`, notificationError);
+                        // Jangan stop proses invoice generation jika notifikasi gagal
+                    }
 
                 } catch (error) {
                     logger.error(`Error creating invoice for customer ${customer.username}:`, error);
                 }
             }
 
+            // Generate invoices for members
+            await this.generateMonthlyInvoicesForMembers();
+
         } catch (error) {
             logger.error('Error in generateMonthlyInvoices:', error);
+            throw error;
+        }
+    }
+
+    async generateMonthlyInvoicesForMembers() {
+        try {
+            // Get all active members
+            const members = await billingManager.getAllMembers({ status: 'active' });
+            const activeMembers = members.filter(member => 
+                member.status === 'active' && member.package_id
+            );
+
+            logger.info(`Found ${activeMembers.length} active members for invoice generation`);
+
+            for (const member of activeMembers) {
+                try {
+                    // Get member's package
+                    const packageData = await billingManager.getMemberPackageById(member.package_id);
+                    if (!packageData) {
+                        logger.warn(`Package not found for member ${member.hotspot_username || member.name}`);
+                        continue;
+                    }
+
+                    // Check if invoice already exists for this month
+                    const currentDate = new Date();
+                    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+                    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+                    const memberUsername = member.hotspot_username || member.username;
+                    if (!memberUsername) {
+                        logger.warn(`Member ${member.name} has no hotspot_username or username, skipping`);
+                        continue;
+                    }
+
+                    const existingInvoices = await billingManager.getInvoicesByMemberAndDateRange(
+                        memberUsername,
+                        startOfMonth,
+                        endOfMonth
+                    );
+
+                    if (existingInvoices.length > 0) {
+                        logger.info(`Invoice already exists for member ${memberUsername} this month`);
+                        continue;
+                    }
+
+                    // Set due date based on member's billing_day
+                    const billingDay = (() => {
+                        const v = parseInt(member.billing_day, 10);
+                        if (Number.isFinite(v)) return Math.min(Math.max(v, 1), 28);
+                        return 15;
+                    })();
+                    const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+                    const targetDay = Math.min(billingDay, lastDayOfMonth);
+                    const dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), targetDay);
+
+                    // Create invoice data with PPN calculation
+                    const basePrice = packageData.price;
+                    const taxRate = (packageData.tax_rate === 0 || (typeof packageData.tax_rate === 'number' && packageData.tax_rate > -1))
+                        ? Number(packageData.tax_rate)
+                        : 11.00;
+                    const amountWithTax = billingManager.calculatePriceWithTax(basePrice, taxRate);
+                    
+                    const invoiceData = {
+                        member_id: member.id,
+                        package_id: member.package_id,
+                        amount: amountWithTax,
+                        base_amount: basePrice,
+                        tax_rate: taxRate,
+                        due_date: dueDate.toISOString().split('T')[0],
+                        notes: `Tagihan bulanan member ${currentDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`,
+                        invoice_type: 'monthly',
+                        package_name: packageData.name,
+                        description: `Tagihan paket ${packageData.name}`
+                    };
+
+                    // Create the invoice
+                    const newInvoice = await billingManager.createInvoice(invoiceData);
+                    logger.info(`Created invoice ${newInvoice.invoice_number} for member ${memberUsername}`);
+
+                    // Kirim notifikasi WhatsApp setelah invoice berhasil dibuat
+                    try {
+                        const whatsappNotifications = require('./whatsapp-notifications');
+                        await whatsappNotifications.sendMemberInvoiceCreatedNotification(member.id, newInvoice.id);
+                        logger.info(`WhatsApp notification sent for invoice ${newInvoice.invoice_number} to member ${memberUsername}`);
+                    } catch (notificationError) {
+                        logger.error(`Failed to send WhatsApp notification for invoice ${newInvoice.invoice_number}:`, notificationError);
+                    }
+                    
+                    // Kirim notifikasi Email setelah invoice berhasil dibuat
+                    try {
+                        const emailNotifications = require('./email-notifications');
+                        await emailNotifications.sendMemberInvoiceCreatedNotification(member.id, newInvoice.id);
+                        logger.info(`Email notification sent for invoice ${newInvoice.invoice_number} to member ${memberUsername}`);
+                    } catch (notificationError) {
+                        logger.error(`Failed to send Email notification for invoice ${newInvoice.invoice_number}:`, notificationError);
+                    }
+
+                } catch (error) {
+                    logger.error(`Error creating invoice for member ${member.hotspot_username || member.name}:`, error);
+                }
+            }
+
+        } catch (error) {
+            logger.error('Error in generateMonthlyInvoicesForMembers:', error);
             throw error;
         }
     }
@@ -399,6 +541,16 @@ class InvoiceScheduler {
                         logger.info(`(Daily) WhatsApp notification sent for invoice ${newInvoice.invoice_number} to customer ${customer.username}`);
                     } catch (notificationError) {
                         logger.error(`(Daily) Failed to send WhatsApp notification for invoice ${newInvoice.invoice_number}:`, notificationError);
+                        // Jangan stop proses invoice generation jika notifikasi gagal
+                    }
+                    
+                    // Kirim notifikasi Email setelah invoice berhasil dibuat
+                    try {
+                        const emailNotifications = require('./email-notifications');
+                        await emailNotifications.sendInvoiceCreatedNotification(customer.id, newInvoice.id);
+                        logger.info(`(Daily) Email notification sent for invoice ${newInvoice.invoice_number} to customer ${customer.username}`);
+                    } catch (notificationError) {
+                        logger.error(`(Daily) Failed to send Email notification for invoice ${newInvoice.invoice_number}:`, notificationError);
                         // Jangan stop proses invoice generation jika notifikasi gagal
                     }
 

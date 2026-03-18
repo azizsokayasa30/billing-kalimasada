@@ -374,8 +374,11 @@
                                         <span class="variable-item">{amount}</span>
                                         <span class="variable-item">{due_date}</span>
                                         <span class="variable-item">{package_name}</span>
-                                        <span class="variable-item">{package_speed}</span>
+                                        <span class="variable-item" title="Untuk Customer (PPPoE) dan Member (Hotspot)">{package_speed}</span>
                                         <span class="variable-item">{notes}</span>
+                                        <div class="mt-2 text-muted small">
+                                            <i class="bi bi-info-circle"></i> <strong>Catatan:</strong> Variabel {package_name} dan {package_speed} otomatis mendeteksi paket Customer (PPPoE) atau Member (Hotspot) berdasarkan tipe invoice.
+                                        </div>
                                     </div>
                                     <textarea class="form-control" id="invoice_created_template" rows="8" placeholder="Enter template message..."></textarea>
                                     <div class="mt-2">
@@ -404,7 +407,10 @@
                                         <span class="variable-item">{due_date}</span>
                                         <span class="variable-item">{days_remaining}</span>
                                         <span class="variable-item">{package_name}</span>
-                                        <span class="variable-item">{package_speed}</span>
+                                        <span class="variable-item" title="Untuk Customer (PPPoE) dan Member (Hotspot)">{package_speed}</span>
+                                        <div class="mt-2 text-muted small">
+                                            <i class="bi bi-info-circle"></i> <strong>Catatan:</strong> Variabel {package_name} dan {package_speed} otomatis mendeteksi paket Customer (PPPoE) atau Member (Hotspot) berdasarkan tipe invoice.
+                                        </div>
                                     </div>
                                     <textarea class="form-control" id="due_date_reminder_template" rows="8" placeholder="Enter template message..."></textarea>
                                     <div class="mt-2">
@@ -433,6 +439,11 @@
                                         <span class="variable-item">{payment_method}</span>
                                         <span class="variable-item">{payment_date}</span>
                                         <span class="variable-item">{reference_number}</span>
+                                        <span class="variable-item">{package_name}</span>
+                                        <span class="variable-item" title="Untuk Customer (PPPoE) dan Member (Hotspot)">{package_speed}</span>
+                                        <div class="mt-2 text-muted small">
+                                            <i class="bi bi-info-circle"></i> <strong>Catatan:</strong> Variabel {package_name} dan {package_speed} otomatis mendeteksi paket Customer (PPPoE) atau Member (Hotspot) berdasarkan tipe invoice.
+                                        </div>
                                     </div>
                                     <textarea class="form-control" id="payment_received_template" rows="8" placeholder="Enter template message..."></textarea>
                                     <div class="mt-2">

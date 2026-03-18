@@ -1,32 +1,80 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 const { adminAuth } = require('./adminAuth');
 const { getRadiusConfig, saveRadiusConfig } = require('../config/radiusConfig');
 const logger = require('../config/logger');
 const { getRadiusConnection } = require('../config/mikrotik');
 const { parseClientsConf, writeClientsConf, restartFreeRADIUS, validateClient } = require('../config/radiusClients');
+const { backupRadius, restoreRadius, listBackups } = require('../utils/radiusBackup');
+
+// Configure multer for file upload
+const upload = multer({
+    dest: path.join(process.cwd(), 'temp', 'uploads'),
+    limits: {
+        fileSize: 500 * 1024 * 1024 // 500MB max
+    },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/gzip' || 
+            file.mimetype === 'application/x-gzip' ||
+            file.originalname.endsWith('.tar.gz') ||
+            file.originalname.endsWith('.gz')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Hanya file backup (.tar.gz) yang diizinkan'));
+        }
+    }
+});
 
 // GET: Halaman Setting RADIUS
 router.get('/radius', adminAuth, async (req, res) => {
   try {
     // Ambil dari database, bukan settings.json
     const settings = await getRadiusConfig();
+    // Force mode RADIUS (100% RADIUS mode)
+    settings.user_auth_mode = 'radius';
+    
+    // Get list of backups
+    let backups = [];
+    try {
+      backups = await listBackups();
+    } catch (backupError) {
+      logger.warn('Error loading backups list:', backupError);
+      backups = [];
+    }
+    
     res.render('adminRadius', {
       settings,
+      backups: backups || [],
       page: 'setting-radius',
-      error: null,
-      success: null
+      error: req.query.error || null,
+      success: req.query.success || null
     });
   } catch (e) {
     logger.error('Error loading radius config:', e);
+    
+    // Get list of backups even on error
+    let backups = [];
+    try {
+      backups = await listBackups();
+    } catch (backupError) {
+      logger.warn('Error loading backups list:', backupError);
+      backups = [];
+    }
+    
     res.render('adminRadius', {
       settings: {
-        user_auth_mode: 'mikrotik',
+        user_auth_mode: 'radius', // Always RADIUS mode
         radius_host: 'localhost',
         radius_user: 'billing',
         radius_password: '',
         radius_database: 'radius'
       },
+      backups: backups || [],
       page: 'setting-radius',
       error: 'Gagal memuat pengaturan RADIUS',
       success: null
@@ -37,11 +85,14 @@ router.get('/radius', adminAuth, async (req, res) => {
 // POST: Simpan Setting RADIUS
 router.post('/radius', adminAuth, async (req, res) => {
   try {
-    const { user_auth_mode, radius_host, radius_user, radius_password, radius_database } = req.body;
+    const { radius_host, radius_user, radius_password, radius_database } = req.body;
+
+    // Force mode RADIUS (100% RADIUS mode - tidak ada opsi Mikrotik API)
+    const user_auth_mode = 'radius';
 
     // Simpan ke database (app_settings table)
     await saveRadiusConfig({
-      user_auth_mode: user_auth_mode || 'radius',
+      user_auth_mode: user_auth_mode, // Always 'radius'
       radius_host: radius_host ? radius_host.trim() : 'localhost',
       radius_user: radius_user ? radius_user.trim() : 'billing',
       radius_password: radius_password || '',
@@ -50,9 +101,21 @@ router.post('/radius', adminAuth, async (req, res) => {
 
     // Reload untuk ditampilkan
     const settings = await getRadiusConfig();
+    // Force mode RADIUS (100% RADIUS mode)
+    settings.user_auth_mode = 'radius';
+    
+    // Get list of backups
+    let backups = [];
+    try {
+      backups = await listBackups();
+    } catch (backupError) {
+      logger.warn('Error loading backups list:', backupError);
+      backups = [];
+    }
     
     res.render('adminRadius', {
       settings,
+      backups: backups || [],
       page: 'setting-radius',
       error: null,
       success: 'Pengaturan RADIUS berhasil disimpan ke database'
@@ -60,18 +123,183 @@ router.post('/radius', adminAuth, async (req, res) => {
   } catch (e) {
     logger.error('Error saving radius config:', e);
     const settings = await getRadiusConfig().catch(() => ({
-      user_auth_mode: 'mikrotik',
+      user_auth_mode: 'radius', // Always RADIUS mode
       radius_host: 'localhost',
       radius_user: 'radius',
       radius_password: '',
       radius_database: 'radius'
     }));
     
+    // Force mode RADIUS
+    settings.user_auth_mode = 'radius';
+    
+    // Get list of backups
+    let backups = [];
+    try {
+      backups = await listBackups();
+    } catch (backupError) {
+      logger.warn('Error loading backups list:', backupError);
+      backups = [];
+    }
+    
     res.render('adminRadius', {
       settings,
+      backups: backups || [],
       page: 'setting-radius',
       error: 'Gagal menyimpan pengaturan RADIUS: ' + e.message,
       success: null
+    });
+  }
+});
+
+// POST: Sync password FreeRADIUS dengan password database billing
+router.post('/radius/sync-password', adminAuth, async (req, res) => {
+  try {
+    const { syncRadiusPassword } = require('../utils/syncRadiusPassword');
+    const result = await syncRadiusPassword();
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: result.message,
+        oldPassword: result.oldPassword ? '***' : null,
+        newPassword: '***'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.message
+      });
+    }
+  } catch (error) {
+    logger.error('Error syncing RADIUS password:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal sync password: ' + error.message
+    });
+  }
+});
+
+// GET: Check password sync status
+router.get('/radius/check-password-sync', adminAuth, async (req, res) => {
+  try {
+    const { checkPasswordSync } = require('../utils/syncRadiusPassword');
+    const status = await checkPasswordSync();
+    
+    res.json({
+      success: true,
+      synced: status.synced,
+      needsSync: !status.synced,
+      billingPassword: status.billingPassword ? '***' : null,
+      freeradiusPassword: status.freeradiusPassword ? '***' : null,
+      error: status.error
+    });
+  } catch (error) {
+    logger.error('Error checking password sync:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal cek status sync: ' + error.message
+    });
+  }
+});
+
+// GET: Check RADIUS service status
+router.get('/radius/status', adminAuth, async (req, res) => {
+  try {
+    let serviceStatus = 'unknown';
+    let serviceError = null;
+    let dbStatus = 'unknown';
+    let dbError = null;
+    let overallStatus = 'unknown'; // 'running', 'error', 'not_running'
+    let statusMessage = '';
+
+    // Check FreeRADIUS service status
+    try {
+      const { stdout, stderr } = await execAsync('systemctl is-active freeradius', { timeout: 5000 });
+      serviceStatus = stdout.trim();
+      
+      // Check if service is active
+      if (serviceStatus === 'active') {
+        serviceStatus = 'running';
+      } else if (serviceStatus === 'inactive' || serviceStatus === 'failed') {
+        serviceStatus = 'not_running';
+      } else {
+        serviceStatus = 'unknown';
+      }
+    } catch (error) {
+      serviceError = error.message;
+      // Try alternative check
+      try {
+        const { stdout } = await execAsync('pgrep -x freeradius || echo "not_running"', { timeout: 3000 });
+        if (stdout.trim() === 'not_running') {
+          serviceStatus = 'not_running';
+        } else {
+          serviceStatus = 'running';
+        }
+      } catch (altError) {
+        serviceStatus = 'not_running';
+        serviceError = error.message;
+      }
+    }
+
+    // Check database connection
+    try {
+      const settings = await getRadiusConfig();
+      const conn = await getRadiusConnection();
+      const [testRows] = await conn.execute('SELECT 1 as test');
+      await conn.end();
+      
+      if (testRows && testRows[0] && testRows[0].test === 1) {
+        dbStatus = 'connected';
+      } else {
+        dbStatus = 'error';
+        dbError = 'Database test query failed';
+      }
+    } catch (error) {
+      dbStatus = 'error';
+      dbError = error.message;
+    }
+
+    // Determine overall status
+    if (serviceStatus === 'running' && dbStatus === 'connected') {
+      overallStatus = 'running';
+      statusMessage = 'RADIUS berjalan normal';
+    } else if (serviceStatus === 'not_running') {
+      overallStatus = 'not_running';
+      statusMessage = 'RADIUS service tidak berjalan';
+    } else if (serviceStatus === 'running' && dbStatus === 'error') {
+      overallStatus = 'error';
+      statusMessage = 'RADIUS service berjalan tapi ada masalah koneksi database';
+    } else if (serviceStatus === 'unknown' || dbStatus === 'error') {
+      overallStatus = 'error';
+      statusMessage = 'Ada masalah pada RADIUS: ' + (serviceError || dbError || 'Unknown error');
+    } else {
+      overallStatus = 'error';
+      statusMessage = 'Status tidak dapat ditentukan';
+    }
+
+    res.json({
+      success: true,
+      status: overallStatus,
+      message: statusMessage,
+      details: {
+        service: {
+          status: serviceStatus,
+          error: serviceError
+        },
+        database: {
+          status: dbStatus,
+          error: dbError
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Error checking RADIUS status:', error);
+    res.json({
+      success: false,
+      status: 'error',
+      message: 'Gagal memeriksa status RADIUS: ' + error.message,
+      error: error.message
     });
   }
 });
@@ -322,6 +550,69 @@ router.post('/radius/clients/delete', adminAuth, async (req, res) => {
   } catch (error) {
     logger.error('Error deleting client:', error);
     res.status(500).json({ success: false, message: 'Gagal menghapus client: ' + error.message });
+  }
+});
+
+// GET: Backup RADIUS
+router.get('/radius/backup', adminAuth, async (req, res) => {
+  try {
+    logger.info('Starting RADIUS backup...');
+    const result = await backupRadius();
+    
+    if (result.success) {
+      // Send file for download
+      res.download(result.filePath, result.fileName, (err) => {
+        if (err) {
+          logger.error('Error sending backup file:', err);
+          res.status(500).json({ success: false, message: 'Gagal mengirim file backup' });
+        }
+      });
+    } else {
+      res.status(500).json({ success: false, message: result.message });
+    }
+  } catch (error) {
+    logger.error('Error creating backup:', error);
+    res.status(500).json({ success: false, message: 'Gagal membuat backup: ' + error.message });
+  }
+});
+
+// POST: Restore RADIUS
+router.post('/radius/restore', adminAuth, upload.single('backupFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.redirect('/admin/radius?error=' + encodeURIComponent('File backup tidak ditemukan'));
+    }
+
+    logger.info(`Starting RADIUS restore from ${req.file.path}`);
+    const result = await restoreRadius(req.file.path);
+    
+    // Cleanup uploaded file
+    try {
+      const fs = require('fs').promises;
+      await fs.unlink(req.file.path);
+    } catch (cleanupError) {
+      logger.warn('Error cleaning up uploaded file:', cleanupError);
+    }
+    
+    if (result.success) {
+      res.redirect('/admin/radius?success=' + encodeURIComponent(result.message));
+    } else {
+      res.redirect('/admin/radius?error=' + encodeURIComponent(result.message));
+    }
+  } catch (error) {
+    logger.error('Error restoring backup:', error);
+    res.redirect('/admin/radius?error=' + encodeURIComponent('Gagal restore backup: ' + error.message));
+  }
+});
+
+// GET: List backups
+router.get('/radius/backups', adminAuth, async (req, res) => {
+  try {
+    const backups = await listBackups();
+    res.json({ success: true, backups });
+  } catch (error) {
+    logger.error('Error listing backups:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

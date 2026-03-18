@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pengaturan Payment Gateway - Admin Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
     <!-- Admin Mobile Optimizations -->
     <link href="/css/admin-mobile.css" rel="stylesheet">
@@ -17,6 +18,53 @@
         }
         .status-badge {
             font-size: 0.8rem;
+        }
+        
+        /* Ensure all icons are always visible */
+        i[class*="bx"],
+        i[class*="bi"],
+        .bx,
+        .bi {
+            display: inline-block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            font-style: normal !important;
+            font-variant: normal !important;
+            text-rendering: auto !important;
+            line-height: 1 !important;
+        }
+        
+        /* Ensure icons in buttons are visible */
+        .btn i,
+        .btn .bx,
+        .btn .bi {
+            display: inline-block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        
+        /* Ensure icons in cards are visible */
+        .card i,
+        .card .bx,
+        .card .bi {
+            display: inline-block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        
+        /* Ensure icons in headers are visible */
+        .card-header i,
+        .card-header .bx,
+        .card-header .bi,
+        h1 i,
+        h1 .bx,
+        h1 .bi,
+        h5 i,
+        h5 .bx,
+        h5 .bi {
+            display: inline-block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
         }
     </style>
 </head>
@@ -54,6 +102,7 @@
                                             <option value="midtrans" <%= settings.payment_gateway.active === 'midtrans' ? 'selected' : '' %>>Midtrans</option>
                                             <option value="xendit" <%= settings.payment_gateway.active === 'xendit' ? 'selected' : '' %>>Xendit</option>
                                             <option value="tripay" <%= settings.payment_gateway.active === 'tripay' ? 'selected' : '' %>>Tripay</option>
+                                            <option value="duitku" <%= settings.payment_gateway.active === 'duitku' ? 'selected' : '' %>>Duitku</option>
                                         </select>
                                     </div>
                                     <div class="col-md-6">
@@ -62,6 +111,7 @@
                                             <span class="badge bg-success">Midtrans: Enabled (Active)</span>
                                             <span class="badge bg-secondary">Xendit: Disabled</span>
                                             <span class="badge bg-secondary">Tripay: Disabled</span>
+                                            <span class="badge bg-secondary">Duitku: Disabled</span>
                                         </div>
                                     </div>
                                 </div>
@@ -76,7 +126,7 @@
                 <!-- Gateway Configurations -->
                 <div class="row">
                     <!-- Midtrans Configuration -->
-                    <div class="col-lg-4 mb-4">
+                    <div class="col-lg-3 mb-4">
                         <div class="card gateway-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
@@ -137,7 +187,7 @@
                     </div>
 
                     <!-- Xendit Configuration -->
-                    <div class="col-lg-4 mb-4">
+                    <div class="col-lg-3 mb-4">
                         <div class="card gateway-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
@@ -193,7 +243,7 @@
                     </div>
 
                     <!-- Tripay Configuration -->
-                    <div class="col-lg-4 mb-4">
+                    <div class="col-lg-3 mb-4">
                         <div class="card gateway-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
@@ -258,6 +308,83 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Duitku Configuration -->
+                    <div class="col-lg-3 mb-4">
+                        <div class="card gateway-card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bx bx-wallet"></i> Duitku
+                                    <span class="badge <%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.enabled) ? 'bg-success' : 'bg-secondary' %> status-badge">
+                                        <%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.enabled) ? 'Enabled' : 'Disabled' %>
+                                    </span>
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="duitkuForm">
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="duitkuEnabled" 
+                                                   <%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.enabled) ? 'checked' : '' %>>
+                                            <label class="form-check-label" for="duitkuEnabled">
+                                                Aktifkan Duitku
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="duitkuProduction" 
+                                                   <%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.production) ? 'checked' : '' %>>
+                                            <label class="form-check-label" for="duitkuProduction">
+                                                Production Mode
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Merchant Code:</label>
+                                        <input type="text" class="form-control" id="duitkuMerchantCode" 
+                                               value="<%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.merchant_code) ? settings.payment_gateway.duitku.merchant_code : '' %>">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">API Key:</label>
+                                        <input type="text" class="form-control" id="duitkuApiKey" 
+                                               value="<%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.api_key) ? settings.payment_gateway.duitku.api_key : '' %>">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Base URL (Callback/Return):</label>
+                                        <input type="text" class="form-control" id="duitkuBaseUrl"
+                                               placeholder="https://billing.domainanda.com atau http://IP:PORT"
+                                               value="<%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.base_url) ? settings.payment_gateway.duitku.base_url : '' %>">
+                                        <div class="form-text">Jika kosong, sistem menggunakan host/port dari settings.json</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Expiry Period (menit):</label>
+                                        <input type="number" class="form-control" id="duitkuExpiryPeriod" 
+                                               value="<%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.expiry_period) ? settings.payment_gateway.duitku.expiry_period : 60 %>"
+                                               min="1" max="1440">
+                                        <div class="form-text">Default: 60 menit</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Default Method:</label>
+                                        <select class="form-select" id="duitkuDefaultMethod">
+                                            <option value="VA" <%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.default_method === 'VA') ? 'selected' : '' %>>Virtual Account</option>
+                                            <option value="QRIS" <%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.default_method === 'QRIS') ? 'selected' : '' %>>QRIS</option>
+                                            <option value="VC" <%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.default_method === 'VC') ? 'selected' : '' %>>Kartu Kredit/Debit</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="alert alert-info">
+                                            <i class="bx bx-info-circle"></i>
+                                            <strong>Info:</strong> Metode pembayaran Duitku (VA, QRIS, e-wallet, dll) dipilih langsung oleh pelanggan saat melakukan pembayaran.
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100">
+                                        <i class="bx bx-save"></i> Simpan Duitku
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Test Connection Section -->
@@ -271,19 +398,24 @@
                             </div>
                             <div class="card-body">
                                 <div class="row">
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <button class="btn btn-outline-primary w-100" onclick="testGateway('midtrans')">
                                             <i class="bx bx-test-tube"></i> Test Midtrans
                                         </button>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <button class="btn btn-outline-primary w-100" onclick="testGateway('xendit')">
                                             <i class="bx bx-test-tube"></i> Test Xendit
                                         </button>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <button class="btn btn-outline-primary w-100" onclick="testGateway('tripay')">
                                             <i class="bx bx-test-tube"></i> Test Tripay
+                                        </button>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button class="btn btn-outline-primary w-100" onclick="testGateway('duitku')">
+                                            <i class="bx bx-test-tube"></i> Test Duitku
                                         </button>
                                     </div>
                                 </div>
@@ -385,6 +517,11 @@
             await saveGatewayConfig('tripay');
         });
 
+        document.getElementById('duitkuForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveGatewayConfig('duitku');
+        });
+
         async function saveGatewayConfig(gateway) {
             const formData = {
                 enabled: document.getElementById(`${gateway}Enabled`).checked,
@@ -421,6 +558,19 @@
                     return;
                 }
                 if (baseUrl) formData.base_url = baseUrl;
+            } else if (gateway === 'duitku') {
+                formData.merchant_code = document.getElementById('duitkuMerchantCode').value;
+                formData.api_key = document.getElementById('duitkuApiKey').value;
+                const baseUrl = document.getElementById('duitkuBaseUrl').value.trim();
+                if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+                    showAlert('danger', 'Base URL harus diawali http:// atau https://');
+                    return;
+                }
+                if (baseUrl) formData.base_url = baseUrl;
+                const expiryPeriod = document.getElementById('duitkuExpiryPeriod').value;
+                if (expiryPeriod) formData.expiry_period = parseInt(expiryPeriod);
+                const defaultMethod = document.getElementById('duitkuDefaultMethod').value;
+                if (defaultMethod) formData.default_method = defaultMethod;
             }
 
             try {

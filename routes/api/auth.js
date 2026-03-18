@@ -1,0 +1,297 @@
+const express = require('express');
+const router = express.Router();
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
+const { getSetting } = require('../../config/settingsManager');
+const logger = require('../../config/logger');
+const billingManager = require('../../config/billing');
+const AgentManager = require('../../config/agentManager');
+const { sendMessage } = require('../../config/sendMessage');
+
+const agentManager = new AgentManager();
+const dbPath = path.join(__dirname, '../../data/billing.db');
+const db = new sqlite3.Database(dbPath);
+
+const JWT_SECRET = getSetting('jwt_secret', 'alijaya-billing-secret-2025');
+
+// OTP Store for mobile API
+const otpStore = {};
+
+// WhatsApp integration for OTP is handled by the import at line 11
+
+/**
+ * Normalisasi nomor telepon ke format Indonesia: 62XXXXXXXXXXX (tanpa +)
+ */
+function normalizePhone(phone) {
+    if (!phone) return '';
+    let p = String(phone).trim();
+    p = p.replace(/\D/g, '');
+    if (p.startsWith('0')) p = '62' + p.slice(1);
+    if (!p.startsWith('62')) p = '62' + p;
+    return p;
+}
+
+/**
+ * Generate dan simpan OTP
+ */
+function generateOTP(phone) {
+    const length = parseInt(getSetting('otp_length', '6'));
+    const expiryMin = parseInt(getSetting('otp_expiry_minutes', '5'));
+    
+    const min = Math.pow(10, length - 1);
+    const max = Math.pow(10, length) - 1;
+    const otp = Math.floor(min + Math.random() * (max - min)).toString();
+    
+    otpStore[phone] = { 
+        otp, 
+        expires: Date.now() + expiryMin * 60 * 1000 
+    };
+    
+    return otp;
+}
+
+// Middleware to verify JWT Token
+const verifyToken = (req, res, next) => {
+    const token = req.headers['authorization']?.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(403).json({ success: false, message: 'Failed to authenticate token' });
+        }
+        req.user = decoded;
+        next();
+    });
+};
+
+// API: POST /api/auth/request-otp
+router.post('/request-otp', async (req, res) => {
+    const { phone } = req.body;
+    
+    if (!phone) {
+        return res.status(400).json({ success: false, message: 'Nomor telepon harus diisi' });
+    }
+    
+    const normPhone = normalizePhone(phone);
+    const variants = [normPhone, '+' + normPhone, '0' + normPhone.slice(2)];
+    const placeholders = variants.map(() => '?').join(',');
+
+    try {
+        // Check if phone exists as Technician or Customer/Member
+        const user = await new Promise((resolve, reject) => {
+            const sql = `
+                SELECT 'technician' as type FROM technicians WHERE phone IN (${placeholders}) AND is_active = 1
+                UNION
+                SELECT 'customer' as type FROM customers WHERE phone IN (${placeholders}) AND status = 'active'
+                UNION
+                SELECT 'member' as type FROM members WHERE phone IN (${placeholders}) AND status = 'active'
+                LIMIT 1
+            `;
+            db.get(sql, [...variants, ...variants, ...variants], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Nomor telepon tidak terdaftar atau tidak aktif' });
+        }
+
+        const otp = generateOTP(normPhone);
+        
+        // Always log OTP in development/testing for visibility
+        logger.info(`[LOGIN-OTP] Generated OTP for ${normPhone}: ${otp}`);
+
+        if (sendMessage) {
+            const message = `*KODE OTP LOGIN*\n\nKode OTP Anda adalah: *${otp}*\nJangan berikan kode ini kepada siapapun.\n\nBerlaku selama 5 menit.`;
+            await sendMessage(normPhone, message);
+            return res.json({ success: true, message: 'OTP telah dikirim ke WhatsApp Anda' });
+        } else {
+            return res.json({ 
+                success: true, 
+                message: 'OTP generated (Dev mode)', 
+                otp: process.env.NODE_ENV === 'development' ? otp : undefined 
+            });
+        }
+    } catch (error) {
+        console.error('Error requesting OTP:', error);
+        res.status(500).json({ success: false, message: 'Gagal mengirim OTP' });
+    }
+});
+
+// API: POST /api/auth/login
+router.post('/login', async (req, res) => {
+    const { username, password, otp, phone, role } = req.body;
+    
+    // 1. Check Admin (Settings based)
+    if (!role || role === 'admin') {
+        const adminUsername = getSetting('admin_username', 'admin');
+        const adminPassword = getSetting('admin_password', 'admin');
+        
+        if (username === adminUsername && password === adminPassword) {
+            const token = jwt.sign(
+                { id: 'admin', username: adminUsername, role: 'admin' }, 
+                JWT_SECRET, 
+                { expiresIn: '24h' }
+            );
+            return res.json({ success: true, token, user: { id: 'admin', username: adminUsername, role: 'admin' } });
+        }
+    }
+
+    // 2. Check Password-based roles (Collector, Agent)
+    if (!otp) {
+        // Try Collector
+        if (!role || role === 'collector') {
+            const collector = await new Promise((resolve) => {
+                db.get('SELECT * FROM collectors WHERE (phone = ? OR email = ?) AND status = "active"', [username || phone, username || phone], (err, row) => {
+                    resolve(row);
+                });
+            });
+
+            if (collector && collector.password && bcrypt.compareSync(password, collector.password)) {
+                const token = jwt.sign(
+                    { id: collector.id, username: collector.phone, phone: collector.phone, name: collector.name, role: 'collector' }, 
+                    JWT_SECRET, 
+                    { expiresIn: '24h' }
+                );
+                return res.json({ success: true, token, user: { id: collector.id, name: collector.name, role: 'collector' } });
+            }
+        }
+
+        // Try Agent
+        if (!role || role === 'agent') {
+            try {
+                const result = await agentManager.authenticateAgent(username || phone, password);
+                if (result.success) {
+                    const agent = result.agent;
+                    const token = jwt.sign(
+                        { id: agent.id, username: agent.username, phone: agent.phone || agent.username, name: agent.name, role: 'agent' }, 
+                        JWT_SECRET, 
+                        { expiresIn: '24h' }
+                    );
+                    return res.json({ success: true, token, user: { id: agent.id, name: agent.name, role: 'agent' } });
+                }
+            } catch (e) {}
+        }
+
+        // Try Technician
+        if (!role || role === 'technician') {
+            const technician = await new Promise((resolve) => {
+                db.get('SELECT * FROM technicians WHERE phone = ? AND is_active = 1', [username || phone], (err, row) => {
+                    resolve(row);
+                });
+            });
+
+            if (technician && technician.password && bcrypt.compareSync(password, technician.password)) {
+                const token = jwt.sign(
+                    { id: technician.id, username: technician.phone, phone: technician.phone, name: technician.name, role: 'technician' }, 
+                    JWT_SECRET, 
+                    { expiresIn: '24h' }
+                );
+                return res.json({ success: true, token, user: { id: technician.id, name: technician.name, role: 'technician' } });
+            }
+        }
+    }
+
+    // 3. Check OTP-based roles (Technician, Customer, Member)
+    if (otp && (phone || username)) {
+        const targetPhone = normalizePhone(phone || username);
+        const stored = otpStore[targetPhone];
+        
+        if (!stored || stored.otp !== otp || Date.now() > stored.expires) {
+            return res.status(401).json({ success: false, message: 'OTP tidak valid atau sudah kadaluarsa' });
+        }
+        
+        // Clear OTP after use
+        delete otpStore[targetPhone];
+
+        const variants = [targetPhone, '+' + targetPhone, '0' + targetPhone.slice(2)];
+        const placeholders = variants.map(() => '?').join(',');
+
+        // Find which role this phone belongs to
+        const user = await new Promise((resolve) => {
+            const sql = `
+                SELECT id, name, phone, 'customer' as role FROM customers WHERE phone IN (${placeholders}) AND status = 'active'
+                UNION
+                SELECT id, name, phone, 'member' as role FROM members WHERE phone IN (${placeholders}) AND status = 'active'
+                LIMIT 1
+            `;
+            db.get(sql, [...variants, ...variants, ...variants], (err, row) => resolve(row));
+        });
+
+        if (user) {
+            const token = jwt.sign(
+                { id: user.id, username: user.phone, phone: user.phone, name: user.name, role: user.role }, 
+                JWT_SECRET, 
+                { expiresIn: '24h' }
+            );
+            return res.json({ success: true, token, user: { id: user.id, name: user.name, role: user.role } });
+        }
+    }
+
+    return res.status(401).json({ success: false, message: 'Kredensial tidak valid' });
+});
+
+// API: GET /api/auth/status
+router.get('/status', verifyToken, (req, res) => {
+    res.json({ success: true, user: req.user });
+});
+
+// API: GET /api/auth/roles
+router.get('/roles', (req, res) => {
+    const roles = [
+        { id: 'collector', name: 'Collector' },
+        { id: 'technician', name: 'Technician' }
+    ];
+    res.json({ success: true, data: roles });
+});
+
+/**
+ * Verify OTP from store
+ */
+function verifyOTP(phone, otp) {
+    const normPhone = normalizePhone(phone);
+    const stored = otpStore[normPhone];
+    
+    if (!stored || stored.otp !== otp || Date.now() > stored.expires) {
+        return false;
+    }
+    
+    // Clear OTP after use
+    delete otpStore[normPhone];
+    return true;
+}
+
+/**
+ * Find user by phone in multiple tables
+ */
+async function findUserByPhone(phone) {
+    const normPhone = normalizePhone(phone);
+    const variants = [normPhone, '+' + normPhone, '0' + normPhone.slice(2)];
+    const placeholders = variants.map(() => '?').join(',');
+
+    return new Promise((resolve) => {
+        const sql = `
+            SELECT id, name, phone, 'technician' as role FROM technicians WHERE phone IN (${placeholders}) AND is_active = 1
+            UNION
+            SELECT id, name, phone, 'customer' as role FROM customers WHERE phone IN (${placeholders}) AND status = 'active'
+            UNION
+            SELECT id, name, phone, 'member' as role FROM members WHERE phone IN (${placeholders}) AND status = 'active'
+            LIMIT 1
+        `;
+        db.get(sql, [...variants, ...variants, ...variants], (err, row) => resolve(row));
+    });
+}
+
+module.exports = {
+    router,
+    verifyToken,
+    normalizePhone,
+    verifyOTP,
+    findUserByPhone
+};

@@ -17,21 +17,29 @@ function startWhatsAppMonitoring() {
         try {
             const status = whatsapp.getWhatsAppStatus();
             
-            if (!status.connected && !isRestarting) {
+            // Hanya reconnect jika benar-benar disconnected dan tidak sedang dalam proses connect
+            if (!status.connected && !isRestarting && status.status !== 'qr_code') {
                 logger.warn('WhatsApp connection lost, attempting to reconnect...');
                 isRestarting = true;
                 
-                // Coba reconnect WhatsApp
-                await whatsapp.connectToWhatsApp();
-                
-                setTimeout(() => {
-                    isRestarting = false;
-                }, 10000);
+                // Coba reconnect WhatsApp (dengan delay untuk avoid conflict)
+                setTimeout(async () => {
+                    try {
+                        await whatsapp.connectToWhatsApp();
+                    } catch (error) {
+                        logger.error('Error reconnecting WhatsApp:', error);
+                    } finally {
+                        setTimeout(() => {
+                            isRestarting = false;
+                        }, 15000); // Increase delay
+                    }
+                }, 5000); // Delay 5 detik sebelum reconnect
             }
         } catch (error) {
             logger.error('Error in WhatsApp monitoring:', error);
+            isRestarting = false;
         }
-    }, 30000); // Check setiap 30 detik
+    }, 30000); // Check setiap 30 detik (lebih agresif untuk detect disconnects lebih cepat)
 
     logger.info('WhatsApp connection monitoring started');
 }
@@ -55,7 +63,7 @@ function startMikrotikMonitoring() {
         } catch (error) {
             logger.error('Error in Mikrotik monitoring:', error);
         }
-    }, 60000); // Check setiap 60 detik
+    }, 300000); // Check setiap 5 menit (dioptimasi untuk mengurangi beban API MikroTik)
 
     logger.info('Mikrotik connection monitoring started');
 }

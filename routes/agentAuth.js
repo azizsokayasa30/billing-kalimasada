@@ -64,23 +64,13 @@ const requireAgentAuth = (req, res, next) => {
     if (req.session && req.session.agentId) {
         return next();
     } else {
-        return res.redirect('/agent/login');
+        return res.redirect('/login');
     }
 };
 
 // GET: Login page
 router.get('/login', (req, res) => {
-    try {
-        const settings = getSettingsWithCache();
-        res.render('agent/login', {
-            error: null,
-            success: null,
-            appSettings: settings
-        });
-    } catch (error) {
-        logger.error('Error rendering agent login:', error);
-        res.status(500).send('Error loading login page');
-    }
+    res.redirect('/login');
 });
 
 // POST: Agent registration
@@ -254,43 +244,9 @@ Terima kasih telah bergabung!`;
     }
 });
 
-// POST: Login process
+// POST: Login process - Redirected
 router.post('/login', async (req, res) => {
-    try {
-        const { username, password } = req.body;
-
-        if (!username || !password) {
-            return res.render('agent/login', {
-                error: 'Username dan password harus diisi',
-                success: null,
-                appSettings: getSettingsWithCache()
-            });
-        }
-
-        const result = await agentManager.authenticateAgent(username, password);
-        
-        if (result.success) {
-            req.session.agentId = result.agent.id;
-            req.session.agentName = result.agent.name;
-            req.session.agentUsername = result.agent.username;
-            
-            logger.info(`Agent ${result.agent.username} logged in successfully`);
-            res.redirect('/agent/dashboard');
-        } else {
-            res.render('agent/login', {
-                error: result.message,
-                success: null,
-                appSettings: getSettingsWithCache()
-            });
-        }
-    } catch (error) {
-        logger.error('Agent login error:', error);
-        res.render('agent/login', {
-            error: 'Terjadi kesalahan saat login',
-            success: null,
-            appSettings: getSettingsWithCache()
-        });
-    }
+    res.redirect('/login');
 });
 
 // GET: Logout
@@ -299,7 +255,7 @@ router.get('/logout', (req, res) => {
         if (err) {
             logger.error('Session destroy error:', err);
         }
-        res.redirect('/agent/login');
+        res.redirect('/login');
     });
 });
 

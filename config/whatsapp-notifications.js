@@ -4,10 +4,12 @@ const logger = require('./logger');
 const fs = require('fs');
 const path = require('path');
 const { getCompanyHeader } = require('./message-templates');
+const { getProviderManager } = require('./whatsapp-provider-manager');
 
 class WhatsAppNotificationManager {
     constructor() {
-        this.sock = null;
+        this.sock = null; // Keep for backward compatibility
+        this.providerManager = null;
         this.templatesFile = path.join(__dirname, '../data/whatsapp-templates.json');
         this.templates = this.loadTemplates() || {
             invoice_created: {
@@ -60,6 +62,7 @@ Terima kasih! Pembayaran Anda telah kami terima:
 💳 *Metode Pembayaran:* {payment_method}
 📅 *Tanggal Pembayaran:* {payment_date}
 🔢 *No. Referensi:* {reference_number}
+📦 *Paket:* {package_name} {package_speed}
 
 Layanan internet Anda akan tetap aktif. Terima kasih atas kepercayaan Anda.`,
                 enabled: true
@@ -143,7 +146,8 @@ Halo {customer_name},
 Selamat datang di layanan internet kami!
 
 📦 *Paket:* {package_name} ({package_speed})
-🔑 *Password WiFi:* {wifi_password}
+🌐 *PPPoE Username:* {pppoe_username}
+🔑 *PPPoE Password:* {pppoe_password}
 📞 *Support:* {support_phone}
 
 Terima kasih telah memilih layanan kami.`,
@@ -291,7 +295,21 @@ Balas dengan: *BANTU* atau *HELP*
     }
 
     setSock(sockInstance) {
-        this.sock = sockInstance;
+        this.sock = sockInstance; // Keep for backward compatibility
+    }
+
+    // Get provider instance
+    getProvider() {
+        if (!this.providerManager) {
+            this.providerManager = getProviderManager();
+        }
+        
+        if (!this.providerManager.isInitialized()) {
+            logger.warn('⚠️ ProviderManager not initialized in WhatsAppNotificationManager');
+            return null;
+        }
+        
+        return this.providerManager.getProvider();
     }
 
     // Format phone number for WhatsApp
@@ -389,14 +407,9 @@ Balas dengan: *BANTU* atau *HELP*
         setSetting(`whatsapp_daily_count.${today}`, currentCount + 1);
     }
 
-    // Send notification with header and footer
+    // Send notification with header and footer (refactored to use provider)
     async sendNotification(phoneNumber, message, options = {}) {
         try {
-            if (!this.sock) {
-                logger.error('WhatsApp sock not initialized');
-                return { success: false, error: 'WhatsApp not connected' };
-            }
-
             // Check rate limiting
             const settings = this.getRateLimitSettings();
             if (settings.enabled && !this.checkDailyMessageLimit()) {
@@ -405,7 +418,6 @@ Balas dengan: *BANTU* atau *HELP*
             }
 
             const formattedNumber = this.formatPhoneNumber(phoneNumber);
-            const jid = `${formattedNumber}@s.whatsapp.net`;
 
             // Add header and footer
             const companyHeader = getSetting('company_header', '📱 SISTEM BILLING 📱\n\n');
@@ -414,33 +426,71 @@ Balas dengan: *BANTU* atau *HELP*
             
             const fullMessage = `${companyHeader}${message}${footerInfo}`;
             
+            // Try to use provider first
+            const provider = this.getProvider();
+            if (provider) {
+                // If imagePath provided and exists, try to send as image with caption
+                if (options.imagePath) {
+                    try {
+                        const imagePath = options.imagePath;
+                        logger.info(`📸 Mencoba mengirim dengan gambar: ${imagePath}`);
+                        
+                        if (fs.existsSync(imagePath)) {
+                            const result = await provider.sendMedia(formattedNumber, imagePath, fullMessage, options);
+                            if (result.success) {
+                                logger.info(`✅ WhatsApp image notification sent to ${phoneNumber} with image via provider`);
+                                this.incrementDailyMessageCount();
+                                return { success: true, withImage: true };
+                            } else {
+                                logger.warn(`⚠️ Provider failed to send image, falling back to text: ${result.error}`);
+                            }
+                        } else {
+                            logger.warn(`⚠️ Image not found at path: ${imagePath}, falling back to text message`);
+                        }
+                    } catch (imgErr) {
+                        logger.error(`❌ Failed sending image to ${phoneNumber}, falling back to text:`, imgErr);
+                    }
+                }
+
+                // Send as text message via provider
+                const result = await provider.sendMessage(formattedNumber, fullMessage, options);
+                if (result.success) {
+                    logger.info(`✅ WhatsApp text notification sent to ${phoneNumber} via provider`);
+                    this.incrementDailyMessageCount();
+                    return { success: true, withImage: false };
+                } else {
+                    logger.warn(`⚠️ Provider failed to send message, falling back to sock: ${result.error}`);
+                }
+            }
+
+            // Fallback ke sock langsung untuk backward compatibility
+            if (!this.sock) {
+                logger.error('WhatsApp sock not initialized and provider not available');
+                return { success: false, error: 'WhatsApp not connected' };
+            }
+
+            const jid = `${formattedNumber}@s.whatsapp.net`;
+            
             // If imagePath provided and exists, try to send as image with caption
             if (options.imagePath) {
                 try {
                     const imagePath = options.imagePath;
-                    logger.info(`📸 Mencoba mengirim dengan gambar: ${imagePath}`);
+                    logger.info(`📸 Mencoba mengirim dengan gambar (fallback): ${imagePath}`);
                     
                     if (fs.existsSync(imagePath)) {
                         await this.sock.sendMessage(jid, { image: { url: imagePath }, caption: fullMessage });
-                        logger.info(`✅ WhatsApp image notification sent to ${phoneNumber} with image`);
-                        
-                        // Increment daily count
+                        logger.info(`✅ WhatsApp image notification sent to ${phoneNumber} with image (fallback)`);
                         this.incrementDailyMessageCount();
                         return { success: true, withImage: true };
-                    } else {
-                        logger.warn(`⚠️ Image not found at path: ${imagePath}, falling back to text message`);
                     }
                 } catch (imgErr) {
-                    logger.error(`❌ Failed sending image to ${phoneNumber}, falling back to text:`, imgErr);
+                    logger.error(`❌ Failed sending image to ${phoneNumber}:`, imgErr);
                 }
             }
 
-            // Send as text message (fallback or when no image specified)
+            // Send as text message (fallback)
             await this.sock.sendMessage(jid, { text: fullMessage }, options);
-            
-            logger.info(`✅ WhatsApp text notification sent to ${phoneNumber}`);
-            
-            // Increment daily count
+            logger.info(`✅ WhatsApp text notification sent to ${phoneNumber} (fallback)`);
             this.incrementDailyMessageCount();
             return { success: true, withImage: false };
         } catch (error) {
@@ -554,29 +604,56 @@ Balas dengan: *BANTU* atau *HELP*
                 });
             }
 
-            if (!this.sock) {
-                logger.error('WhatsApp sock not initialized');
-                return { success: false, sent: 0, failed: ids.length, skipped: 0, error: 'WhatsApp not connected' };
-            }
-
-            let sent = 0;
-            let failed = 0;
-
             const companyHeader = getSetting('company_header', '📱 SISTEM BILLING 📱\n\n');
             const footerSeparator = '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
             const footerInfo = footerSeparator + getSetting('footer_info', 'Powered by Alijaya Digital Network');
             const fullMessage = `${companyHeader}${message}${footerInfo}`;
 
-            for (const gid of ids) {
-                try {
-                    await this.sock.sendMessage(gid, { text: fullMessage });
-                    sent++;
-                    // small delay between group messages to avoid rate limit
-                    await this.delay(1000);
-                } catch (e) {
-                    failed++;
-                    logger.error(`Failed sending to group ${gid}:`, e);
+            let sent = 0;
+            let failed = 0;
+
+            // Coba gunakan provider dulu
+            const provider = this.getProvider();
+            if (provider) {
+                for (const gid of ids) {
+                    try {
+                        // Format group ID untuk provider (extract nomor dari JID jika perlu)
+                        let groupId = gid;
+                        if (typeof gid === 'string' && gid.includes('@')) {
+                            groupId = gid.split('@')[0];
+                        }
+                        
+                        const result = await provider.sendMessage(groupId, fullMessage, { isGroup: true });
+                        if (result && result.success) {
+                            sent++;
+                            logger.info(`✅ Group message sent to ${gid} via provider`);
+                        } else {
+                            failed++;
+                            logger.error(`Failed sending to group ${gid} via provider: ${result?.error || 'Unknown error'}`);
+                        }
+                        // small delay between group messages to avoid rate limit
+                        await this.delay(1000);
+                    } catch (e) {
+                        failed++;
+                        logger.error(`Failed sending to group ${gid}:`, e);
+                    }
                 }
+            } else if (this.sock) {
+                // Fallback ke sock
+                for (const gid of ids) {
+                    try {
+                        await this.sock.sendMessage(gid, { text: fullMessage });
+                        sent++;
+                        // small delay between group messages to avoid rate limit
+                        await this.delay(1000);
+                    } catch (e) {
+                        failed++;
+                        logger.error(`Failed sending to group ${gid}:`, e);
+                    }
+                }
+            } else {
+                logger.error('WhatsApp provider and sock not initialized');
+                return { success: false, sent: 0, failed: ids.length, skipped: 0, error: 'WhatsApp not connected' };
             }
 
             return { success: true, sent, failed, skipped: 0 };
@@ -739,8 +816,128 @@ Balas dengan: *BANTU* atau *HELP*
         }
     }
 
-    // Send payment received notification
-    async sendPaymentReceivedNotification(paymentId) {
+    // Send member invoice created notification
+    async sendMemberInvoiceCreatedNotification(memberId, invoiceId) {
+        try {
+            if (!this.isTemplateEnabled('invoice_created')) {
+                logger.info('Member invoice created notification is disabled, skipping...');
+                return { success: true, skipped: true, reason: 'Template disabled' };
+            }
+
+            const member = await billingManager.getMemberById(memberId);
+            const invoice = await billingManager.getInvoiceById(invoiceId);
+            const packageData = await billingManager.getMemberPackageById(invoice.package_id);
+
+            if (!member || !invoice || !packageData) {
+                logger.error('Missing data for member invoice notification');
+                return { success: false, error: 'Missing data' };
+            }
+
+            const data = {
+                customer_name: member.name,
+                invoice_number: invoice.invoice_number,
+                amount: this.formatCurrency(invoice.amount),
+                due_date: this.formatDate(invoice.due_date),
+                package_name: packageData.name,
+                package_speed: packageData.speed,
+                notes: invoice.notes || 'Tagihan bulanan member'
+            };
+
+            const message = this.replaceTemplateVariables(
+                this.templates.invoice_created.template,
+                data
+            );
+
+            const imagePath = this.getInvoiceImagePath();
+            return await this.sendNotification(member.phone, message, { imagePath });
+        } catch (error) {
+            logger.error('Error sending member invoice created notification:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Send member due date reminder
+    async sendMemberDueDateReminder(invoiceId) {
+        try {
+            if (!this.isTemplateEnabled('due_date_reminder')) {
+                logger.info('Member due date reminder notification is disabled, skipping...');
+                return { success: true, skipped: true, reason: 'Template disabled' };
+            }
+
+            const invoice = await billingManager.getInvoiceById(invoiceId);
+            const member = await billingManager.getMemberById(invoice.member_id);
+            const packageData = await billingManager.getMemberPackageById(invoice.package_id);
+
+            if (!member || !invoice || !packageData) {
+                logger.error('Missing data for member due date reminder');
+                return { success: false, error: 'Missing data' };
+            }
+
+            const dueDate = new Date(invoice.due_date);
+            const today = new Date();
+            const daysRemaining = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+
+            const data = {
+                customer_name: member.name,
+                invoice_number: invoice.invoice_number,
+                amount: this.formatCurrency(invoice.amount),
+                due_date: this.formatDate(invoice.due_date),
+                days_remaining: daysRemaining,
+                package_name: packageData.name,
+                package_speed: packageData.speed
+            };
+
+            const message = this.replaceTemplateVariables(
+                this.templates.due_date_reminder.template,
+                data
+            );
+
+            const imagePath = this.getInvoiceImagePath();
+            return await this.sendNotification(member.phone, message, { imagePath });
+        } catch (error) {
+            logger.error('Error sending member due date reminder:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Send member isolir notification
+    async sendMemberIsolirNotification(memberId, reason = 'Telat bayar') {
+        try {
+            const member = await billingManager.getMemberById(memberId);
+            if (!member) {
+                logger.error('Member not found for isolir notification');
+                return { success: false, error: 'Member not found' };
+            }
+
+            const message = `🚨 *AKUN ANDA DIISOLIR*
+
+Halo ${member.name},
+
+Akun hotspot Anda telah diisolir karena:
+${reason}
+
+📋 *Informasi Akun:*
+👤 Username: ${member.hotspot_username || '-'}
+📦 Paket: ${member.package_name || '-'}
+📅 Status: ISOLIR
+
+Silakan lakukan pembayaran tagihan yang tertunggak untuk mengaktifkan kembali layanan Anda.
+
+Terima kasih.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CV Lintas Multimedia
+Internet Tanpa Batas`;
+
+            return await this.sendNotification(member.phone, message);
+        } catch (error) {
+            logger.error('Error sending member isolir notification:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Send payment received notification (overload: by paymentId or by phone + data)
+    async sendPaymentReceivedNotification(paymentIdOrPhone, data = null) {
         try {
             // Check if template is enabled
             if (!this.isTemplateEnabled('payment_received')) {
@@ -748,32 +945,158 @@ Balas dengan: *BANTU* atau *HELP*
                 return { success: true, skipped: true, reason: 'Template disabled' };
             }
 
-            const payment = await billingManager.getPaymentById(paymentId);
-            const invoice = await billingManager.getInvoiceById(payment.invoice_id);
-            const customer = await billingManager.getCustomerById(invoice.customer_id);
+            let phone, notificationData, invoice;
 
-            if (!payment || !invoice || !customer) {
-                logger.error('Missing data for payment notification');
-                return { success: false, error: 'Missing data' };
+            // If data is provided, use it directly (for member or custom notification)
+            if (data && typeof paymentIdOrPhone === 'string') {
+                phone = paymentIdOrPhone;
+                notificationData = data;
+                // Try to get invoice from data if available
+                if (data.invoice_id) {
+                    invoice = await billingManager.getInvoiceById(data.invoice_id);
+                }
+            } else {
+                // Legacy: get payment by ID
+                const payment = await billingManager.getPaymentById(paymentIdOrPhone);
+                invoice = await billingManager.getInvoiceById(payment.invoice_id);
+                const isMemberInvoice = invoice.member_id !== null && invoice.member_id !== undefined;
+
+                if (isMemberInvoice) {
+                    // Handle member payment
+                    const member = await billingManager.getMemberById(invoice.member_id);
+                    const packageData = await billingManager.getMemberPackageById(invoice.package_id);
+
+                    if (!member || !invoice) {
+                        logger.error('Missing data for member payment notification');
+                        return { success: false, error: 'Missing data' };
+                    }
+
+                    phone = member.phone;
+                    notificationData = {
+                        customer_name: member.name,
+                        invoice_number: invoice.invoice_number,
+                        amount: this.formatCurrency(payment.amount),
+                        payment_method: payment.payment_method,
+                        payment_date: this.formatDate(payment.payment_date),
+                        reference_number: payment.reference_number || 'N/A',
+                        package_name: packageData?.name || '-',
+                        package_speed: packageData?.speed || '-'
+                    };
+                } else {
+                    // Handle customer payment
+                    const customer = await billingManager.getCustomerById(invoice.customer_id);
+                    const packageData = await billingManager.getPackageById(invoice.package_id);
+
+                    if (!payment || !invoice || !customer) {
+                        logger.error('Missing data for payment notification');
+                        return { success: false, error: 'Missing data' };
+                    }
+
+                    phone = customer.phone;
+                    notificationData = {
+                        customer_name: customer.name,
+                        invoice_number: invoice.invoice_number,
+                        amount: this.formatCurrency(payment.amount),
+                        payment_method: payment.payment_method,
+                        payment_date: this.formatDate(payment.payment_date),
+                        reference_number: payment.reference_number || 'N/A',
+                        package_name: packageData?.name || '-',
+                        package_speed: packageData?.speed || '-'
+                    };
+                }
             }
-
-            const data = {
-                customer_name: customer.name,
-                invoice_number: invoice.invoice_number,
-                amount: this.formatCurrency(payment.amount),
-                payment_method: payment.payment_method,
-                payment_date: this.formatDate(payment.payment_date),
-                reference_number: payment.reference_number || 'N/A'
-            };
 
             const message = this.replaceTemplateVariables(
                 this.templates.payment_received.template,
-                data
+                notificationData
             );
 
-            // Attach same invoice banner image
-            const imagePath = this.getInvoiceImagePath();
-            return await this.sendNotification(customer.phone, message, { imagePath });
+            // Generate dan kirim invoice PDF (hanya jika invoice tersedia)
+            let pdfPath = null;
+            try {
+                if (invoice && invoice.id) {
+                    const { generateInvoicePdf } = require('./invoicePdf');
+                    const pdfResult = await generateInvoicePdf(invoice.id);
+                    
+                    // Simpan PDF ke temporary file
+                    const tempDir = path.join(__dirname, '../temp');
+                    if (!fs.existsSync(tempDir)) {
+                        fs.mkdirSync(tempDir, { recursive: true });
+                    }
+                    
+                    pdfPath = path.join(tempDir, pdfResult.fileName);
+                    fs.writeFileSync(pdfPath, pdfResult.buffer);
+                    logger.info(`📄 Invoice PDF generated: ${pdfPath}`);
+                    
+                    // Kirim PDF sebagai dokumen
+                    const provider = this.getProvider();
+                    if (provider) {
+                        const formattedNumber = this.formatPhoneNumber(phone);
+                        const result = await provider.sendMedia(
+                            formattedNumber, 
+                            pdfPath, 
+                            message, 
+                            { 
+                                mimetype: 'application/pdf',
+                                fileName: pdfResult.fileName
+                            }
+                        );
+                        
+                        if (result.success) {
+                            logger.info(`✅ Payment notification with PDF sent to ${phone}`);
+                            this.incrementDailyMessageCount();
+                            
+                            // Hapus temporary file setelah berhasil dikirim
+                            try {
+                                if (fs.existsSync(pdfPath)) {
+                                    fs.unlinkSync(pdfPath);
+                                    logger.debug(`🗑️ Temporary PDF file deleted: ${pdfPath}`);
+                                }
+                            } catch (deleteError) {
+                                logger.warn(`⚠️ Failed to delete temporary PDF: ${deleteError.message}`);
+                            }
+                            
+                            return { success: true, withPdf: true };
+                        } else {
+                            logger.warn(`⚠️ Failed to send PDF, falling back to text: ${result.error}`);
+                            // Hapus file meskipun gagal dikirim untuk mencegah penumpukan file
+                            try {
+                                if (fs.existsSync(pdfPath)) {
+                                    fs.unlinkSync(pdfPath);
+                                    logger.debug(`🗑️ Temporary PDF file deleted after failed send: ${pdfPath}`);
+                                }
+                            } catch (deleteError) {
+                                logger.warn(`⚠️ Failed to delete temporary PDF: ${deleteError.message}`);
+                            }
+                        }
+                    } else {
+                        // Provider tidak tersedia, hapus file
+                        try {
+                            if (fs.existsSync(pdfPath)) {
+                                fs.unlinkSync(pdfPath);
+                                logger.debug(`🗑️ Temporary PDF file deleted (no provider): ${pdfPath}`);
+                            }
+                        } catch (deleteError) {
+                            logger.warn(`⚠️ Failed to delete temporary PDF: ${deleteError.message}`);
+                        }
+                    }
+                }
+            } catch (pdfError) {
+                logger.error('Error generating/sending invoice PDF:', pdfError);
+                // Pastikan file dihapus jika ada error
+                if (pdfPath && fs.existsSync(pdfPath)) {
+                    try {
+                        fs.unlinkSync(pdfPath);
+                        logger.debug(`🗑️ Temporary PDF file deleted after error: ${pdfPath}`);
+                    } catch (deleteError) {
+                        logger.warn(`⚠️ Failed to delete temporary PDF after error: ${deleteError.message}`);
+                    }
+                }
+                // Fallback: kirim text message saja jika PDF gagal
+            }
+
+            // Fallback: kirim text message jika PDF gagal atau provider tidak tersedia
+            return await this.sendNotification(phone, message);
         } catch (error) {
             logger.error('Error sending payment received notification:', error);
             return { success: false, error: error.message };
@@ -1071,6 +1394,8 @@ Balas dengan: *BANTU* atau *HELP*
                     customer_name: customer.name,
                     package_name: customer.package_name || 'N/A',
                     package_speed: customer.package_speed || 'N/A',
+                    pppoe_username: customer.pppoe_username || 'N/A',
+                    pppoe_password: customer.pppoe_password || 'N/A',
                     wifi_password: customer.wifi_password || 'N/A',
                     support_phone: getSetting('support_phone', '0813-6888-8498')
                 }
@@ -1225,6 +1550,81 @@ Balas dengan: *BANTU* atau *HELP*
             return result;
         } catch (error) {
             logger.error(`Error sending installation completion notification to technician ${technician.name}:`, error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Send Sales Order notification to technicians
+    async sendSalesOrderNotification(customer) {
+        try {
+            if (!customer) {
+                logger.warn('No customer data provided for Sales Order notification');
+                return { success: false, error: 'No customer data' };
+            }
+
+            // Get active technicians
+            const db = require('./billing').db;
+            const technicians = await new Promise((resolve, reject) => {
+                db.all('SELECT phone, name FROM technicians WHERE is_active = 1 AND phone IS NOT NULL AND phone != ""', [], (err, rows) => {
+                    if (err) {
+                        if (err.message.includes('no such table')) {
+                            resolve([]);
+                        } else {
+                            reject(err);
+                        }
+                    } else {
+                        resolve(rows || []);
+                    }
+                });
+            });
+
+            if (technicians.length === 0) {
+                logger.info('No active technicians found for Sales Order notification');
+                return { success: true, skipped: true, reason: 'No active technicians' };
+            }
+
+            // Build Sales Order message
+            const message = `📋 *SALES ORDER - PELANGGAN BARU*\n\n` +
+                `*No ID Pelanggan:* ${customer.customer_id || 'N/A'}\n` +
+                `*Nama Pelanggan:* ${customer.name}\n` +
+                `*No HP/WA:* ${customer.phone}\n` +
+                `*Email:* ${customer.email || 'Tidak diisi'}\n` +
+                `*Alamat:* ${customer.address || 'Tidak diisi'}\n` +
+                `*Paket:* ${customer.package_name || 'N/A'} (${customer.package_speed || 'N/A'})\n` +
+                `*PPPoE Username:* ${customer.pppoe_username || 'N/A'}\n` +
+                `*PPPoE Password:* ${customer.pppoe_password || 'N/A'}\n` +
+                `*PPPoE Profile:* ${customer.pppoe_profile || 'default'}\n\n` +
+                `✅ *Status:* Pelanggan telah di-accept dan siap untuk setting.\n\n` +
+                `Silakan lakukan instalasi sesuai dengan data di atas.`;
+
+            // Send to all active technicians
+            let sentCount = 0;
+            let failedCount = 0;
+
+            for (const technician of technicians) {
+                try {
+                    const result = await this.sendNotification(technician.phone, message);
+                    if (result && result.success) {
+                        sentCount++;
+                        logger.info(`Sales Order notification sent to technician ${technician.name} (${technician.phone})`);
+                    } else {
+                        failedCount++;
+                        logger.warn(`Failed to send Sales Order notification to technician ${technician.name}: ${result?.error || 'Unknown error'}`);
+                    }
+                } catch (techError) {
+                    failedCount++;
+                    logger.error(`Error sending Sales Order notification to technician ${technician.name}:`, techError);
+                }
+            }
+
+            return {
+                success: sentCount > 0,
+                sent: sentCount,
+                failed: failedCount,
+                total: technicians.length
+            };
+        } catch (error) {
+            logger.error('Error sending Sales Order notification to technicians:', error);
             return { success: false, error: error.message };
         }
     }

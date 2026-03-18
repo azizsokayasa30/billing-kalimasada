@@ -90,6 +90,7 @@
                                             <input type="checkbox" id="selectAllInvoices" />
                                         </th>
                                         <th>No. Tagihan</th>
+                                        <th>ID Pelanggan</th>
                                         <th>Pelanggan</th>
                                         <th>Paket</th>
                                         <th>Tipe Tagihan</th>
@@ -112,13 +113,48 @@
                                                     <span class="text-body fw-bold"><%= invoice.invoice_number %></span>
                                                 </td>
                                                 <td>
-                                                    <span class="text-body fw-bold"><%= invoice.customer_name %></span>
-                                                    <br>
-                                                    <small class="text-muted"><%= invoice.customer_phone %></small>
+                                                    <% if (invoice.is_member) { %>
+                                                        <span class="badge bg-info" style="font-family: monospace; font-size: 0.85rem;">
+                                                            MEMBER
+                                                        </span>
+                                                    <% } else if (invoice.customer_id) { %>
+                                                        <span class="badge bg-primary" style="font-family: monospace; font-size: 0.85rem;">
+                                                            <%= invoice.customer_id %>
+                                                        </span>
+                                                    <% } else { %>
+                                                        <span class="text-muted">-</span>
+                                                    <% } %>
                                                 </td>
-                                                <td><%= invoice.package_name %></td>
                                                 <td>
-                                                    <% if (invoice.renewal_type === 'fix_date') { %>
+                                                    <% if (invoice.is_member) { %>
+                                                        <span class="badge bg-info mb-1">Member</span>
+                                                        <br>
+                                                        <span class="text-body fw-bold"><%= invoice.display_name || invoice.member_name || invoice.member_username || '-' %></span>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            <%= invoice.display_username || invoice.member_username || '-' %>
+                                                            <% if (invoice.display_phone || invoice.member_phone) { %>
+                                                                | <%= invoice.display_phone || invoice.member_phone %>
+                                                            <% } %>
+                                                        </small>
+                                                    <% } else { %>
+                                                        <span class="text-body fw-bold"><%= invoice.display_name || invoice.customer_name || invoice.username || '-' %></span>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            <%= invoice.display_username || invoice.username || '-' %>
+                                                            <% if (invoice.display_phone || invoice.customer_phone) { %>
+                                                                | <%= invoice.display_phone || invoice.customer_phone %>
+                                                            <% } %>
+                                                        </small>
+                                                    <% } %>
+                                                </td>
+                                                <td><%= invoice.display_package_name || invoice.package_name || '-' %></td>
+                                                <td>
+                                                    <% if (invoice.is_member) { %>
+                                                        <span class="badge bg-info">
+                                                            <i class="bx bx-user"></i> Member
+                                                        </span>
+                                                    <% } else if (invoice.renewal_type === 'fix_date') { %>
                                                         <span class="badge bg-info">
                                                             <i class="bx bx-calendar"></i> Fix Date (<%= invoice.fix_date || 15 %>)
                                                         </span>
@@ -166,7 +202,7 @@
                                                             </button>
                                                         <% } %>
                                                         <!-- WhatsApp Notification Button -->
-                                                        <button class="btn btn-sm btn-success" onclick="sendWhatsAppNotification('<%= invoice.id %>', '<%= invoice.customer_phone %>', '<%= invoice.status %>', '<%= invoice.customer_name %>', '<%= invoice.amount %>', '<%= invoice.due_date %>')" title="Kirim Notifikasi WA">
+                                                        <button class="btn btn-sm btn-success" onclick="sendWhatsAppNotification('<%= invoice.id %>', '<%= invoice.is_member ? (invoice.member_phone || invoice.display_phone) : (invoice.customer_phone || invoice.display_phone) %>', '<%= invoice.status %>', '<%= invoice.is_member ? (invoice.member_name || invoice.display_name) : (invoice.customer_name || invoice.display_name) %>', '<%= invoice.amount %>', '<%= invoice.due_date %>', '<%= invoice.invoice_number || "" %>', '<%= invoice.package_name || "" %>')" title="Kirim Notifikasi WA">
                                                             <i class="bx bxl-whatsapp"></i>
                                                         </button>
                                                         <a href="/admin/billing/invoices/<%= invoice.id %>/print" target="_blank" class="btn btn-sm btn-info" title="Cetak Tagihan">
@@ -200,8 +236,15 @@
                 <form id="addInvoiceForm">
                     <div class="modal-body">
                         <div class="mb-3">
+                            <label for="invoice_type_select" class="form-label">Tipe Pelanggan</label>
+                            <select class="form-control" id="invoice_type_select" name="invoice_type_select" required>
+                                <option value="customer">Customer (PPPoE)</option>
+                                <option value="member">Member (Hotspot)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3" id="customer_select_group">
                             <label for="customer_id" class="form-label">Pelanggan</label>
-                            <select class="form-control" id="customer_id" name="customer_id" required>
+                            <select class="form-control" id="customer_id" name="customer_id">
                                 <option value="">Pilih Pelanggan</option>
                                 <% if (customers && customers.length > 0) { %>
                                     <% customers.forEach(function(customer) { %>
@@ -212,20 +255,55 @@
                                 <% } %>
                             </select>
                         </div>
+                        <div class="mb-3" id="member_select_group" style="display: none;">
+                            <label for="member_id" class="form-label">Member</label>
+                            <select class="form-control" id="member_id" name="member_id">
+                                <option value="">Pilih Member</option>
+                                <% if (members && members.length > 0) { %>
+                                    <% members.forEach(function(member) { %>
+                                        <option value="<%= member.id %>" 
+                                                data-package-id="<%= member.package_id || '' %>">
+                                            <%= member.name %> (<%= member.hotspot_username || member.phone || '-' %>)
+                                        </option>
+                                    <% }); %>
+                                <% } %>
+                            </select>
+                        </div>
                         <div class="mb-3">
                             <label for="package_id" class="form-label">Paket</label>
                             <select class="form-control" id="package_id" name="package_id" required>
                                 <option value="">Pilih Paket</option>
+                                <!-- Customer Packages -->
                                 <% if (packages && packages.length > 0) { %>
                                     <% packages.forEach(function(package) { %>
                                         <option value="<%= package.id %>" 
+                                                data-package-type="customer"
                                                 data-price="<%= package.price %>"
                                                 data-tax-rate="<%= package.tax_rate !== null && package.tax_rate !== undefined ? package.tax_rate : 11.00 %>">
-                                            <%= package.name %> - Rp <%= Math.round(parseFloat(package.price)).toLocaleString('id-ID') %>
+                                            [Customer] <%= package.name %> - Rp <%= Math.round(parseFloat(package.price)).toLocaleString('id-ID') %>
                                             <% if (package.tax_rate === 0) { %>
                                                 (Tidak Ada PPN)
                                             <% } else if (package.tax_rate) { %>
                                                 (PPN <%= package.tax_rate.toFixed(2) %>%)
+                                            <% } else { %>
+                                                (PPN 11.00%)
+                                            <% } %>
+                                        </option>
+                                    <% }); %>
+                                <% } %>
+                                <!-- Member Packages -->
+                                <% if (memberPackages && memberPackages.length > 0) { %>
+                                    <% memberPackages.forEach(function(memberPackage) { %>
+                                        <option value="<%= memberPackage.id %>" 
+                                                data-package-type="member"
+                                                data-price="<%= memberPackage.price %>"
+                                                data-tax-rate="<%= memberPackage.tax_rate !== null && memberPackage.tax_rate !== undefined ? memberPackage.tax_rate : 11.00 %>"
+                                                style="display: none;">
+                                            [Member] <%= memberPackage.name %> - Rp <%= Math.round(parseFloat(memberPackage.price)).toLocaleString('id-ID') %>
+                                            <% if (memberPackage.tax_rate === 0) { %>
+                                                (Tidak Ada PPN)
+                                            <% } else if (memberPackage.tax_rate) { %>
+                                                (PPN <%= memberPackage.tax_rate.toFixed(2) %>%)
                                             <% } else { %>
                                                 (PPN 11.00%)
                                             <% } %>
@@ -364,7 +442,7 @@
                         }
                         
                         // Get the created date from the table row
-                        const createdDateCell = data[7]; // Tanggal Terbit is column 7 (0-indexed) after adding Tipe Tagihan column
+                        const createdDateCell = data[8]; // Tanggal Terbit is column 8 (0-indexed) after adding ID Pelanggan column
                         if (createdDateCell && createdDateCell !== '-') {
                             // Parse the date (assuming format like "1/10/2025")
                             const dateParts = createdDateCell.split('/');
@@ -387,7 +465,7 @@
                             return true;
                         }
                         
-                        const createdDateCell = data[7]; // Tanggal Terbit is column 7 after adding Tipe Tagihan column
+                        const createdDateCell = data[8]; // Tanggal Terbit is column 8 after adding ID Pelanggan column
                         if (createdDateCell && createdDateCell !== '-') {
                             const dateParts = createdDateCell.split('/');
                             if (dateParts.length === 3) {
@@ -454,6 +532,50 @@
                 $('#invoicesTable').DataTable().draw();
             });
 
+            // Toggle between customer and member
+            $('#invoice_type_select').on('change', function() {
+                const invoiceType = $(this).val();
+                if (invoiceType === 'customer') {
+                    $('#customer_select_group').show();
+                    $('#member_select_group').hide();
+                    $('#customer_id').prop('required', true);
+                    $('#member_id').prop('required', false);
+                    $('#member_id').val('');
+                    
+                    // Show customer packages, hide member packages
+                    $('#package_id option[data-package-type="customer"]').show();
+                    $('#package_id option[data-package-type="member"]').hide();
+                    $('#package_id').val('');
+                } else if (invoiceType === 'member') {
+                    $('#customer_select_group').hide();
+                    $('#member_select_group').show();
+                    $('#customer_id').prop('required', false);
+                    $('#member_id').prop('required', true);
+                    $('#customer_id').val('');
+                    
+                    // Show member packages, hide customer packages
+                    $('#package_id option[data-package-type="member"]').show();
+                    $('#package_id option[data-package-type="customer"]').hide();
+                    $('#package_id').val('');
+                }
+                
+                // Reset package and amount fields
+                $('#base_amount').val('');
+                $('#tax_rate_display').val('');
+                $('#amount').val('');
+                $('#base_amount_hidden').val('');
+                $('#tax_rate_hidden').val('');
+            });
+            
+            // Auto-select package when member is selected
+            $('#member_id').on('change', function() {
+                const selectedMember = $(this).find('option:selected');
+                const packageId = selectedMember.data('package-id');
+                if (packageId) {
+                    $('#package_id').val(packageId).trigger('change');
+                }
+            });
+            
             // Auto-fill amount when package is selected
             $('#package_id').on('change', function() {
                 const selectedOption = $(this).find('option:selected');
@@ -487,6 +609,18 @@
         // Add Invoice Form
         $('#addInvoiceForm').on('submit', function(e) {
             e.preventDefault();
+            
+            // Validate required fields based on invoice type
+            const invoiceType = $('#invoice_type_select').val();
+            if (invoiceType === 'customer' && !$('#customer_id').val()) {
+                alert('Pilih pelanggan terlebih dahulu');
+                return;
+            }
+            if (invoiceType === 'member' && !$('#member_id').val()) {
+                alert('Pilih member terlebih dahulu');
+                return;
+            }
+            
             const formData = new FormData(this);
             const urlParams = new URLSearchParams();
             for (const [key, value] of formData.entries()) {
@@ -677,40 +811,101 @@
         let currentNotificationData = null;
 
         // Send WhatsApp Notification for Invoice
-        function sendWhatsAppNotification(invoiceId, phoneNumber, status, customerName, amount, dueDate) {
+        function sendWhatsAppNotification(invoiceId, phoneNumber, status, customerName, amount, dueDate, invoiceNumber, packageName) {
+            // Store invoice ID for sending
             currentNotificationData = {
-                invoiceId: invoiceId,
-                phoneNumber: phoneNumber,
-                status: status,
-                customerName: customerName,
-                amount: amount,
-                dueDate: dueDate,
-                invoiceNumber: `INV-${invoiceId}`,
-                packageName: 'Paket Internet'
+                invoiceId: invoiceId
             };
 
             // Set form data
             document.getElementById('waPhoneNumber').value = phoneNumber;
             document.getElementById('waCustomerName').value = customerName;
 
-            // Generate message preview based on status
-            const messagePreview = generateMessagePreview(status, customerName, amount, dueDate);
-            document.getElementById('notificationPreview').innerHTML = `
-                <div class="card">
-                    <div class="card-header">
-                        <h6 class="mb-0">Preview Pesan:</h6>
-                    </div>
-                    <div class="card-body">
-                        <pre style="white-space: pre-wrap; font-size: 14px;">${messagePreview}</pre>
-                    </div>
-                </div>
-            `;
+            // Fetch invoice details from server for preview
+            fetch(`/admin/billing/api/invoices/${invoiceId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.invoice) {
+                        const invoice = data.invoice;
+                        const actualInvoiceNumber = invoice.invoice_number || invoiceNumber || `INV-${invoiceId}`;
+                        const actualPackageName = packageName || (invoice.package_name || 'Paket Internet');
+                        const actualPackageSpeed = invoice.package_speed || '';
+                        
+                        // Generate message preview based on status
+                        const messagePreview = generateMessagePreview(
+                            status, 
+                            customerName, 
+                            amount, 
+                            dueDate,
+                            actualInvoiceNumber,
+                            actualPackageName,
+                            actualPackageSpeed
+                        );
+                        
+                        document.getElementById('notificationPreview').innerHTML = `
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Preview Pesan:</h6>
+                                </div>
+                                <div class="card-body">
+                                    <pre style="white-space: pre-wrap; font-size: 14px;">${messagePreview}</pre>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // Fallback if invoice not found
+                        const messagePreview = generateMessagePreview(
+                            status, 
+                            customerName, 
+                            amount, 
+                            dueDate,
+                            invoiceNumber || `INV-${invoiceId}`,
+                            packageName || 'Paket Internet',
+                            ''
+                        );
+                        
+                        document.getElementById('notificationPreview').innerHTML = `
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Preview Pesan:</h6>
+                                </div>
+                                <div class="card-body">
+                                    <pre style="white-space: pre-wrap; font-size: 14px;">${messagePreview}</pre>
+                                </div>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching invoice details:', error);
+                    // Fallback preview
+                    const messagePreview = generateMessagePreview(
+                        status, 
+                        customerName, 
+                        amount, 
+                        dueDate,
+                        invoiceNumber || `INV-${invoiceId}`,
+                        packageName || 'Paket Internet',
+                        ''
+                    );
+                    
+                    document.getElementById('notificationPreview').innerHTML = `
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Preview Pesan:</h6>
+                            </div>
+                            <div class="card-body">
+                                <pre style="white-space: pre-wrap; font-size: 14px;">${messagePreview}</pre>
+                            </div>
+                        </div>
+                    `;
+                });
 
             // Show modal
             $('#whatsappModal').modal('show');
         }
 
-        function generateMessagePreview(status, customerName, amount, dueDate) {
+        function generateMessagePreview(status, customerName, amount, dueDate, invoiceNumber, packageName, packageSpeed) {
             const formattedAmount = new Intl.NumberFormat('id-ID', {
                 style: 'currency',
                 currency: 'IDR',
@@ -718,6 +913,11 @@
             }).format(amount);
 
             const formattedDueDate = new Date(dueDate).toLocaleDateString('id-ID');
+            const packageDisplay = packageSpeed ? `${packageName} (${packageSpeed})` : packageName;
+            
+            // Get company name and footer from settings
+            const companyName = typeof settings !== 'undefined' && settings.company_header ? settings.company_header : (typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : 'Net digital Group');
+            const footerInfo = typeof settings !== 'undefined' && settings.footer_info ? settings.footer_info : 'Internet Tanpa Batas';
 
             if (status === 'paid') {
                 return `✅ *PEMBAYARAN DITERIMA*
@@ -726,18 +926,18 @@ Halo ${customerName},
 
 Terima kasih! Pembayaran Anda telah kami terima:
 
-📄 *No. Invoice:* INV-${Date.now()}
+📄 *No. Invoice:* ${invoiceNumber || 'N/A'}
 💰 *Jumlah:* Rp ${parseFloat(amount).toLocaleString('id-ID')}
 💳 *Metode Pembayaran:* Manual Admin
 📅 *Tanggal Pembayaran:* ${new Date().toLocaleDateString('id-ID')}
-📦 *Paket:* Paket Internet
+📦 *Paket:* ${packageDisplay}
 
 Layanan internet Anda akan tetap aktif. Terima kasih atas kepercayaan Anda.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CV Lintas Multimedia
-Internet Tanpa Batas`;
+${companyName}
+${footerInfo}`;
             } else if (status === 'unpaid') {
                 const today = new Date();
                 const due = new Date(dueDate);
@@ -750,18 +950,18 @@ Halo ${customerName},
 
 Tagihan Anda telah melewati jatuh tempo:
 
-📄 *No. Invoice:* INV-${Date.now()}
+📄 *No. Invoice:* ${invoiceNumber || 'N/A'}
 💰 *Jumlah:* Rp ${parseFloat(amount).toLocaleString('id-ID')}
 📅 *Jatuh Tempo:* ${formattedDueDate}
-📦 *Paket:* Paket Internet
+📦 *Paket:* ${packageDisplay}
 ⚠️ *Status:* TERLAMBAT ${Math.abs(daysRemaining)} hari
 
 Silakan lakukan pembayaran segera untuk menghindari denda keterlambatan.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CV Lintas Multimedia
-Internet Tanpa Batas`;
+${companyName}
+${footerInfo}`;
                 } else {
                     return `⚠️ *PERINGATAN JATUH TEMPO*
 
@@ -769,17 +969,17 @@ Halo ${customerName},
 
 Tagihan Anda akan jatuh tempo dalam ${daysRemaining} hari:
 
-📄 *No. Invoice:* INV-${Date.now()}
+📄 *No. Invoice:* ${invoiceNumber || 'N/A'}
 💰 *Jumlah:* Rp ${parseFloat(amount).toLocaleString('id-ID')}
 📅 *Jatuh Tempo:* ${formattedDueDate}
-📦 *Paket:* Paket Internet
+📦 *Paket:* ${packageDisplay}
 
 Silakan lakukan pembayaran segera untuk menghindari denda keterlambatan.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CV Lintas Multimedia
-Internet Tanpa Batas`;
+${companyName}
+${footerInfo}`;
                 }
             }
         }

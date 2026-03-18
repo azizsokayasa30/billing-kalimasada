@@ -206,7 +206,7 @@ function technicianAuth(req, res, next) {
         if (acceptsJson) {
             return res.status(401).json({ success: false, message: 'Unauthorized' });
         }
-        return res.redirect('/technician/login');
+        return res.redirect('/login');
     }
 
     authManager.validateSession(sessionId)
@@ -217,7 +217,7 @@ function technicianAuth(req, res, next) {
                 if (acceptsJson) {
                     return res.status(401).json({ success: false, message: 'Unauthorized' });
                 }
-                return res.redirect('/technician/login');
+                return res.redirect('/login');
             }
 
             // Tambahkan info teknisi ke request
@@ -243,196 +243,17 @@ function technicianAuth(req, res, next) {
 
 // GET: Halaman login teknisi
 router.get('/login', (req, res) => {
-    const settings = {
-        company_header: getSetting('company_header', 'GEMBOK'),
-        footer_info: getSetting('footer_info', 'Portal Teknisi'),
-        otp_length: authManager.otpLength,
-        otp_expiry_minutes: authManager.otpExpiryMinutes,
-        customerPortalOtp: getSetting('customerPortalOtp', false) // Tambah status OTP
-    };
-
-    res.render('technicianLogin', { 
-        error: null, 
-        success: null,
-        step: 'phone',
-        phone: null,
-        settings 
-    });
+    res.redirect('/login');
 });
 
-// POST: Request OTP
+// POST: Request OTP - Redirected
 router.post('/request-otp', async (req, res) => {
-    try {
-        const { phone } = req.body;
-        const { getSetting } = require('../config/settingsManager');
-
-        if (!phone) {
-            return res.render('technicianLogin', { 
-                error: 'Nomor telepon harus diisi',
-                success: null,
-                step: 'phone',
-                phone: null,
-                settings: { company_header: getSetting('company_header', 'GEMBOK') }
-            });
-        }
-
-        // Format nomor telepon
-        let formattedPhone = phone.replace(/\D/g, '');
-        if (formattedPhone.startsWith('0')) {
-            formattedPhone = '62' + formattedPhone.slice(1);
-        }
-        if (!formattedPhone.startsWith('62')) {
-            formattedPhone = '62' + formattedPhone;
-        }
-
-        // Cek apakah teknisi valid
-        const technician = await authManager.isValidTechnician(formattedPhone);
-        if (!technician) {
-            return res.render('technicianLogin', { 
-                error: 'Nomor telepon tidak terdaftar sebagai teknisi',
-                success: null,
-                step: 'phone',
-                phone: null,
-                settings: { company_header: getSetting('company_header', 'GEMBOK') }
-            });
-        }
-
-        // Cek setting OTP (mengikuti customer portal pattern)
-        const otpSetting = getSetting('customerPortalOtp', false);
-        const otpEnabled = (otpSetting === true || otpSetting === 'true');
-        
-        console.log(`[TECHNICIAN_LOGIN] OTP Setting: ${otpSetting}, Enabled: ${otpEnabled}`);
-        
-        if (otpEnabled) {
-            // OTP aktif - generate dan kirim OTP
-            const { otpCode } = await authManager.generateAndSaveOTP(formattedPhone);
-            
-            try {
-                await authManager.sendOTPViaWhatsApp(formattedPhone, otpCode);
-                
-                // Simpan phone di session untuk step selanjutnya
-                req.session.pendingTechnicianPhone = formattedPhone;
-                
-                res.render('technicianLogin', { 
-                    error: null,
-                    success: `Kode OTP telah dikirim ke nomor ${formattedPhone} via WhatsApp`,
-                    step: 'otp',
-                    phone: formattedPhone,
-                    settings: { 
-                        company_header: getSetting('company_header', 'GEMBOK'),
-                        otp_length: authManager.otpLength 
-                    }
-                });
-            } catch (whatsappError) {
-                logger.error('Failed to send OTP:', whatsappError);
-                res.render('technicianLogin', { 
-                    error: 'Gagal mengirim OTP. Silakan coba lagi atau hubungi admin.',
-                    success: null,
-                    step: 'phone',
-                    phone: null,
-                    settings: { company_header: getSetting('company_header', 'GEMBOK') }
-                });
-            }
-        } else {
-            // OTP nonaktif - langsung login (seperti customer portal)
-            console.log(`[TECHNICIAN_LOGIN] OTP disabled, proceeding with direct login for: ${formattedPhone}`);
-            
-            try {
-                // Create session langsung tanpa OTP
-                const session = await authManager.createTechnicianSession(technician, req);
-                req.session.technicianSessionId = session.sessionId;
-                req.session.pendingTechnicianPhone = null;
-
-                // Log aktivitas login
-                await authManager.logActivity(technician.id, 'login', 'Login ke portal teknisi (tanpa OTP)', {
-                    ip: req.ip,
-                    userAgent: req.get('User-Agent')
-                });
-
-                logger.info(`Technician logged in without OTP: ${technician.name} (${technician.phone})`);
-                
-                res.redirect('/technician/dashboard');
-            } catch (error) {
-                logger.error('Error during direct login:', error);
-                res.render('technicianLogin', { 
-                    error: 'Terjadi kesalahan saat login. Silakan coba lagi.',
-                    success: null,
-                    step: 'phone',
-                    phone: null,
-                    settings: { company_header: getSetting('company_header', 'GEMBOK') }
-                });
-            }
-        }
-
-    } catch (error) {
-        logger.error('Error requesting OTP:', error);
-        res.render('technicianLogin', { 
-            error: 'Terjadi kesalahan sistem. Silakan coba lagi.',
-            success: null,
-            step: 'phone',
-            phone: null,
-            settings: { company_header: getSetting('company_header', 'GEMBOK') }
-        });
-    }
+    res.redirect('/login');
 });
 
-// POST: Verify OTP dan login
+// POST: Verify OTP dan login - Redirected
 router.post('/verify-otp', async (req, res) => {
-    try {
-        const { otp_code } = req.body;
-        const phone = req.session.pendingTechnicianPhone;
-
-        if (!phone || !otp_code) {
-            return res.redirect('/technician/login');
-        }
-
-        // Verifikasi OTP
-        const verification = await authManager.verifyOTP(phone, otp_code);
-        
-        if (!verification.valid) {
-            return res.render('technicianLogin', { 
-                error: 'Kode OTP tidak valid atau sudah kadaluarsa',
-                success: null,
-                step: 'otp',
-                phone: phone,
-                settings: { 
-                    company_header: getSetting('company_header', 'GEMBOK'),
-                    otp_length: authManager.otpLength 
-                }
-            });
-        }
-
-        // Get technician data
-        const technician = await authManager.isValidTechnician(phone);
-        if (!technician) {
-            return res.redirect('/technician/login');
-        }
-
-        // Create session
-        const session = await authManager.createTechnicianSession(technician, req);
-        req.session.technicianSessionId = session.sessionId;
-        req.session.pendingTechnicianPhone = null;
-
-        // Log aktivitas login
-        await authManager.logActivity(technician.id, 'login', 'Login ke portal teknisi', {
-            ip: req.ip,
-            userAgent: req.get('User-Agent')
-        });
-
-        logger.info(`Technician logged in: ${technician.name} (${technician.phone})`);
-        
-        res.redirect('/technician/dashboard');
-
-    } catch (error) {
-        logger.error('Error verifying OTP:', error);
-        res.render('technicianLogin', { 
-            error: 'Terjadi kesalahan sistem. Silakan coba lagi.',
-            success: null,
-            step: 'phone',
-            phone: null,
-            settings: { company_header: getSetting('company_header', 'GEMBOK') }
-        });
-    }
+    res.redirect('/login');
 });
 
 // GET: Logout
@@ -450,12 +271,12 @@ router.get('/logout', technicianAuth, async (req, res) => {
         }
 
         req.session.technicianSessionId = null;
-        res.redirect('/technician/login');
+        res.redirect('/login');
         
     } catch (error) {
         logger.error('Error during logout:', error);
         req.session.technicianSessionId = null;
-        res.redirect('/technician/login');
+        res.redirect('/login');
     }
 });
 
@@ -465,7 +286,7 @@ router.get('/', (req, res) => {
     if (sessionId) {
         res.redirect('/technician/dashboard');
     } else {
-        res.redirect('/technician/login');
+        res.redirect('/login');
     }
 });
 

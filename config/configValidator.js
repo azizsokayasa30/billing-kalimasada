@@ -86,7 +86,7 @@ class ConfigValidator {
                     return {
                         success: false,
                         error: 'Tidak ada GenieACS server yang dikonfigurasi',
-                        details: 'Silakan tambahkan GenieACS server di /admin/genieacs-servers',
+                        details: 'Silakan tambahkan GenieACS server di /admin/genieacs-setting',
                         servers: []
                     };
                 }

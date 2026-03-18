@@ -1460,12 +1460,16 @@ class AgentManager {
                     -- Total voucher sales
                     (SELECT COUNT(*) FROM agent_voucher_sales WHERE agent_id = ?) as total_voucher_sales,
                     (SELECT COALESCE(SUM(price), 0) FROM agent_voucher_sales WHERE agent_id = ?) as total_voucher_revenue,
-                    (SELECT COALESCE(SUM(commission), 0) FROM agent_voucher_sales WHERE agent_id = ?) as total_commission_earned,
+                    (SELECT COALESCE(SUM(commission), 0) FROM agent_voucher_sales WHERE agent_id = ?) as voucher_commission,
                     
                     -- Total monthly payments
                     (SELECT COUNT(*) FROM agent_monthly_payments WHERE agent_id = ?) as total_monthly_payments,
                     (SELECT COALESCE(SUM(payment_amount), 0) FROM agent_monthly_payments WHERE agent_id = ?) as total_payment_amount,
+                    (SELECT COALESCE(SUM(commission_amount), 0) FROM agent_monthly_payments WHERE agent_id = ?) as payment_commission,
                     
+                    -- Combined Stats
+                    (SELECT (COALESCE(SUM(commission), 0) + (SELECT COALESCE(SUM(commission_amount), 0) FROM agent_monthly_payments WHERE agent_id = ?)) FROM agent_voucher_sales WHERE agent_id = ?) as total_commission_earned,
+
                     -- Balance requests
                     (SELECT COUNT(*) FROM agent_balance_requests WHERE agent_id = ?) as total_balance_requests,
                     (SELECT COALESCE(SUM(amount), 0) FROM agent_balance_requests WHERE agent_id = ? AND status = 'approved') as total_approved_requests,
@@ -1480,7 +1484,8 @@ class AgentManager {
             
             this.db.get(sql, [
                 agentId, agentId, agentId,  // voucher sales
-                agentId, agentId,          // monthly payments  
+                agentId, agentId, agentId,  // monthly payments (added commissions)
+                agentId, agentId,          // total commission (combined subqueries)
                 agentId, agentId,          // balance requests
                 agentId, agentId,          // recent activity
                 agentId                    // current balance

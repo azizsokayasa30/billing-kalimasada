@@ -17,6 +17,96 @@
             z-index: 9999;
             min-width: 300px;
         }
+        
+        /* Modern Metric Cards Styling - Like Image 2 */
+        .metric-card {
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            border: none;
+            position: relative;
+            overflow: hidden;
+            background: var(--card-bg-color);
+            color: #ffffff;
+            min-height: auto;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.15);
+        }
+        
+        .metric-card-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            font-size: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .metric-card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 6px 0;
+            line-height: 1.2;
+        }
+        
+        .metric-card-label {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+            margin-top: 2px;
+        }
+        
+        .metric-card-subtext {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 4px;
+        }
+        
+        /* Card Colors - Solid Backgrounds like Image 2 */
+        .metric-card-primary {
+            --card-bg-color: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        }
+        
+        .metric-card-success {
+            --card-bg-color: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+        }
+        
+        .metric-card-danger {
+            --card-bg-color: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+        }
+        
+        .metric-card-info {
+            --card-bg-color: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+            background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+        }
+        
+        .metric-card-warning {
+            --card-bg-color: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+        }
+        
+        .metric-card-pink {
+            --card-bg-color: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
+            background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
+        }
+        
+        .metric-card-teal {
+            --card-bg-color: linear-gradient(135deg, #14b8a6 0%, #5eead4 100%);
+            background: linear-gradient(135deg, #14b8a6 0%, #5eead4 100%);
+        }
     </style>
 </head>
 <body>
@@ -72,101 +162,57 @@
                 </div>
 
                 <!-- Statistik Cards -->
-                <div class="row">
-                    <div class="col-xl-3 col-md-6">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <h5 class="text-muted fw-normal mt-0" title="Total Customers">Total Pelanggan</h5>
-                                        <h3 class="mt-3 mb-3"><%= stats.total_customers || 0 %></h3>
-                                        <p class="mb-0 text-muted">
-                                            <span class="text-success me-2">
-                                                <i class="mdi mdi-arrow-up-bold"></i> <%= stats.active_customers || 0 %>
-                                            </span>
-                                            <span class="text-nowrap">Aktif</span>
-                                        </p>
-                                    </div>
-                                    <div class="avatar-sm">
-                                        <span class="avatar-title bg-soft-primary rounded">
-                                            <i class="mdi mdi-account-group font-20 text-primary"></i>
-                                        </span>
-                                    </div>
-                                </div>
+                <div class="row mb-4">
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="metric-card metric-card-primary">
+                            <div class="metric-card-icon">
+                                <i class="bi bi-people"></i>
+                            </div>
+                            <div class="metric-card-value"><%= stats.total_customers || 0 %></div>
+                            <div class="metric-card-label">Total Pelanggan</div>
+                            <div class="metric-card-subtext">
+                                <i class="bi bi-check-circle"></i> <%= stats.active_customers || 0 %> Aktif
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-xl-3 col-md-6">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <h5 class="text-muted fw-normal mt-0" title="Monthly Revenue">Pendapatan Bulanan</h5>
-                                        <h3 class="mt-3 mb-3">Rp <%= (stats.monthly_revenue || 0).toLocaleString('id-ID') %></h3>
-                                        <p class="mb-0 text-muted">
-                                            <span class="text-success me-2">
-                                                <i class="mdi mdi-arrow-up-bold"></i> <%= stats.paid_monthly_invoices || 0 %>
-                                            </span>
-                                            <span class="text-nowrap">Tagihan Lunas</span>
-                                        </p>
-                                    </div>
-                                    <div class="avatar-sm">
-                                        <span class="avatar-title bg-soft-success rounded">
-                                            <i class="mdi mdi-currency-usd font-20 text-success"></i>
-                                        </span>
-                                    </div>
-                                </div>
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="metric-card metric-card-success">
+                            <div class="metric-card-icon">
+                                <i class="bi bi-calendar-month"></i>
+                            </div>
+                            <div class="metric-card-value">Rp <%= (stats.monthly_revenue || 0).toLocaleString('id-ID') %></div>
+                            <div class="metric-card-label">Pendapatan Bulanan</div>
+                            <div class="metric-card-subtext">
+                                <i class="bi bi-receipt-check"></i> <%= stats.paid_monthly_invoices || 0 %> Tagihan Lunas
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-xl-3 col-md-6">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <h5 class="text-muted fw-normal mt-0" title="Voucher Revenue">Pendapatan Voucher</h5>
-                                        <h3 class="mt-3 mb-3">Rp <%= (stats.voucher_revenue || 0).toLocaleString('id-ID') %></h3>
-                                        <p class="mb-0 text-muted">
-                                            <span class="text-info me-2">
-                                                <i class="mdi mdi-ticket-confirmation"></i> <%= stats.paid_voucher_invoices || 0 %>
-                                            </span>
-                                            <span class="text-nowrap">Voucher Lunas</span>
-                                            <br>
-                                            <small>Pending: Rp <%= ((stats.voucher_summary && stats.voucher_summary.pending_revenue) || stats.voucher_unpaid || 0).toLocaleString('id-ID') %></small>
-                                        </p>
-                                    </div>
-                                    <div class="avatar-sm">
-                                        <span class="avatar-title bg-soft-info rounded">
-                                            <i class="mdi mdi-ticket-confirmation font-20 text-info"></i>
-                                        </span>
-                                    </div>
-                                </div>
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="metric-card metric-card-info">
+                            <div class="metric-card-icon">
+                                <i class="bi bi-ticket-perforated"></i>
+                            </div>
+                            <div class="metric-card-value">Rp <%= (stats.voucher_revenue || 0).toLocaleString('id-ID') %></div>
+                            <div class="metric-card-label">Pendapatan Voucher</div>
+                            <div class="metric-card-subtext">
+                                <i class="bi bi-check-circle"></i> <%= stats.paid_voucher_invoices || 0 %> Lunas
+                                <br>
+                                <small>Pending: Rp <%= ((stats.voucher_summary && stats.voucher_summary.pending_revenue) || stats.voucher_unpaid || 0).toLocaleString('id-ID') %></small>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-xl-3 col-md-6">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <h5 class="text-muted fw-normal mt-0" title="Total Revenue">Total Pendapatan</h5>
-                                        <h3 class="mt-3 mb-3">Rp <%= (stats.total_revenue || 0).toLocaleString('id-ID') %></h3>
-                                        <p class="mb-0 text-muted">
-                                            <span class="text-success me-2">
-                                                <i class="mdi mdi-chart-line"></i> <%= stats.paid_invoices || 0 %>/<%= stats.total_invoices || 0 %>
-                                            </span>
-                                            <span class="text-nowrap">Lunas</span>
-                                        </p>
-                                    </div>
-                                    <div class="avatar-sm">
-                                        <span class="avatar-title bg-soft-warning rounded">
-                                            <i class="mdi mdi-receipt font-20 text-warning"></i>
-                                        </span>
-                                    </div>
-                                </div>
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="metric-card metric-card-warning">
+                            <div class="metric-card-icon">
+                                <i class="bi bi-cash-stack"></i>
+                            </div>
+                            <div class="metric-card-value">Rp <%= (stats.total_revenue || 0).toLocaleString('id-ID') %></div>
+                            <div class="metric-card-label">Total Pendapatan</div>
+                            <div class="metric-card-subtext">
+                                <i class="bi bi-graph-up"></i> <%= stats.paid_invoices || 0 %>/<%= stats.total_invoices || 0 %> Lunas
                             </div>
                         </div>
                     </div>
@@ -284,11 +330,21 @@
                                                             </a>
                                                         </td>
                                                         <td>
-                                                            <span class="text-body fw-bold"><%= invoice.customer_name %></span>
+                                                            <% if (invoice.is_member) { %>
+                                                                <span class="badge bg-info mb-1">Member</span>
+                                                                <br>
+                                                            <% } %>
+                                                            <span class="text-body fw-bold"><%= invoice.display_name || invoice.customer_name || invoice.member_name || 'N/A' %></span>
                                                             <br>
-                                                            <small class="text-muted"><%= invoice.customer_phone %></small>
+                                                            <small class="text-muted"><%= invoice.display_phone || invoice.customer_phone || invoice.member_phone || 'N/A' %></small>
+                                                            <% if (invoice.display_username || invoice.username || invoice.member_username) { %>
+                                                                <br>
+                                                                <small class="text-muted">@<%= invoice.display_username || invoice.username || invoice.member_username %></small>
+                                                            <% } %>
                                                         </td>
-                                                        <td><%= invoice.package_name %></td>
+                                                        <td>
+                                                            <span class="badge bg-primary"><%= invoice.display_package_name || invoice.package_name || 'N/A' %></span>
+                                                        </td>
                                                         <td>Rp <%= parseFloat(invoice.amount).toLocaleString('id-ID') %></td>
                                                         <td>
                                                             <% if (invoice.status === 'paid') { %>
@@ -415,15 +471,20 @@
             </div>
         `;
         
-        $('#toast-container').append(toastHtml);
-        const toastElement = document.getElementById(toastId);
-        const toast = new bootstrap.Toast(toastElement, { delay: duration });
-        toast.show();
-        
-        // Auto remove after hide
-        toastElement.addEventListener('hidden.bs.toast', () => {
-            toastElement.remove();
-        });
+        const toastContainer = document.getElementById('toast-container');
+        if (toastContainer) {
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            const toastElement = document.getElementById(toastId);
+            if (toastElement) {
+                const toast = new bootstrap.Toast(toastElement, { delay: duration });
+                toast.show();
+                
+                // Auto remove after hide
+                toastElement.addEventListener('hidden.bs.toast', () => {
+                    toastElement.remove();
+                });
+            }
+        }
     }
 
     // Auto refresh stats setiap 30 detik dengan toast feedback
@@ -431,18 +492,29 @@
         fetch('/admin/billing/api/stats')
             .then(response => response.json())
             .then(data => {
-                // Update stats cards
-                document.querySelector('[title="Total Customers"]').nextElementSibling.textContent = data.total_customers || 0;
-                document.querySelector('[title="Total Revenue"]').nextElementSibling.textContent = 'Rp ' + (data.total_revenue || 0).toLocaleString('id-ID');
-                document.querySelector('[title="Unpaid Invoices"]').nextElementSibling.textContent = 'Rp ' + (data.total_unpaid || 0).toLocaleString('id-ID');
-                document.querySelector('[title="Total Invoices"]').nextElementSibling.textContent = data.total_invoices || 0;
+                // Update stats cards dengan null check
+                const totalCustomersEl = document.querySelector('[title="Total Customers"]');
+                if (totalCustomersEl && totalCustomersEl.nextElementSibling) {
+                    totalCustomersEl.nextElementSibling.textContent = data.total_customers || 0;
+                }
                 
-                // Show success toast jika ada perubahan
-                showToast('success', 'Data Diperbarui', 'Statistik billing berhasil diperbarui');
+                const totalRevenueEl = document.querySelector('[title="Total Revenue"]');
+                if (totalRevenueEl && totalRevenueEl.nextElementSibling) {
+                    totalRevenueEl.nextElementSibling.textContent = 'Rp ' + (data.total_revenue || 0).toLocaleString('id-ID');
+                }
+                
+                const unpaidInvoicesEl = document.querySelector('[title="Unpaid Invoices"]');
+                if (unpaidInvoicesEl && unpaidInvoicesEl.nextElementSibling) {
+                    unpaidInvoicesEl.nextElementSibling.textContent = 'Rp ' + (data.total_unpaid || 0).toLocaleString('id-ID');
+                }
+                
+                const totalInvoicesEl = document.querySelector('[title="Total Invoices"]');
+                if (totalInvoicesEl && totalInvoicesEl.nextElementSibling) {
+                    totalInvoicesEl.nextElementSibling.textContent = data.total_invoices || 0;
+                }
             })
             .catch(error => {
                 console.error('Error updating stats:', error);
-                showToast('error', 'Error', 'Gagal memperbarui statistik');
             });
     }, 30000);
 
@@ -884,32 +956,43 @@
 
         // Fungsi untuk update tampilan stats
         function updateStatsDisplay(stats) {
+            // Helper function untuk mencari elemen berdasarkan text content
+            function findElementByText(selector, text) {
+                const elements = document.querySelectorAll(selector);
+                for (let el of elements) {
+                    if (el.textContent && el.textContent.includes(text)) {
+                        return el;
+                    }
+                }
+                return null;
+            }
+            
             // Update total customers
-            const totalCustomersEl = document.querySelector('h3:contains("Total Pelanggan")');
+            const totalCustomersEl = findElementByText('h3', 'Total Pelanggan');
             if (totalCustomersEl) {
                 totalCustomersEl.textContent = stats.total_customers || 0;
             }
             
             // Update active customers
             const activeCustomersEl = document.querySelector('.text-success .mdi-arrow-up-bold');
-            if (activeCustomersEl) {
+            if (activeCustomersEl && activeCustomersEl.nextElementSibling) {
                 activeCustomersEl.nextElementSibling.textContent = stats.active_customers || 0;
             }
             
             // Update total revenue
-            const totalRevenueEl = document.querySelector('h3:contains("Total Pendapatan")');
+            const totalRevenueEl = findElementByText('h3', 'Total Pendapatan');
             if (totalRevenueEl) {
                 totalRevenueEl.textContent = 'Rp ' + (stats.total_revenue || 0).toLocaleString('id-ID');
             }
             
             // Update unpaid amount
-            const unpaidAmountEl = document.querySelector('h3:contains("Tagihan Belum Lunas")');
+            const unpaidAmountEl = findElementByText('h3', 'Tagihan Belum Lunas');
             if (unpaidAmountEl) {
                 unpaidAmountEl.textContent = 'Rp ' + (stats.total_unpaid || 0).toLocaleString('id-ID');
             }
             
             // Update total invoices
-            const totalInvoicesEl = document.querySelector('h3:contains("Total Tagihan")');
+            const totalInvoicesEl = findElementByText('h3', 'Total Tagihan');
             if (totalInvoicesEl) {
                 totalInvoicesEl.textContent = stats.total_invoices || 0;
             }

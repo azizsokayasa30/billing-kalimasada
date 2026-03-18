@@ -5,6 +5,7 @@ const path = require('path');
 const { getSetting } = require('../config/settingsManager');
 const { adminAuth } = require('./adminAuth');
 const logger = require('../config/logger');
+const bcrypt = require('bcrypt');
 
 // Database connection
 const dbPath = path.join(__dirname, '../data/billing.db');
@@ -105,7 +106,7 @@ router.get('/', adminAuth, async (req, res) => {
  */
 router.post('/add', adminAuth, async (req, res) => {
     try {
-        const { name, phone, role, notes, whatsapp_group_id } = req.body;
+        const { name, phone, role, notes, whatsapp_group_id, password } = req.body;
 
         // Validasi input
         if (!name || !phone || !role) {
@@ -145,14 +146,17 @@ router.post('/add', adminAuth, async (req, res) => {
             });
         }
 
+        // Hash password if provided
+        const hashedPassword = password ? bcrypt.hashSync(password, 10) : null;
+
         // Insert new technician
         const result = await new Promise((resolve, reject) => {
             const sql = `
-                INSERT INTO technicians (name, phone, role, area_coverage, whatsapp_group_id, is_active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO technicians (name, phone, role, area_coverage, whatsapp_group_id, password, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `;
 
-            db.run(sql, [name, cleanPhone, role, notes || 'Area Default', whatsapp_group_id || null], function(err) {
+            db.run(sql, [name, cleanPhone, role, notes || 'Area Default', whatsapp_group_id || null, hashedPassword], function(err) {
                 if (err) reject(err);
                 else resolve({ id: this.lastID, changes: this.changes });
             });
@@ -229,7 +233,7 @@ router.get('/:id', adminAuth, async (req, res) => {
 router.put('/:id/update', adminAuth, async (req, res) => {
     try {
         const technicianId = req.params.id;
-        const { name, phone, role, notes, whatsapp_group_id } = req.body;
+        const { name, phone, role, notes, whatsapp_group_id, password } = req.body;
 
         // Validasi input
         if (!name || !phone || !role) {
@@ -271,13 +275,21 @@ router.put('/:id/update', adminAuth, async (req, res) => {
 
         // Update technician
         const result = await new Promise((resolve, reject) => {
-            const sql = `
+            let sql = `
                 UPDATE technicians
                 SET name = ?, phone = ?, role = ?, area_coverage = ?, whatsapp_group_id = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
             `;
+            const params = [name, cleanPhone, role, notes || 'Area Default', whatsapp_group_id || null];
 
-            db.run(sql, [name, cleanPhone, role, notes || 'Area Default', whatsapp_group_id || null, technicianId], function(err) {
+            if (password) {
+                sql += `, password = ? `;
+                params.push(bcrypt.hashSync(password, 10));
+            }
+
+            sql += ` WHERE id = ?`;
+            params.push(technicianId);
+
+            db.run(sql, params, function(err) {
                 if (err) reject(err);
                 else resolve({ changes: this.changes });
             });
