@@ -27,7 +27,7 @@
   "otp_length": "4",
   "otp_expiry_minutes": "5",
   "server_host": "38.253.240.247",
-  "server_port": "22197",
+  "server_port": "3003",
   "pppoe_notifications.enabled": true,
   "pppoe_notifications.loginNotifications": true,
   "pppoe_notifications.logoutNotifications": true,

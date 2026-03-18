@@ -6,7 +6,7 @@ services:
     container_name: gembok-bill
     restart: unless-stopped
     ports:
-      - "22197:22197"
+      - "3003:22197"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
