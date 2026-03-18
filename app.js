@@ -30,19 +30,40 @@ const technicianSync = {
         const db = new sqlite3.Database('./data/billing.db');
         
         const sync = () => {
-            try {
-                const settings = getSettingsWithCache();
-                Object.keys(settings).filter(k => k.startsWith('technician_numbers.')).forEach(k => {
-                    const phone = settings[k];
-                    if (phone) {
-                        db.run('INSERT OR IGNORE INTO technicians (phone, name, role, is_active, created_at) VALUES (?, ?, "technician", 1, datetime("now"))', 
-                            [phone, `Teknisi ${phone.slice(-4)}`]);
-                    }
-                });
-                console.log('📱 Technician numbers synced from settings.json');
-            } catch (e) {
-                console.error('Sync error:', e.message);
-            }
+            db.run(`CREATE TABLE IF NOT EXISTS technicians (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT UNIQUE NOT NULL,
+                role TEXT NOT NULL DEFAULT 'technician',
+                email TEXT,
+                notes TEXT,
+                is_active INTEGER DEFAULT 1 CHECK (is_active IN (0, 1)),
+                area_coverage TEXT,
+                whatsapp_group TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_login DATETIME
+            )`, (createErr) => {
+                if (createErr) {
+                    console.error('Failed to ensure technicians table:', createErr.message);
+                    return;
+                }
+                try {
+                    const settings = getSettingsWithCache();
+                    Object.keys(settings).filter(k => k.startsWith('technician_numbers.')).forEach(k => {
+                        const phone = settings[k];
+                        if (phone) {
+                            db.run('INSERT OR IGNORE INTO technicians (phone, name, role, is_active, created_at) VALUES (?, ?, "technician", 1, datetime("now"))', 
+                                [phone, `Teknisi ${phone.slice(-4)}`], (instErr) => {
+                                    if (instErr) console.error('Error inserting technician:', instErr.message);
+                                });
+                        }
+                    });
+                    console.log('📱 Technician numbers synced from settings.json');
+                } catch (e) {
+                    console.error('Sync error:', e.message);
+                }
+            });
         };
         
         fs.watchFile('settings.json', { interval: 1000 }, sync);

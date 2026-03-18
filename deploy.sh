@@ -58,6 +58,10 @@ git pull origin main
 log_info "Installing Node.js dependencies..."
 npm install
 
+# 5.5 Initialize database
+log_info "Initializing database..."
+npm run setup
+
 # 6. Rebuild native modules untuk sistem ini
 log_info "Rebuilding native modules for this system..."
 npm rebuild
@@ -107,8 +111,8 @@ pm2 save
 log_success "Deployment completed successfully!"
 echo ""
 echo "🌐 Application URLs:"
-echo "  - Admin Portal: http://$(curl -s ifconfig.me || echo 'SERVER_IP'):3003/admin/login"
-echo "  - Customer Portal: http://$(curl -s ifconfig.me || echo 'SERVER_IP'):3003"
+echo "  - Admin Portal: http://$(curl -s ifconfig.me || echo 'SERVER_IP'):22197/admin/login"
+echo "  - Customer Portal: http://$(curl -s ifconfig.me || echo 'SERVER_IP'):22197"
 echo ""
 echo "🔧 Management Commands:"
 echo "  - Check status: pm2 status gembok-bill"
@@ -126,8 +130,8 @@ echo "  1. Configure settings.json with your credentials"
 echo "  2. Setup WhatsApp bot by scanning QR code"
 echo "  3. Test all features"
 echo ""
-echo "🎯 Gembok-Bill is now running on port 3003!"
-echo "   Check: $(curl -s ifconfig.me || echo 'SERVER_IP'):3003"
+echo "🎯 Gembok-Bill is now running on port 22197!"
+echo "   Check: $(curl -s ifconfig.me || echo 'SERVER_IP'):22197"
 
 # 14. Verifikasi
 log_info "Verifying deployment..."
