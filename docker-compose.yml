@@ -1,4 +1,5 @@
 version: '3.8'
+version: '3.8'
 
 services:
   gembok-bill:
@@ -17,13 +18,6 @@ services:
       - PORT=22197
     networks:
       - gembok-network
-    # healthcheck:
-    #   test: ["CMD", "curl", "-f", "http://127.0.0.1:22197/health"]
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 3
-    #   start_period: 40s
-
   nginx:
     image: nginx:alpine
     container_name: gembok-nginx
@@ -43,5 +37,3 @@ services:
 networks:
   gembok-network:
     driver: bridge
-
-
