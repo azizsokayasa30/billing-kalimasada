@@ -39,5 +39,5 @@ EXPOSE 22197
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:22197/health || exit 1
 
-# Start aplikasi
-CMD ["npm", "start"]
+# Start aplikasi (Inisialisasi database dulu baru start)
+CMD ["sh", "-c", "node scripts/init-database.js && npm start"]
