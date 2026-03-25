@@ -433,7 +433,7 @@ app.use('/api/technicians', apiTechniciansRouter);
 app.use('/api/vouchers', apiVouchersRouter);
 app.use('/api/settings', apiSettingsRouter);
 app.use('/api/collectors', apiCollectorsRouter);
-app.use('/api', apiSystemRouter);
+app.use('/api/system', apiSystemRouter);
 
 // Import dan gunakan route Wablas webhook
 try {

@@ -51,6 +51,10 @@ router.get('/customers', verifyToken, async (req, res) => {
         const allCustomers = await billingManager.getCustomers();
         const statusFilter = req.query.status; // Optional: paid, unpaid, overdue
         
+        if (req.user.role !== 'collector' && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        
         let customers = (allCustomers || []).filter(c => c.status === 'active');
         
         if (statusFilter) {
