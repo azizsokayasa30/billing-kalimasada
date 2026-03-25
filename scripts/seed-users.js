@@ -91,6 +91,7 @@ async function seed() {
     });
 
     // 3. Seed Collector
+    let collectorId = 1;
     const collectorPassword = hashPassword('collector123');
     try {
         await new Promise((resolve, reject) => {
@@ -100,7 +101,10 @@ async function seed() {
                 ['Collector Demo', '6281368888498', 'collector@demo.com', collectorPassword, 'Bengkulu', 'active'],
                 function(err) {
                     if (err) reject(err);
-                    else resolve(this.lastID);
+                    else {
+                        collectorId = this.lastID || collectorId;
+                        resolve(collectorId);
+                    }
                 }
             );
         });
@@ -112,6 +116,7 @@ async function seed() {
     }
 
     // 4. Seed Technician
+    let technicianId = 1;
     const techPassword = hashPassword('tech123');
     try {
         await new Promise((resolve, reject) => {
@@ -121,7 +126,10 @@ async function seed() {
                 ['Teknisi Demo', '6281368888498', 'technician', techPassword, 1, 'Bengkulu'],
                 function(err) {
                     if (err) reject(err);
-                    else resolve(this.lastID);
+                    else {
+                        technicianId = this.lastID || technicianId;
+                        resolve(technicianId);
+                    }
                 }
             );
         });
@@ -293,6 +301,7 @@ async function seed() {
     }
 
     // 9. Seed Invoice
+    let invoiceId = 1;
     try {
         await new Promise((resolve, reject) => {
             db.run(`CREATE TABLE IF NOT EXISTS invoices (
@@ -323,9 +332,26 @@ async function seed() {
         
         await new Promise((resolve, reject) => {
             db.run(
-                `INSERT OR IGNORE INTO invoices (customer_id, package_id, invoice_number, amount, due_date, status, description, package_name) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [customerId, packageId, invoiceNo, 150000, dueDate.toISOString().split('T')[0], 'unpaid', 'Tagihan Internet Bulan Ini', 'Paket Family 20Mbps'],
+                `INSERT OR IGNORE INTO invoices (id, customer_id, package_id, invoice_number, amount, due_date, status, description, package_name) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [1, customerId, packageId, invoiceNo, 150000, dueDate.toISOString().split('T')[0], 'unpaid', 'Tagihan Internet Bulan Ini', 'Paket Family 20Mbps'],
+                function(err) {
+                    if (err) reject(err);
+                    else {
+                        invoiceId = this.lastID || 1;
+                        resolve(invoiceId);
+                    }
+                }
+            );
+        });
+        
+        // Seed another invoice that is paid to show collector stats
+        const invoiceNo2 = 'INV-' + new Date().getFullYear() + '0002';
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO invoices (id, customer_id, package_id, invoice_number, amount, due_date, status, payment_date, description, package_name) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)`,
+                [2, customerId, packageId, invoiceNo2, 150000, dueDate.toISOString().split('T')[0], 'paid', 'Tagihan Internet Bulan Lalu', 'Paket Family 20Mbps'],
                 function(err) {
                     if (err) reject(err);
                     else resolve(this.lastID);
@@ -337,7 +363,7 @@ async function seed() {
         console.log('⚠️  Invoice error:', err.message);
     }
 
-    // 10. Seed Menbers
+    // 10. Seed Members
     try {
         await new Promise((resolve, reject) => {
             db.run(`CREATE TABLE IF NOT EXISTS members (
@@ -365,6 +391,65 @@ async function seed() {
         console.log('✅ Member seeded');
     } catch (err) {
         console.log('⚠️  Member error:', err.message);
+    }
+
+    // 11. Seed Collector Payment (for mobile app stats)
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO collector_payments (collector_id, invoice_id, amount, commission_amount, status) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [collectorId, 2, 150000, 7500, 'completed'],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+        console.log('✅ Collector Payment seeded');
+    } catch (err) {
+        console.log('⚠️  Collector Payment error:', err.message);
+    }
+
+    // 12. Seed Installation Job (for mobile app technician dashboard)
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`CREATE TABLE IF NOT EXISTS installation_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sn TEXT,
+                odp TEXT,
+                customer_name TEXT NOT NULL,
+                address TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                latitude DECIMAL(10,8),
+                longitude DECIMAL(11,8),
+                package_id INTEGER,
+                assigned_technician_id INTEGER,
+                assigned_by INTEGER,
+                status VARCHAR(20) DEFAULT 'pending',
+                scheduled_date DATE,
+                completed_date DATETIME,
+                signal_level TEXT,
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`, (err) => err ? reject(err) : resolve());
+        });
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO installation_jobs (customer_name, address, phone, package_id, assigned_technician_id, status, scheduled_date) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                ['Joko Kendil', 'Jl. Pahlawan No 10', '6281999999999', packageId, technicianId, 'pending', new Date().toISOString().split('T')[0]],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+        console.log('✅ Installation Job seeded');
+    } catch (err) {
+        console.log('⚠️  Installation Job error:', err.message);
     }
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
