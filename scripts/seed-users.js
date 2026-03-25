@@ -12,7 +12,12 @@ const bcrypt = require('bcrypt');
 const path = require('path');
 
 const dbPath = path.join(__dirname, '../data/billing.db');
-const db = new sqlite3.Database(dbPath);
+const db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+        console.error('❌ Failed to open database in seeder:', err.message);
+        process.exit(1);
+    }
+});
 
 const SALT_ROUNDS = 10;
 
