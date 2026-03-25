@@ -41,8 +41,9 @@ router.get('/jobs', verifyToken, async (req, res) => {
             const allReports = await getAllTroubleReports();
             
             // Filter reports assigned to this technician and not resolved/closed
+            const techIdStr = String(technicianId);
             const myReports = allReports.filter(r => 
-                Number(r.assigned_technician_id || r.assignedTechnicianId) === technicianId && 
+                String(r.assigned_technician_id || r.assignedTechnicianId) === techIdStr && 
                 !['resolved', 'closed'].includes(r.status)
             ).map(r => ({
                 ...r,
@@ -84,7 +85,8 @@ router.get('/stats', verifyToken, async (req, res) => {
             (async () => {
                 const { getAllTroubleReports } = require('../../config/troubleReport');
                 const reports = await getAllTroubleReports();
-                return reports.filter(r => Number(r.assigned_technician_id || r.assignedTechnicianId) === Number(technicianId) && !['resolved', 'closed'].includes(r.status)).length;
+                const techIdStr = String(technicianId);
+                return reports.filter(r => String(r.assigned_technician_id || r.assignedTechnicianId) === techIdStr && !['resolved', 'closed'].includes(r.status)).length;
             })()
         ]);
 
@@ -125,8 +127,9 @@ router.get('/history', verifyToken, async (req, res) => {
         // 2. Get Resolved/Closed Trouble Reports
         const { getAllTroubleReports } = require('../../config/troubleReport');
         const allReports = await getAllTroubleReports();
+        const techIdStr = String(technicianId);
         const historyReports = allReports.filter(r => 
-            Number(r.assigned_technician_id || r.assignedTechnicianId) === technicianId && 
+            String(r.assigned_technician_id || r.assignedTechnicianId) === techIdStr && 
             ['resolved', 'closed'].includes(r.status)
         ).map(r => ({ ...r, job_type: 'repair' }));
 
