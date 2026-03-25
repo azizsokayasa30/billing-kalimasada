@@ -36,6 +36,21 @@ async function seed() {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`, (err) => {
+        });
+    });
+
+    // 1b. Ensure collector_payments table exists
+    await new Promise((resolve, reject) => {
+        db.run(`CREATE TABLE IF NOT EXISTS collector_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            collector_id INTEGER NOT NULL,
+            invoice_id INTEGER NOT NULL,
+            amount DECIMAL(10,2) NOT NULL,
+            commission_amount DECIMAL(10,2) NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            paid_at DATETIME
+        )`, (err) => {
             if (err) reject(err);
             else resolve();
         });
@@ -117,6 +132,241 @@ async function seed() {
         console.log('⚠️  Technician already exists or error:', err.message);
     }
 
+    // 5. Seed Router
+    let routerId = 1;
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`CREATE TABLE IF NOT EXISTS routers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                nas_ip TEXT NOT NULL,
+                nas_identifier TEXT,
+                secret TEXT,
+                UNIQUE(nas_ip)
+            )`, (err) => err ? reject(err) : resolve());
+        });
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO routers (id, name, nas_ip, nas_identifier, secret) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [routerId, 'Router Utama', '192.168.1.1', 'MikroTik-Main', 'rahasia123'],
+                function(err) {
+                    if (err) reject(err);
+                    else {
+                        routerId = this.lastID || routerId;
+                        resolve(routerId);
+                    }
+                }
+            );
+        });
+        console.log('✅ Router seeded');
+    } catch (err) {
+        console.log('⚠️  Router error:', err.message);
+    }
+
+    // 6. Seed Package
+    let packageId = 1;
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`CREATE TABLE IF NOT EXISTS packages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                speed TEXT NOT NULL,
+                price DECIMAL(10,2) NOT NULL,
+                tax_rate DECIMAL(5,2) DEFAULT 11.00,
+                description TEXT,
+                pppoe_profile TEXT DEFAULT 'default',
+                router_id INTEGER,
+                is_active BOOLEAN DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                image TEXT
+            )`, (err) => err ? reject(err) : resolve());
+        });
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO packages (id, name, speed, price, description, router_id) 
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [packageId, 'Paket Family 20Mbps', '20Mbps', 150000, 'Paket internet keluarga murah meriah', routerId],
+                function(err) {
+                    if (err) reject(err);
+                    else {
+                        packageId = this.lastID || packageId;
+                        resolve(packageId);
+                    }
+                }
+            );
+        });
+        console.log('✅ Package seeded');
+    } catch (err) {
+        console.log('⚠️  Package error:', err.message);
+    }
+
+    // 7. Seed ODP
+    let odpId = 1;
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`CREATE TABLE IF NOT EXISTS odps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                code VARCHAR(50) NOT NULL UNIQUE,
+                latitude DECIMAL(10,8) NOT NULL,
+                longitude DECIMAL(11,8) NOT NULL,
+                address TEXT,
+                capacity INTEGER DEFAULT 64,
+                used_ports INTEGER DEFAULT 0,
+                status VARCHAR(20) DEFAULT 'active',
+                installation_date DATE,
+                parent_odp_id INTEGER,
+                is_pole BOOLEAN DEFAULT 0
+            )`, (err) => err ? reject(err) : resolve());
+        });
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO odps (id, name, code, latitude, longitude, address, capacity) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [odpId, 'ODP Pusat', 'ODP-001', -3.788, 102.266, 'Jl. Jend. Sudirman, Bengkulu', 16],
+                function(err) {
+                    if (err) reject(err);
+                    else {
+                        odpId = this.lastID || odpId;
+                        resolve(odpId);
+                    }
+                }
+            );
+        });
+        console.log('✅ ODP seeded');
+    } catch (err) {
+        console.log('⚠️  ODP error:', err.message);
+    }
+
+    // 8. Seed Customer
+    let customerId = 1;
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                phone TEXT UNIQUE NOT NULL,
+                pppoe_username TEXT,
+                email TEXT,
+                address TEXT,
+                latitude DECIMAL(10,8),
+                longitude DECIMAL(11,8),
+                package_id INTEGER,
+                pppoe_profile TEXT,
+                status TEXT DEFAULT 'active',
+                join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                cable_type TEXT,
+                cable_length INTEGER,
+                port_number INTEGER,
+                cable_status TEXT DEFAULT 'connected',
+                cable_notes TEXT,
+                odp_id INTEGER,
+                auto_suspension BOOLEAN DEFAULT 1,
+                billing_day INTEGER DEFAULT 15,
+                renewal_type TEXT DEFAULT 'renewal',
+                fix_date INTEGER
+            )`, (err) => err ? reject(err) : resolve());
+        });
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO customers (id, username, name, phone, email, address, package_id, odp_id) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [customerId, 'budi001', 'Budi Santoso', '6281234567890', 'budi@demo.com', 'Jl. Merdeka No 1', packageId, odpId],
+                function(err) {
+                    if (err) reject(err);
+                    else {
+                        customerId = this.lastID || customerId;
+                        resolve(customerId);
+                    }
+                }
+            );
+        });
+        console.log('✅ Customer seeded');
+    } catch (err) {
+        console.log('⚠️  Customer error:', err.message);
+    }
+
+    // 9. Seed Invoice
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`CREATE TABLE IF NOT EXISTS invoices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL,
+                package_id INTEGER NOT NULL,
+                invoice_number TEXT UNIQUE NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                due_date DATE NOT NULL,
+                status TEXT DEFAULT 'unpaid',
+                payment_date DATETIME,
+                payment_method TEXT,
+                payment_gateway TEXT,
+                payment_token TEXT,
+                payment_url TEXT,
+                payment_status TEXT DEFAULT 'pending',
+                notes TEXT,
+                description TEXT,
+                invoice_type TEXT DEFAULT 'monthly',
+                package_name TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`, (err) => err ? reject(err) : resolve());
+        });
+
+        const invoiceNo = 'INV-' + new Date().getFullYear() + '0001';
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 7); // Due in 7 days
+        
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO invoices (customer_id, package_id, invoice_number, amount, due_date, status, description, package_name) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [customerId, packageId, invoiceNo, 150000, dueDate.toISOString().split('T')[0], 'unpaid', 'Tagihan Internet Bulan Ini', 'Paket Family 20Mbps'],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+        console.log('✅ Invoice seeded');
+    } catch (err) {
+        console.log('⚠️  Invoice error:', err.message);
+    }
+
+    // 10. Seed Menbers
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`CREATE TABLE IF NOT EXISTS members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT UNIQUE NOT NULL,
+                email TEXT,
+                address TEXT,
+                status TEXT DEFAULT 'active',
+                join_date DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`, (err) => err ? reject(err) : resolve());
+        });
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO members (name, phone, email, address) 
+                 VALUES (?, ?, ?, ?)`,
+                ['Member Demo', '6289876543210', 'member@demo.com', 'Jl. Sudirman No 2'],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+        console.log('✅ Member seeded');
+    } catch (err) {
+        console.log('⚠️  Member error:', err.message);
+    }
+
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📱 Login di Mobile App:');
     console.log('');
@@ -124,9 +374,11 @@ async function seed() {
     console.log('    Username: 6281368888498');
     console.log('    Password: collector123');
     console.log('');
-    console.log('  Technician:');
-    console.log('    Username: 6281368888498');
-    console.log('    Password: tech123');
+    console.log('');
+    console.log('  Customer/Member (via Web):');
+    console.log('    Phone: 6281234567890 (Customer Budi)');
+    console.log('    Phone: 6289876543210 (Member Demo)');
+    console.log('      *Login pakai OTP');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     db.close();
