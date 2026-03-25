@@ -30,7 +30,7 @@ const technicianSync = {
         const db = new sqlite3.Database('./data/billing.db');
         
         const sync = () => {
-            db.run(`CREATE TABLE IF NOT EXISTS technicians (
+            const sql = `CREATE TABLE IF NOT EXISTS technicians (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 phone TEXT UNIQUE NOT NULL,
@@ -43,11 +43,25 @@ const technicianSync = {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 last_login DATETIME
-            )`, (createErr) => {
+            )`;
+            db.run(sql, (createErr) => {
                 if (createErr) {
                     console.error('Failed to ensure technicians table:', createErr.message);
                     return;
                 }
+                // Migrate missing columns for older databases
+                const migrations = [
+                    'ALTER TABLE technicians ADD COLUMN join_date DATETIME DEFAULT CURRENT_TIMESTAMP',
+                    'ALTER TABLE technicians ADD COLUMN whatsapp_group_id TEXT',
+                    'ALTER TABLE technicians ADD COLUMN password TEXT'
+                ];
+                migrations.forEach(m => {
+                    db.run(m, (err) => {
+                        if (err && !err.message.includes('duplicate column')) {
+                            // Column already exists, ignore
+                        }
+                    });
+                });
                 try {
                     const settings = getSettingsWithCache();
                     Object.keys(settings).filter(k => k.startsWith('technician_numbers.')).forEach(k => {
