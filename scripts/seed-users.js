@@ -471,6 +471,76 @@ async function seed() {
         console.log('⚠️  Installation Job error:', err.message);
     }
 
+    // 13. Seed Trouble Report (for technician dashboard)
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`CREATE TABLE IF NOT EXISTS trouble_reports (
+                id TEXT PRIMARY KEY,
+                status TEXT DEFAULT 'open',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                name TEXT,
+                phone TEXT,
+                location TEXT,
+                category TEXT,
+                description TEXT,
+                assigned_technician_id INTEGER,
+                priority TEXT DEFAULT 'Normal',
+                notes TEXT,
+                odp TEXT,
+                sn TEXT,
+                signal_level TEXT
+            )`, (err) => err ? reject(err) : resolve());
+        });
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO trouble_reports (id, status, name, phone, location, category, description, assigned_technician_id, priority, notes) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ['TR123456', 'open', 'Budi Santoso', '081234567890', 'Jl. Merdeka No 123', 'koneksi_lambat', 'Internet lemot sejak semalam', technicianId, 'Tertinggi', '[]'],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+        console.log('✅ Trouble Report seeded');
+    } catch (err) {
+        console.log('⚠️  Trouble Report error:', err.message);
+    }
+
+    // 14. Seed Expenses (for Admin Dashboard)
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(`CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                description TEXT NOT NULL,
+                amount REAL NOT NULL,
+                category TEXT NOT NULL,
+                expense_date DATE NOT NULL,
+                payment_method TEXT,
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`, (err) => err ? reject(err) : resolve());
+        });
+
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR IGNORE INTO expenses (description, amount, category, expense_date, payment_method) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                ['Beli Mikrotik', 500000, 'infrastruktur', new Date().toISOString().split('T')[0], 'cash'],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+        console.log('✅ Expense seeded');
+    } catch (err) {
+        console.log('⚠️  Expense error:', err.message);
+    }
+
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📱 Login di Mobile App:');
     console.log('');
