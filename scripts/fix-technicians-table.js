@@ -12,27 +12,29 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE, (err) => {
 });
 
 const migrations = [
-    'ALTER TABLE technicians ADD COLUMN join_date DATETIME DEFAULT CURRENT_TIMESTAMP',
-    'ALTER TABLE technicians ADD COLUMN whatsapp_group_id TEXT',
-    'ALTER TABLE technicians ADD COLUMN password TEXT'
+    { query: 'ALTER TABLE technicians ADD COLUMN join_date DATETIME', isSchema: true },
+    { query: 'UPDATE technicians SET join_date = CURRENT_TIMESTAMP WHERE join_date IS NULL', isSchema: false },
+    { query: 'ALTER TABLE technicians ADD COLUMN whatsapp_group_id TEXT', isSchema: true },
+    { query: 'ALTER TABLE technicians ADD COLUMN password TEXT', isSchema: true }
 ];
 
 console.log('Running migrations to add missing columns to technicians table...');
 
 let completed = 0;
 
-migrations.forEach((query) => {
-    db.run(query, (err) => {
+migrations.forEach((item) => {
+    db.run(item.query, (err) => {
         if (err) {
             if (err.message.includes('duplicate column')) {
-                console.log(`Column already exists, skipping: ${query}`);
+                console.log(`Column already exists, skipping schema change: ${item.query}`);
             } else {
-                console.error(`Error executing migration: ${query}`, err.message);
+                console.error(`Error executing migration: ${item.query}`, err.message);
             }
         } else {
-            console.log(`Successfully added column: ${query}`);
+            console.log(`Successfully executed: ${item.query}`);
         }
         
+        // Wait for all to finish before closing (very simple implementation)
         completed++;
         if (completed === migrations.length) {
             console.log('\nAll migrations completed.');
