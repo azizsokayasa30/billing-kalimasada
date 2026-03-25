@@ -16,7 +16,7 @@ const db = new sqlite3.Database(dbPath);
 
 const SALT_ROUNDS = 10;
 
-async function hashPassword(password) {
+function hashPassword(password) {
     return bcrypt.hashSync(password, SALT_ROUNDS);
 }
 
