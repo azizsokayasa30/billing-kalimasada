@@ -882,6 +882,60 @@ class BillingManager {
             }
         });
 
+        // Tambahkan kolom member_id ke invoices jika belum ada (untuk support member/hotspot billing)
+        this.db.run("ALTER TABLE invoices ADD COLUMN member_id INTEGER REFERENCES members(id)", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding member_id column to invoices:', err);
+            } else if (!err) {
+                console.log('Added member_id column to invoices table');
+            }
+        });
+
+        // Tambahkan kolom invoice_type ke invoices jika belum ada
+        this.db.run("ALTER TABLE invoices ADD COLUMN invoice_type TEXT DEFAULT 'monthly'", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding invoice_type column to invoices:', err);
+            } else if (!err) {
+                console.log('Added invoice_type column to invoices table');
+            }
+        });
+
+        // Tambahkan kolom package_name ke invoices jika belum ada
+        this.db.run("ALTER TABLE invoices ADD COLUMN package_name TEXT", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding package_name column to invoices:', err);
+            } else if (!err) {
+                console.log('Added package_name column to invoices table');
+            }
+        });
+
+        // Tambahkan kolom base_amount ke invoices jika belum ada
+        this.db.run("ALTER TABLE invoices ADD COLUMN base_amount DECIMAL(10,2)", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding base_amount column to invoices:', err);
+            } else if (!err) {
+                console.log('Added base_amount column to invoices table');
+            }
+        });
+
+        // Tambahkan kolom tax_rate ke invoices jika belum ada
+        this.db.run("ALTER TABLE invoices ADD COLUMN tax_rate DECIMAL(5,2)", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding tax_rate column to invoices:', err);
+            } else if (!err) {
+                console.log('Added tax_rate column to invoices table');
+            }
+        });
+
+        // Tambahkan kolom description ke invoices jika belum ada
+        this.db.run("ALTER TABLE invoices ADD COLUMN description TEXT", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding description column to invoices:', err);
+            } else if (!err) {
+                console.log('Added description column to invoices table');
+            }
+        });
+
         // Tambahkan kolom payment_gateway jika belum ada
         this.db.run("ALTER TABLE invoices ADD COLUMN payment_gateway TEXT", (err) => {
             if (err && !err.message.includes('duplicate column name')) {
