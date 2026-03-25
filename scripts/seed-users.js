@@ -36,6 +36,8 @@ async function seed() {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`, (err) => {
+            if (err) reject(err);
+            else resolve();
         });
     });
 
@@ -59,11 +61,21 @@ async function seed() {
     // 2. Ensure technicians table has password column
     await new Promise((resolve) => {
         db.run(`ALTER TABLE technicians ADD COLUMN password TEXT`, (err) => {
-            if (err && !err.message.includes('duplicate column')) {
-                console.log('ℹ️  password column:', err.message);
-            } else if (!err) {
-                console.log('✅ Added password column to technicians table');
-            }
+            if (err && !err.message.includes('duplicate column')) console.log('ALTER techs:', err.message);
+            resolve();
+        });
+    });
+    
+    await new Promise((resolve) => {
+        db.run(`ALTER TABLE collectors ADD COLUMN password TEXT`, (err) => {
+            if (err && !err.message.includes('duplicate column')) console.log('ALTER collectors password:', err.message);
+            resolve();
+        });
+    });
+
+    await new Promise((resolve) => {
+        db.run(`ALTER TABLE collectors ADD COLUMN area TEXT`, (err) => {
+            if (err && !err.message.includes('duplicate column')) console.log('ALTER collectors area:', err.message);
             resolve();
         });
     });
@@ -431,6 +443,17 @@ async function seed() {
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )`, (err) => err ? reject(err) : resolve());
         });
+
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN address TEXT`, () => resolve()));
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN customer_name TEXT`, () => resolve()));
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN phone TEXT`, () => resolve()));
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN scheduled_date DATE`, () => resolve()));
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN package_id INTEGER`, () => resolve()));
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN assigned_technician_id INTEGER`, () => resolve()));
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN assigned_by INTEGER`, () => resolve()));
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN sn TEXT`, () => resolve()));
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN odp TEXT`, () => resolve()));
+        await new Promise(resolve => db.run(`ALTER TABLE installation_jobs ADD COLUMN signal_level TEXT`, () => resolve()));
 
         await new Promise((resolve, reject) => {
             db.run(
