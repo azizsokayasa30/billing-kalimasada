@@ -276,15 +276,26 @@ function createBaseTables() {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 phone TEXT UNIQUE NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('technician', 'field_officer', 'collector')),
+                role TEXT NOT NULL DEFAULT 'technician',
                 email TEXT,
                 notes TEXT,
+                password TEXT,
                 is_active INTEGER DEFAULT 1 CHECK (is_active IN (0, 1)),
                 area_coverage TEXT,
                 whatsapp_group TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 last_login DATETIME
+            )`,
+            `CREATE TABLE IF NOT EXISTS collector_payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collector_id INTEGER NOT NULL,
+                invoice_id INTEGER NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                commission_amount DECIMAL(10,2) NOT NULL,
+                status TEXT DEFAULT 'pending',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                paid_at DATETIME
             )`,
             `CREATE TABLE IF NOT EXISTS app_settings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
