@@ -87,4 +87,50 @@ router.get('/stats', verifyToken, async (req, res) => {
     }
 });
 
+// API: GET /api/system/customers - Get all customers + members for admin
+router.get('/customers', verifyToken, async (req, res) => {
+    try {
+        const dbPath = path.join(__dirname, '../../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        // Get PPPoE customers with package names
+        const customers = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT c.*, p.name as package_name, 'customer' as type
+                FROM customers c
+                LEFT JOIN packages p ON c.package_id = p.id
+                ORDER BY c.name
+            `, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+        
+        // Get hotspot members with package names
+        const members = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT m.*, mp.name as package_name, 'member' as type
+                FROM members m
+                LEFT JOIN member_packages mp ON m.package_id = mp.id
+                ORDER BY m.name
+            `, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+        
+        db.close();
+        
+        // Combine and sort by name
+        const allCustomers = [...customers, ...members].sort((a, b) => 
+            (a.name || '').localeCompare(b.name || '')
+        );
+        
+        res.json({ success: true, data: allCustomers });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 module.exports = router;
+
