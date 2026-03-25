@@ -250,8 +250,15 @@ async function seed() {
         console.log('⚠️  ODP error:', err.message);
     }
 
-    // 8. Seed Customer
-    let customerId = 1;
+    // 8. Seed Multiple Customers
+    const dummyCustomers = [
+        { id: 1, user: 'budi001', name: 'Budi Santoso', phone: '6281234567890', address: 'Jl. Merdeka No 1' },
+        { id: 2, user: 'siti002', name: 'Siti Aminah', phone: '6281234567891', address: 'Jl. Sudirman No 15' },
+        { id: 3, user: 'bambang003', name: 'Bambang Pamungkas', phone: '6281234567892', address: 'Jl. Melati No 8' },
+        { id: 4, user: 'ayu004', name: 'Ayu Lestari', phone: '6281234567893', address: 'Jl. Mawar No 22' },
+        { id: 5, user: 'hendra005', name: 'Hendra Wijaya', phone: '6281234567894', address: 'Jl. Anggrek No 5' }
+    ];
+
     try {
         await new Promise((resolve, reject) => {
             db.run(`CREATE TABLE IF NOT EXISTS customers (
@@ -281,27 +288,22 @@ async function seed() {
             )`, (err) => err ? reject(err) : resolve());
         });
 
-        await new Promise((resolve, reject) => {
-            db.run(
-                `INSERT OR IGNORE INTO customers (id, username, name, phone, email, address, package_id, odp_id) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [customerId, 'budi001', 'Budi Santoso', '6281234567890', 'budi@demo.com', 'Jl. Merdeka No 1', packageId, odpId],
-                function(err) {
-                    if (err) reject(err);
-                    else {
-                        customerId = this.lastID || customerId;
-                        resolve(customerId);
-                    }
-                }
-            );
-        });
-        console.log('✅ Customer seeded');
+        for (const cust of dummyCustomers) {
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT OR REPLACE INTO customers (id, username, name, phone, email, address, package_id, odp_id) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [cust.id, cust.user, cust.name, cust.phone, cust.user + '@demo.com', cust.address, packageId, odpId],
+                    (err) => err ? reject(err) : resolve()
+                );
+            });
+        }
+        console.log('✅ 5 Customers seeded');
     } catch (err) {
         console.log('⚠️  Customer error:', err.message);
     }
 
-    // 9. Seed Invoice
-    let invoiceId = 1;
+    // 9. Seed Multiple Invoices
     try {
         await new Promise((resolve, reject) => {
             db.run(`CREATE TABLE IF NOT EXISTS invoices (
@@ -326,39 +328,34 @@ async function seed() {
             )`, (err) => err ? reject(err) : resolve());
         });
 
-        const invoiceNo = 'INV-' + new Date().getFullYear() + '0001';
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + 7); // Due in 7 days
         
-        await new Promise((resolve, reject) => {
-            db.run(
-                `INSERT OR IGNORE INTO invoices (id, customer_id, package_id, invoice_number, amount, due_date, status, description, package_name) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [1, customerId, packageId, invoiceNo, 150000, dueDate.toISOString().split('T')[0], 'unpaid', 'Tagihan Internet Bulan Ini', 'Paket Family 20Mbps'],
-                function(err) {
-                    if (err) reject(err);
-                    else {
-                        invoiceId = this.lastID || 1;
-                        resolve(invoiceId);
-                    }
-                }
-            );
-        });
-        
-        // Seed another invoice that is paid to show collector stats
-        const invoiceNo2 = 'INV-' + new Date().getFullYear() + '0002';
-        await new Promise((resolve, reject) => {
-            db.run(
-                `INSERT OR IGNORE INTO invoices (id, customer_id, package_id, invoice_number, amount, due_date, status, payment_date, description, package_name) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)`,
-                [2, customerId, packageId, invoiceNo2, 150000, dueDate.toISOString().split('T')[0], 'paid', 'Tagihan Internet Bulan Lalu', 'Paket Family 20Mbps'],
-                function(err) {
-                    if (err) reject(err);
-                    else resolve(this.lastID);
-                }
-            );
-        });
-        console.log('✅ Invoice seeded');
+        let invCounter = 1;
+        for (const cust of dummyCustomers) {
+            // Create 1 unpaid invoice for each
+            const invoiceNoUnpaid = 'INV-' + new Date().getFullYear() + '000' + invCounter++;
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT OR REPLACE INTO invoices (customer_id, package_id, invoice_number, amount, due_date, status, description, package_name) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [cust.id, packageId, invoiceNoUnpaid, 150000, dueDate.toISOString().split('T')[0], 'unpaid', 'Tagihan Internet Bulan Ini', 'Paket Family 20Mbps'],
+                    (err) => err ? reject(err) : resolve()
+                );
+            });
+
+            // Create 1 paid invoice for each
+            const invoiceNoPaid = 'INV-' + new Date().getFullYear() + '000' + invCounter++;
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT OR REPLACE INTO invoices (customer_id, package_id, invoice_number, amount, due_date, status, payment_date, description, package_name) 
+                     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)`,
+                    [cust.id, packageId, invoiceNoPaid, 150000, dueDate.toISOString().split('T')[0], 'paid', 'Tagihan Internet Bulan Lalu', 'Paket Family 20Mbps'],
+                    (err) => err ? reject(err) : resolve()
+                );
+            });
+        }
+        console.log('✅ 10 Invoices seeded (5 unpaid, 5 paid)');
     } catch (err) {
         console.log('⚠️  Invoice error:', err.message);
     }
@@ -393,20 +390,19 @@ async function seed() {
         console.log('⚠️  Member error:', err.message);
     }
 
-    // 11. Seed Collector Payment (for mobile app stats)
+    // 11. Seed Multiple Collector Payments (for mobile app stats)
     try {
-        await new Promise((resolve, reject) => {
-            db.run(
-                `INSERT OR IGNORE INTO collector_payments (collector_id, invoice_id, amount, commission_amount, status) 
-                 VALUES (?, ?, ?, ?, ?)`,
-                [collectorId, 2, 150000, 7500, 'completed'],
-                function(err) {
-                    if (err) reject(err);
-                    else resolve(this.lastID);
-                }
-            );
-        });
-        console.log('✅ Collector Payment seeded');
+        for (let i = 1; i <= 5; i++) {
+            await new Promise((resolve, reject) => {
+                db.run(
+                    `INSERT OR REPLACE INTO collector_payments (collector_id, invoice_id, amount, commission_amount, status) 
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [collectorId, i * 2, 150000, 7500, 'completed'], // Link to the even (paid) invoices
+                    (err) => err ? reject(err) : resolve()
+                );
+            });
+        }
+        console.log('✅ 5 Collector Payments seeded');
     } catch (err) {
         console.log('⚠️  Collector Payment error:', err.message);
     }
