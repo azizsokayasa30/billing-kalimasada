@@ -41,7 +41,19 @@ async function seed() {
         });
     });
 
-    // 2. Ensure technicians table exists  
+    // 2. Ensure technicians table has password column
+    await new Promise((resolve) => {
+        db.run(`ALTER TABLE technicians ADD COLUMN password TEXT`, (err) => {
+            if (err && !err.message.includes('duplicate column')) {
+                console.log('ℹ️  password column:', err.message);
+            } else if (!err) {
+                console.log('✅ Added password column to technicians table');
+            }
+            resolve();
+        });
+    });
+
+    // 2b. Ensure technicians table exists (if not created yet)
     await new Promise((resolve, reject) => {
         db.run(`CREATE TABLE IF NOT EXISTS technicians (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
