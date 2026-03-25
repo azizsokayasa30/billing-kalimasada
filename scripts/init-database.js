@@ -227,6 +227,12 @@ function createBaseTables() {
                 payment_method TEXT NOT NULL,
                 reference_number TEXT,
                 notes TEXT,
+                collector_id INTEGER,
+                commission_amount DECIMAL(15,2) DEFAULT 0,
+                payment_type TEXT DEFAULT 'direct' CHECK(payment_type IN ('direct', 'collector', 'online', 'manual')),
+                remittance_status TEXT CHECK(remittance_status IN ('pending', 'remitted', 'cancelled')),
+                remittance_date DATETIME,
+                remittance_notes TEXT,
                 FOREIGN KEY (invoice_id) REFERENCES invoices (id)
             )`,
             `CREATE TABLE IF NOT EXISTS payment_gateway_transactions (
@@ -338,6 +344,27 @@ async function initDatabase() {
     try {
         // Step 1: Create base tables first
         await createBaseTables();
+        
+        // Step 1.5: Fix existing payments table columns
+        console.log('\n📋 Step 1.5: Patching existing tables...');
+        await new Promise((resolve) => {
+            const alterQueries = [
+                'ALTER TABLE payments ADD COLUMN collector_id INTEGER',
+                'ALTER TABLE payments ADD COLUMN commission_amount DECIMAL(15,2) DEFAULT 0',
+                "ALTER TABLE payments ADD COLUMN payment_type TEXT DEFAULT 'direct' CHECK(payment_type IN ('direct', 'collector', 'online', 'manual'))",
+                "ALTER TABLE payments ADD COLUMN remittance_status TEXT CHECK(remittance_status IN ('pending', 'remitted', 'cancelled'))",
+                'ALTER TABLE payments ADD COLUMN remittance_date DATETIME',
+                'ALTER TABLE payments ADD COLUMN remittance_notes TEXT'
+            ];
+            
+            let count = 0;
+            alterQueries.forEach(q => {
+                db.run(q, (err) => {
+                    count++;
+                    if (count === alterQueries.length) resolve();
+                });
+            });
+        });
         
         // Step 2: Run migrations
         console.log('\n📋 Step 2: Running migrations...');
