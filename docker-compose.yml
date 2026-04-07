@@ -18,6 +18,16 @@ services:
     networks:
       - gembok-network
 
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    networks:
+      - gembok-network
+    depends_on:
+      - gembok-bill
+
 networks:
   gembok-network:
     driver: bridge
