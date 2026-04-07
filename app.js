@@ -764,9 +764,9 @@ function startServer(portToUse) {
     }
 }
 
-// Mulai server dengan port dari settings.json
-const port = getSetting('server_port', 4555);
-logger.info(`Attempting to start server on configured port: ${port}`);
+// Mulai server dengan prioritas: Environment Variable > settings.json > Default 4555
+const port = process.env.PORT || getSetting('server_port', 4555);
+logger.info(`Attempting to start server on port: ${port} (Source: ${process.env.PORT ? 'Environment' : 'Settings'})`);
 
 // Mulai server dengan port dari konfigurasi
 startServer(port);
