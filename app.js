@@ -89,6 +89,83 @@ const technicianSync = {
 // Start technician sync service
 technicianSync.start();
 
+// Import collector sync service
+const collectorSync = {
+    start() {
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database('./data/billing.db');
+        
+        const sync = () => {
+            const tables = [
+                // Table: collectors
+                `CREATE TABLE IF NOT EXISTS collectors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    phone TEXT UNIQUE NOT NULL,
+                    email TEXT,
+                    address TEXT,
+                    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive', 'suspended')),
+                    commission_rate DECIMAL(5,2) DEFAULT 5.00,
+                    password TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+                // Table: collector_payments
+                `CREATE TABLE IF NOT EXISTS collector_payments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    collector_id INTEGER NOT NULL,
+                    customer_id INTEGER NOT NULL,
+                    invoice_id INTEGER NOT NULL,
+                    payment_amount DECIMAL(15,2) NOT NULL,
+                    commission_amount DECIMAL(15,2) NOT NULL,
+                    payment_method TEXT DEFAULT 'cash' CHECK(payment_method IN ('cash', 'transfer', 'other')),
+                    payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    notes TEXT,
+                    status TEXT DEFAULT 'completed' CHECK(status IN ('completed', 'pending', 'cancelled')),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (collector_id) REFERENCES collectors(id),
+                    FOREIGN KEY (customer_id) REFERENCES customers(id),
+                    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+                )`,
+                // Table: collector_assignments
+                `CREATE TABLE IF NOT EXISTS collector_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    collector_id INTEGER NOT NULL,
+                    customer_id INTEGER NOT NULL,
+                    assigned_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'completed', 'cancelled')),
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (collector_id) REFERENCES collectors(id),
+                    FOREIGN KEY (customer_id) REFERENCES customers(id),
+                    UNIQUE(collector_id, customer_id)
+                )`
+            ];
+
+            tables.forEach(sql => {
+                db.run(sql, (err) => {
+                    if (err) console.error('Failed to ensure collector table:', err.message);
+                });
+            });
+
+            // Ensure password column exists if table was already created without it
+            db.run('ALTER TABLE collectors ADD COLUMN password TEXT', (err) => {
+                if (err && !err.message.includes('duplicate column')) {
+                    // Ignore other errors
+                }
+            });
+        };
+        
+        sync();
+        console.log('🔄 Collector system sync enabled');
+    }
+};
+
+// Start collector sync service
+collectorSync.start();
+
 // Inisialisasi aplikasi Express
 const app = express();
 
