@@ -7,446 +7,326 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="/css/responsive-admin.css" rel="stylesheet">
-    <!-- Admin Mobile Optimizations -->
     <link href="/css/admin-mobile.css" rel="stylesheet">
     <style>
-        .collector-card {
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            margin-bottom: 1.5rem;
+        .main-content {
+            padding-top: 20px;
+            background-color: #f8f9fa;
+            min-height: 100vh;
         }
-        
-        .collector-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        .page-header {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #dee2e6;
         }
-        
-        .collector-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 12px 12px 0 0;
-            padding: 1.5rem;
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 0;
+            overflow: hidden;
         }
-        
-        .collector-name {
-            font-size: 1.25rem;
+        .table {
+            margin-bottom: 0;
+        }
+        .table th {
+            background-color: #f1f3f5;
             font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-        
-        .collector-phone {
-            font-size: 0.9rem;
-            opacity: 0.9;
-        }
-        
-        .collector-stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            padding: 1rem;
-            background: #f8f9fa;
-        }
-        
-        .stat-item {
-            text-align: center;
-        }
-        
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #2c3e50;
-        }
-        
-        .stat-label {
-            font-size: 0.8rem;
-            color: #6c757d;
-        }
-        
-        .collector-actions {
-            padding: 1rem;
-            border-top: 1px solid #e9ecef;
-        }
-        
-        .btn-edit {
-            background: #007bff;
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 1rem;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-edit:hover {
-            background: #0056b3;
-            transform: translateY(-2px);
-        }
-        
-        .btn-delete {
-            background: #dc3545;
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 1rem;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-delete:hover {
-            background: #c82333;
-            transform: translateY(-2px);
-        }
-        
-        .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
             text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            border-top: none;
+            padding: 12px 15px;
         }
-        
-        .status-active {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .status-inactive {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .floating-add-btn {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(135deg, #28a745, #1e7e34);
-            border: none;
-            border-radius: 50%;
-            color: white;
-            font-size: 1.5rem;
-            box-shadow: 0 4px 15px rgba(40,167,69,0.4);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            z-index: 1000;
-        }
-        
-        .floating-add-btn:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 20px rgba(40,167,69,0.6);
-        }
-        
-        .search-section {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .search-input {
-            border: 2px solid #e9ecef;
-            border-radius: 25px;
-            padding: 0.75rem 1rem 0.75rem 2.5rem;
-            width: 100%;
+        .table td {
+            vertical-align: middle;
+            padding: 12px 15px;
             font-size: 0.9rem;
-            transition: all 0.3s ease;
         }
-        
-        .search-input:focus {
-            border-color: #007bff;
-            box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
-            outline: none;
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
         }
-        
-        .search-icon {
-            position: absolute;
-            left: 1rem;
-            top: 50%;
-            transform: translateY(-50%);
+        .area-badge {
+            display: inline-block;
+            background-color: #e9ecef;
+            color: #495057;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin: 2px;
+            font-size: 0.8rem;
+            border: 1px solid #ced4da;
+        }
+        .stats-column {
+            min-width: 150px;
+        }
+        .stats-label {
+            display: block;
+            font-size: 0.7rem;
             color: #6c757d;
+            margin-bottom: -2px;
         }
-        
-        .filter-tabs {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 1rem;
+        .stats-value {
+            font-weight: 700;
+            font-size: 0.9rem;
         }
-        
-        .filter-tab {
-            padding: 0.5rem 1rem;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            background: white;
-            color: #6c757d;
-            text-align: center;
+        .search-box {
+            max-width: 300px;
+        }
+        .btn-action {
+            padding: 4px 8px;
             font-size: 0.85rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
         }
-        
-        .filter-tab.active {
-            border-color: #007bff;
-            background: #007bff;
-            color: white;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: #6c757d;
-        }
-        
-        .empty-state i {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-        
-        .empty-state h4 {
-            margin-bottom: 1rem;
-        }
-        
-        .empty-state p {
-            margin-bottom: 2rem;
+        .itallics-text {
+            font-style: italic;
+            color: #adb5bd;
         }
     </style>
 </head>
 <body>
     <div class="container-fluid">
         <div class="row">
-            <!-- Include Admin Sidebar -->
             <%- include('../partials/billing-sidebar') %>
 
-            <!-- Main content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">
-                        <i class="bi bi-person-check me-2"></i>Kelola Tukang Tagih
-                    </h1>
-                    <div>
-                        <button class="btn btn-success" onclick="addCollector()">
-                            <i class="bi bi-plus me-2"></i>Tambah Tukang Tagih
-                        </button>
-                    </div>
+            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="page-header d-flex justify-content-between align-items-center">
+                    <h1 class="h4 m-0">Kelola Tukang Tagih</h1>
+                    <button class="btn btn-primary" onclick="addCollector()">
+                        Tambah Tukang Tagih
+                    </button>
                 </div>
 
-                <!-- Search Section -->
-                <div class="search-section">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <div class="position-relative">
-                                <i class="bi bi-search search-icon"></i>
-                                <input type="text" class="search-input" placeholder="Cari tukang tagih..." id="searchInput">
+                <div class="card mb-4 border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-auto">
+                                <label for="searchInput" class="col-form-label">Cari:</label>
                             </div>
-                        </div>
-                        <div class="col-md-4">
-                            <select class="form-select" id="statusFilter">
-                                <option value="all">Semua Status</option>
-                                <option value="active">Aktif</option>
-                                <option value="inactive">Nonaktif</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="filter-tabs">
-                        <div class="filter-tab active" data-filter="all">
-                            <i class="bi bi-list me-1"></i>Semua
-                        </div>
-                        <div class="filter-tab" data-filter="active">
-                            <i class="bi bi-check-circle me-1"></i>Aktif
-                        </div>
-                        <div class="filter-tab" data-filter="inactive">
-                            <i class="bi bi-x-circle me-1"></i>Nonaktif
+                            <div class="col-md-4">
+                                <input type="text" id="searchInput" class="form-control" placeholder="Nama atau telepon...">
+                            </div>
+                            <div class="col-auto ms-md-auto">
+                                <label for="statusFilter" class="col-form-label">Status:</label>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="statusFilter">
+                                    <option value="all">Semua Status</option>
+                                    <option value="active">Aktif</option>
+                                    <option value="inactive">Nonaktif</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Collectors List -->
-                <div id="collectorsList">
-                    <% if (collectors && collectors.length > 0) { %>
-                        <% collectors.forEach(function(collector) { %>
-                            <div class="collector-card" data-status="<%= collector.status || 'active' %>">
-                                <div class="collector-header">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <div class="collector-name"><%= collector.name %></div>
-                                            <div class="collector-phone">
-                                                <i class="bi bi-telephone me-1"></i><%= collector.phone %>
-                                            </div>
-                                        </div>
-                                        <span class="status-badge status-<%= collector.status || 'active' %>">
-                                            <%= collector.status === 'active' ? 'Aktif' : 'Nonaktif' %>
-                                        </span>
-                                    </div>
-                                </div>
-                                
-                                <div class="collector-stats">
-                                    <div class="stat-item">
-                                        <div class="stat-value text-success"><%= collector.total_payments || 0 %></div>
-                                        <div class="stat-label">Total Pembayaran</div>
-                                    </div>
-                                    <div class="stat-item">
-                                        <div class="stat-value text-warning">Rp <%= collector.total_commission ? collector.total_commission.toLocaleString('id-ID') : '0' %></div>
-                                        <div class="stat-label">Total Komisi</div>
-                                    </div>
-                                    <div class="stat-item">
-                                        <div class="stat-value text-info"><%= collector.commission_rate || 5 %>%</div>
-                                        <div class="stat-label">Rate Komisi</div>
-                                    </div>
-                                </div>
-                                
-                                <div class="collector-actions">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <small class="text-muted">
-                                                <i class="bi bi-envelope me-1"></i><%= collector.email || 'Email tidak tersedia' %>
-                                            </small>
-                                            <br>
-                                            <small class="text-muted">
-                                                <i class="bi bi-geo-alt me-1"></i><%= collector.address || 'Alamat tidak tersedia' %>
-                                            </small>
-                                        </div>
-                                        <div>
-                                            <button class="btn btn-edit me-2" onclick="editCollector('<%= collector.id %>')">
-                                                <i class="bi bi-pencil me-1"></i>Edit
-                                            </button>
-                                            <button class="btn btn-delete" onclick="deleteCollector('<%= collector.id %>')">
-                                                <i class="bi bi-trash me-1"></i>Hapus
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        <% }); %>
-                    <% } else { %>
-                        <div class="empty-state">
-                            <i class="bi bi-person-check"></i>
-                            <h4>Belum ada tukang tagih</h4>
-                            <p>Mulai dengan menambahkan tukang tagih pertama Anda.</p>
-                            <button class="btn btn-primary" onclick="addCollector()">
-                                <i class="bi bi-plus me-2"></i>Tambah Tukang Tagih
-                            </button>
-                        </div>
-                    <% } %>
+                <div class="table-container shadow-sm">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Nama & Kontak</th>
+                                    <th>Area Tugas</th>
+                                    <th class="stats-column text-end">Statistik</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-end">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="collectorsTableBody">
+                                <% if (collectors && collectors.length > 0) { %>
+                                    <% collectors.forEach(function(collector) { %>
+                                        <tr class="collector-row" data-status="<%= collector.status || 'active' %>" data-name="<%= collector.name.toLowerCase() %>" data-phone="<%= collector.phone.toLowerCase() %>">
+                                            <td>
+                                                <div class="fw-bold"><%= collector.name %></div>
+                                                <div class="text-muted small"><%= collector.phone %></div>
+                                                <div class="text-muted extra-small" style="font-size: 0.75rem;"><%= collector.email || '-' %></div>
+                                            </td>
+                                            <td style="max-width: 300px;">
+                                                <div id="areas-<%= collector.id %>">
+                                                    <% if (collector.assigned_areas) { %>
+                                                        <% collector.assigned_areas.split(',').forEach(function(area) { %>
+                                                            <span class="area-badge"><%= area.trim() %></span>
+                                                        <% }); %>
+                                                    <% } else { %>
+                                                        <span class="itallics-text small">Belum ada area ditugaskan</span>
+                                                    <% } %>
+                                                </div>
+                                            </td>
+                                            <td class="text-end">
+                                                <div>
+                                                    <span class="stats-label">Siswa/Pelanggan:</span>
+                                                    <span class="stats-value text-primary"><%= collector.total_payments || 0 %></span>
+                                                </div>
+                                                <div class="mt-1">
+                                                    <span class="stats-label">Total Komisi:</span>
+                                                    <span class="stats-value text-success">Rp <%= collector.total_commission ? collector.total_commission.toLocaleString('id-ID') : '0' %></span>
+                                                </div>
+                                                <div class="mt-1">
+                                                    <span class="stats-label">Rate:</span>
+                                                    <span class="stats-value text-dark"><%= collector.commission_rate || 5 %>%</span>
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <% if (collector.status === 'active') { %>
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2">Aktif</span>
+                                                <% } else { %>
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2">Nonaktif</span>
+                                                <% } %>
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="btn-group">
+                                                    <button class="btn btn-sm btn-outline-primary" onclick="manageAreas('<%= collector.id %>', '<%= collector.name %>')">Area</button>
+                                                    <button class="btn btn-sm btn-outline-secondary" onclick="editCollector('<%= collector.id %>')">Edit</button>
+                                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCollector('<%= collector.id %>')">Hapus</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <% }); %>
+                                <% } else { %>
+                                    <tr>
+                                        <td colspan="5" class="text-center py-5 text-muted">
+                                            Belum ada data tukang tagih.
+                                        </td>
+                                    </tr>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </main>
         </div>
     </div>
 
-    <!-- Floating Add Button -->
-    <button class="floating-add-btn" onclick="addCollector()" title="Tambah Tukang Tagih">
-        <i class="bi bi-plus"></i>
-    </button>
+    <!-- Area Mapping Modal -->
+    <div class="modal fade" id="areaMappingModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold">Mapping Area: <span id="modalCollectorName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body pt-3">
+                    <input type="hidden" id="modalCollectorId">
+                    <p class="text-muted small mb-3">Tugaskan area (desa) ke kolektor ini.</p>
+                    
+                    <div id="areaCheckboxes" class="mb-3 p-2 border rounded" style="max-height: 250px; overflow-y: auto;">
+                        <div class="text-center py-3 text-muted small">Memuat area...</div>
+                    </div>
+                    
+                    <div class="input-group input-group-sm mb-3">
+                        <input type="text" id="newAreaInput" class="form-control" placeholder="Nama area baru...">
+                        <button class="btn btn-dark" type="button" id="addNewAreaBtn">Tambah</button>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 pt-0">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                    <button type="button" class="btn btn-sm btn-primary px-4" id="saveAreasBtn">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Collector management functions
-        function addCollector() {
-            window.location.href = '/admin/collectors/add';
-        }
-        
-        function editCollector(id) {
-            window.location.href = `/admin/collectors/${id}/edit`;
-        }
-        
+        function addCollector() { window.location.href = '/admin/collectors/add'; }
+        function editCollector(id) { window.location.href = `/admin/collectors/${id}/edit`; }
         function deleteCollector(id) {
-            if (confirm('Apakah Anda yakin ingin menghapus tukang tagih ini?')) {
-                fetch(`/admin/collectors/${id}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Tukang tagih berhasil dihapus!');
-                        window.location.reload();
-                    } else {
-                        alert('Error: ' + (data.message || 'Gagal menghapus tukang tagih'));
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Terjadi kesalahan jaringan. Silakan coba lagi.');
-                });
+            if (confirm('Hapus tukang tagih ini?')) {
+                fetch(`/admin/collectors/${id}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => { if(data.success) location.reload(); else alert(data.message); });
             }
         }
-        
-        // Search and filter functionality
-        document.addEventListener('DOMContentLoaded', function() {
+
+        let areaMappingModal;
+        document.addEventListener('DOMContentLoaded', () => {
+            const modalEl = document.getElementById('areaMappingModal');
+            if (modalEl) areaMappingModal = new bootstrap.Modal(modalEl);
+            
+            document.getElementById('addNewAreaBtn')?.addEventListener('click', () => {
+                const input = document.getElementById('newAreaInput');
+                const areaName = input.value.trim();
+                if (areaName) { addAreaCheckbox(areaName, true); input.value = ''; }
+            });
+            
+            document.getElementById('saveAreasBtn')?.addEventListener('click', saveAssignedAreas);
+            
+            // Search & Filter
             const searchInput = document.getElementById('searchInput');
             const statusFilter = document.getElementById('statusFilter');
-            const filterTabs = document.querySelectorAll('.filter-tab');
-            const collectorCards = document.querySelectorAll('.collector-card');
             
-            // Search functionality
-            searchInput.addEventListener('input', function() {
-                filterCollectors();
-            });
-            
-            // Status filter
-            statusFilter.addEventListener('change', function() {
-                filterCollectors();
-            });
-            
-            // Filter tabs
-            filterTabs.forEach(tab => {
-                tab.addEventListener('click', function() {
-                    filterTabs.forEach(t => t.classList.remove('active'));
-                    this.classList.add('active');
-                    filterCollectors();
+            const handleFilter = () => {
+                const term = searchInput.value.toLowerCase();
+                const status = statusFilter.value;
+                document.querySelectorAll('.collector-row').forEach(row => {
+                    const name = row.dataset.name;
+                    const phone = row.dataset.phone;
+                    const rowStatus = row.dataset.status;
+                    const matchesSearch = name.includes(term) || phone.includes(term);
+                    const matchesStatus = status === 'all' || rowStatus === status;
+                    row.style.display = matchesSearch && matchesStatus ? '' : 'none';
                 });
-            });
+            };
+            
+            searchInput?.addEventListener('input', handleFilter);
+            statusFilter?.addEventListener('change', handleFilter);
         });
-        
-        function filterCollectors() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            const statusFilter = document.getElementById('statusFilter').value;
-            const activeTab = document.querySelector('.filter-tab.active');
-            const tabFilter = activeTab ? activeTab.dataset.filter : 'all';
+
+        async function manageAreas(id, name) {
+            document.getElementById('modalCollectorId').value = id;
+            document.getElementById('modalCollectorName').textContent = name;
+            const container = document.getElementById('areaCheckboxes');
+            container.innerHTML = '<div class="text-center py-3 text-muted small">Memuat...</div>';
             
-            const collectorCards = document.querySelectorAll('.collector-card');
-            let visibleCount = 0;
-            
-            collectorCards.forEach(card => {
-                const collectorName = card.querySelector('.collector-name').textContent.toLowerCase();
-                const collectorPhone = card.querySelector('.collector-phone').textContent.toLowerCase();
-                const collectorStatus = card.dataset.status;
+            try {
+                const [uniqueRes, currentAreas] = await Promise.all([
+                    fetch('/admin/collectors/unique-areas').then(r => r.json()),
+                    Array.from(document.querySelectorAll(`#areas-${id} .area-badge`)).map(el => el.textContent.trim())
+                ]);
                 
-                const matchesSearch = collectorName.includes(searchTerm) || collectorPhone.includes(searchTerm);
-                const matchesStatus = statusFilter === 'all' || collectorStatus === statusFilter;
-                const matchesTab = tabFilter === 'all' || collectorStatus === tabFilter;
+                container.innerHTML = '';
+                if (uniqueRes.success && uniqueRes.areas.length > 0) {
+                    uniqueRes.areas.forEach(area => addAreaCheckbox(area, currentAreas.includes(area)));
+                } else if (currentAreas.length === 0) {
+                    container.innerHTML = '<div class="text-center py-3 text-muted small">Belum ada data area.</div>';
+                }
                 
-                if (matchesSearch && matchesStatus && matchesTab) {
-                    card.style.display = 'block';
-                    visibleCount++;
-                } else {
-                    card.style.display = 'none';
-                }
-            });
+                currentAreas.forEach(area => {
+                    if (!uniqueRes.areas.includes(area)) addAreaCheckbox(area, true);
+                });
+                
+                areaMappingModal.show();
+            } catch (e) { alert('Gagal memuat area'); }
+        }
+
+        function addAreaCheckbox(name, checked) {
+            const container = document.getElementById('areaCheckboxes');
+            const existing = Array.from(container.querySelectorAll('label')).find(el => el.textContent.trim() === name);
+            if (existing) { if (checked) existing.previousElementSibling.checked = true; return; }
+            if (container.querySelector('.text-muted')) container.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'form-check small mb-1';
+            div.innerHTML = `<input class="form-check-input area-checkbox" type="checkbox" value="${name}" id="area-${Date.now()}-${Math.random().toString(36).substr(2, 5)}" ${checked ? 'checked' : ''}><label class="form-check-label">${name}</label>`;
+            container.appendChild(div);
+        }
+
+        async function saveAssignedAreas() {
+            const id = document.getElementById('modalCollectorId').value;
+            const areas = Array.from(document.querySelectorAll('.area-checkbox:checked')).map(cb => cb.value);
+            const btn = document.getElementById('saveAreasBtn');
+            btn.disabled = true; btn.textContent = 'Menyimpan...';
             
-            // Show/hide empty state
-            const emptyState = document.querySelector('.empty-state');
-            const collectorsList = document.getElementById('collectorsList');
-            
-            if (visibleCount === 0 && collectorCards.length > 0) {
-                if (!emptyState) {
-                    collectorsList.innerHTML = `
-                        <div class="empty-state">
-                            <i class="bi bi-search"></i>
-                            <h4>Tidak ada hasil</h4>
-                            <p>Tidak ada tukang tagih yang sesuai dengan filter yang dipilih.</p>
-                        </div>
-                    `;
-                }
-            }
+            try {
+                const res = await fetch(`/admin/collectors/${id}/areas`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ areas })
+                });
+                if ((await res.json()).success) { alert('Berhasil!'); location.reload(); }
+                else alert('Gagal menyimpan');
+            } catch (e) { alert('Terjadi kesalahan'); }
+            finally { btn.disabled = false; btn.textContent = 'Simpan'; }
         }
     </script>
 </body>

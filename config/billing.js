@@ -474,6 +474,7 @@ class BillingManager {
                 port_number INTEGER,
                 cable_status TEXT DEFAULT 'connected',
                 cable_notes TEXT,
+                area TEXT,
                 FOREIGN KEY (package_id) REFERENCES packages (id)
             )`,
 
@@ -526,6 +527,10 @@ class BillingManager {
                 billing_day INTEGER DEFAULT 15,
                 renewal_type TEXT DEFAULT 'renewal',
                 fix_date INTEGER,
+                area TEXT,
+                ktp_photo_path TEXT,
+                house_photo_path TEXT,
+                password TEXT,
                 FOREIGN KEY (package_id) REFERENCES member_packages (id)
             )`,
 
@@ -536,6 +541,27 @@ class BillingManager {
                 PRIMARY KEY (customer_id),
                 FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
                 FOREIGN KEY (router_id) REFERENCES routers(id) ON DELETE CASCADE
+            )`,
+
+            // Tabel Assignment Collector (Lama - Masih dipertahankan sebagai fallback/manual)
+            `CREATE TABLE IF NOT EXISTS collector_assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collector_id INTEGER NOT NULL,
+                customer_id INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(collector_id, customer_id),
+                FOREIGN KEY (collector_id) REFERENCES collectors(id) ON DELETE CASCADE,
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+            )`,
+
+            // Tabel Mapping Area ke Collector (Baru)
+            `CREATE TABLE IF NOT EXISTS collector_areas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collector_id INTEGER NOT NULL,
+                area TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(collector_id, area),
+                FOREIGN KEY (collector_id) REFERENCES collectors(id) ON DELETE CASCADE
             )`,
 
             // Tabel tagihan
@@ -957,6 +983,56 @@ class BillingManager {
             }
         });
 
+        // Tambahkan kolom password ke customers untuk login via username/password
+        this.db.run("ALTER TABLE customers ADD COLUMN password TEXT", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding password column to customers:', err);
+            } else if (!err) {
+                console.log('Added password column to customers table');
+            }
+        });
+
+        // Tambahkan kolom area ke customers jika belum ada
+        this.db.run("ALTER TABLE customers ADD COLUMN area TEXT", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding area column to customers:', err);
+            } else if (!err) {
+                console.log('Added area column to customers table');
+            }
+        });
+
+        // Tambahkan kolom password ke members untuk login via username/password
+        this.db.run("ALTER TABLE members ADD COLUMN password TEXT", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding password column to members:', err);
+            } else if (!err) {
+                console.log('Added password column to members table');
+            }
+        });
+
+        // Tambahkan kolom area ke members jika belum ada
+        this.db.run("ALTER TABLE members ADD COLUMN area TEXT", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding area column to members:', err);
+            } else if (!err) {
+                console.log('Added area column to members table');
+            }
+        });
+
+        // Tambahkan kolom ktp_photo_path ke members jika belum ada
+        this.db.run("ALTER TABLE members ADD COLUMN ktp_photo_path TEXT", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding ktp_photo_path column to members:', err);
+            }
+        });
+
+        // Tambahkan kolom house_photo_path ke members jika belum ada
+        this.db.run("ALTER TABLE members ADD COLUMN house_photo_path TEXT", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding house_photo_path column to members:', err);
+            }
+        });
+
         // Tambahkan kolom image ke packages jika belum ada
         this.db.run("ALTER TABLE packages ADD COLUMN image TEXT", (err) => {
             if (err && !err.message.includes('duplicate column name')) {
@@ -1267,7 +1343,7 @@ class BillingManager {
             // Simpan reference database untuk digunakan di callback
             const db = this.db;
             
-            const { name, username, phone, pppoe_username, email, address, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path } = customerData;
+            const { name, username, password, phone, pppoe_username, email, address, area, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path } = customerData;
             
             // Use provided username, fallback to auto-generate if not provided
             const finalUsername = username || this.generateUsername(phone);
@@ -1290,13 +1366,13 @@ class BillingManager {
             // Jika tidak, default ke 'active'
             const finalStatus = (status !== undefined && status !== null && status !== '') ? status : 'active';
             
-            const sql = `INSERT INTO customers (customer_id, username, name, phone, pppoe_username, email, address, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const sql = `INSERT INTO customers (customer_id, username, password, name, phone, pppoe_username, email, address, area, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
             // Default coordinates untuk Jakarta jika tidak ada koordinat
             const finalLatitude = latitude !== undefined ? parseFloat(latitude) : -6.2088;
             const finalLongitude = longitude !== undefined ? parseFloat(longitude) : 106.8456;
             
-            db.run(sql, [generatedCustomerId, finalUsername, name, phone, autoPPPoEUsername, email, address, package_id, customerData.odp_id || null, pppoe_profile, finalStatus, auto_suspension !== undefined ? auto_suspension : 1, normBillingDay, static_ip || null, assigned_ip || null, mac_address || null, finalLatitude, finalLongitude, cable_type || null, cable_length || null, port_number || null, cable_status || 'connected', cable_notes || null, ktp_photo_path || null, house_photo_path || null], async function(err) {
+            db.run(sql, [generatedCustomerId, finalUsername, password || null, name, phone, autoPPPoEUsername, email, address, area || null, package_id, customerData.odp_id || null, pppoe_profile, finalStatus, auto_suspension !== undefined ? auto_suspension : 1, normBillingDay, static_ip || null, assigned_ip || null, mac_address || null, finalLatitude, finalLongitude, cable_type || null, cable_length || null, port_number || null, cable_status || 'connected', cable_notes || null, ktp_photo_path || null, house_photo_path || null], async function(err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -1403,10 +1479,11 @@ class BillingManager {
         });
     }
 
-    async getCustomers() {
+    async getCollectorCustomers(collectorId) {
         return new Promise(async (resolve, reject) => {
+            // Kita gabungkan customer yang di-mapping area-nya DAN yang di-mapping manual
             const sql = `
-                SELECT c.*, p.name as package_name, p.price as package_price, p.image as package_image, p.tax_rate,
+                SELECT DISTINCT c.*, p.name as package_name, p.price as package_price, p.image as package_image, p.tax_rate,
                        c.latitude, c.longitude,
                        r.name as router_name,
                        CASE 
@@ -1432,6 +1509,98 @@ class BillingManager {
                 LEFT JOIN packages p ON c.package_id = p.id
                 LEFT JOIN customer_router_map m ON m.customer_id = c.id
                 LEFT JOIN routers r ON r.id = m.router_id
+                -- Filter Area: Ambil customer yang areanya sesuai dengan area yang di-assign ke collector
+                LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != "" AND c.area = cra.area AND cra.collector_id = ?)
+                -- Filter Manual: Ambil customer yang di-mapping manual ke collector
+                LEFT JOIN collector_assignments ca ON (c.id = ca.customer_id AND ca.collector_id = ?)
+                WHERE cra.collector_id IS NOT NULL OR ca.collector_id IS NOT NULL
+                ORDER BY c.name ASC
+            `;
+            
+            this.db.all(sql, [collectorId, collectorId], async (err, rows) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    // Calculate price with tax for each customer
+                    let processedRows = rows.map(row => {
+                        if (row.package_price && row.tax_rate !== null) {
+                            row.package_price = this.calculatePriceWithTax(row.package_price, row.tax_rate);
+                        }
+                        return row;
+                    });
+                    
+                    // Jika menggunakan RADIUS mode, ambil profil dari RADIUS
+                    try {
+                        const { getUserAuthModeAsync, getRadiusConnection } = require('./mikrotik');
+                        const authMode = await getUserAuthModeAsync();
+                        
+                        if (authMode === 'radius') {
+                            const radiusConn = await getRadiusConnection();
+                            const pppUsers = processedRows
+                                .map(c => (c.pppoe_username && String(c.pppoe_username).trim()) || (c.username && String(c.username).trim()))
+                                .filter(u => u && u.length > 0);
+                            
+                            if (pppUsers.length > 0) {
+                                const placeholders = pppUsers.map(() => '?').join(',');
+                                const [radProfiles] = await radiusConn.execute(`
+                                    SELECT username, value as profile 
+                                    FROM radreply 
+                                    WHERE username IN (${placeholders}) AND attribute = 'Mikrotik-Group'
+                                `, pppUsers);
+                                
+                                const profileMap = {};
+                                radProfiles.forEach(rp => { profileMap[rp.username] = rp.profile; });
+                                
+                                processedRows = processedRows.map(c => {
+                                    const user = (c.pppoe_username && String(c.pppoe_username).trim()) || (c.username && String(c.username).trim());
+                                    if (user && profileMap[user]) c.pppoe_profile = profileMap[user];
+                                    return c;
+                                });
+                            }
+                            await radiusConn.end();
+                        }
+                    } catch (e) {
+                        console.error('Error fetching RADIUS profiles for collector customers:', e.message);
+                    }
+                    
+                    resolve(processedRows);
+                }
+            });
+        });
+    }
+
+    async getCustomers() {
+        return new Promise(async (resolve, reject) => {
+            const sql = `
+                SELECT c.*, p.name as package_name, p.price as package_price, p.image as package_image, p.tax_rate,
+                       c.latitude, c.longitude,
+                        r.name as router_name,
+                       col.name as collector_name,
+                       CASE 
+                           WHEN EXISTS (
+                               SELECT 1 FROM invoices i 
+                               WHERE i.customer_id = c.id 
+                               AND i.status = 'unpaid' 
+                               AND i.due_date < date('now')
+                           ) THEN 'overdue'
+                           WHEN EXISTS (
+                               SELECT 1 FROM invoices i 
+                               WHERE i.customer_id = c.id 
+                               AND i.status = 'unpaid'
+                           ) THEN 'unpaid'
+                           WHEN EXISTS (
+                               SELECT 1 FROM invoices i 
+                               WHERE i.customer_id = c.id 
+                               AND i.status = 'paid'
+                           ) THEN 'paid'
+                           ELSE 'no_invoice'
+                       END as payment_status
+                FROM customers c 
+                LEFT JOIN packages p ON c.package_id = p.id
+                LEFT JOIN customer_router_map m ON m.customer_id = c.id
+                LEFT JOIN routers r ON r.id = m.router_id
+                LEFT JOIN collector_assignments ca ON ca.customer_id = c.id
+                LEFT JOIN collectors col ON col.id = ca.collector_id
                 ORDER BY c.name ASC
             `;
             
@@ -1521,15 +1690,45 @@ class BillingManager {
                 params.push(searchTerm, searchTerm, searchTerm);
             }
             
-            if (filters.router_id) {
-                whereClause += ' AND m.router_id = ?';
-                params.push(filters.router_id);
+            if (filters.package_id) {
+                whereClause += ' AND c.package_id = ?';
+                params.push(filters.package_id);
+            }
+
+            if (filters.area) {
+                whereClause += ' AND c.area = ?';
+                params.push(filters.area);
+            }
+
+            if (filters.collector_id) {
+                whereClause += ' AND ca.collector_id = ?';
+                params.push(filters.collector_id);
+            }
+
+            // Filter status pembayaran (Lunas/Belum Lunas)
+            if (filters.payment_status === 'paid') {
+                whereClause += ` AND NOT EXISTS (
+                    SELECT 1 FROM invoices i 
+                    WHERE i.customer_id = c.id 
+                    AND i.status = 'unpaid'
+                ) AND EXISTS (
+                    SELECT 1 FROM invoices i 
+                    WHERE i.customer_id = c.id 
+                    AND i.status = 'paid'
+                )`;
+            } else if (filters.payment_status === 'unpaid') {
+                whereClause += ` AND EXISTS (
+                    SELECT 1 FROM invoices i 
+                    WHERE i.customer_id = c.id 
+                    AND i.status = 'unpaid'
+                )`;
             }
 
             const sql = `
                 SELECT c.*, p.name as package_name, p.price as package_price, p.image as package_image, p.tax_rate,
                        c.latitude, c.longitude,
                        r.name as router_name,
+                       col.name as collector_name,
                        CASE 
                            WHEN EXISTS (
                                SELECT 1 FROM invoices i 
@@ -1553,6 +1752,8 @@ class BillingManager {
                 LEFT JOIN packages p ON c.package_id = p.id
                 LEFT JOIN customer_router_map m ON m.customer_id = c.id
                 LEFT JOIN routers r ON r.id = m.router_id
+                LEFT JOIN collector_assignments ca ON ca.customer_id = c.id
+                LEFT JOIN collectors col ON col.id = ca.collector_id
                 WHERE 1=1 ${whereClause}
                 ORDER BY c.id DESC
                 LIMIT ? OFFSET ?
@@ -1936,7 +2137,7 @@ class BillingManager {
             // Simpan reference database untuk digunakan di callback
             const db = this.db;
             
-            const { name, username, phone, pppoe_username, email, address, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, renewal_type, fix_date, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path } = customerData;
+            const { name, username, password, phone, pppoe_username, email, address, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, renewal_type, fix_date, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path } = customerData;
             
             // Dapatkan data customer lama untuk membandingkan nomor telepon
             try {
@@ -1956,9 +2157,8 @@ class BillingManager {
                     (fix_date !== undefined ? Math.min(Math.max(parseInt(fix_date, 10) || 15, 1), 28) : (oldCustomer.fix_date || 15)) : 
                     null;
                 
-                const sql = `UPDATE customers SET name = ?, username = ?, phone = ?, pppoe_username = ?, email = ?, address = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, latitude = ?, longitude = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ?, ktp_photo_path = ?, house_photo_path = ? WHERE id = ?`;
-                
-                db.run(sql, [
+                let sql = `UPDATE customers SET name = ?, username = ?, phone = ?, pppoe_username = ?, email = ?, address = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, latitude = ?, longitude = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ?, ktp_photo_path = ?, house_photo_path = ?`;
+                let params = [
                     name !== undefined ? name : oldCustomer.name, 
                     username || oldCustomer.username, 
                     phone || oldPhone, 
@@ -1981,9 +2181,18 @@ class BillingManager {
                     cable_status !== undefined ? cable_status : oldCustomer.cable_status,
                     cable_notes !== undefined ? cable_notes : oldCustomer.cable_notes,
                     ktp_photo_path !== undefined ? ktp_photo_path : oldCustomer.ktp_photo_path,
-                    house_photo_path !== undefined ? house_photo_path : oldCustomer.house_photo_path,
-                    oldCustomer.id
-                ], async function(err) {
+                    house_photo_path !== undefined ? house_photo_path : oldCustomer.house_photo_path
+                ];
+
+                if (password !== undefined) {
+                    sql += `, password = ?`;
+                    params.push(password);
+                }
+
+                sql += ` WHERE id = ?`;
+                params.push(oldCustomer.id);
+                
+                db.run(sql, params, async function(err) {
                     if (err) {
                         reject(err);
                     } else {
@@ -3218,6 +3427,52 @@ class BillingManager {
                         ...paymentData 
                     });
                 }
+            });
+        });
+    }
+
+    async getCollectorAssignedCustomerCount(collectorId) {
+        return new Promise((resolve, reject) => {
+            const sql = `
+                SELECT COUNT(DISTINCT c.id) as count 
+                FROM customers c 
+                LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != "" AND c.area = cra.area AND cra.collector_id = ?)
+                LEFT JOIN collector_assignments ca ON (c.id = ca.customer_id AND ca.collector_id = ?)
+                WHERE cra.collector_id IS NOT NULL OR ca.collector_id IS NOT NULL
+            `;
+            this.db.get(sql, [collectorId, collectorId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row ? row.count : 0);
+            });
+        });
+    }
+
+    async getCollectorAreas(collectorId) {
+        return new Promise((resolve, reject) => {
+            this.db.all('SELECT area FROM collector_areas WHERE collector_id = ?', [collectorId], (err, rows) => {
+                if (err) reject(err);
+                else resolve((rows || []).map(r => r.area));
+            });
+        });
+    }
+
+    async saveCollectorAreas(collectorId, areas) {
+        return new Promise((resolve, reject) => {
+            this.db.serialize(() => {
+                this.db.run('DELETE FROM collector_areas WHERE collector_id = ?', [collectorId], (err) => {
+                    if (err) return reject(err);
+                    
+                    if (!areas || areas.length === 0) return resolve();
+                    
+                    const stmt = this.db.prepare('INSERT INTO collector_areas (collector_id, area) VALUES (?, ?)');
+                    areas.forEach(area => {
+                        if (area && area.trim()) stmt.run(collectorId, area.trim());
+                    });
+                    stmt.finalize((err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
             });
         });
     }
@@ -6552,7 +6807,7 @@ billingManager.createMember = function(memberData) {
         // Jika auto_suspension = 0, member tidak akan diisolir otomatis meskipun invoice terlambat
         const finalAutoSuspension = auto_suspension !== undefined ? auto_suspension : 1;
         
-        const sql = `INSERT INTO members (username, name, phone, hotspot_username, email, address, package_id, hotspot_profile, status, server_hotspot, auto_suspension, billing_day, latitude, longitude, ktp_photo_path, house_photo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        const sql = `INSERT INTO members (username, name, phone, hotspot_username, email, address, area, package_id, hotspot_profile, status, server_hotspot, auto_suspension, billing_day, latitude, longitude, ktp_photo_path, house_photo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         
         // Default coordinates untuk Jakarta jika tidak ada koordinat
         const finalLatitude = latitude !== undefined ? parseFloat(latitude) : -6.2088;
@@ -6565,6 +6820,7 @@ billingManager.createMember = function(memberData) {
             finalHotspotUsername, 
             email || null, 
             address || null, 
+            memberData.area || null,
             package_id, 
             hotspot_profile || null, 
             finalStatus,
@@ -6610,11 +6866,50 @@ billingManager.getAllMembers = function(filters = {}) {
             params.push(searchTerm, searchTerm, searchTerm, searchTerm);
         }
         
+        if (filters.area) {
+            conditions.push('m.area = ?');
+            params.push(filters.area);
+        }
+
+        if (filters.collector_id) {
+            conditions.push('ca.collector_id = ?');
+            params.push(filters.collector_id);
+        }
+
+        // Filter status pembayaran (Lunas/Belum Lunas) - Member
+        if (filters.payment_status === 'paid') {
+            conditions.push(`NOT EXISTS (
+                SELECT 1 FROM invoices i 
+                WHERE i.member_id = m.id 
+                AND i.status = 'unpaid'
+            ) AND EXISTS (
+                SELECT 1 FROM invoices i 
+                WHERE i.member_id = m.id 
+                AND i.status = 'paid'
+            )`);
+        } else if (filters.payment_status === 'unpaid') {
+            conditions.push(`EXISTS (
+                SELECT 1 FROM invoices i 
+                WHERE i.member_id = m.id 
+                AND i.status = 'unpaid'
+            )`);
+        }
+        
         if (conditions.length > 0) {
             sql += ' WHERE ' + conditions.join(' AND ');
         }
         
         sql += ' ORDER BY m.join_date DESC';
+        
+        // Pagination logic if needed
+        if (filters.limit) {
+            sql += ' LIMIT ?';
+            params.push(parseInt(filters.limit));
+            if (filters.offset) {
+                sql += ' OFFSET ?';
+                params.push(parseInt(filters.offset));
+            }
+        }
         
         this.db.all(sql, params, (err, rows) => {
             if (err) {
@@ -6719,14 +7014,14 @@ billingManager.getMemberByHotspotUsername = function(hotspotUsername) {
 billingManager.updateMember = function(id, memberData) {
     return new Promise((resolve, reject) => {
         const { 
-            name, username, phone, hotspot_username, email, address, 
+            name, username, phone, hotspot_username, email, address, area,
             package_id, hotspot_profile, status, server_hotspot,
             auto_suspension, billing_day, latitude, longitude,
             ktp_photo_path, house_photo_path
         } = memberData;
         
         const sql = `UPDATE members SET 
-            name = ?, username = ?, phone = ?, hotspot_username = ?, email = ?, address = ?, 
+            name = ?, username = ?, phone = ?, hotspot_username = ?, email = ?, address = ?, area = ?,
             package_id = ?, hotspot_profile = ?, status = ?, server_hotspot = ?,
             auto_suspension = ?, billing_day = ?, latitude = ?, longitude = ?,
             ktp_photo_path = ?, house_photo_path = ?
@@ -6739,6 +7034,7 @@ billingManager.updateMember = function(id, memberData) {
             hotspot_username, 
             email || null, 
             address || null, 
+            area || null,
             package_id, 
             hotspot_profile || null, 
             status,
@@ -6763,13 +7059,13 @@ billingManager.updateMember = function(id, memberData) {
 billingManager.updateMemberByPhone = function(phone, memberData) {
     return new Promise((resolve, reject) => {
         const { 
-            name, username, hotspot_username, email, address, 
+            name, username, hotspot_username, email, address, area,
             package_id, hotspot_profile, status, server_hotspot,
             auto_suspension, billing_day, latitude, longitude 
         } = memberData;
         
         const sql = `UPDATE members SET 
-            name = ?, username = ?, hotspot_username = ?, email = ?, address = ?, 
+            name = ?, username = ?, hotspot_username = ?, email = ?, address = ?, area = ?,
             package_id = ?, hotspot_profile = ?, status = ?, server_hotspot = ?,
             auto_suspension = ?, billing_day = ?, latitude = ?, longitude = ?
             WHERE phone = ?`;
@@ -6780,6 +7076,7 @@ billingManager.updateMemberByPhone = function(phone, memberData) {
             hotspot_username, 
             email || null, 
             address || null, 
+            area || null,
             package_id, 
             hotspot_profile || null, 
             status,

@@ -49,13 +49,12 @@
     </div>
     
     <!-- Navigation Links -->
-    <!-- Dashboard -->
     <a href="/admin/dashboard" class="<%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
         <i class="bi bi-house"></i> Dashboard
     </a>
     
-    <!-- Billing & Accounting -->
-    <a href="/admin/billing/dashboard" class="<%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>">
+    <% const billingPages = ['billing', 'financial-report', 'report-voucher', 'report-pppoe', 'invoices', 'monthly-summary']; %>
+    <a href="/admin/billing/dashboard" class="<%= typeof page !== 'undefined' && billingPages.includes(page) ? 'active' : '' %>">
         <i class="bi bi-receipt"></i> Billing & Accounting
     </a>
     
@@ -63,11 +62,12 @@
     <% const pppPages = ['mikrotik', 'mikrotik-profiles', 'genieacs']; %>
     <% const pppExpanded = typeof page !== 'undefined' && pppPages.includes(page); %>
     <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse"
-         data-bs-target="#pppConnectionCollapse"
+         data-manual-toggle="collapse"
+         data-target-id="pppConnectionCollapse"
          aria-expanded="<%= pppExpanded ? 'true' : 'false' %>"
          aria-controls="pppConnectionCollapse"
-         style="cursor:pointer;">
+         role="button"
+         tabindex="0">
         <span><i class="bi bi-router me-2"></i>PPP CONNECTION</span>
         <i class="bi <%= pppExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
     </div>
@@ -87,11 +87,12 @@
     <% const hotspotPages = ['hotspot-settings','hotspot-master','hotspot-users','hotspot-profiles','hotspot-server-profiles','voucher-template','member-list']; %>
     <% const hotspotExpanded = typeof page !== 'undefined' && hotspotPages.includes(page); %>
     <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse"
-         data-bs-target="#responsiveHotspotCollapse"
+         data-manual-toggle="collapse"
+         data-target-id="responsiveHotspotCollapse"
          aria-expanded="<%= hotspotExpanded ? 'true' : 'false' %>"
          aria-controls="responsiveHotspotCollapse"
-         style="cursor:pointer;">
+         role="button"
+         tabindex="0">
         <span><i class="bi bi-wifi me-2"></i>HOTSPOT & VOUCHER</span>
         <i class="bi <%= hotspotExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
     </div>
@@ -123,11 +124,12 @@
     <% const agentPages = ['agents', 'agent-registrations']; %>
     <% const agentExpanded = typeof page !== 'undefined' && agentPages.includes(page); %>
     <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse"
-         data-bs-target="#agentCollapse"
+         data-manual-toggle="collapse"
+         data-target-id="agentCollapse"
          aria-expanded="<%= agentExpanded ? 'true' : 'false' %>"
          aria-controls="agentCollapse"
-         style="cursor:pointer;">
+         role="button"
+         tabindex="0">
         <span><i class="bi bi-person-badge-fill me-2"></i>AGENT</span>
         <i class="bi <%= agentExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
     </div>
@@ -144,11 +146,12 @@
     <% const teknisiPages = ['technicians', 'installations', 'trouble']; %>
     <% const teknisiExpanded = typeof page !== 'undefined' && teknisiPages.includes(page); %>
     <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse"
-         data-bs-target="#teknisiCollapse"
+         data-manual-toggle="collapse"
+         data-target-id="teknisiCollapse"
          aria-expanded="<%= teknisiExpanded ? 'true' : 'false' %>"
          aria-controls="teknisiCollapse"
-         style="cursor:pointer;">
+         role="button"
+         tabindex="0">
         <span><i class="bi bi-people-fill me-2"></i>TEKNISI</span>
         <i class="bi <%= teknisiExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
     </div>
@@ -168,11 +171,12 @@
     <% const toolsPages = ['cable-network-odp', 'cable-network-cables', 'cable-network-analytics', 'mapping-new']; %>
     <% const toolsExpanded = typeof page !== 'undefined' && toolsPages.includes(page); %>
     <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse"
-         data-bs-target="#toolsCollapse"
+         data-manual-toggle="collapse"
+         data-target-id="toolsCollapse"
          aria-expanded="<%= toolsExpanded ? 'true' : 'false' %>"
          aria-controls="toolsCollapse"
-         style="cursor:pointer;">
+         role="button"
+         tabindex="0">
         <span><i class="bi bi-tools me-2"></i>TOOLS REPORTING</span>
         <i class="bi <%= toolsExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
     </div>
@@ -195,11 +199,12 @@
     <% const settingPages = ['setting', 'setting-radius', 'setting-radius-clients', 'connection-settings', 'genieacs-setting', 'cache']; %>
     <% const settingExpanded = typeof page !== 'undefined' && settingPages.includes(page); %>
     <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse"
-         data-bs-target="#settingCollapse"
+         data-manual-toggle="collapse"
+         data-target-id="settingCollapse"
          aria-expanded="<%= settingExpanded ? 'true' : 'false' %>"
          aria-controls="settingCollapse"
-         style="cursor:pointer;">
+         role="button"
+         tabindex="0">
         <span><i class="bi bi-gear me-2"></i>SETTINGAN</span>
         <i class="bi <%= settingExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
     </div>
@@ -223,9 +228,11 @@
             <i class="bi bi-database"></i> Cache Management
         </a>
     </div>
+    
     <a href="/admin/logout">
         <i class="bi bi-box-arrow-right"></i> Logout
     </a>
+    
     <div class="mt-2" style="padding: 0 24px;">
         <button id="btnRestartBilling" class="btn btn-sm btn-primary w-100 mb-2">
             <i class="bi bi-arrow-repeat"></i> Restart Billing System
@@ -239,891 +246,266 @@
     
     <!-- Version Info Panel -->
     <div class="version-info-panel">
-        <div class="version-header">
-            <i class="bi bi-info-circle"></i> Version Info
-        </div>
+        <div class="version-header"><i class="bi bi-info-circle"></i> Version Info</div>
         <div class="version-details">
-            <div class="version-item">
-                <span class="version-label">Version:</span>
-                <span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.version : '4.1' %></span>
-            </div>
-            <div class="version-item">
-                <span class="version-label">Build:</span>
-                <span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.buildNumber : 'Unknown' %></span>
-            </div>
-            <div class="version-item">
-                <span class="version-label">Released:</span>
-                <span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.versionDate : 'Unknown' %></span>
-            </div>
+            <div class="version-item"><span class="version-label">Version:</span><span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.version : '4.1' %></span></div>
+            <div class="version-item"><span class="version-label">Build:</span><span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.buildNumber : 'Unknown' %></span></div>
+            <div class="version-item"><span class="version-label">Released:</span><span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.versionDate : 'Unknown' %></span></div>
         </div>
-        <div class="version-badge">
-            <span class="badge <%= typeof versionBadge !== 'undefined' ? versionBadge.class : 'badge-secondary' %>">
-                <%= typeof versionBadge !== 'undefined' ? versionBadge.text : 'v4.1' %>
-            </span>
-        </div>
+        <div class="version-badge"><span class="badge <%= typeof versionBadge !== 'undefined' ? versionBadge.class : 'badge-secondary' %>"><%= typeof versionBadge !== 'undefined' ? versionBadge.text : 'v4.1' %></span></div>
     </div>
 </nav>
+
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // Function to handle collapse toggle icons
-    function setupCollapseToggle(collapseId) {
-        var toggler = document.querySelector('[data-bs-target="#' + collapseId + '"]');
-        var collapseEl = document.getElementById(collapseId);
-        if (toggler && collapseEl && typeof bootstrap !== 'undefined') {
-            var icon = toggler.querySelector('.toggle-arrow');
-            collapseEl.addEventListener('show.bs.collapse', function () {
-                if (icon) {
-                    icon.classList.remove('bi-chevron-down');
-                    icon.classList.add('bi-chevron-up');
-                }
-            });
-            collapseEl.addEventListener('hide.bs.collapse', function () {
-                if (icon) {
-                    icon.classList.remove('bi-chevron-up');
-                    icon.classList.add('bi-chevron-down');
-                }
-            });
-        }
-    }
-    
-    // Setup all collapse toggles
-    setupCollapseToggle('pppConnectionCollapse');
-    setupCollapseToggle('responsiveHotspotCollapse');
-    setupCollapseToggle('agentCollapse');
-    setupCollapseToggle('teknisiCollapse');
-    setupCollapseToggle('toolsCollapse');
-    setupCollapseToggle('settingCollapse');
-});
-</script>
-
-<style>
-/* Mobile Top Navbar */
-.sidebar-label {
-    font-size: 0.9rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: rgba(255,255,255,0.7);
-    padding: 8px 24px 4px 24px;
-    transition: all 0.3s ease;
-    border-radius: 4px;
-    margin: 4px 0;
-}
-
-.sidebar-label:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.95);
-    transform: translateX(3px);
-    cursor: pointer;
-}
-
-.sidebar-label:active {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateX(5px);
-}
-
-.mobile-navbar {
-    background: #3498DB;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1001;
-    padding: 0.5rem 1rem;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-}
-
-.mobile-navbar .navbar-brand {
-    font-size: 1.1rem;
-    font-weight: 600;
-}
-
-/* Sidebar Overlay */
-.sidebar-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 999;
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.3s ease;
-}
-
-.sidebar-overlay.show {
-    opacity: 1;
-    visibility: visible;
-}
-
-/* Sidebar */
-.sidebar {
-    min-height: 100vh;
-    background: #3498DB;
-    color: #fff;
-    padding-top: 32px;
-}
-
-.sidebar a {
-    color: #fff;
-    text-decoration: none;
-    display: flex;
-    align-items: center;
-    padding: 12px 24px;
-    border-radius: 4px;
-    margin-bottom: 8px;
-    transition: all 0.3s ease;
-    white-space: nowrap;
-}
-
-.sidebar a.active, 
-.sidebar a:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateX(3px);
-}
-
-.sidebar.collapsed a.active,
-.sidebar.collapsed a:hover {
-    transform: translateX(0); /* No translation when collapsed */
-}
-
-.sidebar a i {
-    margin-right: 8px;
-    width: 16px;
-    flex-shrink: 0;
-}
-
-/* Submenu styling */
-.sidebar a.submenu {
-    font-size: 0.9rem;
-    padding: 10px 24px 10px 3rem;
-    opacity: 0.9;
-}
-
-.sidebar a.submenu:hover,
-.sidebar a.submenu.active {
-    opacity: 1;
-    background: rgba(255, 255, 255, 0.15);
-}
-
-.sidebar a.submenu.active {
-    font-weight: 600;
-    border-left: 3px solid rgba(255, 255, 255, 0.8);
-}
-
-.server-time-box {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 8px;
-    padding: 10px 12px;
-}
-
-.server-time-box #serverTimeValue {
-    letter-spacing: 0.5px;
-}
-
-/* Sidebar Header */
-.sidebar .sidebar-header {
-    font-size: 1.3rem;
-    font-weight: 600;
-    letter-spacing: 1px;
-    padding: 0 24px 24px 24px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 1rem;
-}
-
-.sidebar-header img {
-    transition: transform 0.3s ease;
-}
-
-.sidebar-header img:hover {
-    transform: scale(1.05);
-}
-
-.company-info {
-    color: #fff;
-}
-
-.company-name {
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin: 0;
-    color: #fff;
-    line-height: 1.2;
-}
-
-.version-badge-small .badge {
-    font-size: 0.7rem;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-weight: 600;
-}
-
-/* Main Content */
-.main-content {
-    padding: 32px 24px;
-}
-
-/* Hamburger Button (Desktop) - Integrated with Sidebar */
-.sidebar .hamburger {
-    display: block !important;
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    z-index: 1002;
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
-    padding: 6px 10px;
-    font-size: 1.1rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-.sidebar .hamburger:hover {
-    background: rgba(255, 255, 255, 0.3);
-    transform: scale(1.05);
-}
-
-/* When sidebar is collapsed, move hamburger button to fixed position */
-@media (min-width: 768px) {
-    .sidebar.collapsed .hamburger,
-    #adminSidebar.collapsed .hamburger {
-        position: fixed !important;
-        top: 20px !important;
-        left: 20px !important;
-        right: auto !important;
-        background: #3498DB !important;
-        border: none !important;
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        z-index: 1003 !important;
-    }
-    
-    .sidebar.collapsed .hamburger:hover,
-    #adminSidebar.collapsed .hamburger:hover {
-        background: #2980B9 !important;
-    }
-}
-
-/* Desktop sidebar toggle state */
-@media (min-width: 768px) {
-    .sidebar {
-        transition: width 0.3s ease, transform 0.3s ease;
-        width: 16.666667%; /* col-md-2 width */
-        position: fixed;
-        height: 100vh;
-        left: 0;
-        top: 0;
-        z-index: 1000;
-    }
-    
-    .sidebar.collapsed {
-        width: 70px !important; /* Narrow width untuk icon saja */
-        transform: translateX(0) !important; /* Tidak hilang, tetap terlihat */
-        overflow: hidden !important;
-    }
-    
-    /* Hide text labels when collapsed - menggunakan teknik yang lebih compatible */
-    .sidebar.collapsed .company-info {
-        display: none !important;
-    }
-    
-    .sidebar.collapsed .company-name {
-        display: none !important;
-    }
-    
-    .sidebar.collapsed .version-badge-small {
-        display: none !important;
-    }
-    
-    /* Hide sidebar labels when collapsed */
-    .sidebar.collapsed .sidebar-label {
-        display: none !important;
-    }
-    
-    /* Hide collapse menus when collapsed */
-    .sidebar.collapsed .collapse {
-        display: none !important;
-    }
-    
-    /* Hide text content in links, keep only icons */
-    .sidebar.collapsed a {
-        justify-content: center !important;
-        padding: 12px 8px !important;
-        text-align: center;
-        position: relative;
-        font-size: 0 !important; /* Hide text by making font size 0 */
-        line-height: 0 !important;
-        overflow: hidden;
-    }
-    
-    .sidebar.collapsed a i {
-        margin-right: 0 !important;
-        margin-left: 0 !important;
-        font-size: 1.3rem !important;
-        width: auto !important;
-        display: inline-block !important;
-        line-height: normal !important;
-        vertical-align: middle;
-    }
-    
-    /* Hide any text nodes inside links */
-    .sidebar.collapsed a *:not(i) {
-        display: none !important;
-    }
-    
-    /* Hide sidebar header text when collapsed */
-    .sidebar.collapsed .sidebar-header {
-        padding: 15px 8px !important;
-        margin-bottom: 0.5rem !important;
-    }
-    
-    .sidebar.collapsed .sidebar-header img {
-        max-width: 50px !important;
-        max-height: 30px !important;
-    }
-    
-    /* Hide version info panel and update controls when collapsed */
-    .sidebar.collapsed .version-info-panel {
-        display: none !important;
-    }
-    
-    .sidebar.collapsed .mt-2 {
-        display: none !important;
-    }
-    
-    /* Adjust hamburger button when collapsed */
-    .sidebar.collapsed .hamburger {
-        position: absolute !important;
-        top: 10px !important;
-        right: 8px !important;
-        left: auto !important;
-        padding: 4px 6px !important;
-        font-size: 0.9rem !important;
-        width: auto !important;
-    }
-    
-    .main-content {
-        transition: margin-left 0.3s ease, width 0.3s ease;
-    }
-    
-    .main-content.sidebar-expanded {
-        margin-left: 16.666667%; /* col-md-2 width */
-        width: 83.333333%; /* 100% - sidebar width */
-    }
-    
-    .main-content.sidebar-collapsed {
-        margin-left: 70px !important; /* Width of collapsed sidebar */
-        width: calc(100% - 70px) !important;
-    }
-    
-    /* Default state: sidebar expanded */
-    .main-content:not(.sidebar-collapsed):not(.sidebar-expanded) {
-        margin-left: 16.666667%;
-        width: 83.333333%;
-    }
-    
-    /* Container fluid and body full width when sidebar collapsed */
-    body:has(.sidebar.collapsed) .container-fluid,
-    .container-fluid:has(.sidebar.collapsed) {
-        width: 100% !important;
-        max-width: 100% !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-        margin-left: 0 !important;
-    }
-    
-    /* Row full width when sidebar collapsed */
-    body:has(.sidebar.collapsed) .row,
-    body:has(.sidebar.collapsed) .container-fluid > .row,
-    .sidebar.collapsed ~ * .row,
-    .sidebar.collapsed ~ .main-content .row {
-        width: 100% !important;
-        margin-left: 0 !important;
-        margin-right: 0 !important;
-        max-width: 100% !important;
-    }
-    
-    /* Ensure main content column uses full available width */
-    body:has(.sidebar.collapsed) .row > .main-content {
-        padding-left: 15px !important;
-        padding-right: 15px !important;
-    }
-    
-    /* Ensure main content and its children are full width */
-    body:has(.sidebar.collapsed) .main-content {
-        max-width: calc(100% - 70px) !important;
-        width: calc(100% - 70px) !important;
-        margin-left: 70px !important;
-        padding-left: 20px !important;
-        padding-right: 20px !important;
-    }
-    
-    /* Override Bootstrap column classes */
-    body:has(.sidebar.collapsed) .main-content.col-md-10,
-    body:has(.sidebar.collapsed) .col-md-10.main-content {
-        flex: 0 0 calc(100% - 70px) !important;
-        max-width: calc(100% - 70px) !important;
-        width: calc(100% - 70px) !important;
-    }
-}
-
-/* Cards */
-.card {
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-}
-
-/* Mobile responsive */
-@media (max-width: 767.98px) {
-    .main-content {
-        margin-left: 0;
-        margin-top: 60px; /* Space for mobile navbar */
-        padding: 15px;
-    }
-    
-    .sidebar {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        z-index: 1000 !important;
-        width: 280px !important;
-        height: 100vh !important;
-        transform: translateX(-100%) !important;
-        transition: transform 0.3s ease !important;
-        box-shadow: 2px 0 10px rgba(0,0,0,0.3) !important;
-        overflow: hidden !important;
-        padding-top: 0 !important;
-    }
-    
-    .sidebar.show {
-        transform: translateX(0) !important;
-    }
-    
-    .sidebar .sidebar-header {
-        margin-top: 20px !important;
-        padding-top: 20px !important;
-        flex-shrink: 0 !important;
-    }
-    
-    /* Enable scrolling for sidebar content */
-    .sidebar {
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        -webkit-overflow-scrolling: touch !important;
-    }
-    
-    /* Ensure all sidebar content is scrollable */
-    .sidebar > * {
-        flex-shrink: 0 !important;
-    }
-    
-    .sidebar .version-info-panel {
-        margin-top: auto !important;
-        flex-shrink: 0 !important;
-    }
-    
-    /* Adjust content for better mobile view */
-    .card {
-        margin-bottom: 1rem;
-    }
-    
-    .table-responsive {
-        border-radius: 10px;
-    }
-}
-
-/* Extra small devices */
-@media (max-width: 575.98px) {
-    .main-content {
-        padding: 10px;
-    }
-    
-    .sidebar {
-        width: 260px !important;
-    }
-    
-    .mobile-navbar .navbar-brand {
-        font-size: 1rem;
-    }
-}
-
-/* Desktop specific */
-@media (min-width: 768px) {
-    .main-content {
-        margin-left: 16.666667%; /* col-md-2 width */
-        width: 83.333333%; /* 100% - sidebar width */
-    }
-    
-    .sidebar {
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        position: fixed;
-        height: 100vh;
-        left: 0;
-        top: 0;
-        z-index: 1000;
-    }
-    
-    /* Full width when sidebar collapsed */
-    .sidebar.collapsed ~ .main-content,
-    body:has(.sidebar.collapsed) .main-content {
-        margin-left: 70px !important; /* Width of collapsed sidebar */
-        width: calc(100% - 70px) !important;
-        max-width: calc(100% - 70px) !important;
-        flex: 0 0 calc(100% - 70px) !important;
-    }
-    
-    /* Override Bootstrap column classes when sidebar collapsed */
-    body:has(.sidebar.collapsed) .main-content.col-md-10 {
-        flex: 0 0 calc(100% - 70px) !important;
-        max-width: calc(100% - 70px) !important;
-        width: calc(100% - 70px) !important;
-    }
-    
-    /* Ensure container and rows are full width */
-    body:has(.sidebar.collapsed) .container-fluid {
-        width: 100% !important;
-        max-width: 100% !important;
-    }
-}
-
-/* Version Info Panel */
-.version-info-panel {
-    margin-top: auto;
-    padding: 20px 24px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-    margin: 20px 24px 0 24px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.version-header {
-    color: #4fc3f7;
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 15px;
-    text-align: center;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.version-header i {
-    margin-right: 8px;
-}
-
-.version-details {
-    margin-bottom: 15px;
-}
-
-.version-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-    font-size: 0.8rem;
-}
-
-.version-label {
-    color: #b0bec5;
-    font-weight: 500;
-}
-
-.version-value {
-    color: #fff;
-    font-weight: 600;
-}
-
-.version-badge {
-    text-align: center;
-}
-
-.version-badge .badge {
-    font-size: 0.9rem;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const sidebarToggle = document.getElementById('sidebarToggle');
-    const sidebarClose = document.getElementById('sidebarClose');
     const sidebar = document.getElementById('adminSidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    const hamburger = document.getElementById('hamburgerBtn'); // Desktop hamburger if exists
-    
-    // Toggle sidebar on mobile hamburger click
-    if (sidebarToggle) {
-        sidebarToggle.addEventListener('click', function() {
-            sidebar.classList.add('show');
-            overlay.classList.add('show');
-            document.body.style.overflow = 'hidden';
-        });
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const hamburgerBtn = document.getElementById('hamburgerBtn');
+    const sidebarClose = document.getElementById('sidebarClose');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const mainContent = document.querySelector('.main-content');
+
+    function openSidebar() {
+        sidebar.classList.add('show');
+        sidebarOverlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
     }
-    
-    // Desktop hamburger toggle functionality
-    if (hamburger) {
-        hamburger.addEventListener('click', function() {
-            // For desktop: toggle collapsed state
-            if (window.innerWidth >= 768) {
-                const isCollapsed = sidebar.classList.contains('collapsed');
-                const mainContent = document.querySelector('.main-content');
-                
-                if (isCollapsed) {
-                    sidebar.classList.remove('collapsed');
-                    if (mainContent) {
-                        mainContent.classList.remove('sidebar-collapsed');
-                        mainContent.classList.add('sidebar-expanded');
-                    }
-                    // Save state to localStorage
-                    localStorage.setItem('sidebarCollapsed', 'false');
-                } else {
-                    sidebar.classList.add('collapsed');
-                    if (mainContent) {
-                        mainContent.classList.remove('sidebar-expanded');
-                        mainContent.classList.add('sidebar-collapsed');
-                    }
-                    // Save state to localStorage
-                    localStorage.setItem('sidebarCollapsed', 'true');
-                }
-            } else {
-                // For mobile: use existing show/hide
-                sidebar.classList.toggle('show');
-                overlay.classList.toggle('show');
-            }
-        });
-    }
-    
-    // Restore sidebar state from localStorage on page load (desktop only)
-    if (window.innerWidth >= 768) {
-        const sidebarState = localStorage.getItem('sidebarCollapsed');
-        const mainContent = document.querySelector('.main-content');
-        if (sidebarState === 'true') {
-            sidebar.classList.add('collapsed');
-            if (mainContent) {
-                mainContent.classList.remove('sidebar-expanded');
-                mainContent.classList.add('sidebar-collapsed');
-            }
-        } else {
-            sidebar.classList.remove('collapsed');
-            if (mainContent) {
-                mainContent.classList.add('sidebar-expanded');
-                mainContent.classList.remove('sidebar-collapsed');
-            }
-        }
-    } else {
-        // On mobile, ensure main content has no margin
-        const mainContent = document.querySelector('.main-content');
-        if (mainContent) {
-            mainContent.classList.remove('sidebar-expanded', 'sidebar-collapsed');
-        }
-    }
-    
-    // Close sidebar functions
+
     function closeSidebar() {
         sidebar.classList.remove('show');
-        overlay.classList.remove('show');
+        sidebarOverlay.classList.remove('show');
         document.body.style.overflow = '';
     }
-    
-    // Close sidebar on close button click
-    if (sidebarClose) {
-        sidebarClose.addEventListener('click', closeSidebar);
+
+    function toggleDesktopSidebar() {
+        sidebar.classList.toggle('collapsed');
+        if (mainContent) {
+            if (sidebar.classList.contains('collapsed')) {
+                mainContent.classList.remove('sidebar-expanded');
+                mainContent.classList.add('sidebar-collapsed');
+                localStorage.setItem('sidebarState', 'collapsed');
+            } else {
+                mainContent.classList.remove('sidebar-collapsed');
+                mainContent.classList.add('sidebar-expanded');
+                localStorage.setItem('sidebarState', 'expanded');
+            }
+        }
+    }
+
+    if (sidebarToggle) sidebarToggle.addEventListener('click', openSidebar);
+    if (hamburgerBtn) hamburgerBtn.addEventListener('click', toggleDesktopSidebar);
+    if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
+    if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
+
+    if (window.innerWidth >= 768) {
+        const savedState = localStorage.getItem('sidebarState');
+        if (savedState === 'collapsed') {
+            sidebar.classList.add('collapsed');
+            if (mainContent) mainContent.classList.add('sidebar-collapsed');
+        } else {
+            if (mainContent) mainContent.classList.add('sidebar-expanded');
+        }
+    }
+
+    function setupCollapseToggle(collapseId) {
+        var toggler = document.querySelector('[data-target-id="' + collapseId + '"]');
+        var collapseEl = document.getElementById(collapseId);
+        
+        if (toggler && collapseEl && typeof bootstrap !== 'undefined') {
+            var icon = toggler.querySelector('.toggle-arrow');
+            
+            // Sync initial state
+            if (collapseEl.classList.contains('show')) {
+                if (icon) icon.classList.replace('bi-chevron-down', 'bi-chevron-up');
+                toggler.setAttribute('aria-expanded', 'true');
+            }
+
+            // Manual toggle on click
+            toggler.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
+                bsCollapse.toggle();
+            });
+
+            collapseEl.addEventListener('show.bs.collapse', function () {
+                if (icon) { icon.classList.replace('bi-chevron-down', 'bi-chevron-up'); }
+                toggler.setAttribute('aria-expanded', 'true');
+                try {
+                    let expanded = JSON.parse(sessionStorage.getItem('sidebarExpandedMenus') || '[]');
+                    if (!expanded.includes(collapseId)) {
+                        expanded.push(collapseId);
+                        sessionStorage.setItem('sidebarExpandedMenus', JSON.stringify(expanded));
+                    }
+                } catch (e) {}
+            });
+            
+            collapseEl.addEventListener('hide.bs.collapse', function () {
+                if (icon) { icon.classList.replace('bi-chevron-up', 'bi-chevron-down'); }
+                toggler.setAttribute('aria-expanded', 'false');
+                try {
+                    let expanded = JSON.parse(sessionStorage.getItem('sidebarExpandedMenus') || '[]');
+                    expanded = expanded.filter(id => id !== collapseId);
+                    sessionStorage.setItem('sidebarExpandedMenus', JSON.stringify(expanded));
+                } catch (e) {}
+            });
+            
+            // Ensure Bootstrap instance exists
+            bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
+        }
     }
     
-    // Close sidebar on overlay click
-    if (overlay) {
-        overlay.addEventListener('click', closeSidebar);
-    }
-    
-    // Close sidebar when clicking on nav links (mobile)
-    const navLinks = sidebar.querySelectorAll('a:not(#restartMikrotikBtn)');
-    navLinks.forEach(link => {
-        link.addEventListener('click', function() {
-            if (window.innerWidth < 768) {
-                setTimeout(closeSidebar, 100);
+    ['pppConnectionCollapse','responsiveHotspotCollapse','agentCollapse','teknisiCollapse','toolsCollapse','settingCollapse'].forEach(setupCollapseToggle);
+
+    try {
+        const expandedMenus = JSON.parse(sessionStorage.getItem('sidebarExpandedMenus') || '[]');
+        expandedMenus.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && typeof bootstrap !== 'undefined') {
+                const bsCollapse = bootstrap.Collapse.getOrCreateInstance(el, { toggle: false });
+                bsCollapse.show();
             }
         });
-    });
+    } catch (e) {}
     
-    // Handle window resize
-    window.addEventListener('resize', function() {
-        if (window.innerWidth >= 768) {
-            closeSidebar();
-        }
-    });
+    window.addEventListener('resize', function() { if (window.innerWidth >= 768) closeSidebar(); });
     
-    // Restart Mikrotik functionality (preserve existing functionality)
     const restartBtn = document.getElementById('restartMikrotikBtn');
     if (restartBtn) {
         restartBtn.addEventListener('click', function(e) {
             e.preventDefault();
             if (typeof showConfirmAlert !== 'undefined') {
-                showConfirmAlert(
-                    'Konfirmasi Restart',
-                    'Apakah Anda yakin ingin restart Mikrotik?',
-                    'Ya, Restart',
-                    'Batal',
-                    function() {
-                        fetch('/admin/mikrotik/restart', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                showSuccessAlert('Berhasil!', 'Mikrotik berhasil direstart');
-                            } else {
-                                showErrorAlert('Gagal', 'Gagal restart Mikrotik: ' + data.message);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            showErrorAlert('Error', 'Terjadi kesalahan saat restart Mikrotik');
-                        });
-                    }
-                );
-            } else {
-                // Fallback jika SweetAlert belum dimuat
-                if (confirm('Apakah Anda yakin ingin restart Mikrotik?')) {
-                    fetch('/admin/mikrotik/restart', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert('Mikrotik berhasil direstart');
-                        } else {
-                            alert('Gagal restart Mikrotik: ' + data.message);
+                showConfirmAlert('Konfirmasi', 'Restart Mikrotik?', 'Ya', 'Batal', () => {
+                    fetch('/admin/mikrotik/restart', { method: 'POST' })
+                    .then(res => res.json())
+                    .then(data => { if (data.success) alert('Berhasil'); else alert('Gagal'); });
+                });
+            }
+        });
+    }
+
+    // --- SMOOTH AJAX NAVIGATION (PJAX) ---
+    function executeScripts(container) {
+        const scripts = container.querySelectorAll('script');
+        scripts.forEach(oldScript => {
+            const newScript = document.createElement('script');
+            Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+            newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+        });
+    }
+
+    function updateSidebarActive(url) {
+        const path = new URL(url, window.location.origin).pathname;
+        sidebar.querySelectorAll('a').forEach(link => {
+            const linkPath = new URL(link.getAttribute('href'), window.location.origin).pathname;
+            const isActive = (path === linkPath);
+            link.classList.toggle('active', isActive);
+            
+            if (isActive) {
+                let parent = link.closest('.collapse');
+                while (parent) {
+                    if (typeof bootstrap !== 'undefined') {
+                        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(parent, { toggle: false });
+                        if (!parent.classList.contains('show')) {
+                            bsCollapse.show();
                         }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('Terjadi kesalahan saat restart Mikrotik');
-                    });
-                }
-            }
-        });
-    }
-    
-    const restartBillingBtn = document.getElementById('btnRestartBilling');
-    const restartResultBox = document.getElementById('billingRestartResult');
-    const serverTimeValue = document.getElementById('serverTimeValue');
-    let serverTimeOffset = null;
-
-    function showRestartResult(text, success = true) {
-        if (!restartResultBox) return;
-        restartResultBox.style.display = 'block';
-        restartResultBox.style.color = success ? '#c8e6c9' : '#ffcdd2';
-        restartResultBox.textContent = text;
-    }
-
-    function renderServerTime() {
-        if (serverTimeOffset === null || !serverTimeValue) return;
-        const current = new Date(Date.now() + serverTimeOffset);
-        serverTimeValue.textContent = current.toLocaleString('id-ID', {
-            timeZone: 'Asia/Jakarta',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-    }
-
-    async function fetchServerInfo() {
-        try {
-            const res = await fetch('/admin/billing/system/server-info');
-            const data = await res.json();
-            if (!data.success && !data.serverTimeIso) {
-                throw new Error(data.message || 'Gagal mengambil info server');
-            }
-            if (data.serverTimeIso) {
-                serverTimeOffset = new Date(data.serverTimeIso).getTime() - Date.now();
-                renderServerTime();
-            }
-        } catch (error) {
-            if (serverTimeValue) {
-                serverTimeValue.textContent = 'Gagal memuat waktu';
-            }
-            console.error('Failed to fetch server info:', error);
-        }
-    }
-
-    if (restartBillingBtn) {
-        async function performRestart() {
-            try {
-                restartBillingBtn.disabled = true;
-                restartBillingBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Restarting...';
-                showRestartResult('Memproses restart...', true);
-                const res = await fetch('/admin/billing/system/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-                const data = await res.json();
-                if (!data.success) {
-                    showRestartResult('Restart gagal: ' + (data.message || 'Unknown error') + '\n' + (data.error || ''), false);
-                } else {
-                    showRestartResult('Restart berhasil dijalankan.', true);
-                    await fetchServerInfo();
-                }
-            } catch (error) {
-                showRestartResult('Restart error: ' + error.message, false);
-            } finally {
-                restartBillingBtn.disabled = false;
-                restartBillingBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Restart Billing System';
-            }
-        }
-        
-        restartBillingBtn.addEventListener('click', async () => {
-            if (typeof showConfirmAlert !== 'undefined') {
-                showConfirmAlert(
-                    'Konfirmasi Restart',
-                    'Restart layanan billing sekarang?',
-                    'Ya, Restart',
-                    'Batal',
-                    function() {
-                        performRestart();
                     }
-                );
-            } else {
-                // Fallback jika SweetAlert belum dimuat
-                if (confirm('Restart layanan billing sekarang?')) {
-                    performRestart();
+                    const toggler = document.querySelector('[data-target-id="' + parent.id + '"]');
+                    if (toggler) {
+                        const arrow = toggler.querySelector('.toggle-arrow');
+                        if (arrow) arrow.classList.replace('bi-chevron-down', 'bi-chevron-up');
+                        toggler.setAttribute('aria-expanded', 'true');
+                    }
+                    parent = parent.parentElement.closest('.collapse');
                 }
             }
         });
     }
 
-    fetchServerInfo();
-    setInterval(renderServerTime, 1000);
-    // Auto refresh logo functionality (preserve existing functionality)
-    function refreshLogo() {
-        const logo = document.getElementById('logoImage');
-        if (logo) {
-            const timestamp = new Date().getTime();
-            const src = logo.src.split('?')[0];
-            logo.src = `${src}?v=${timestamp}`;
+    function loadPjaxContent(url, pushState = true) {
+        const loader = document.getElementById('pjax-loader');
+        if (loader) loader.style.width = '30%';
+        
+        fetch(url)
+            .then(res => { if (!res.ok) throw new Error(); return res.text(); })
+            .then(html => {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const newContent = doc.querySelector('#pjax-container') || doc.querySelector('.main-content');
+                const current = document.getElementById('pjax-container') || document.querySelector('.main-content');
+                
+                if (newContent && current) {
+                    current.innerHTML = newContent.innerHTML;
+                    Array.from(newContent.attributes).forEach(attr => current.setAttribute(attr.name, attr.value));
+                    document.title = doc.title;
+                    if (pushState) history.pushState({ url }, doc.title, url);
+                    updateSidebarActive(url);
+                    executeScripts(current);
+                    if (window.innerWidth < 768) closeSidebar();
+                    window.scrollTo(0, 0);
+                    if (loader) loader.style.width = '100%';
+                    setTimeout(() => { if(loader) loader.style.width = '0'; }, 300);
+                } else { window.location.href = url; }
+            })
+            .catch(() => { window.location.href = url; });
+    }
+
+    // Helper: check if URL belongs to billing sidebar
+    function isBillingUrl(url) {
+        return url.startsWith('/admin/billing') || url.startsWith('/admin/collectors') || url.startsWith('/admin/member');
+    }
+
+    document.addEventListener('click', e => {
+        const link = e.target.closest('a');
+        if (!link) return;
+        const url = link.getAttribute('href');
+        if (!url || url.startsWith('#') || url.startsWith('javascript:') || url.includes('logout') || link.target === '_blank' || link.hasAttribute('data-no-pjax')) return;
+        if (url.startsWith('/admin')) {
+            e.preventDefault();
+            // If navigating to billing pages, force full reload so billing sidebar loads
+            if (isBillingUrl(url)) {
+                window.location.href = url;
+            } else {
+                loadPjaxContent(url);
+            }
         }
-    }
-    
-    // Refresh logo every 5 seconds (if needed)
-    if (document.getElementById('logoImage')) {
-        setInterval(refreshLogo, 5000);
-    }
+    });
+
+    window.addEventListener('popstate', e => {
+        loadPjaxContent(e.state && e.state.url ? e.state.url : window.location.pathname, false);
+    });
 });
 </script>
+
+<div id="pjax-loader" style="position: fixed; top: 0; left: 0; height: 3px; background: #fff; width: 0; z-index: 10005; transition: width 0.4s ease;"></div>
+
+<style>
+.mobile-navbar { background: #3498DB; position: fixed; top: 0; left: 0; right: 0; z-index: 1001; padding: 0.5rem 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+.sidebar-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; opacity: 0; visibility: hidden; transition: 0.3s; }
+.sidebar-overlay.show { opacity: 1; visibility: visible; }
+.sidebar { height: 100vh; overflow-y: auto; background: #3498DB; color: #fff; padding-top: 32px; transition: 0.3s; }
+.sidebar a { color: #fff; text-decoration: none; display: flex; align-items: center; padding: 12px 24px; border-radius: 4px; transition: 0.3s; }
+.sidebar a.active, .sidebar a:hover { background: rgba(255,255,255,0.2); }
+.sidebar a.submenu { font-size: 0.9rem; padding-left: 3rem; }
+.sidebar-label { font-size: 0.9rem; font-weight: 600; color: rgba(255,255,255,0.7); padding: 12px 24px; cursor: pointer; outline: none; }
+.sidebar-label:focus { background: rgba(255,255,255,0.05); }
+.sidebar .hamburger { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+
+@media (min-width: 768px) {
+    .sidebar { width: 16.666667%; position: fixed; left: 0; top: 0; }
+    .sidebar.collapsed { width: 70px; }
+    .sidebar.collapsed .sidebar-label, .sidebar.collapsed .company-info, .sidebar.collapsed .collapse, .sidebar.collapsed a span, .sidebar.collapsed .version-info-panel { display: none; }
+    .sidebar.collapsed a { justify-content: center; padding: 12px 0; font-size: 0; }
+    .sidebar.collapsed a i { font-size: 1.3rem; margin: 0; }
+    .main-content { transition: 0.3s; }
+    .main-content.sidebar-expanded { margin-left: 16.666667%; width: 83.333333%; }
+    .main-content.sidebar-collapsed { margin-left: 70px; width: calc(100% - 70px); }
+}
+
+@media (max-width: 767.98px) {
+    .sidebar { position: fixed; top: 0; left: 0; width: 280px; transform: translateX(-100%); z-index: 1000; }
+    .sidebar.show { transform: translateX(0); }
+    .main-content { margin-top: 60px; }
+}
+</style>

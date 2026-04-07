@@ -381,11 +381,30 @@ router.get('/data', adminAuth, async (req, res) => {
         const filters = {
             status: req.query.status || null,
             package_id: req.query.package_id || null,
+            area: req.query.area || null,
+            collector_id: req.query.collector_id || null,
+            payment_status: req.query.payment_status || null,
             search: req.query.search || null
         };
 
         const members = await billingManager.getAllMembers(filters);
         const packages = await billingManager.getAllMemberPackages(true);
+        
+        // Get unique Areas for member filter
+        const uniqueAreas = await new Promise((resolve) => {
+            const db = require('../config/billing').db;
+            db.all('SELECT DISTINCT area FROM members WHERE area IS NOT NULL AND area != "" ORDER BY area', (err, rows) => {
+                resolve(rows ? rows.map(r => r.area) : []);
+            });
+        });
+
+        // Get Collectors
+        const collectors = await new Promise((resolve) => {
+            const db = require('../config/billing').db;
+            db.all('SELECT id, name FROM collectors WHERE status = "active" ORDER BY name', (err, rows) => {
+                resolve(rows || []);
+            });
+        });
         
         // Get hotspot profiles and servers for form
         let hotspotProfiles = [];
@@ -418,6 +437,8 @@ router.get('/data', adminAuth, async (req, res) => {
             packages: packages,
             hotspotProfiles: hotspotProfiles,
             hotspotServers: hotspotServers,
+            uniqueAreas: uniqueAreas,
+            collectors: collectors,
             filters: filters,
             settings: settings,
             versionInfo: versionInfo,
@@ -449,7 +470,7 @@ router.post('/data', adminAuth, memberPhotoUpload.fields([
 ]), async (req, res) => {
     try {
         const { 
-            name, username, phone, hotspot_username, password, email, address,
+            name, username, phone, hotspot_username, password, email, address, area,
             package_id, hotspot_profile, server_hotspot, auto_suspension, billing_day,
             latitude, longitude
         } = req.body;
@@ -494,6 +515,7 @@ router.post('/data', adminAuth, memberPhotoUpload.fields([
             hotspot_username: finalHotspotUsername, // Pastikan tidak null untuk suspension
             email: email ? email.trim() : null,
             address: address ? address.trim() : null,
+            area: area ? area.trim() : null,
             package_id: parseInt(package_id),
             hotspot_profile: hotspot_profile ? hotspot_profile.trim() : null,
             server_hotspot: server_hotspot ? server_hotspot.trim() : null,
@@ -567,7 +589,7 @@ router.post('/data/:id/update', adminAuth, memberPhotoUpload.fields([
     try {
         const { id } = req.params;
         const { 
-            name, username, phone, hotspot_username, password, email, address,
+            name, username, phone, hotspot_username, password, email, address, area,
             package_id, hotspot_profile, server_hotspot, status, auto_suspension, billing_day,
             latitude, longitude, existing_ktp_photo, existing_house_photo
         } = req.body;
@@ -619,6 +641,7 @@ router.post('/data/:id/update', adminAuth, memberPhotoUpload.fields([
             hotspot_username: hotspot_username ? hotspot_username.trim() : null,
             email: email ? email.trim() : null,
             address: address ? address.trim() : null,
+            area: area ? area.trim() : null,
             package_id: parseInt(package_id),
             hotspot_profile: hotspot_profile ? hotspot_profile.trim() : null,
             server_hotspot: server_hotspot ? server_hotspot.trim() : null,

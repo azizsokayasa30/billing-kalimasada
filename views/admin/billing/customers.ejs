@@ -362,7 +362,7 @@
             <% } %>
 
             <!-- Main content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
                         <i class="bx bx-user"></i> <%= title || 'Kelola Pelanggan' %>
@@ -554,6 +554,57 @@
                         </h5>
                     </div>
                     <div class="card-body">
+                        <!-- Server-side Filter Bar -->
+                        <form method="GET" action="/admin/billing/customers" class="row mb-4 bg-light p-3 rounded border mx-0">
+                            <div class="col-md-2 mb-2">
+                                <label class="form-label small fw-bold text-muted uppercase">Filter Paket</label>
+                                <select name="package_id" class="form-select form-select-sm shadow-sm border-primary">
+                                    <option value="">Semua Paket</option>
+                                    <% if (packages && packages.length > 0) { %>
+                                        <% packages.forEach(function(pkg) { %>
+                                            <option value="<%= pkg.id %>" <%= (typeof filters !== 'undefined' && filters.package_id == pkg.id) ? 'selected' : '' %>><%= pkg.name %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <label class="form-label small fw-bold text-muted uppercase">Status Pembayaran</label>
+                                <select name="payment_status" class="form-select form-select-sm shadow-sm border-primary">
+                                    <option value="">Semua Status</option>
+                                    <option value="paid" <%= (typeof filters !== 'undefined' && filters.payment_status === 'paid') ? 'selected' : '' %>>Lunas</option>
+                                    <option value="unpaid" <%= (typeof filters !== 'undefined' && filters.payment_status === 'unpaid') ? 'selected' : '' %>>Belum Lunas</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label small fw-bold text-muted uppercase">Area / Desa</label>
+                                <select name="area" class="form-select form-select-sm shadow-sm border-primary">
+                                    <option value="">Semua Area</option>
+                                    <% if (typeof uniqueAreas !== 'undefined' && uniqueAreas.length > 0) { %>
+                                        <% uniqueAreas.forEach(function(areaName) { %>
+                                            <option value="<%= areaName %>" <%= (typeof filters !== 'undefined' && filters.area === areaName) ? 'selected' : '' %>><%= areaName %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <label class="form-label small fw-bold text-muted uppercase">Kolektor</label>
+                                <select name="collector_id" class="form-select form-select-sm shadow-sm border-primary">
+                                    <option value="">Semua Kolektor</option>
+                                    <% if (typeof collectors !== 'undefined' && collectors.length > 0) { %>
+                                        <% collectors.forEach(function(collector) { %>
+                                            <option value="<%= collector.id %>" <%= (typeof filters !== 'undefined' && filters.collector_id == collector.id) ? 'selected' : '' %>><%= collector.name %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <div class="col-md-2 mb-2 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary btn-sm w-100">
+                                    <i class="bx bx-filter-alt"></i> Filter
+                                </button>
+                            </div>
+                        </form>
+                        </div>
+
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <div class="form-check">
@@ -582,13 +633,13 @@
                                         <th>Telepon</th>
                                         <th>PPPoE Username</th>
                                         <th>Paket</th>
-                                        <th>PPPoE Profile</th>
-                                        <th>Tipe Tagihan</th>
-                                        <th>NAS</th>
+                                        <th>Area</th>
+                                        <th>Kolektor</th>
                                         <th>Status Pelanggan</th>
+                                        <th>Status Bayar</th>
                                         <th>Aksi</th>
                                     </tr>
-                                </thead>
+</thead>
                                 <tbody>
                                     <% if (customers && customers.length > 0) { %>
                                         <% customers.forEach(function(customer) { %>
@@ -608,25 +659,8 @@
                                                 <td><a href="/admin/billing/customers/<%= customer.phone %>" class="text-decoration-none text-primary"><%= customer.phone %></a></td>
                                                 <td><%= customer.pppoe_username || '-' %></td>
                                                 <td><%= customer.package_name || '-' %></td>
-                                                <td class="pppoe-profile"><span class="badge bg-info"><%= customer.pppoe_profile || 'default' %></span></td>
-                                                <td>
-                                                    <% if (customer.renewal_type === 'fix_date') { %>
-                                                        <span class="badge bg-info">
-                                                            <i class="bx bx-calendar"></i> Fix Date (<%= customer.fix_date || 15 %>)
-                                                        </span>
-                                                    <% } else { %>
-                                                        <span class="badge bg-primary">
-                                                            <i class="bx bx-refresh"></i> Renewal
-                                                        </span>
-                                                    <% } %>
-                                                </td>
-                                                <td>
-                                                    <% if (customer.router_name) { %>
-                                                        <span class="badge bg-secondary"><%= customer.router_name %></span>
-                                                    <% } else { %>
-                                                        <span class="text-muted">-</span>
-                                                    <% } %>
-                                                </td>
+                                                <td><span class="badge bg-light text-dark border"><%= customer.area || '-' %></span></td>
+                                                <td><span class="badge bg-soft-info text-info"><%= customer.collector_name || '-' %></span></td>
                                                 <td class="cust-status">
                                                     <% if (customer.status === 'active') { %>
                                                         <span class="badge bg-success">Aktif</span>
@@ -636,6 +670,17 @@
                                                         <span class="badge" style="background-color: #9900CC; color: white;">Register</span>
                                                     <% } else { %>
                                                         <span class="badge bg-secondary">Nonaktif</span>
+                                                    <% } %>
+                                                </td>
+                                                <td>
+                                                    <% if (customer.payment_status === 'paid') { %>
+                                                        <span class="badge bg-success">Lunas</span>
+                                                    <% } else if (customer.payment_status === 'unpaid') { %>
+                                                        <span class="badge bg-warning text-dark">Belum Lunas</span>
+                                                    <% } else if (customer.payment_status === 'overdue') { %>
+                                                        <span class="badge bg-danger">Terlambat</span>
+                                                    <% } else { %>
+                                                        <span class="badge bg-secondary">Bukan Member</span>
                                                     <% } %>
                                                 </td>
                                                 <td>
@@ -752,6 +797,11 @@
                             <label for="username" class="form-label">Username *</label>
                             <input type="text" class="form-control" id="username" name="username" required placeholder="Akan otomatis terisi dari nama + tanggal (contoh: test_280825)">
                             <small class="form-text text-muted">Username akan digunakan untuk login pelanggan dan payment gateway. Format otomatis: nama_DDMMYY</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password Portal</label>
+                            <input type="text" class="form-control" id="password" name="password" placeholder="Minimal 6 karakter (Opsional)">
+                            <small class="form-text text-muted">Password untuk login pelanggan ke portal. Biarkan kosong jika tidak ingin diset sekarang.</small>
                         </div>
                         <div class="mb-3">
                             <label for="phone" class="form-label">Telepon *</label>
@@ -910,7 +960,11 @@
                         </div>
                         
                         <div class="mb-3">
-                            <label for="address" class="form-label">Alamat</label>
+                            <label for="area" class="form-label">Area / Nama Desa *</label>
+                            <input type="text" class="form-control" id="area" name="area" placeholder="Contoh: Desa Karanganyar / Area Selatan" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="address" class="form-label">Alamat Lengkap</label>
                             <textarea class="form-control" id="address" name="address" rows="3"></textarea>
                         </div>
                         <div class="row">
@@ -1056,6 +1110,11 @@
                             <label for="edit_username" class="form-label">Username *</label>
                             <input type="text" class="form-control" id="edit_username" name="username" required placeholder="username untuk login dan payment gateway">
                             <small class="form-text text-muted">Username akan digunakan untuk login pelanggan dan payment gateway. Harus unik dan tanpa spasi.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit_password" class="form-label">Password Portal Baru</label>
+                            <input type="text" class="form-control" id="edit_password" name="password" placeholder="Minimal 6 karakter (Opsional)">
+                            <small class="form-text text-muted">Abaikan/kosongkan jika tidak ingin mengubah password portal saat ini.</small>
                         </div>
                         <div class="mb-3">
                             <label for="edit_phone" class="form-label">Telepon *</label>
@@ -1296,7 +1355,11 @@
                         </div>
                         
                         <div class="mb-3">
-                            <label for="edit_status" class="form-label">Status</label>
+                            <label for="edit_area" class="form-label">Area / Nama Desa *</label>
+                            <input type="text" class="form-control" id="edit_area" name="area" placeholder="Contoh: Desa Karanganyar" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit_address" class="form-label">Alamat Lengkap</label>
                             <select class="form-control" id="edit_status" name="status">
                                 <option value="active">Aktif</option>
                                 <option value="suspended">Isolir</option>
@@ -1444,6 +1507,7 @@
                 lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]]
             });
             
+            // Advanced Filtering Logic (Server-side handled by form submission)
             // Function to filter packages based on selected NAS (router_id)
             window.filterPackagesByNAS = function(routerSelectId, packageSelectId) {
                 const routerSelect = document.getElementById(routerSelectId);
@@ -2377,7 +2441,9 @@
             formData.append('username', username);
             formData.append('phone', phone);
             formData.append('email', $('#email').val().trim());
+            formData.append('password', $('#password').val().trim());
             formData.append('pppoe_username', pppoeUser);
+            formData.append('area', $('#area').val().trim());
             formData.append('address', $('#address').val().trim());
             formData.append('package_id', package_id);
             formData.append('odp_id', $('#odp_id').val() || '');
@@ -2482,6 +2548,7 @@
                         $('#edit_phone').val(customer.phone).data('original-phone', customer.phone);
                         $('#edit_email').val(customer.email || '');
                         $('#edit_pppoe_username').val(customer.pppoe_username || '');
+                        $('#edit_area').val(customer.area || '');
                         $('#edit_address').val(customer.address || '');
                         $('#edit_latitude').val(customer.latitude || '');
                         $('#edit_longitude').val(customer.longitude || '');
@@ -2628,7 +2695,9 @@
             formData.append('username', username);
             formData.append('phone', phone);
             formData.append('email', safeVal('#edit_email'));
+            formData.append('password', safeVal('#edit_password'));
             formData.append('pppoe_username', safeVal('#edit_pppoe_username'));
+            formData.append('area', safeVal('#edit_area'));
             formData.append('address', safeVal('#edit_address'));
             // Ensure package_id is always sent (required field)
             if (!package_id) {

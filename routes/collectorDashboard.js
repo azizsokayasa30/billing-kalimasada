@@ -43,7 +43,7 @@ router.get('/dashboard', collectorAuth, async (req, res) => {
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
         
-        const [todayPayments, totalCommission, totalPayments, recentPayments] = await Promise.all([
+        const [todayPayments, totalCommission, totalPayments, recentPayments, totalAssignedCustomers] = await Promise.all([
             // Today's payments - menggunakan data real dari database
             billingManager.getCollectorTodayPayments(collectorId, startOfDay, endOfDay),
             // Total commission - menggunakan data real dari database
@@ -51,7 +51,9 @@ router.get('/dashboard', collectorAuth, async (req, res) => {
             // Total payments count - menggunakan data real dari database
             billingManager.getCollectorTotalPayments(collectorId),
             // Recent payments - menggunakan data real dari database
-            billingManager.getCollectorRecentPayments(collectorId, 5)
+            billingManager.getCollectorRecentPayments(collectorId, 5),
+            // Total assigned customers
+            billingManager.getCollectorAssignedCustomerCount(collectorId)
         ]);
         
         const appSettings = await getAppSettings();
@@ -63,7 +65,8 @@ router.get('/dashboard', collectorAuth, async (req, res) => {
             statistics: {
                 todayPayments: todayPayments,
                 totalCommission: totalCommission,
-                totalPayments: totalPayments
+                totalPayments: totalPayments,
+                totalAssignedCustomers: totalAssignedCustomers
             },
             recentPayments: recentPayments
         });
@@ -83,9 +86,16 @@ router.get('/payment', collectorAuth, async (req, res) => {
         const dbPath = path.join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
         
-        // Get active customers
+        // Get active assigned customers
         const customers = await new Promise((resolve, reject) => {
-            db.all('SELECT * FROM customers WHERE status = "active" ORDER BY name', (err, rows) => {
+            const sql = `
+                SELECT c.* 
+                FROM customers c 
+                INNER JOIN collector_assignments ca ON ca.customer_id = c.id 
+                WHERE ca.collector_id = ? AND c.status = 'active' 
+                ORDER BY c.name
+            `;
+            db.all(sql, [collector.id], (err, rows) => {
                 if (err) reject(err);
                 else resolve(rows || []);
             });
@@ -187,16 +197,17 @@ router.get('/payments', collectorAuth, async (req, res) => {
 // Customers list
 router.get('/customers', collectorAuth, async (req, res) => {
     try {
-        // Gunakan billingManager agar termasuk payment_status
-        const allCustomers = await billingManager.getCustomers();
+        // Gunakan getCollectorCustomers agar hanya menampilkan customer yang di-mapping
+        const collector = req.collector;
+        const allMappedCustomers = await billingManager.getCollectorCustomers(collector.id);
         const statusFilter = (req.query.status || '').toString().toLowerCase();
         const validFilters = new Set(['paid', 'unpaid', 'overdue', 'no_invoice']);
-        let customers = (allCustomers || []).filter(c => c.status === 'active');
+        
+        let customers = (allMappedCustomers || []).filter(c => c.status === 'active');
         if (validFilters.has(statusFilter)) {
             customers = customers.filter(c => (c.payment_status || '') === statusFilter);
         }
         const appSettings = await getAppSettings();
-        const collector = req.collector;
         
         res.render('collector/customers', {
             title: 'Daftar Pelanggan',

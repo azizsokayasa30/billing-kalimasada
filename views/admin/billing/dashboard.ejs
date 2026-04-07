@@ -9,105 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
     <!-- Admin Mobile Optimizations -->
     <link href="/css/admin-mobile.css" rel="stylesheet">
-    <style>
-        .toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            min-width: 300px;
-        }
-        
-        /* Modern Metric Cards Styling - Like Image 2 */
-        .metric-card {
-            border-radius: 12px;
-            padding: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
-            transition: all 0.3s ease;
-            border: none;
-            position: relative;
-            overflow: hidden;
-            background: var(--card-bg-color);
-            color: #ffffff;
-            min-height: auto;
-        }
-        
-        .metric-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.15);
-        }
-        
-        .metric-card-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 8px;
-            background: rgba(255, 255, 255, 0.2);
-            color: #ffffff;
-            font-size: 20px;
-            backdrop-filter: blur(10px);
-        }
-        
-        .metric-card-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #ffffff;
-            margin: 6px 0;
-            line-height: 1.2;
-        }
-        
-        .metric-card-label {
-            font-size: 0.85rem;
-            color: rgba(255, 255, 255, 0.9);
-            font-weight: 500;
-            margin-top: 2px;
-        }
-        
-        .metric-card-subtext {
-            font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.8);
-            margin-top: 4px;
-        }
-        
-        /* Card Colors - Solid Backgrounds like Image 2 */
-        .metric-card-primary {
-            --card-bg-color: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        }
-        
-        .metric-card-success {
-            --card-bg-color: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-        }
-        
-        .metric-card-danger {
-            --card-bg-color: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
-            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
-        }
-        
-        .metric-card-info {
-            --card-bg-color: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
-            background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
-        }
-        
-        .metric-card-warning {
-            --card-bg-color: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
-            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
-        }
-        
-        .metric-card-pink {
-            --card-bg-color: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
-            background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
-        }
-        
-        .metric-card-teal {
-            --card-bg-color: linear-gradient(135deg, #14b8a6 0%, #5eead4 100%);
-            background: linear-gradient(135deg, #14b8a6 0%, #5eead4 100%);
-        }
-    </style>
+    <link href="/css/dashboard-modern.css" rel="stylesheet">
 </head>
 <body>
     <div class="container-fluid">
@@ -116,62 +18,58 @@
             <%- include('../../partials/billing-sidebar') %>
 
             <!-- Main content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">
-                        <i class="bx bx-speedometer"></i> Dashboard Billing
-                    </h1>
-                    
-                    <!-- Desktop: Show all buttons -->
-                    <div class="d-none d-lg-block">
-                        <a href="/admin/billing/monthly-summary" class="btn btn-secondary me-2">
-                            <i class="bx bx-calendar"></i> Summary Bulanan
-                        </a>
-                        <a href="/admin/billing/invoices-by-type" class="btn btn-info me-2">
-                            <i class="bx bx-receipt"></i> Invoice by Type
-                        </a>
-                        <button id="cleanupDataBtn" class="btn btn-warning me-2" onclick="cleanupData()">
-                            <i class="bx bx-refresh"></i> Perbaiki Data
-                        </button>
-                        <a href="/admin/billing/payment-settings" class="btn btn-primary">
-                            <i class="bx bx-cog"></i> Payment Settings
-                        </a>
-                    </div>
-                    
-                    <!-- Mobile: Hamburger dropdown menu -->
-                    <div class="dropdown d-lg-none">
-                        <button class="btn btn-primary dropdown-toggle" type="button" id="actionMenuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bx bx-menu"></i> Menu
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="actionMenuDropdown">
-                            <li><a class="dropdown-item" href="/admin/billing/monthly-summary">
-                                <i class="bx bx-calendar"></i> Summary Bulanan
-                            </a></li>
-                            <li><a class="dropdown-item" href="/admin/billing/invoices-by-type">
-                                <i class="bx bx-receipt"></i> Invoice by Type
-                            </a></li>
-                            <li><a class="dropdown-item text-warning" href="#" onclick="cleanupData(); return false;">
-                                <i class="bx bx-refresh"></i> Perbaiki Data
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/admin/billing/payment-settings">
-                                <i class="bx bx-cog"></i> Payment Settings
-                            </a></li>
-                        </ul>
+            <main id="pjax-container" class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <!-- DASHBOARD HEADER -->
+                <div class="dashboard-header mt-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1"><i class="bi bi-speedometer2 me-2"></i>Dashboard Billing</h5>
+                            <p class="text-muted small mb-0">Statistik Penagihan & Keuangan Real-time</p>
+                        </div>
+                        
+                        <!-- Desktop Tools -->
+                        <div class="d-none d-lg-flex gap-2">
+                            <a href="/admin/billing/monthly-summary" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-calendar-event me-1"></i>Summary Bulanan
+                            </a>
+                            <a href="/admin/billing/invoices-by-type" class="btn btn-outline-info btn-sm">
+                                <i class="bi bi-receipt-cutoff me-1"></i>Invoice by Type
+                            </a>
+                            <button id="cleanupDataBtn" class="btn btn-outline-warning btn-sm" onclick="cleanupData()">
+                                <i class="bi bi-arrow-repeat me-1"></i>Perbaiki Data
+                            </button>
+                            <a href="/admin/billing/payment-settings" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-gear me-1"></i>Settings
+                            </a>
+                        </div>
+                        
+                        <!-- Mobile Dropdown -->
+                        <div class="dropdown d-lg-none">
+                            <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-list me-1"></i>Menu
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="/admin/billing/monthly-summary"><i class="bi bi-calendar-event me-2"></i>Summary Bulanan</a></li>
+                                <li><a class="dropdown-item" href="/admin/billing/invoices-by-type"><i class="bi bi-receipt-cutoff me-2"></i>Invoice by Type</a></li>
+                                <li><button class="dropdown-item text-warning" onclick="cleanupData()"><i class="bi bi-arrow-repeat me-2"></i>Perbaiki Data</button></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="/admin/billing/payment-settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Statistik Cards -->
+                <!-- STATISTIK CARDS -->
                 <div class="row mb-4">
                     <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="metric-card metric-card-primary">
+                        <div class="metric-card metric-card-secondary">
                             <div class="metric-card-icon">
                                 <i class="bi bi-people"></i>
                             </div>
                             <div class="metric-card-value"><%= stats.total_customers || 0 %></div>
                             <div class="metric-card-label">Total Pelanggan</div>
-                            <div class="metric-card-subtext">
-                                <i class="bi bi-check-circle"></i> <%= stats.active_customers || 0 %> Aktif
+                            <div class="mt-2 small text-muted">
+                                <span class="badge bg-success-subtle text-success"><i class="bi bi-check-circle me-1"></i><%= stats.active_customers || 0 %> Aktif</span>
                             </div>
                         </div>
                     </div>
@@ -179,12 +77,12 @@
                     <div class="col-xl-3 col-md-6 mb-3">
                         <div class="metric-card metric-card-success">
                             <div class="metric-card-icon">
-                                <i class="bi bi-calendar-month"></i>
+                                <i class="bi bi-calendar-check"></i>
                             </div>
-                            <div class="metric-card-value">Rp <%= (stats.monthly_revenue || 0).toLocaleString('id-ID') %></div>
+                            <div class="metric-card-value text-success">Rp <%= (stats.monthly_revenue || 0).toLocaleString('id-ID') %></div>
                             <div class="metric-card-label">Pendapatan Bulanan</div>
-                            <div class="metric-card-subtext">
-                                <i class="bi bi-receipt-check"></i> <%= stats.paid_monthly_invoices || 0 %> Tagihan Lunas
+                            <div class="mt-2 small text-muted">
+                                <span class="badge bg-info-subtle text-info"><i class="bi bi-receipt-check me-1"></i><%= stats.paid_monthly_invoices || 0 %> Lunas</span>
                             </div>
                         </div>
                     </div>
@@ -194,98 +92,92 @@
                             <div class="metric-card-icon">
                                 <i class="bi bi-ticket-perforated"></i>
                             </div>
-                            <div class="metric-card-value">Rp <%= (stats.voucher_revenue || 0).toLocaleString('id-ID') %></div>
+                            <div class="metric-card-value text-info">Rp <%= (stats.voucher_revenue || 0).toLocaleString('id-ID') %></div>
                             <div class="metric-card-label">Pendapatan Voucher</div>
-                            <div class="metric-card-subtext">
-                                <i class="bi bi-check-circle"></i> <%= stats.paid_voucher_invoices || 0 %> Lunas
-                                <br>
-                                <small>Pending: Rp <%= ((stats.voucher_summary && stats.voucher_summary.pending_revenue) || stats.voucher_unpaid || 0).toLocaleString('id-ID') %></small>
+                            <div class="mt-2 small text-muted">
+                                <span class="badge bg-danger-subtle text-danger"><i class="bi bi-exclamation-circle me-1"></i>Rp <%= ((stats.voucher_summary && stats.voucher_summary.pending_revenue) || stats.voucher_unpaid || 0).toLocaleString('id-ID') %> Pending</span>
                             </div>
                         </div>
                     </div>
 
                     <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="metric-card metric-card-warning">
+                        <div class="metric-card metric-card-pink">
                             <div class="metric-card-icon">
                                 <i class="bi bi-cash-stack"></i>
                             </div>
-                            <div class="metric-card-value">Rp <%= (stats.total_revenue || 0).toLocaleString('id-ID') %></div>
+                            <div class="metric-card-value text-primary">Rp <%= (stats.total_revenue || 0).toLocaleString('id-ID') %></div>
                             <div class="metric-card-label">Total Pendapatan</div>
-                            <div class="metric-card-subtext">
-                                <i class="bi bi-graph-up"></i> <%= stats.paid_invoices || 0 %>/<%= stats.total_invoices || 0 %> Lunas
+                            <div class="mt-2 small text-muted">
+                                <span class="badge bg-primary-subtle text-primary"><i class="bi bi-graph-up me-1"></i><%= stats.paid_invoices || 0 %>/<%= stats.total_invoices || 0 %> Lunas</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Invoice Type Breakdown -->
-                <div class="row mt-4">
-                    <div class="col-xl-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="bx bx-receipt"></i> Tagihan Bulanan
-                                </h5>
+                <!-- INVOICE BREAKDOWN -->
+                <div class="row">
+                    <div class="col-xl-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header section-card-header">
+                                <div class="fw-bold"><i class="bi bi-calendar2-range me-2"></i>Tagihan Bulanan</div>
                             </div>
                             <div class="card-body">
-                                <div class="row text-center">
+                                <div class="row text-center mb-4 mt-2">
                                     <div class="col-4">
-                                        <h4 class="text-primary"><%= stats.monthly_invoices || 0 %></h4>
-                                        <p class="text-muted mb-0">Total</p>
+                                        <h4 class="fw-bold"><%= stats.monthly_invoices || 0 %></h4>
+                                        <p class="text-muted small mb-0">Total</p>
                                     </div>
-                                    <div class="col-4">
-                                        <h4 class="text-success"><%= stats.paid_monthly_invoices || 0 %></h4>
-                                        <p class="text-muted mb-0">Lunas</p>
+                                    <div class="col-4 border-start">
+                                        <h4 class="fw-bold text-success"><%= stats.paid_monthly_invoices || 0 %></h4>
+                                        <p class="text-muted small mb-0">Lunas</p>
                                     </div>
-                                    <div class="col-4">
-                                        <h4 class="text-danger"><%= stats.unpaid_monthly_invoices || 0 %></h4>
-                                        <p class="text-muted mb-0">Belum Lunas</p>
+                                    <div class="col-4 border-start">
+                                        <h4 class="fw-bold text-danger"><%= stats.unpaid_monthly_invoices || 0 %></h4>
+                                        <p class="text-muted small mb-0">Unpaid</p>
                                     </div>
                                 </div>
-                                <div class="mt-3">
-                                    <div class="d-flex justify-content-between">
-                                        <span>Pendapatan:</span>
-                                        <strong class="text-success">Rp <%= (stats.monthly_revenue || 0).toLocaleString('id-ID') %></strong>
+                                <div class="p-3 bg-light rounded-3">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted small">Pendapatan:</span>
+                                        <span class="fw-bold text-success">Rp <%= (stats.monthly_revenue || 0).toLocaleString('id-ID') %></span>
                                     </div>
                                     <div class="d-flex justify-content-between">
-                                        <span>Belum Dibayar:</span>
-                                        <strong class="text-danger">Rp <%= (stats.monthly_unpaid || 0).toLocaleString('id-ID') %></strong>
+                                        <span class="text-muted small">Unpaid Amount:</span>
+                                        <span class="fw-bold text-danger">Rp <%= (stats.monthly_unpaid || 0).toLocaleString('id-ID') %></span>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-xl-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="bx bx-ticket"></i> Tagihan Voucher
-                                </h5>
+                    <div class="col-xl-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header section-card-header">
+                                <div class="fw-bold"><i class="bi bi-ticket-detailed me-2"></i>Tagihan Voucher</div>
                             </div>
                             <div class="card-body">
-                                <div class="row text-center">
+                                <div class="row text-center mb-4 mt-2">
                                     <div class="col-4">
-                                        <h4 class="text-primary"><%= stats.voucher_invoices || 0 %></h4>
-                                        <p class="text-muted mb-0">Total</p>
+                                        <h4 class="fw-bold"><%= stats.voucher_invoices || 0 %></h4>
+                                        <p class="text-muted small mb-0">Total</p>
                                     </div>
-                                    <div class="col-4">
-                                        <h4 class="text-success"><%= stats.paid_voucher_invoices || 0 %></h4>
-                                        <p class="text-muted mb-0">Lunas</p>
+                                    <div class="col-4 border-start">
+                                        <h4 class="fw-bold text-success"><%= stats.paid_voucher_invoices || 0 %></h4>
+                                        <p class="text-muted small mb-0">Lunas</p>
                                     </div>
-                                    <div class="col-4">
-                                        <h4 class="text-danger"><%= stats.unpaid_voucher_invoices || 0 %></h4>
-                                        <p class="text-muted mb-0">Belum Lunas</p>
+                                    <div class="col-4 border-start">
+                                        <h4 class="fw-bold text-danger"><%= stats.unpaid_voucher_invoices || 0 %></h4>
+                                        <p class="text-muted small mb-0">Unpaid</p>
                                     </div>
                                 </div>
-                                <div class="mt-3">
-                                    <div class="d-flex justify-content-between">
-                                        <span>Pendapatan:</span>
-                                        <strong class="text-success">Rp <%= (stats.voucher_revenue || 0).toLocaleString('id-ID') %></strong>
+                                <div class="p-3 bg-light rounded-3">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted small">Pendapatan:</span>
+                                        <span class="fw-bold text-success">Rp <%= (stats.voucher_revenue || 0).toLocaleString('id-ID') %></span>
                                     </div>
                                     <div class="d-flex justify-content-between">
-                                        <span>Belum Dibayar:</span>
-                                        <strong class="text-danger">Rp <%= (stats.voucher_unpaid || 0).toLocaleString('id-ID') %></strong>
+                                        <span class="text-muted small">Unpaid Amount:</span>
+                                        <span class="fw-bold text-danger">Rp <%= (stats.voucher_unpaid || 0).toLocaleString('id-ID') %></span>
                                     </div>
                                 </div>
                             </div>
@@ -295,57 +187,46 @@
 
                 <div class="row">
                     <!-- Tagihan Terbaru -->
-                    <div class="col-xl-8">
+                    <div class="col-xl-8 mb-4">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="bx bx-receipt"></i> Tagihan Terbaru
-                                </h5>
+                            <div class="card-header section-card-header d-flex justify-content-between align-items-center">
+                                <div class="fw-bold"><i class="bi bi-clock-history me-2"></i>Tagihan Terbaru</div>
+                                <a href="/admin/billing/invoices" class="btn btn-sm btn-light py-0 px-2" style="font-size: 0.75rem;">View All</a>
                             </div>
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h4 class="header-title">Tagihan Terbaru</h4>
-                                    <a href="/admin/billing/invoices" class="btn btn-sm btn-primary">Lihat Semua</a>
-                                </div>
-                                
+                            <div class="card-body p-0">
                                 <div class="table-responsive">
-                                    <table class="table table-centered table-nowrap table-hover mb-0">
+                                    <table class="table table-hover mb-0">
                                         <thead>
                                             <tr>
-                                                <th>No. Tagihan</th>
-                                                <th>Pelanggan</th>
-                                                <th>Paket</th>
-                                                <th>Jumlah</th>
-                                                <th>Status</th>
-                                                <th>Jatuh Tempo</th>
+                                                <th class="ps-3 text-nowrap">No. Tagihan</th>
+                                                <th class="text-nowrap">Pelanggan</th>
+                                                <th class="text-nowrap">Paket</th>
+                                                <th class="text-nowrap">Jumlah</th>
+                                                <th class="text-nowrap">Status</th>
+                                                <th class="pe-3 text-nowrap">Jatuh Tempo</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <% if (recentInvoices && recentInvoices.length > 0) { %>
                                                 <% recentInvoices.forEach(function(invoice) { %>
                                                     <tr>
-                                                        <td>
-                                                            <a href="/admin/billing/invoices/<%= invoice.id %>" class="text-body fw-bold">
+                                                        <td class="ps-3">
+                                                            <a href="/admin/billing/invoices/<%= invoice.id %>" class="text-primary fw-bold text-decoration-none">
                                                                 <%= invoice.invoice_number %>
                                                             </a>
                                                         </td>
                                                         <td>
-                                                            <% if (invoice.is_member) { %>
-                                                                <span class="badge bg-info mb-1">Member</span>
-                                                                <br>
-                                                            <% } %>
-                                                            <span class="text-body fw-bold"><%= invoice.display_name || invoice.customer_name || invoice.member_name || 'N/A' %></span>
-                                                            <br>
-                                                            <small class="text-muted"><%= invoice.display_phone || invoice.customer_phone || invoice.member_phone || 'N/A' %></small>
-                                                            <% if (invoice.display_username || invoice.username || invoice.member_username) { %>
-                                                                <br>
-                                                                <small class="text-muted">@<%= invoice.display_username || invoice.username || invoice.member_username %></small>
-                                                            <% } %>
+                                                            <div class="d-flex flex-column">
+                                                                <span class="fw-bold"><%= invoice.display_name || invoice.customer_name || invoice.member_name || 'N/A' %></span>
+                                                                <% if (invoice.is_member) { %>
+                                                                    <span class="badge bg-info-subtle text-info mt-1" style="width: fit-content; font-size: 0.65rem;">Member</span>
+                                                                <% } %>
+                                                            </div>
                                                         </td>
                                                         <td>
-                                                            <span class="badge bg-primary"><%= invoice.display_package_name || invoice.package_name || 'N/A' %></span>
+                                                            <span class="badge bg-primary-subtle text-primary"><%= invoice.display_package_name || invoice.package_name || 'N/A' %></span>
                                                         </td>
-                                                        <td>Rp <%= parseFloat(invoice.amount).toLocaleString('id-ID') %></td>
+                                                        <td class="fw-bold">Rp <%= parseFloat(invoice.amount).toLocaleString('id-ID') %></td>
                                                         <td>
                                                             <% if (invoice.status === 'paid') { %>
                                                                 <span class="badge bg-success">Lunas</span>
@@ -353,16 +234,16 @@
                                                                 <% if (new Date(invoice.due_date) < new Date()) { %>
                                                                     <span class="badge bg-danger">Terlambat</span>
                                                                 <% } else { %>
-                                                                    <span class="badge bg-warning">Belum Lunas</span>
+                                                                    <span class="badge bg-warning text-dark">Belum Lunas</span>
                                                                 <% } %>
                                                             <% } %>
                                                         </td>
-                                                        <td><%= new Date(invoice.due_date).toLocaleDateString('id-ID') %></td>
+                                                        <td class="pe-3"><%= new Date(invoice.due_date).toLocaleDateString('id-ID') %></td>
                                                     </tr>
                                                 <% }); %>
                                             <% } else { %>
                                                 <tr>
-                                                    <td colspan="6" class="text-center text-muted">Belum ada tagihan</td>
+                                                    <td colspan="6" class="text-center py-4 text-muted small">Belum ada tagihan terbaru</td>
                                                 </tr>
                                             <% } %>
                                         </tbody>
@@ -373,67 +254,70 @@
                     </div>
 
                     <!-- Tagihan Terlambat -->
-                    <div class="col-xl-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="bx bx-time"></i> Tagihan Terlambat
-                                </h5>
+                    <div class="col-xl-4 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header section-card-header d-flex justify-content-between align-items-center">
+                                <div class="fw-bold"><i class="bi bi-exclamation-triangle me-2"></i>Terlambat</div>
+                                <span class="badge bg-danger rounded-pill"><%= overdueInvoices.length %></span>
                             </div>
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h4 class="header-title">Tagihan Terlambat</h4>
-                                    <span class="badge bg-danger"><%= overdueInvoices.length %></span>
-                                </div>
-                                
+                            <div class="card-body p-0">
                                 <div class="table-responsive">
-                                    <table class="table table-centered table-nowrap table-hover mb-0">
+                                    <table class="table table-hover mb-0">
                                         <thead>
                                             <tr>
-                                                <th>Pelanggan</th>
-                                                <th>Jumlah</th>
-                                                <th>Jatuh Tempo</th>
-                                                <th>Aksi</th>
+                                                <th class="ps-3">Pelanggan</th>
+                                                <th class="text-nowrap">Jum/Tempo</th>
+                                                <th class="pe-3 text-center">Aksi</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <% if (overdueInvoices && overdueInvoices.length > 0) { %>
                                                 <% overdueInvoices.forEach(function(invoice) { %>
                                                     <tr>
-                                                        <td>
-                                                            <span class="text-body fw-bold"><%= invoice.customer_name %></span>
-                                                            <br>
-                                                            <small class="text-muted"><%= invoice.customer_phone %></small>
-                                                        </td>
-                                                        <td>Rp <%= parseFloat(invoice.amount).toLocaleString('id-ID') %></td>
-                                                        <td>
-                                                            <span class="text-danger">
-                                                                <%= new Date(invoice.due_date).toLocaleDateString('id-ID') %>
-                                                            </span>
+                                                        <td class="ps-3">
+                                                            <div class="d-flex flex-column">
+                                                                <span class="fw-bold text-dark small"><%= invoice.customer_name %></span>
+                                                                <small class="text-muted" style="font-size: 0.7rem;"><%= invoice.customer_phone %></small>
+                                                            </div>
                                                         </td>
                                                         <td>
-                                                            <div class="btn-group btn-group-sm" role="group">
-                                                                <button type="button" class="btn btn-outline-danger" onclick="suspendCustomer('<%= invoice.username %>')">
-                                                                    <i class="bx bx-block"></i> Isolir
+                                                            <div class="d-flex flex-column">
+                                                                <span class="fw-bold small">Rp <%= parseFloat(invoice.amount).toLocaleString('id-ID') %></span>
+                                                                <span class="text-danger" style="font-size: 0.7rem;"><%= new Date(invoice.due_date).toLocaleDateString('id-ID') %></span>
+                                                            </div>
+                                                        </td>
+                                                        <td class="pe-3 text-center">
+                                                            <div class="dropdown">
+                                                                <button class="btn btn-light btn-sm p-1" type="button" data-bs-toggle="dropdown">
+                                                                    <i class="bi bi-three-dots-vertical"></i>
                                                                 </button>
-                                                                <button type="button" class="btn btn-outline-success" onclick="restoreCustomer('<%= invoice.username %>')">
-                                                                    <i class="bx bx-rotate-left"></i> Restore
-                                                                </button>
-                                                                <button type="button" class="btn btn-outline-secondary"
-                                                                    data-phone="<%= invoice.customer_phone || '' %>"
-                                                                    data-name="<%= invoice.customer_name || '' %>"
-                                                                    data-invoicenumber="<%= invoice.invoice_number || '' %>"
-                                                                    data-amount="<%= invoice.amount || 0 %>"
-                                                                    onclick="sendWaReminderFromBtn(this)">
-                                                                    <i class="bx bx-message-rounded-dots"></i> Reminder
-                                                                </button>
+                                                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                                                                    <li><button class="dropdown-item text-danger py-2" onclick="suspendCustomer('<%= invoice.username %>')">
+                                                                        <i class="bi bi-slash-circle me-2"></i>Isolir
+                                                                    </button></li>
+                                                                    <li><button class="dropdown-item text-success py-2" onclick="restoreCustomer('<%= invoice.username %>')">
+                                                                        <i class="bi bi-arrow-counterclockwise me-2"></i>Restore
+                                                                    </button></li>
+                                                                    <li><hr class="dropdown-divider"></li>
+                                                                    <li><button class="dropdown-item py-2" 
+                                                                        data-phone="<%= invoice.customer_phone || '' %>"
+                                                                        data-name="<%= invoice.customer_name || '' %>"
+                                                                        data-invoicenumber="<%= invoice.invoice_number || '' %>"
+                                                                        data-amount="<%= invoice.amount || 0 %>"
+                                                                        onclick="sendWaReminderFromBtn(this)">
+                                                                        <i class="bi bi-whatsapp me-2"></i>WhatsApp Reminder
+                                                                    </button></li>
+                                                                </ul>
                                                             </div>
                                                         </td>
                                                     </tr>
                                                 <% }); %>
                                             <% } else { %>
                                                 <tr>
-                                                    <td colspan="4" class="text-center text-muted">Tidak ada tagihan terlambat</td>
+                                                    <td colspan="3" class="text-center py-5 text-muted small">
+                                                        <i class="bi bi-check2-circle d-block fs-3 mb-2 opacity-25"></i>
+                                                        Tidak ada tagihan terlambat
+                                                    </td>
                                                 </tr>
                                             <% } %>
                                         </tbody>
@@ -442,6 +326,7 @@
                             </div>
                         </div>
                     </div>
+                </div>
                 </div>
             </main>
         </div>

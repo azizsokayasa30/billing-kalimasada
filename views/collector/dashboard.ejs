@@ -373,10 +373,10 @@
             <div class="col-md-6 col-6 mb-3">
                 <div class="stat-card">
                     <div class="stat-icon info">
-                        <i class="bi bi-percent"></i>
+                        <i class="bi bi-people"></i>
                     </div>
-                    <div class="stat-value"><%= Math.round(collector.commission_rate || 5) %>%</div>
-                    <div class="stat-label">Rate Komisi</div>
+                    <div class="stat-value"><%= statistics.totalAssignedCustomers || 0 %></div>
+                    <div class="stat-label">Pelanggan Anda</div>
                 </div>
             </div>
         </div>

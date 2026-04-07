@@ -897,7 +897,8 @@ router.get('/dashboard', getAppSettings, async (req, res) => {
             recentInvoices: recentInvoices || [], // Fallback ke array kosong jika error
             appSettings: req.appSettings,
             settings: settings,
-            versionInfo: getVersionInfo()
+            versionInfo: getVersionInfo(),
+            page: 'billing'
         });
     } catch (error) {
         logger.error('Error loading billing dashboard:', error);
@@ -955,7 +956,8 @@ router.get('/financial-report', getAppSettings, async (req, res) => {
             startDate,
             endDate,
             type: type || 'all',
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            page: 'financial-report'
         });
     } catch (error) {
         logger.error('Error loading financial report:', error);
@@ -1011,7 +1013,8 @@ router.get('/reports/voucher', getAppSettings, adminAuth, async (req, res) => {
             startDate,
             endDate,
             status: status || 'all',
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            page: 'report-voucher'
         });
     } catch (error) {
         logger.error('Error loading voucher report:', error);
@@ -1042,7 +1045,8 @@ router.get('/reports/pppoe', getAppSettings, adminAuth, async (req, res) => {
             startDate,
             endDate,
             status: status || 'all',
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            page: 'report-pppoe'
         });
     } catch (error) {
         logger.error('Error loading PPPoE report:', error);
@@ -1268,7 +1272,8 @@ router.get('/invoice-list', getAppSettings, async (req, res) => {
                 customer_username: customer_username || '',
                 type: type || ''
             },
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            page: 'invoices'
         });
     } catch (error) {
         logger.error('Error loading invoice list:', error);
@@ -1360,7 +1365,8 @@ router.get('/monthly-summary', adminAuth, async (req, res) => {
         res.render('admin/billing/monthly-summary', {
             title: 'Summary Bulanan',
             summaries,
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            page: 'monthly-summary'
         });
     } catch (error) {
         logger.error('Error loading monthly summary:', error);
@@ -3755,11 +3761,16 @@ router.get('/customers', getAppSettings, async (req, res) => {
         
         const routerFilter = req.query.router ? parseInt(req.query.router) : null;
         
-        // Build filters object
         const filters = {};
         if (routerFilter) filters.router_id = routerFilter;
         if (search) filters.search = search;
         if (statusFilter) filters.status = statusFilter;
+        
+        // Add new filters
+        if (req.query.package_id) filters.package_id = req.query.package_id;
+        if (req.query.area) filters.area = req.query.area;
+        if (req.query.collector_id) filters.collector_id = req.query.collector_id;
+        if (req.query.payment_status) filters.payment_status = req.query.payment_status;
         
         let customersResult;
         if (routerFilter) {
@@ -3850,12 +3861,30 @@ router.get('/customers', getAppSettings, async (req, res) => {
             });
         });
         
+        // Get Collectors for dropdown selection
+        const collectors = await new Promise((resolve) => {
+            const db = require('../config/billing').db;
+            db.all('SELECT id, name, phone FROM collectors WHERE status = "active" ORDER BY name', (err, rows) => {
+                resolve(rows || []);
+            });
+        });
+
+        // Get unique Areas for dropdown selection
+        const uniqueAreas = await new Promise((resolve) => {
+            const db = require('../config/billing').db;
+            db.all('SELECT DISTINCT area FROM customers WHERE area IS NOT NULL AND area != "" ORDER BY area', (err, rows) => {
+                resolve(rows ? rows.map(r => r.area) : []);
+            });
+        });
+        
         res.render('admin/billing/customers', {
             title: 'Kelola Pelanggan',
             customers,
             packages,
             odps,
             routers,
+            collectors,
+            uniqueAreas,
             routerFilter,
             authMode, // Pass auth mode ke view
             radiusRouterId, // Pass radius router ID jika ada
@@ -3869,7 +3898,8 @@ router.get('/customers', getAppSettings, async (req, res) => {
             },
             search: search,
             statusFilter: statusFilter,
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            page: 'customers'
         });
     } catch (error) {
         logger.error('Error loading customers:', error);
@@ -3886,7 +3916,7 @@ router.post('/customers', customerPhotoUpload.fields([
     { name: 'house_photo', maxCount: 1 }
 ]), async (req, res) => {
     try {
-        const { name, username, phone, pppoe_username, email, address, package_id, odp_id, pppoe_profile, auto_suspension, billing_day, renewal_type, fix_date, create_pppoe_user, pppoe_password, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, router_id } = req.body;
+        const { name, username, password, phone, pppoe_username, email, address, area, package_id, odp_id, pppoe_profile, auto_suspension, billing_day, renewal_type, fix_date, create_pppoe_user, pppoe_password, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, router_id } = req.body;
         
         // Validate required fields
         if (!name || !username || !phone || !package_id) {
@@ -3911,13 +3941,27 @@ router.post('/customers', customerPhotoUpload.fields([
             profileToUse = packageData?.pppoe_profile || 'default';
         }
 
+        // Handle password hashing if provided
+        let hashedPassword = undefined;
+        if (password && password.trim().length >= 6) {
+            const bcrypt = require('bcrypt');
+            hashedPassword = await bcrypt.hash(password.trim(), 10);
+        } else if (password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password portal harus minimal 6 karakter'
+            });
+        }
+
         const customerData = {
             name,
             username,
+            password: hashedPassword,
             phone,
             pppoe_username,
             email,
             address,
+            area,
             package_id,
             odp_id: odp_id || null,
             pppoe_profile: profileToUse,
@@ -4214,6 +4258,20 @@ router.get('/customers/:phone', getAppSettings, async (req, res) => {
             logger.warn('Unable to load trouble reports for customer:', e.message);
         }
         
+        let assignedCollectorId = null;
+        let activeCollectors = [];
+        try {
+            const dbPath = path.join(__dirname, '../data/billing.db');
+            const dblcl = new sqlite3.Database(dbPath);
+            const mappingRow = await new Promise((resolve) => dblcl.get(`SELECT collector_id FROM collector_assignments WHERE customer_id = ?`, [customer.id], (err, row) => resolve(row)));
+            if (mappingRow) assignedCollectorId = mappingRow.collector_id;
+            
+            activeCollectors = await new Promise((resolve) => dblcl.all(`SELECT id, name FROM collectors WHERE status = 'active'`, (err, rows) => resolve(rows || [])));
+            dblcl.close();
+        } catch (e) {
+            logger.warn('Failed to load collector assigning options:', e.message);
+        }
+        
         logger.info(`Rendering customer detail page for: ${phone}`);
         
         // Try to render with minimal data first
@@ -4226,6 +4284,8 @@ router.get('/customers/:phone', getAppSettings, async (req, res) => {
                 invoices: invoices || [],
                 packages: packages || [],
                 troubleReports,
+                activeCollectors,
+                assignedCollectorId,
                 appSettings: req.appSettings
             });
         } catch (renderError) {
@@ -4375,6 +4435,7 @@ router.put('/customers/:phone', customerPhotoUpload.fields([
         const pppoe_username = req.body.pppoe_username;
         const email = req.body.email;
         const address = req.body.address;
+        const area = req.body.area;
         const odp_id = req.body.odp_id;
         const pppoe_profile = req.body.pppoe_profile;
         const status = req.body.status;
@@ -4441,14 +4502,28 @@ router.put('/customers/:phone', customerPhotoUpload.fields([
 
         // Extract new phone from request body, fallback to current if not provided
         const newPhone = req.body.phone || currentCustomer.phone;
+        const password = req.body.password;
+        
+        let hashedPassword = undefined;
+        if (password && password.trim().length >= 6) {
+            const bcrypt = require('bcrypt');
+            hashedPassword = await bcrypt.hash(password.trim(), 10);
+        } else if (password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password portal harus minimal 6 karakter'
+            });
+        }
         
         const customerData = {
             name: name,
             username: username,
+            password: hashedPassword,
             phone: newPhone,
             pppoe_username: pppoe_username || currentCustomer.pppoe_username,
             email: email || currentCustomer.email,
             address: address || currentCustomer.address,
+            area: area !== undefined ? area : currentCustomer.area,
             package_id: package_id,
             odp_id: odp_id !== undefined ? odp_id : currentCustomer.odp_id,
             pppoe_profile: profileToUse,
@@ -8431,6 +8506,177 @@ router.get('/api/packages/:id/price-with-tax', async (req, res) => {
             message: 'Error calculating price with tax',
             error: error.message
         });
+    }
+});
+
+// ==========================================
+// Customer/Member Password Management
+// ==========================================
+
+// API: Set customer password (admin only)
+router.post('/api/customers/:id/set-password', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { password } = req.body;
+        
+        if (!password || password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password harus minimal 6 karakter'
+            });
+        }
+        
+        const bcrypt = require('bcrypt');
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        // Check if customer exists
+        const customer = await new Promise((resolve) => {
+            db.get('SELECT id, name, username FROM customers WHERE id = ?', [id], (err, row) => resolve(row));
+        });
+        
+        if (!customer) {
+            db.close();
+            return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+        }
+        
+        // Update password
+        await new Promise((resolve, reject) => {
+            db.run('UPDATE customers SET password = ? WHERE id = ?', [hashedPassword, id], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        
+        db.close();
+        
+        logger.info(`[AUTH] Password set for customer: ${customer.username} (ID: ${id})`);
+        
+        res.json({
+            success: true,
+            message: `Password berhasil diatur untuk pelanggan ${customer.name}`
+        });
+        
+    } catch (error) {
+        logger.error('Error setting customer password:', error);
+        res.status(500).json({ success: false, message: 'Gagal mengatur password: ' + error.message });
+    }
+});
+
+// API: Set member password (admin only)
+router.post('/api/members/:id/set-password', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { password } = req.body;
+        
+        if (!password || password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password harus minimal 6 karakter'
+            });
+        }
+        
+        const bcrypt = require('bcrypt');
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        // Check if member exists
+        const member = await new Promise((resolve) => {
+            db.get('SELECT id, name, username FROM members WHERE id = ?', [id], (err, row) => resolve(row));
+        });
+        
+        if (!member) {
+            db.close();
+            return res.status(404).json({ success: false, message: 'Member tidak ditemukan' });
+        }
+        
+        // Update password
+        await new Promise((resolve, reject) => {
+            db.run('UPDATE members SET password = ? WHERE id = ?', [hashedPassword, id], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        
+        db.close();
+        
+        logger.info(`[AUTH] Password set for member: ${member.username} (ID: ${id})`);
+        
+        res.json({
+            success: true,
+            message: `Password berhasil diatur untuk member ${member.name}`
+        });
+        
+    } catch (error) {
+        logger.error('Error setting member password:', error);
+        res.status(500).json({ success: false, message: 'Gagal mengatur password: ' + error.message });
+    }
+});
+
+// API: Assign collector to customer
+router.post('/api/customers/:id/assign-collector', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { collector_id } = req.body;
+        
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        await new Promise((resolve, reject) => {
+            // Delete existing assignment first
+            db.run('DELETE FROM collector_assignments WHERE customer_id = ?', [id], (err) => {
+                if (err) return reject(err);
+                
+                // If collector_id is provided, insert new assignment
+                if (collector_id) {
+                    db.run('INSERT INTO collector_assignments (collector_id, customer_id) VALUES (?, ?)', [collector_id, id], (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                } else {
+                    resolve();
+                }
+            });
+        });
+        
+        db.close();
+        logger.info(`[MAPPING] Collector updated for customer ID: ${id}`);
+        res.json({ success: true, message: 'Mapping kolektor berhasil diperbarui' });
+        
+    } catch (error) {
+        logger.error('Error assigning collector:', error);
+        res.status(500).json({ success: false, message: 'Gagal memperbarui mapping kolektor: ' + error.message });
+    }
+});
+
+// API: Reset customer password (admin only)
+router.delete('/api/customers/:id/password', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        await new Promise((resolve, reject) => {
+            db.run('UPDATE customers SET password = NULL WHERE id = ?', [id], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        
+        db.close();
+        
+        logger.info(`[AUTH] Password reset for customer ID: ${id}`);
+        
+        res.json({ success: true, message: 'Password pelanggan berhasil direset' });
+        
+    } catch (error) {
+        logger.error('Error resetting customer password:', error);
+        res.status(500).json({ success: false, message: 'Gagal mereset password' });
     }
 });
 

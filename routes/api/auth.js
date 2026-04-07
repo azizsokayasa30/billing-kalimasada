@@ -196,6 +196,42 @@ router.post('/login', async (req, res) => {
                 return res.json({ success: true, token, user: { id: technician.id, name: technician.name, role: 'technician' } });
             }
         }
+
+        // Try Customer (password login)
+        if (!role || role === 'customer') {
+            const normPhone = normalizePhone(username || phone);
+            const variants = [normPhone, '+' + normPhone, '0' + normPhone.slice(2)];
+            const placeholders = variants.map(() => '?').join(',');
+
+            const customer = await new Promise((resolve) => {
+                db.get(`SELECT * FROM customers WHERE (username = ? OR phone IN (${placeholders}) OR customer_id = ?) AND status = 'active'`,
+                    [username || phone, ...variants, username || phone], (err, row) => resolve(row));
+            });
+
+            if (customer && customer.password && bcrypt.compareSync(password, customer.password)) {
+                const token = jwt.sign(
+                    { id: customer.id, username: customer.username, phone: customer.phone, name: customer.name, role: 'customer' },
+                    JWT_SECRET,
+                    { expiresIn: '24h' }
+                );
+                return res.json({ success: true, token, user: { id: customer.id, name: customer.name, role: 'customer' } });
+            }
+
+            // Try Member (password login)
+            const member = await new Promise((resolve) => {
+                db.get(`SELECT * FROM members WHERE (username = ? OR phone IN (${placeholders}) OR hotspot_username = ?) AND status = 'active'`,
+                    [username || phone, ...variants, username || phone], (err, row) => resolve(row));
+            });
+
+            if (member && member.password && bcrypt.compareSync(password, member.password)) {
+                const token = jwt.sign(
+                    { id: member.id, username: member.username, phone: member.phone, name: member.name, role: 'member' },
+                    JWT_SECRET,
+                    { expiresIn: '24h' }
+                );
+                return res.json({ success: true, token, user: { id: member.id, name: member.name, role: 'member' } });
+            }
+        }
     }
 
     // 3. Check OTP-based roles (Technician, Customer, Member)

@@ -14,7 +14,7 @@
         <div class="row">
             <%- include('../../partials/billing-sidebar', { page: page, settings: settings, versionInfo: versionInfo, versionBadge: versionBadge }) %>
             
-            <main class="col-md-9 ms-sm-auto col-lg-9 px-md-4 main-content py-4">
+            <main class="col-md-10 ms-sm-auto col-lg-9 px-md-4 main-content py-4">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h1 class="h3 mb-0"><i class="bi bi-person-check me-2"></i>Data Member</h1>
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
@@ -65,6 +65,36 @@
                                     <% } %>
                                 </select>
                             </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Area / Desa</label>
+                                <select class="form-select" name="area">
+                                    <option value="">Semua Area</option>
+                                    <% if (uniqueAreas && uniqueAreas.length > 0) { %>
+                                        <% uniqueAreas.forEach(function(area) { %>
+                                            <option value="<%= area %>" <%= filters.area === area ? 'selected' : '' %>><%= area %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Status Pembayaran</label>
+                                <select class="form-select" name="payment_status">
+                                    <option value="">Semua</option>
+                                    <option value="paid" <%= filters.payment_status === 'paid' ? 'selected' : '' %>>Lunas</option>
+                                    <option value="unpaid" <%= filters.payment_status === 'unpaid' ? 'selected' : '' %>>Belum Lunas</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Collector</label>
+                                <select class="form-select" name="collector_id">
+                                    <option value="">Semua Collector</option>
+                                    <% if (collectors && collectors.length > 0) { %>
+                                        <% collectors.forEach(function(col) { %>
+                                            <option value="<%= col.id %>" <%= filters.collector_id == col.id ? 'selected' : '' %>><%= col.name %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
                             <div class="col-md-2">
                                 <label class="form-label">&nbsp;</label>
                                 <button type="submit" class="btn btn-primary w-100">
@@ -87,7 +117,7 @@
                                         <th>Nama</th>
                                         <th>Telepon</th>
                                         <th>Username</th>
-                                        <th>Hotspot Username</th>
+                                        <th>Area</th>
                                         <th>Paket</th>
                                         <th>Status</th>
                                         <th>Tanggal Bergabung</th>
@@ -101,7 +131,7 @@
                                                 <td><strong><%= member.name || '-' %></strong></td>
                                                 <td><%= member.phone || '-' %></td>
                                                 <td><%= member.username || '-' %></td>
-                                                <td><span class="badge bg-info"><%= member.hotspot_username || '-' %></span></td>
+                                                <td><span class="badge bg-secondary"><%= member.area || '-' %></span></td>
                                                 <td>
                                                     <% if (member.package_name) { %>
                                                         <span class="badge bg-primary"><%= member.package_name %></span>
@@ -201,6 +231,10 @@
                                 <label class="form-label">Email</label>
                                 <input type="email" class="form-control" name="email">
                             </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Area / Nama Desa</label>
+                            <input type="text" class="form-control" name="area" placeholder="Masukkan nama desa atau area">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Alamat</label>
@@ -321,6 +355,10 @@
                                 <label class="form-label">Email</label>
                                 <input type="email" class="form-control" id="edit_email" name="email">
                             </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Area / Nama Desa</label>
+                            <input type="text" class="form-control" id="edit_area" name="area" placeholder="Masukkan nama desa atau area">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Alamat</label>
@@ -502,7 +540,11 @@
                     </div>
                 </div>
                 <div class="row">
-                    <div class="col-12 mb-3">
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-muted mb-1">Area / Desa</h6>
+                        <p class="mb-3"><span class="badge bg-secondary">${member.area || '-'}</span></p>
+                    </div>
+                    <div class="col-md-6 mb-3">
                         <h6 class="text-muted mb-1">Alamat</h6>
                         <p class="mb-3">${member.address || '-'}</p>
                     </div>
@@ -561,6 +603,7 @@
             $('#edit_email').val(member.email || '');
             $('#edit_address').val(member.address || '');
             $('#edit_package_id').val(member.package_id || '');
+            $('#edit_area').val(member.area || '');
             $('#edit_status').val(member.status || 'active');
             $('#edit_hotspot_profile').val(member.hotspot_profile || '');
             $('#edit_billing_day').val(member.billing_day || 15);

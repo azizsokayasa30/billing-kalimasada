@@ -22,7 +22,8 @@ router.get('/', adminAuth, async (req, res) => {
             db.all(`
                 SELECT c.*, 
                        COUNT(cp.id) as total_payments,
-                       COALESCE(SUM(cp.commission_amount), 0) as total_commission
+                       COALESCE(SUM(cp.commission_amount), 0) as total_commission,
+                       (SELECT GROUP_CONCAT(area, ', ') FROM collector_areas WHERE collector_id = c.id) as assigned_areas
                 FROM collectors c
                 LEFT JOIN collector_payments cp ON c.id = cp.collector_id 
                     AND cp.status = 'completed'
@@ -313,6 +314,55 @@ router.delete('/:id', adminAuth, async (req, res) => {
             success: false,
             message: 'Error deleting collector: ' + error.message
         });
+    }
+});
+
+// Update collector areas mapping
+router.post('/:id/areas', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { areas } = req.body; // Array of area names
+        const billingManager = require('../config/billing');
+        
+        await billingManager.saveCollectorAreas(id, areas);
+        
+        res.json({
+            success: true,
+            message: 'Mapping area berhasil diperbarui'
+        });
+    } catch (error) {
+        console.error('Error updating collector areas:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating mapping area: ' + error.message
+        });
+    }
+});
+
+// Get unique areas from customers and members
+router.get('/unique-areas', adminAuth, async (req, res) => {
+    try {
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const areas = await new Promise((resolve, reject) => {
+            db.all(`
+               SELECT DISTINCT area FROM (
+                   SELECT area FROM customers WHERE area IS NOT NULL AND area != ""
+                   UNION
+                   SELECT area FROM members WHERE area IS NOT NULL AND area != ""
+               ) ORDER BY area
+            `, (err, rows) => {
+                if (err) reject(err);
+                else resolve((rows || []).map(r => r.area));
+            });
+        });
+        
+        db.close();
+        res.json({ success: true, areas });
+    } catch (error) {
+        console.error('Error getting unique areas:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 

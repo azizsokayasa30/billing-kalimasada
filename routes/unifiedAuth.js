@@ -94,14 +94,48 @@ router.post('/', async (req, res) => {
             }
         }
 
+        // 4. Customer / Member Login via Password
+        if (role === 'customer' && password && !otp) {
+            const targetPhone = normalizePhone(username || phone);
+            const variants = [targetPhone, '+' + targetPhone, '0' + targetPhone.slice(2)];
+            const placeholders = variants.map(() => '?').join(',');
+
+            // Cek di tabel customers
+            const customer = await new Promise(resolve => {
+                db.get(`SELECT * FROM customers WHERE (username = ? OR phone IN (${placeholders}) OR customer_id = ?) AND status = 'active'`,
+                    [username || phone, ...variants, username || phone], (err, row) => resolve(row));
+            });
+
+            if (customer && customer.password && bcrypt.compareSync(password, customer.password)) {
+                req.session.phone = customer.phone;
+                req.session.customer_username = customer.username;
+                req.session.customer_id = customer.customer_id || customer.id;
+                req.session.is_member = false;
+                return res.json({ success: true, redirect: '/customer/dashboard' });
+            }
+
+            // Cek di tabel members
+            const member = await new Promise(resolve => {
+                db.get(`SELECT * FROM members WHERE (username = ? OR phone IN (${placeholders}) OR hotspot_username = ?) AND status = 'active'`,
+                    [username || phone, ...variants, username || phone], (err, row) => resolve(row));
+            });
+
+            if (member && member.password && bcrypt.compareSync(password, member.password)) {
+                req.session.phone = member.phone;
+                req.session.member_id = member.id;
+                req.session.member_phone = member.phone;
+                req.session.member_username = member.hotspot_username || member.username;
+                req.session.customer_username = member.hotspot_username || member.username;
+                req.session.is_member = true;
+                return res.json({ success: true, redirect: '/customer/billing/dashboard' });
+            }
+        }
+
         // OTP Based Roles (Technician, Customer)
         if (otp && (phone || username)) {
             const targetPhone = normalizePhone(phone || username);
             
-            // We can call /api/auth/login logic or implement it here
-            // For now, let's implement the session logic here to match existing routes
-            
-            // 4. Technician Login
+            // 5. Technician Login
             if (role === 'technician') {
                 const apiAuth = require('./api/auth');
                 const { authManager } = require('./technicianAuth');
@@ -118,7 +152,7 @@ router.post('/', async (req, res) => {
                 }
             }
 
-            // 5. Customer / Member Login
+            // 6. Customer / Member Login via OTP
             if (role === 'customer') {
                 const apiAuth = require('./api/auth');
                 const isValid = apiAuth.verifyOTP(targetPhone, otp);

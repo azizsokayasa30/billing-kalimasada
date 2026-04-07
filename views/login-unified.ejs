@@ -174,6 +174,55 @@
             color: rgba(255, 255, 255, 0.8);
             font-size: 13px;
         }
+
+        /* Custom Tab Styling */
+        .auth-tabs {
+            margin-bottom: 20px;
+        }
+
+        .auth-tabs .nav-tabs {
+            border: none;
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 4px;
+            display: flex;
+        }
+
+        .auth-tabs .nav-tabs .nav-link {
+            border: none;
+            border-radius: 10px;
+            color: #64748b;
+            font-weight: 600;
+            font-size: 13px;
+            padding: 10px 16px;
+            transition: all 0.3s ease;
+            flex: 1;
+            text-align: center;
+            background: transparent;
+        }
+
+        .auth-tabs .nav-tabs .nav-link:hover {
+            color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .auth-tabs .nav-tabs .nav-link.active {
+            background: white;
+            color: var(--primary);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .auth-tabs .nav-tabs .nav-link i {
+            margin-right: 6px;
+        }
+
+        .tab-content {
+            min-height: 120px;
+        }
+
+        .tab-pane {
+            animation: fadeIn 0.3s ease-out;
+        }
     </style>
 </head>
 <body>
@@ -191,7 +240,7 @@
                 <div class="role-selector-container">
                     <label class="form-label">Masuk Sebagai</label>
                     <select id="roleSelect" class="form-control role-select">
-                        <option value="customer" data-auth="otp">Pelanggan</option>
+                        <option value="customer" data-auth="dual">Pelanggan</option>
                         <option value="collector" data-auth="password">Collector</option>
                         <option value="agent" data-auth="password">Agent</option>
                         <option value="technician" data-auth="otp">Teknisi</option>
@@ -201,37 +250,103 @@
 
                 <form id="loginForm">
                     <input type="hidden" name="role" id="selectedRole" value="customer">
-                    
-                    <!-- Phone/Username Field -->
-                    <div class="mb-3">
-                        <label class="form-label" id="labelUsername">Nomor WhatsApp / ID</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-person text-muted"></i></span>
-                            <input type="text" class="form-control border-start-0" id="username" name="username" placeholder="Contoh: 0812..." required>
+
+                    <!-- Auth Method Tabs (Only for Customer - dual mode) -->
+                    <div class="auth-tabs" id="authTabs">
+                        <ul class="nav nav-tabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="tab-password" data-bs-toggle="tab" data-bs-target="#pane-password" type="button" role="tab" aria-controls="pane-password" aria-selected="true">
+                                    <i class="bi bi-key"></i>Password
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tab-otp" data-bs-toggle="tab" data-bs-target="#pane-otp" type="button" role="tab" aria-controls="pane-otp" aria-selected="false">
+                                    <i class="bi bi-whatsapp"></i>OTP WhatsApp
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="tab-content" id="authTabContent">
+                        <!-- Tab Password -->
+                        <div class="tab-pane fade show active" id="pane-password" role="tabpanel" aria-labelledby="tab-password">
+                            <div class="mb-3">
+                                <label class="form-label" id="labelUsernamePassword">Username / No. HP / ID Pelanggan</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-person text-muted"></i></span>
+                                    <input type="text" class="form-control border-start-0" id="usernamePassword" name="username" placeholder="Masukkan username atau nomor HP">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Password</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-lock text-muted"></i></span>
+                                    <input type="password" class="form-control border-start-0" id="passwordField" name="password" placeholder="••••••••">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab OTP -->
+                        <div class="tab-pane fade" id="pane-otp" role="tabpanel" aria-labelledby="tab-otp">
+                            <div class="mb-3">
+                                <label class="form-label">Nomor WhatsApp</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-whatsapp text-muted"></i></span>
+                                    <input type="text" class="form-control border-start-0" id="phoneOtp" name="phone" placeholder="Contoh: 0812...">
+                                </div>
+                            </div>
+                            <div class="d-grid mb-3">
+                                <button type="button" class="btn btn-outline-primary btn-otp" id="btnSendOTP">
+                                    <i class="bi bi-send me-2"></i>Kirim Kode OTP
+                                </button>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Kode OTP</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-shield-check text-muted"></i></span>
+                                    <input type="text" class="form-control border-start-0" id="otpField" name="otp" placeholder="6 Digit Kode">
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Password Field (Dynamic) -->
-                    <div class="mb-3" id="passwordGroup" style="display: none;">
-                        <label class="form-label">Password</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-lock text-muted"></i></span>
-                            <input type="password" class="form-control border-start-0" id="password" name="password" placeholder="••••••••">
+                    <!-- For password-only roles (no tabs) -->
+                    <div id="passwordOnlyGroup" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label" id="labelUsernameSingle">Username / Email</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-person text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0" id="usernameSingle" placeholder="Masukkan username">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-lock text-muted"></i></span>
+                                <input type="password" class="form-control border-start-0" id="passwordSingle" placeholder="••••••••">
+                            </div>
                         </div>
                     </div>
 
-                    <!-- OTP Fields (Dynamic) -->
-                    <div id="otpGroup">
+                    <!-- For OTP-only roles (no tabs) -->
+                    <div id="otpOnlyGroup" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">Nomor WhatsApp</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-whatsapp text-muted"></i></span>
+                                <input type="text" class="form-control border-start-0" id="phoneSingle" placeholder="Contoh: 0812...">
+                            </div>
+                        </div>
                         <div class="d-grid mb-3">
-                            <button type="button" class="btn btn-outline-primary btn-otp" id="btnSendOTP">
-                                <i class="bi bi-whatsapp me-2"></i>Kirim Kode OTP
+                            <button type="button" class="btn btn-outline-primary btn-otp" id="btnSendOTPSingle">
+                                <i class="bi bi-send me-2"></i>Kirim Kode OTP
                             </button>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Kode OTP</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-shield-check text-muted"></i></span>
-                                <input type="text" class="form-control border-start-0" id="otp" name="otp" placeholder="6 Digit Kode">
+                                <input type="text" class="form-control border-start-0" id="otpSingle" placeholder="6 Digit Kode">
                             </div>
                         </div>
                     </div>
@@ -255,9 +370,20 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script>
         $(document).ready(function() {
+            // Track current active tab for customer
+            let customerAuthMode = 'password'; // 'password' or 'otp'
+
+            // Listen for tab changes
+            $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function(e) {
+                const targetId = $(e.target).attr('id');
+                customerAuthMode = targetId === 'tab-otp' ? 'otp' : 'password';
+                $('#alertPlaceholder').empty();
+            });
+
             // Role Selection Change
             $('#roleSelect').change(function() {
                 const selectedOption = $(this).find('option:selected');
@@ -265,45 +391,55 @@
                 const auth = selectedOption.data('auth');
                 
                 $('#selectedRole').val(role);
+                $('#alertPlaceholder').empty();
 
-                // Toggle fields
-                if (auth === 'password') {
-                    $('#passwordGroup').show().addClass('fade-in');
-                    $('#otpGroup').hide();
-                    $('#labelUsername').text(role === 'admin' ? 'Username Admin' : 'Nomor WhatsApp / Email');
-                } else {
-                    $('#passwordGroup').hide();
-                    $('#otpGroup').show().addClass('fade-in');
-                    $('#labelUsername').text('Nomor WhatsApp');
+                // Hide all groups first
+                $('#authTabs, #authTabContent').hide();
+                $('#passwordOnlyGroup').hide();
+                $('#otpOnlyGroup').hide();
+
+                if (auth === 'dual') {
+                    // Customer: show tabs
+                    $('#authTabs, #authTabContent').show().addClass('fade-in');
+                } else if (auth === 'password') {
+                    // Collector, Agent, Admin: password only
+                    $('#passwordOnlyGroup').show().addClass('fade-in');
+                    $('#labelUsernameSingle').text(
+                        role === 'admin' ? 'Username Admin' : 'Nomor WhatsApp / Email'
+                    );
+                } else if (auth === 'otp') {
+                    // Technician: OTP only
+                    $('#otpOnlyGroup').show().addClass('fade-in');
                 }
 
                 // Customer links visibility
-                if (role === 'customer') {
-                    $('#customerLinks').show();
-                } else {
-                    $('#customerLinks').hide();
-                }
-
-                // Clear alerts
-                $('#alertPlaceholder').empty();
+                $('#customerLinks').toggle(role === 'customer');
             });
 
-            // Send OTP Handler
+            // Initialize: show tabs for customer (default)
+            $('#authTabs, #authTabContent').show();
+            $('#passwordOnlyGroup').hide();
+            $('#otpOnlyGroup').hide();
+
+            // Send OTP Handler (Tab version)
             $('#btnSendOTP').click(function() {
-                const role = $('#selectedRole').val();
-                const phone = $('#username').val();
-                
+                sendOTP($('#phoneOtp').val(), $(this));
+            });
+
+            // Send OTP Handler (Single version for technician)
+            $('#btnSendOTPSingle').click(function() {
+                sendOTP($('#phoneSingle').val(), $(this));
+            });
+
+            function sendOTP(phone, $btn) {
                 if (!phone) {
                     showAlert('danger', 'Silakan masukkan nomor WhatsApp Anda');
                     return;
                 }
 
-                const $btn = $(this);
                 $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Mengirim...');
 
-                const endpoint = role === 'technician' ? '/api/auth/request-otp' : '/api/auth/request-otp'; // Unified for now
-                
-                $.post(endpoint, { phone: phone }, function(res) {
+                $.post('/api/auth/request-otp', { phone: phone }, function(res) {
                     if (res.success) {
                         showAlert('success', 'Kode OTP telah dikirim ke WhatsApp Anda');
                     } else {
@@ -312,21 +448,53 @@
                 }).fail(function(xhr) {
                     showAlert('danger', xhr.responseJSON?.message || 'Terjadi kesalahan sistem');
                 }).always(function() {
-                    $btn.prop('disabled', false).html('<i class="bi bi-whatsapp me-2"></i>Kirim Kode OTP');
+                    $btn.prop('disabled', false).html('<i class="bi bi-send me-2"></i>Kirim Kode OTP');
                 });
-            });
+            }
 
             // Login Form Handler
             $('#loginForm').on('submit', function(e) {
                 e.preventDefault();
                 
-                const data = {
-                    role: $('#selectedRole').val(),
-                    username: $('#username').val(),
-                    password: $('#password').val(),
-                    phone: $('#username').val(),
-                    otp: $('#otp').val()
-                };
+                const role = $('#selectedRole').val();
+                const auth = $('#roleSelect option:selected').data('auth');
+                
+                let data = { role: role };
+
+                if (auth === 'dual') {
+                    // Customer with tabs
+                    if (customerAuthMode === 'password') {
+                        data.username = $('#usernamePassword').val();
+                        data.password = $('#passwordField').val();
+                        if (!data.username || !data.password) {
+                            showAlert('danger', 'Silakan isi username dan password');
+                            return;
+                        }
+                    } else {
+                        data.phone = $('#phoneOtp').val();
+                        data.otp = $('#otpField').val();
+                        data.username = $('#phoneOtp').val();
+                        if (!data.phone || !data.otp) {
+                            showAlert('danger', 'Silakan isi nomor WhatsApp dan kode OTP');
+                            return;
+                        }
+                    }
+                } else if (auth === 'password') {
+                    data.username = $('#usernameSingle').val();
+                    data.password = $('#passwordSingle').val();
+                    if (!data.username || !data.password) {
+                        showAlert('danger', 'Silakan isi username dan password admin');
+                        return;
+                    }
+                } else if (auth === 'otp') {
+                    data.phone = $('#phoneSingle').val();
+                    data.otp = $('#otpSingle').val();
+                    data.username = $('#phoneSingle').val();
+                    if (!data.phone || !data.otp) {
+                        showAlert('danger', 'Silakan isi nomor WhatsApp dan kode OTP');
+                        return;
+                    }
+                }
 
                 $('#loginSpinner').show();
                 $('#btnLogin').prop('disabled', true);
