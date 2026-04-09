@@ -7,183 +7,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="/css/admin-mobile.css" rel="stylesheet">
     <link href="/css/dashboard-modern.css" rel="stylesheet">
-    <style>
-        .page-header-bar {
-            padding: 0 0 16px;
-            margin-bottom: 20px;
-            border-bottom: 1px solid var(--border);
-        }
-        .page-header-bar h1 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--fg);
-            margin: 0 0 2px;
-            letter-spacing: -0.02em;
-        }
-        .page-header-bar .page-desc {
-            font-size: 0.8rem;
-            color: var(--fg-muted);
-            margin: 0;
-        }
-        .breadcrumb { margin-bottom: 6px; }
-        .breadcrumb-item, .breadcrumb-item a {
-            font-size: 0.8rem;
-            color: var(--fg-muted) !important;
-            text-decoration: none;
-        }
-        .breadcrumb-item.active { color: var(--fg) !important; }
-        .breadcrumb-item + .breadcrumb-item::before { color: var(--fg-subtle) !important; }
-
-        /* Filter card */
-        .filter-header {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 12px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--fg);
-        }
-        .filter-header i { color: var(--fg-muted); }
-
-        .form-control, .form-select {
-            border: 1px solid var(--border) !important;
-            border-radius: var(--radius-md) !important;
-            padding: 8px 12px !important;
-            font-size: 0.85rem !important;
-            font-family: 'Inter', sans-serif !important;
-            color: var(--fg) !important;
-            background: var(--card-bg) !important;
-            transition: all 150ms;
-        }
-        .form-control:focus, .form-select:focus {
-            border-color: var(--primary) !important;
-            box-shadow: 0 0 0 3px var(--primary-muted) !important;
-        }
-        .form-label {
-            font-size: 0.7rem !important;
-            font-weight: 600 !important;
-            color: var(--fg-muted) !important;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-        }
-
-        /* Collector card */
-        .collector-avatar {
-            width: 40px;
-            height: 40px;
-            background: var(--primary-muted);
-            border-radius: var(--radius-md);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.1rem;
-            color: var(--primary);
-            flex-shrink: 0;
-        }
-        .collector-name {
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: var(--fg);
-            margin: 0;
-        }
-
-        .stats-summary {
-            background: var(--bg-secondary);
-            border-radius: var(--radius-md);
-            padding: 12px;
-            margin: 12px 0;
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-        }
-        .mini-stat-label {
-            font-size: 0.7rem;
-            color: var(--fg-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            margin-bottom: 1px;
-            display: block;
-        }
-        .mini-stat-value {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--fg);
-        }
-        .mini-stat-value.text-primary { color: var(--primary) !important; }
-        .mini-stat-value.text-warning { color: var(--warning) !important; }
-        .mini-stat-value.text-success { color: var(--success) !important; }
-
-        .badge-status {
-            padding: 4px 10px;
-            border-radius: var(--radius-sm);
-            font-weight: 600;
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            background: var(--success-muted);
-            color: var(--success);
-            border: 1px solid var(--success-border);
-        }
-
-        .btn-filter {
-            background: var(--primary) !important;
-            color: var(--primary-fg) !important;
-            border: none !important;
-            border-radius: var(--radius-md) !important;
-            padding: 8px 16px !important;
-            font-size: 0.825rem !important;
-            font-weight: 500 !important;
-            font-family: 'Inter', sans-serif !important;
-            transition: all 150ms;
-        }
-        .btn-filter:hover {
-            background: var(--primary-hover) !important;
-        }
-
-        .btn-export {
-            background: var(--card-bg) !important;
-            color: var(--fg) !important;
-            border: 1px solid var(--border) !important;
-            border-radius: var(--radius-md) !important;
-            padding: 6px 14px !important;
-            font-size: 0.8rem !important;
-            font-weight: 500 !important;
-            font-family: 'Inter', sans-serif !important;
-            transition: all 150ms;
-        }
-        .btn-export:hover {
-            background: var(--bg-secondary) !important;
-            border-color: var(--border-hover) !important;
-        }
-
-        .btn-detail {
-            background: transparent;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 4px 12px;
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: var(--fg-muted);
-            transition: all 150ms;
-            text-decoration: none;
-        }
-        .btn-detail:hover {
-            background: var(--bg-secondary);
-            color: var(--primary);
-            border-color: var(--primary-muted-border);
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade { animation: fadeIn 0.3s ease forwards; }
-    </style>
+    <link href="/css/collector-reports.css" rel="stylesheet">
 </head>
 <body>
     <div class="container-fluid">
@@ -364,7 +192,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
         function applyFilters() {
             const dateFrom = document.getElementById('dateFrom').value;

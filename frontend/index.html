@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CI/CD Monitoring Dashboard — Enterprise deployment monitoring and management">
+  <title>DeployHub — CI/CD Dashboard</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚀</text></svg>">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- ========== SIDEBAR ========== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="sidebar-brand">
+          <span class="sidebar-brand-name">DeployHub</span>
+          <span class="sidebar-brand-tag">CI/CD Monitor</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Overview</div>
+          <div class="sidebar-item active" data-page="dashboard" onclick="navigateTo('dashboard')">
+            <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Dashboard
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Management</div>
+          <div class="sidebar-item" data-page="servers" onclick="navigateTo('servers')">
+            <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+            Servers
+            <span class="sidebar-item-badge">3</span>
+          </div>
+          <div class="sidebar-item" data-page="projects" onclick="navigateTo('projects')">
+            <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 002-2V8a2 2 0 00-2-2h-7.93a2 2 0 01-1.66-.9l-.82-1.2A2 2 0 007.93 3H4a2 2 0 00-2 2v13c0 1.1.9 2 2 2z"/></svg>
+            Projects
+            <span class="sidebar-item-badge">8</span>
+          </div>
+          <div class="sidebar-item" data-page="deployments" onclick="navigateTo('deployments')">
+            <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Deployments
+            <span class="sidebar-item-badge">24</span>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Settings</div>
+          <div class="sidebar-item" data-page="settings" onclick="navigateTo('settings')">
+            <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            Settings
+          </div>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar">A</div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name">Admin User</div>
+            <div class="sidebar-user-role">Administrator</div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--foreground-subtle); flex-shrink:0"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Sidebar Backdrop (mobile/tablet) -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+    <!-- ========== MAIN CONTENT ========== -->
+    <main class="main-content">
+      <!-- Top Header -->
+      <header class="top-header">
+        <div class="top-header-left">
+          <button class="btn btn-ghost btn-icon mobile-menu-btn" onclick="toggleSidebar()" style="display:none">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <nav class="breadcrumb" id="breadcrumb">
+            <span class="breadcrumb-item">DeployHub</span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-current" id="breadcrumb-current">Dashboard</span>
+          </nav>
+        </div>
+        <div class="top-header-right">
+          <div class="search-input-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" class="search-input" placeholder="Search projects..." id="searchInput">
+            <span class="search-shortcut">⌘K</span>
+          </div>
+          <button class="header-btn" id="refreshBtn" onclick="refreshData()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          </button>
+          <button class="header-btn" id="notifBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notification-dot"></span>
+          </button>
+        </div>
+      </header>
+
+      <!-- ========== PAGE: DASHBOARD ========== -->
+      <div class="page-content page" id="page-dashboard">
+        <div class="page-header">
+          <div class="page-title-group">
+            <h1 class="page-title">Dashboard</h1>
+            <p class="page-description">Overview of your deployment pipeline and project health.</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-secondary" onclick="openModal('addProject')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Project
+            </button>
+            <button class="btn btn-primary" onclick="triggerDeploy()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Deploy
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid" id="statsGrid">
+          <div class="stat-card stat-primary">
+            <div class="stat-top">
+              <span class="stat-label">Total Projects</span>
+              <div class="stat-icon icon-primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 002-2V8a2 2 0 00-2-2h-7.93a2 2 0 01-1.66-.9l-.82-1.2A2 2 0 007.93 3H4a2 2 0 00-2 2v13c0 1.1.9 2 2 2z"/></svg>
+              </div>
+            </div>
+            <div class="stat-value">8</div>
+            <div class="stat-change positive">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>
+              +2 this month
+            </div>
+          </div>
+          <div class="stat-card stat-success">
+            <div class="stat-top">
+              <span class="stat-label">Successful Deploys</span>
+              <div class="stat-icon icon-success">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+            </div>
+            <div class="stat-value">142</div>
+            <div class="stat-change positive">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>
+              92% success rate
+            </div>
+          </div>
+          <div class="stat-card stat-danger">
+            <div class="stat-top">
+              <span class="stat-label">Failed Deploys</span>
+              <div class="stat-icon icon-danger">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              </div>
+            </div>
+            <div class="stat-value">12</div>
+            <div class="stat-change negative">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/></svg>
+              +3 vs last week
+            </div>
+          </div>
+          <div class="stat-card stat-warning">
+            <div class="stat-top">
+              <span class="stat-label">Servers Active</span>
+              <div class="stat-icon icon-warning">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+              </div>
+            </div>
+            <div class="stat-value">3</div>
+            <div class="stat-change neutral">All operational</div>
+          </div>
+        </div>
+
+        <!-- Charts & Activity -->
+        <div class="grid-2" style="margin-bottom: 24px;">
+          <!-- Deployment Chart -->
+          <div class="card col-span-2" style="grid-column: span 1;">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Deployment Activity</div>
+                <div class="card-description">Last 7 days overview</div>
+              </div>
+              <div class="chart-legend">
+                <div class="chart-legend-item">
+                  <div class="chart-legend-dot" style="background: var(--success)"></div>
+                  Success
+                </div>
+                <div class="chart-legend-item">
+                  <div class="chart-legend-dot" style="background: var(--danger)"></div>
+                  Failed
+                </div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-container" id="deployChart"></div>
+            </div>
+          </div>
+
+          <!-- Recent Activity -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Recent Activity</div>
+                <div class="card-description">Latest deployment events</div>
+              </div>
+              <button class="btn btn-ghost" style="font-size: 12px; height: 28px; padding: 0 8px;" onclick="navigateTo('deployments')">View all</button>
+            </div>
+            <div class="card-body" style="padding: 8px 20px;">
+              <div class="activity-list" id="activityList"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Projects Quick View -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Projects Overview</div>
+              <div class="card-description">Current status of all monitored projects</div>
+            </div>
+            <button class="btn btn-secondary" style="height: 32px; font-size: 12px;" onclick="navigateTo('projects')">
+              View All Projects
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Server</th>
+                  <th>Branch</th>
+                  <th>Status</th>
+                  <th>SSL Expiry</th>
+                  <th>Last Deploy</th>
+                  <th style="text-align: right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="dashboardProjectsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== PAGE: SERVERS ========== -->
+      <div class="page-content page" id="page-servers" style="display:none">
+        <div class="page-header">
+          <div class="page-title-group">
+            <h1 class="page-title">Servers</h1>
+            <p class="page-description">Manage your deployment target servers and SSH configurations.</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="openModal('addServer')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Server
+            </button>
+          </div>
+        </div>
+
+        <div class="grid-3" id="serversGrid"></div>
+      </div>
+
+      <!-- ========== PAGE: PROJECTS ========== -->
+      <div class="page-content page" id="page-projects" style="display:none">
+        <div class="page-header">
+          <div class="page-title-group">
+            <h1 class="page-title">Projects</h1>
+            <p class="page-description">All registered projects and their deployment configurations.</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" onclick="openModal('addProject')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Project
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="filter-btn active" onclick="filterProjects('all', this)">
+              All <span style="margin-left:2px; opacity:0.6">8</span>
+            </button>
+            <button class="filter-btn" onclick="filterProjects('up', this)">
+              <span class="badge-dot" style="background:var(--success); width:6px; height:6px; border-radius:50%;"></span>
+              Up <span style="opacity:0.6">6</span>
+            </button>
+            <button class="filter-btn" onclick="filterProjects('down', this)">
+              <span class="badge-dot" style="background:var(--danger); width:6px; height:6px; border-radius:50%;"></span>
+              Down <span style="opacity:0.6">1</span>
+            </button>
+            <button class="filter-btn" onclick="filterProjects('unknown', this)">
+              <span class="badge-dot" style="background:var(--foreground-subtle); width:6px; height:6px; border-radius:50%;"></span>
+              Unknown <span style="opacity:0.6">1</span>
+            </button>
+          </div>
+          <div class="toolbar-right">
+            <button class="filter-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              Filter
+            </button>
+            <button class="filter-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
+              Sort
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Repository</th>
+                  <th>Server</th>
+                  <th>Status</th>
+                  <th>SSL Expiry</th>
+                  <th>Last Deploy</th>
+                  <th style="text-align: right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="projectsTable"></tbody>
+            </table>
+          </div>
+          <div class="card-footer">
+            <div class="pagination">
+              <div class="pagination-info">Showing 1 to 8 of 8 results</div>
+              <div class="pagination-controls">
+                <button class="pagination-btn" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button class="pagination-btn active">1</button>
+                <button class="pagination-btn" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== PAGE: DEPLOYMENTS ========== -->
+      <div class="page-content page" id="page-deployments" style="display:none">
+        <div class="page-header">
+          <div class="page-title-group">
+            <h1 class="page-title">Deployment History</h1>
+            <p class="page-description">Complete log of all deployment activities across your projects.</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-secondary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="filter-btn active" onclick="filterDeploys('all', this)">All</button>
+            <button class="filter-btn" onclick="filterDeploys('success', this)">
+              <span style="background:var(--success); width:6px; height:6px; border-radius:50%; display:inline-block;"></span>
+              Success
+            </button>
+            <button class="filter-btn" onclick="filterDeploys('failed', this)">
+              <span style="background:var(--danger); width:6px; height:6px; border-radius:50%; display:inline-block;"></span>
+              Failed
+            </button>
+            <button class="filter-btn" onclick="filterDeploys('running', this)">
+              <span style="background:var(--primary); width:6px; height:6px; border-radius:50%; display:inline-block;"></span>
+              Running
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Project</th>
+                  <th>Commit</th>
+                  <th>Triggered</th>
+                  <th style="text-align: right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="deploymentsTable"></tbody>
+            </table>
+          </div>
+          <div class="card-footer">
+            <div class="pagination">
+              <div class="pagination-info">Showing 1 to 10 of 24 results</div>
+              <div class="pagination-controls">
+                <button class="pagination-btn" disabled>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button class="pagination-btn active">1</button>
+                <button class="pagination-btn">2</button>
+                <button class="pagination-btn">3</button>
+                <button class="pagination-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== PAGE: SETTINGS ========== -->
+      <div class="page-content page" id="page-settings" style="display:none">
+        <div class="page-header">
+          <div class="page-title-group">
+            <h1 class="page-title">Settings</h1>
+            <p class="page-description">Configure your CI/CD integration and notification preferences.</p>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab-item active" onclick="switchTab(this, 'general')">General</div>
+          <div class="tab-item" onclick="switchTab(this, 'api')">API & Integration</div>
+          <div class="tab-item" onclick="switchTab(this, 'notifications')">Notifications</div>
+        </div>
+
+        <!-- General Settings -->
+        <div class="settings-tab" id="settings-general">
+          <div class="card" style="max-width: 640px;">
+            <div class="card-header">
+              <div>
+                <div class="card-title">General Settings</div>
+                <div class="card-description">Basic application configuration</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label">Application Name</label>
+                <input type="text" class="form-input" value="DeployHub" id="settingsAppName">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Default Branch</label>
+                <input type="text" class="form-input" value="main" id="settingsDefaultBranch">
+                <div class="form-hint">Default branch used when creating new projects</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Timezone</label>
+                <select class="form-select" id="settingsTimezone">
+                  <option value="Asia/Jakarta" selected>Asia/Jakarta (WIB)</option>
+                  <option value="Asia/Makassar">Asia/Makassar (WITA)</option>
+                  <option value="Asia/Jayapura">Asia/Jayapura (WIT)</option>
+                  <option value="UTC">UTC</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+              <button class="btn btn-secondary">Cancel</button>
+              <button class="btn btn-primary">Save Changes</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- API Settings -->
+        <div class="settings-tab" id="settings-api" style="display:none;">
+          <div class="card" style="max-width: 640px; margin-bottom: 16px;">
+            <div class="card-header">
+              <div>
+                <div class="card-title">n8n Integration</div>
+                <div class="card-description">Configure the connection to your n8n workflow engine</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label form-label-required">n8n Webhook URL</label>
+                <input type="text" class="form-input" placeholder="https://your-n8n.com/webhook/deploy" id="settingsN8nUrl">
+              </div>
+              <div class="form-group">
+                <label class="form-label form-label-required">API Key</label>
+                <div style="position: relative;">
+                  <input type="password" class="form-input" value="sk-deployhub-xxxxxxxxxxxx" id="settingsApiKey" style="padding-right: 80px;">
+                  <button class="btn btn-ghost" style="position:absolute; right:2px; top:2px; height:34px; font-size:11px;" onclick="toggleApiKeyVisibility()">Show</button>
+                </div>
+                <div class="form-hint">Used in the X-N8N-Key header for API authentication</div>
+              </div>
+            </div>
+            <div class="card-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+              <button class="btn btn-secondary">Regenerate Key</button>
+              <button class="btn btn-primary">Save</button>
+            </div>
+          </div>
+
+          <div class="card" style="max-width: 640px;">
+            <div class="card-header">
+              <div>
+                <div class="card-title">API Endpoints</div>
+                <div class="card-description">Available endpoints for n8n workflow integration</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div style="margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <span class="badge badge-success" style="font-family: 'JetBrains Mono', monospace; font-size: 10px;">GET</span>
+                  <code style="font-size: 13px; color: var(--foreground-muted); font-family: 'JetBrains Mono', monospace;">/api/deploy/info</code>
+                </div>
+                <div class="code-block">curl -H "X-N8N-Key: your-api-key" \
+  "https://your-app.com/api/deploy/info?repo=owner/repo"</div>
+              </div>
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <span class="badge badge-primary" style="font-family: 'JetBrains Mono', monospace; font-size: 10px;">POST</span>
+                  <code style="font-size: 13px; color: var(--foreground-muted); font-family: 'JetBrains Mono', monospace;">/api/deploy/log</code>
+                </div>
+                <div class="code-block">curl -X POST -H "X-N8N-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"project_id":1,"status":"success","commit_hash":"abc123","output":"OK"}' \
+  "https://your-app.com/api/deploy/log"</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notifications Settings -->
+        <div class="settings-tab" id="settings-notifications" style="display:none;">
+          <div class="card" style="max-width: 640px;">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Notification Preferences</div>
+                <div class="card-description">Configure how you want to be notified about deployment events</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--card-border);">
+                  <div>
+                    <div style="font-size: 13px; font-weight: 500; color: var(--foreground);">Telegram Notifications</div>
+                    <div style="font-size: 12px; color: var(--foreground-subtle);">Send alerts via Telegram bot</div>
+                  </div>
+                  <span class="badge badge-muted">Coming Soon</span>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--card-border);">
+                  <div>
+                    <div style="font-size: 13px; font-weight: 500; color: var(--foreground);">Email Notifications</div>
+                    <div style="font-size: 12px; color: var(--foreground-subtle);">Receive email on deploy failure</div>
+                  </div>
+                  <span class="badge badge-muted">Coming Soon</span>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0;">
+                  <div>
+                    <div style="font-size: 13px; font-weight: 500; color: var(--foreground);">WhatsApp Notifications</div>
+                    <div style="font-size: 12px; color: var(--foreground-subtle);">Send alerts via WhatsApp API</div>
+                  </div>
+                  <span class="badge badge-muted">Coming Soon</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ========== MODAL: Add Server ========== -->
+  <div class="modal-overlay" id="modal-addServer">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Add Server</h2>
+        <button class="modal-close" onclick="closeModal('addServer')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label form-label-required">Server Name</label>
+          <input type="text" class="form-input" placeholder="e.g. Production Server">
+        </div>
+        <div class="form-group">
+          <label class="form-label form-label-required">IP Address</label>
+          <input type="text" class="form-input" placeholder="e.g. 192.168.1.100">
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">SSH User</label>
+            <input type="text" class="form-input" value="root">
+          </div>
+          <div class="form-group">
+            <label class="form-label">SSH Port</label>
+            <input type="number" class="form-input" value="22">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-textarea" placeholder="Optional server description..." style="min-height: 60px; font-family: inherit;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('addServer')">Cancel</button>
+        <button class="btn btn-primary" onclick="closeModal('addServer')">Add Server</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MODAL: Add Project ========== -->
+  <div class="modal-overlay" id="modal-addProject">
+    <div class="modal" style="max-width: 580px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Add Project</h2>
+        <button class="modal-close" onclick="closeModal('addProject')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label form-label-required">Project Name</label>
+          <input type="text" class="form-input" placeholder="e.g. Aurelif">
+        </div>
+        <div class="form-group">
+          <label class="form-label form-label-required">Repository</label>
+          <input type="text" class="form-input" placeholder="e.g. username/repo-name" style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+          <div class="form-hint">GitHub repository in owner/repo format</div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label form-label-required">Server</label>
+            <select class="form-select">
+              <option value="">Select server...</option>
+              <option value="1">Production Server</option>
+              <option value="2">Staging Server</option>
+              <option value="3">Development Server</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Branch</label>
+            <input type="text" class="form-input" value="main">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label form-label-required">Server Path</label>
+          <input type="text" class="form-input" placeholder="/var/www/your-project" style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Domain URL</label>
+          <input type="text" class="form-input" placeholder="https://example.com">
+          <div class="form-hint">Used for SSL monitoring (Phase 2)</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Deploy Script</label>
+          <textarea class="form-textarea" placeholder="composer install --no-dev && php artisan migrate --force" style="min-height: 80px;"></textarea>
+          <div class="form-hint">Commands to run after git pull on the server</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('addProject')">Cancel</button>
+        <button class="btn btn-primary" onclick="closeModal('addProject')">Add Project</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MODAL: Deploy Output ========== -->
+  <div class="modal-overlay" id="modal-deployOutput">
+    <div class="modal" style="max-width: 680px;">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title">Deploy Output</h2>
+          <div style="font-size: 12px; color: var(--foreground-subtle); margin-top: 4px;">
+            <span id="outputProject">Aurelif</span> · <span id="outputCommit" style="font-family: 'JetBrains Mono', monospace;">a1b2c3d</span>
+          </div>
+        </div>
+        <button class="modal-close" onclick="closeModal('deployOutput')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 16px;">
+        <div class="terminal-output">
+<span class="terminal-line muted">$ cd /var/www/aurelif</span>
+<span class="terminal-line info">$ git pull origin main</span>
+<span class="terminal-line">remote: Enumerating objects: 12, done.</span>
+<span class="terminal-line">remote: Counting objects: 100% (12/12), done.</span>
+<span class="terminal-line">remote: Compressing objects: 100% (8/8), done.</span>
+<span class="terminal-line success">Already up to date. Fast-forward merge.</span>
+<span class="terminal-line info">$ composer install --no-dev --optimize-autoloader</span>
+<span class="terminal-line">Loading composer repositories with package information</span>
+<span class="terminal-line">Installing dependencies from lock file</span>
+<span class="terminal-line success">Nothing to install, update or remove</span>
+<span class="terminal-line success">Generating optimized autoload files</span>
+<span class="terminal-line info">$ php artisan migrate --force</span>
+<span class="terminal-line success">Nothing to migrate.</span>
+<span class="terminal-line info">$ php artisan config:cache</span>
+<span class="terminal-line success">Configuration cached successfully.</span>
+<span class="terminal-line info">$ php artisan route:cache</span>
+<span class="terminal-line success">Route cache cleared successfully.</span>
+<span class="terminal-line success">Routes cached successfully.</span>
+<span class="terminal-line muted">───────────────────────────────────────</span>
+<span class="terminal-line success">✓ Deployment completed successfully in 4.2s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== TOAST CONTAINER ========== -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
