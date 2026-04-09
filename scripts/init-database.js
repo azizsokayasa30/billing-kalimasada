@@ -48,75 +48,30 @@ function runSQLFile(filePath) {
         
         const sql = fs.readFileSync(filePath, 'utf-8');
         
-        // Split by semicolon and run each statement
-        const statements = sql
-            .split(';')
-            .map(s => s.trim())
-            .filter(s => s.length > 0 && !s.startsWith('--'));
-        
-        let completed = 0;
-        let errors = [];
-        let warnings = 0;
-        
-        if (statements.length === 0) {
-            return resolve();
-        }
-        
-        statements.forEach((statement, index) => {
-            // Skip empty or comment-only statements
-            if (!statement || statement.startsWith('--')) {
-                completed++;
-                if (completed === statements.length) {
-                    if (warnings > 0 && errors.length === 0) {
-                        console.log(`    ✅ Completed with ${warnings} warning(s) (expected)`);
-                        resolve();
-                    } else if (errors.length === 0) {
-                        resolve();
-                    } else {
-                        reject(new Error(`Errors in ${filePath}: ${errors.map(e => e.message).join('; ')}`));
-                    }
-                }
-                return;
-            }
-            
-            db.run(statement, (err) => {
-                if (err) {
-                    // Ignore expected errors:
-                    // - "already exists" (table/column/index already exists)
-                    // - "duplicate column" (column already exists)
-                    // - "no such table" (normal for ALTER/INDEX before CREATE TABLE)
-                    // - "cannot commit - no transaction is active" (normal if no BEGIN)
-                    const ignorableErrors = [
-                        'already exists',
-                        'duplicate column',
-                        'no such table',
-                        'cannot commit - no transaction is active'
-                    ];
-                    
-                    const isIgnorable = ignorableErrors.some(msg => err.message.includes(msg));
-                    
-                    if (isIgnorable) {
-                        warnings++;
-                        // Don't log expected warnings to reduce noise
-                    } else {
-                        // Only log real errors
-                        console.warn(`    ⚠️  Warning in statement ${index + 1}: ${err.message}`);
-                        errors.push(err);
-                    }
-                }
+        // Use db.exec() to run multiple statements at once natively.
+        // This handles semicolons inside strings (like HTML/CSS) correctly.
+        db.exec(sql, (err) => {
+            if (err) {
+                // Ignore expected errors (table already exists, etc.)
+                const ignorableErrors = [
+                    'already exists',
+                    'duplicate column',
+                    'no such table',
+                    'cannot commit - no transaction is active'
+                ];
                 
-                completed++;
-                if (completed === statements.length) {
-                    if (warnings > 0 && errors.length === 0) {
-                        // All errors were ignorable
-                        resolve();
-                    } else if (errors.length === 0) {
-                        resolve();
-                    } else {
-                        reject(new Error(`Errors in ${filePath}: ${errors.map(e => e.message).join('; ')}`));
-                    }
+                const isIgnorable = ignorableErrors.some(msg => err.message.includes(msg));
+                
+                if (isIgnorable) {
+                    // console.log(`    ℹ️  Notice: ${err.message}`);
+                    resolve();
+                } else {
+                    console.error(`    ❌ Error in ${path.basename(filePath)}: ${err.message}`);
+                    reject(err);
                 }
-            });
+            } else {
+                resolve();
+            }
         });
     });
 }
