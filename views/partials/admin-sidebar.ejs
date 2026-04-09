@@ -1,83 +1,314 @@
-<nav class="col-md-2 sidebar d-flex flex-column" id="adminSidebar">
-    <style>
-        #adminSidebar .sidebar-section-label {
-            font-size: 0.95rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: rgba(255,255,255,0.7);
-            padding: 8px 24px 4px 24px;
-            margin-top: 10px;
-        }
-        #adminSidebar {
-            height: 100vh;
-            overflow-y: auto;
-        }
-        #adminSidebar .sidebar-subitem {
-            padding-left: 48px;
-            font-size: 0.95rem;
-        }
-        #adminSidebar .sidebar-subitem i {
-            margin-right: 8px;
-        }
-    </style>
-    <div class="sidebar-header mb-4 text-center">
-        <img src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?ts=<%= Date.now() %>" alt="Logo" style="max-width:120px;max-height:60px;">
+<nav class="col-md-2 sb d-flex flex-column" id="adminSidebar">
+    <!-- Logo Section -->
+    <div class="sb-header">
+        <div class="sb-logo-icon">
+            <img src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?ts=<%= Date.now() %>" alt="Logo" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
+        </div>
+        <div class="sb-brand">
+            <span class="sb-brand-name"><%= typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Net digital Group') %></span>
+            <span class="sb-brand-tag">Admin Panel</span>
+        </div>
     </div>
-    <a href="/admin/dashboard" class="<%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>"><i class="bi bi-house"></i> Dashboard</a>
-    <a href="/admin/billing/dashboard" class="<%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>"><i class="bi bi-receipt"></i> Billing</a>
-    <a href="/admin/installations" class="<%= typeof page !== 'undefined' && page === 'installations' ? 'active' : '' %>"><i class="bi bi-tools"></i> Installation Jobs</a>
-    <a href="/admin/technicians" class="<%= typeof page !== 'undefined' && page === 'technicians' ? 'active' : '' %>"><i class="bi bi-people-fill"></i> Kelola Teknisi</a>
-    <a href="/admin/cable-network/odp" class="<%= typeof page !== 'undefined' && page === 'cable-network-odp' ? 'active' : '' %>"><i class="bi bi-broadcast"></i> ODP Management</a>
-    <a href="/admin/cable-network/cables" class="<%= typeof page !== 'undefined' && page === 'cable-network-cables' ? 'active' : '' %>"><i class="bi bi-diagram-3"></i> Cable Routes</a>
-    <a href="/admin/cable-network/analytics" class="<%= typeof page !== 'undefined' && page === 'cable-network-analytics' ? 'active' : '' %>"><i class="bi bi-bar-chart-alt-2"></i> Network Analytics</a>
-    <a href="/admin/billing/mapping-new" class="<%= typeof page !== 'undefined' && page === 'mapping-new' ? 'active' : '' %>"><i class="bi bi-map"></i> Network Mapping</a>
-    <a href="/admin/genieacs" class="<%= typeof page !== 'undefined' && page === 'genieacs' ? 'active' : '' %>"><i class="bi bi-hdd-network"></i> GenieACS</a>
-    <a href="/admin/mikrotik" class="<%= typeof page !== 'undefined' && page === 'mikrotik' ? 'active' : '' %>"><i class="bi bi-router"></i> PPPoE</a>
-    <a href="/admin/mikrotik/profiles" class="<%= typeof page !== 'undefined' && page === 'mikrotik-profiles' ? 'active' : '' %>"><i class="bi bi-person-badge"></i> Profile PPPoE</a>
-    <% const hotspotPages = ['hotspot-settings','hotspot-master','hotspot-users','hotspot-profiles','hotspot-server-profiles']; %>
-    <% const hotspotExpanded = typeof page !== 'undefined' && hotspotPages.includes(page); %>
-    <div class="sidebar-section-label d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse"
-         data-bs-target="#adminHotspotCollapse"
-         aria-expanded="<%= hotspotExpanded ? 'true' : 'false' %>"
-         aria-controls="adminHotspotCollapse"
-         style="cursor:pointer;">
-        <span><i class="bi bi-wifi me-2"></i>Hotspot</span>
-        <i class="bi <%= hotspotExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
+
+    <!-- Navigation Links -->
+    <div class="sb-nav">
+        <!-- App Switcher -->
+        <div class="sb-section">
+            <div class="sb-app-switcher">
+                <button class="sb-app-switcher-btn" id="appSwitcherBtn">
+                    <div class="sb-app-current">
+                        <i class="bi <%= typeof page !== 'undefined' && page === 'billing' ? 'bi-speedometer2' : 'bi-grid-1x2' %>"></i>
+                        <span class="sb-item-text"><%= typeof page !== 'undefined' && page === 'billing' ? 'Billing & Accounting' : 'Dashboard' %></span>
+                    </div>
+                    <i class="bi bi-chevron-expand sb-item-text" style="font-size: 11px; opacity: 0.5;"></i>
+                </button>
+                <div class="sb-app-dropdown" id="appSwitcherDropdown">
+                    <a href="/admin/dashboard" class="sb-app-option <%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
+                        <i class="bi bi-grid-1x2"></i>
+                        <span>Dashboard</span>
+                        <% if (typeof page !== 'undefined' && page === 'dashboard') { %><i class="bi bi-check2 ms-auto"></i><% } %>
+                    </a>
+                    <a href="/admin/billing/dashboard" class="sb-app-option <%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>">
+                        <i class="bi bi-speedometer2"></i>
+                        <span>Billing & Accounting</span>
+                        <% if (typeof page !== 'undefined' && page === 'billing') { %><i class="bi bi-check2 ms-auto"></i><% } %>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- NETWORK -->
+        <div class="sb-section">
+            <div class="sb-section-title">Network</div>
+            <a href="/admin/mikrotik" class="sb-item <%= typeof page !== 'undefined' && page === 'mikrotik' ? 'active' : '' %>">
+                <i class="bi bi-router"></i>
+                <span class="sb-item-text">PPPoE</span>
+            </a>
+            <a href="/admin/mikrotik/profiles" class="sb-item <%= typeof page !== 'undefined' && page === 'mikrotik-profiles' ? 'active' : '' %>">
+                <i class="bi bi-person-badge"></i>
+                <span class="sb-item-text">Profile PPPoE</span>
+            </a>
+        </div>
+
+        <!-- HOTSPOT -->
+        <% const hotspotPages = ['hotspot-settings','hotspot-master','hotspot-users','hotspot-profiles','hotspot-server-profiles']; %>
+        <% const hotspotExpanded = typeof page !== 'undefined' && hotspotPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="adminHotspotCollapse"
+                 aria-expanded="<%= hotspotExpanded ? 'true' : 'false' %>"
+                 aria-controls="adminHotspotCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Hotspot</span>
+                <i class="bi <%= hotspotExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= hotspotExpanded ? 'show' : '' %>" id="adminHotspotCollapse">
+                <a href="/admin/mikrotik/hotspot-server-profiles" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'hotspot-server-profiles' ? 'active' : '' %>">
+                    <i class="bi bi-server"></i>
+                    <span class="sb-item-text">Server Profile</span>
+                </a>
+                <a href="/admin/mikrotik/hotspot-profiles" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'hotspot-profiles' ? 'active' : '' %>">
+                    <i class="bi bi-wifi"></i>
+                    <span class="sb-item-text">Voucher Profiles</span>
+                </a>
+                <a href="/admin/hotspot/voucher" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'hotspot-settings' ? 'active' : '' %>">
+                    <i class="bi bi-sliders"></i>
+                    <span class="sb-item-text">Manajemen Voucher</span>
+                </a>
+                <a href="/admin/hotspot" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'hotspot-master' ? 'active' : '' %>">
+                    <i class="bi bi-collection"></i>
+                    <span class="sb-item-text">Voucher Online</span>
+                </a>
+                <a href="/admin/hotspot/users" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'hotspot-users' ? 'active' : '' %>">
+                    <i class="bi bi-people"></i>
+                    <span class="sb-item-text">Daftar Voucher</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- INFRASTRUKTUR -->
+        <% const infraPages = ['installations','technicians','cable-network-odp','cable-network-cables','cable-network-analytics','mapping-new','genieacs']; %>
+        <% const infraExpanded = typeof page !== 'undefined' && infraPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="adminInfraCollapse"
+                 aria-expanded="<%= infraExpanded ? 'true' : 'false' %>"
+                 aria-controls="adminInfraCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Infrastruktur</span>
+                <i class="bi <%= infraExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= infraExpanded ? 'show' : '' %>" id="adminInfraCollapse">
+                <a href="/admin/installations" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'installations' ? 'active' : '' %>">
+                    <i class="bi bi-tools"></i>
+                    <span class="sb-item-text">Installation Jobs</span>
+                </a>
+                <a href="/admin/technicians" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'technicians' ? 'active' : '' %>">
+                    <i class="bi bi-people-fill"></i>
+                    <span class="sb-item-text">Kelola Teknisi</span>
+                </a>
+                <a href="/admin/cable-network/odp" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cable-network-odp' ? 'active' : '' %>">
+                    <i class="bi bi-broadcast"></i>
+                    <span class="sb-item-text">ODP Management</span>
+                </a>
+                <a href="/admin/cable-network/cables" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cable-network-cables' ? 'active' : '' %>">
+                    <i class="bi bi-diagram-3"></i>
+                    <span class="sb-item-text">Cable Routes</span>
+                </a>
+                <a href="/admin/cable-network/analytics" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cable-network-analytics' ? 'active' : '' %>">
+                    <i class="bi bi-bar-chart"></i>
+                    <span class="sb-item-text">Network Analytics</span>
+                </a>
+                <a href="/admin/billing/mapping-new" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'mapping-new' ? 'active' : '' %>">
+                    <i class="bi bi-map"></i>
+                    <span class="sb-item-text">Network Mapping</span>
+                </a>
+                <a href="/admin/genieacs" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'genieacs' ? 'active' : '' %>">
+                    <i class="bi bi-hdd-network"></i>
+                    <span class="sb-item-text">GenieACS</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- SETTINGAN -->
+        <% const adminSettingPages = ['setting','setting-radius','cache','trouble']; %>
+        <% const adminSettingExpanded = typeof page !== 'undefined' && adminSettingPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="adminSettingCollapse"
+                 aria-expanded="<%= adminSettingExpanded ? 'true' : 'false' %>"
+                 aria-controls="adminSettingCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Settingan</span>
+                <i class="bi <%= adminSettingExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= adminSettingExpanded ? 'show' : '' %>" id="adminSettingCollapse">
+                <a href="/admin/trouble" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'trouble' ? 'active' : '' %>">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span class="sb-item-text">Trouble Report</span>
+                </a>
+                <a href="/admin/settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'setting' ? 'active' : '' %>">
+                    <i class="bi bi-gear"></i>
+                    <span class="sb-item-text">Setting</span>
+                </a>
+                <a href="/admin/radius" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'setting-radius' ? 'active' : '' %>">
+                    <i class="bi bi-gear-wide-connected"></i>
+                    <span class="sb-item-text">Setting RADIUS</span>
+                </a>
+                <a href="/admin/cache" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cache' ? 'active' : '' %>">
+                    <i class="bi bi-database"></i>
+                    <span class="sb-item-text">Cache Management</span>
+                </a>
+            </div>
+        </div>
     </div>
-    <div class="collapse <%= hotspotExpanded ? 'show' : '' %>" id="adminHotspotCollapse">
-        <a href="/admin/mikrotik/hotspot-server-profiles" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-server-profiles' ? 'active' : '' %>"><i class="bi bi-server"></i> Server Profile</a>
-        <a href="/admin/mikrotik/hotspot-profiles" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-profiles' ? 'active' : '' %>"><i class="bi bi-wifi"></i> Voucher Profiles</a>
-        <a href="/admin/hotspot/voucher" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-settings' ? 'active' : '' %>"><i class="bi bi-sliders"></i> Manajemen Voucher</a>
-        <a href="/admin/hotspot" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-master' ? 'active' : '' %>"><i class="bi bi-collection"></i> Voucher Online</a>
-        <a href="/admin/hotspot/users" class="sidebar-subitem <%= typeof page !== 'undefined' && page === 'hotspot-users' ? 'active' : '' %>"><i class="bi bi-people"></i> Daftar Voucher</a>
+
+    <!-- Sidebar Footer -->
+    <div class="sb-footer">
+        <div class="sb-actions">
+            <a href="#" id="restartMikrotikBtn" class="sb-action-btn" title="Restart Mikrotik">
+                <i class="bi bi-arrow-repeat"></i>
+                <span class="sb-item-text">Restart</span>
+            </a>
+            <a href="/admin/logout" class="sb-action-btn sb-action-logout" title="Logout">
+                <i class="bi bi-box-arrow-right"></i>
+                <span class="sb-item-text">Logout</span>
+            </a>
+        </div>
     </div>
-    <a href="/admin/trouble" class="<%= typeof page !== 'undefined' && page === 'trouble' ? 'active' : '' %>"><i class="bi bi-exclamation-triangle"></i> Trouble Report</a>
-    <a href="/admin/settings" class="<%= typeof page !== 'undefined' && page === 'setting' ? 'active' : '' %>"><i class="bi bi-gear"></i> Setting</a>
-    <a href="/admin/radius" class="<%= typeof page !== 'undefined' && page === 'setting-radius' ? 'active' : '' %>"><i class="bi bi-gear-wide-connected"></i> Setting RADIUS</a>
-    <a href="/admin/cache" class="<%= typeof page !== 'undefined' && page === 'cache' ? 'active' : '' %>"><i class="bi bi-database"></i> Cache Management</a>
-    <a href="#" id="restartMikrotikBtn"><i class="bi bi-arrow-repeat"></i> Restart Mikrotik</a>
-    <a href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
 </nav>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    var toggler = document.querySelector('[data-bs-target="#adminHotspotCollapse"]');
-    var collapseEl = document.getElementById('adminHotspotCollapse');
-    if (toggler && collapseEl && typeof bootstrap !== 'undefined') {
-        var icon = toggler.querySelector('.toggle-arrow');
-        collapseEl.addEventListener('show.bs.collapse', function () {
-            if (icon) {
-                icon.classList.remove('bi-chevron-down');
-                icon.classList.add('bi-chevron-up');
-            }
+    // App Switcher dropdown
+    const appSwitcherBtn = document.getElementById('appSwitcherBtn');
+    const appSwitcherDropdown = document.getElementById('appSwitcherDropdown');
+    if (appSwitcherBtn && appSwitcherDropdown) {
+        appSwitcherBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            appSwitcherDropdown.classList.toggle('show');
         });
-        collapseEl.addEventListener('hide.bs.collapse', function () {
-            if (icon) {
-                icon.classList.remove('bi-chevron-up');
-                icon.classList.add('bi-chevron-down');
-            }
+        document.addEventListener('click', function() {
+            appSwitcherDropdown.classList.remove('show');
         });
     }
+
+    // Collapse toggle setup
+    function setupCollapseToggle(collapseId) {
+        var toggler = document.querySelector('[data-target-id="' + collapseId + '"]');
+        var collapseEl = document.getElementById(collapseId);
+        if (toggler && collapseEl && typeof bootstrap !== 'undefined') {
+            var icon = toggler.querySelector('.toggle-arrow');
+            if (collapseEl.classList.contains('show')) {
+                if (icon) icon.classList.replace('bi-chevron-down', 'bi-chevron-up');
+                toggler.setAttribute('aria-expanded', 'true');
+            }
+            toggler.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
+                bsCollapse.toggle();
+            });
+            collapseEl.addEventListener('show.bs.collapse', function () {
+                if (icon) icon.classList.replace('bi-chevron-down', 'bi-chevron-up');
+                toggler.setAttribute('aria-expanded', 'true');
+            });
+            collapseEl.addEventListener('hide.bs.collapse', function () {
+                if (icon) icon.classList.replace('bi-chevron-up', 'bi-chevron-down');
+                toggler.setAttribute('aria-expanded', 'false');
+            });
+            bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
+        }
+    }
+    ['adminHotspotCollapse','adminInfraCollapse','adminSettingCollapse'].forEach(setupCollapseToggle);
 });
 </script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+    --sb-bg: #ffffff;
+    --sb-border: #e2e8f0;
+    --sb-item-hover: #f1f5f9;
+    --sb-item-active: #eff6ff;
+    --sb-item-active-border: #bfdbfe;
+    --sb-text: #1e293b;
+    --sb-muted: #64748b;
+    --sb-subtle: #94a3b8;
+    --sb-primary: #2563eb;
+    --sb-radius: 8px;
+}
+
+.sb {
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--sb-bg);
+    border-right: 1px solid var(--sb-border);
+    padding-top: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+.sb::-webkit-scrollbar { width: 4px; }
+.sb::-webkit-scrollbar-track { background: transparent; }
+.sb::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+
+.sb-header { padding: 16px; border-bottom: 1px solid var(--sb-border); display: flex; align-items: center; gap: 12px; }
+.sb-logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #2563eb, #3b82f6); border-radius: var(--sb-radius); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
+.sb-brand { display: flex; flex-direction: column; }
+.sb-brand-name { font-size: 14px; font-weight: 700; color: var(--sb-text); letter-spacing: -0.02em; }
+.sb-brand-tag { font-size: 10px; color: var(--sb-subtle); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+
+.sb-nav { flex: 1; padding: 8px; overflow-y: auto; }
+.sb-section { margin-bottom: 16px; }
+.sb-section-title { font-size: 11px; font-weight: 600; color: var(--sb-subtle); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 12px; margin-bottom: 4px; }
+.sb-section-title.sb-collapsible { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 6px 12px; border-radius: var(--sb-radius); transition: all 150ms; outline: none; }
+.sb-section-title.sb-collapsible:hover { background: var(--sb-item-hover); color: var(--sb-muted); }
+.sb-chevron { font-size: 10px; transition: transform 200ms; }
+
+/* App Switcher */
+.sb-app-switcher { position: relative; }
+.sb-app-switcher-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: var(--sb-radius); border: 1px solid var(--sb-border); background: var(--sb-item-hover); color: var(--sb-text); font-size: 13px; font-weight: 500; font-family: 'Inter', sans-serif; cursor: pointer; transition: all 150ms; }
+.sb-app-switcher-btn:hover { border-color: #bfdbfe; }
+.sb-app-current { display: flex; align-items: center; gap: 8px; }
+.sb-app-current i { font-size: 14px; color: var(--sb-primary); }
+.sb-app-dropdown { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1px solid var(--sb-border); border-radius: var(--sb-radius); box-shadow: 0 4px 12px rgba(0,0,0,0.08); z-index: 20; padding: 4px; }
+.sb-app-dropdown.show { display: block; }
+.sb-app-option { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; color: var(--sb-muted); font-size: 13px; font-weight: 500; text-decoration: none; transition: all 150ms; }
+.sb-app-option:hover { background: var(--sb-item-hover); color: var(--sb-text); text-decoration: none; }
+.sb-app-option.active { color: var(--sb-primary); background: #eff6ff; }
+.sb-app-option i { font-size: 14px; }
+
+.sb-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--sb-radius); color: var(--sb-muted); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 150ms; border: 1px solid transparent; position: relative; text-decoration: none; white-space: nowrap; margin-bottom: 2px; }
+.sb-item i { width: 16px; font-size: 14px; flex-shrink: 0; opacity: 0.7; }
+.sb-item:hover { color: var(--sb-text); background: var(--sb-item-hover); text-decoration: none; }
+.sb-item:hover i { opacity: 1; }
+.sb-item.active { color: var(--sb-text); background: var(--sb-item-active); border-color: var(--sb-item-active-border); }
+.sb-item.active::before { content: ''; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 3px; height: 18px; background: var(--sb-primary); border-radius: 99px; }
+.sb-item.active i { opacity: 1; color: var(--sb-primary); }
+.sb-item.sb-sub { padding-left: 2.5rem; font-size: 12.5px; }
+
+.sb-footer { padding: 8px; border-top: 1px solid var(--sb-border); }
+.sb-actions { display: flex; gap: 6px; padding: 4px 0; }
+.sb-action-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; border-radius: var(--sb-radius); font-size: 12px; font-weight: 500; font-family: 'Inter', sans-serif; cursor: pointer; transition: all 150ms; border: 1px solid var(--sb-border); background: transparent; color: var(--sb-muted); text-decoration: none; white-space: nowrap; }
+.sb-action-btn:hover { background: var(--sb-item-hover); color: var(--sb-primary); border-color: #bfdbfe; text-decoration: none; }
+.sb-action-btn i { font-size: 13px; }
+.sb-action-logout:hover { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
+
+@media (min-width: 768px) {
+    .sb { width: 16.666667%; position: fixed; left: 0; top: 0; }
+    .main-content { transition: 0.3s; }
+    .main-content.sidebar-expanded { margin-left: 16.666667%; width: 83.333333%; }
+}
+@media (max-width: 767.98px) {
+    .sb { position: fixed; top: 0; left: 0; width: 280px; transform: translateX(-100%); z-index: 1000; overflow-y: auto; }
+    .sb.show { transform: translateX(0); }
+    .main-content { margin-top: 60px; padding: 15px; }
+}
+</style>
