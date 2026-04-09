@@ -20,218 +20,236 @@
 <div class="sidebar-overlay d-md-none" id="sidebarOverlay"></div>
 
 <!-- Billing Sidebar -->
-<nav class="col-md-2 sidebar d-flex flex-column" id="billingSidebar">
+<nav class="col-md-2 sb d-flex flex-column" id="billingSidebar">
     <!-- Hamburger Button (Desktop) - Inside Sidebar -->
-    <button class="hamburger d-none d-md-block" id="hamburgerBtn" aria-label="Toggle Menu">
-        <i class="bi bi-list"></i>
+    <button class="sb-hamburger d-none d-md-block" id="hamburgerBtn" aria-label="Toggle Menu">
+        <i class="bi bi-layout-sidebar-inset"></i>
     </button>
     
     <!-- Close button for mobile -->
     <div class="d-md-none text-end p-3">
-        <button class="btn btn-link text-white p-0" id="sidebarClose">
+        <button class="btn btn-link p-0" id="sidebarClose" style="color: var(--sb-muted);">
             <i class="bi bi-x" style="font-size: 1.5rem;"></i>
         </button>
     </div>
     
     <!-- Logo Section -->
-    <div class="sidebar-header mb-4 text-center">
-        <img id="logoImage" src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?v=<%= new Date().getTime() %>" alt="Logo" style="max-width:120px;max-height:60px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-        <div class="company-info mt-2">
-            <h6 class="company-name mb-1">
-                <%= typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Net digital Group') %>
-            </h6>
-            <div class="version-badge-small">
-                <span class="badge <%= typeof versionBadge !== 'undefined' ? versionBadge.class : 'badge-secondary' %>">
-                    <%= typeof versionInfo !== 'undefined' ? versionInfo.version : 'v4.1' %>
-                </span>
-            </div>
+    <div class="sb-header">
+        <div class="sb-logo-icon">
+            <img id="logoImage" src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?v=<%= new Date().getTime() %>" alt="Logo" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
+        </div>
+        <div class="sb-brand">
+            <span class="sb-brand-name"><%= typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Net digital Group') %></span>
+            <span class="sb-brand-tag">Billing System</span>
         </div>
     </div>
     
     <!-- Navigation Links -->
-    <!-- Dashboard -->
-    <a href="/admin/dashboard" class="<%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
-        <i class="bi bi-house"></i> Dashboard
-    </a>
-    <a href="/admin/billing/dashboard" class="<%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>">
-        <i class="bi bi-bar-chart-alt-2"></i> Billing & Accounting
-    </a>
-    
-    <!-- PELANGGAN -->
-    <% const customerPages = ['customers', 'packages', 'member-data', 'member-packages']; %>
-    <% const customerExpanded = typeof page !== 'undefined' && customerPages.includes(page); %>
-    <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-manual-toggle="collapse"
-         data-target-id="customerCollapse"
-         aria-expanded="<%= customerExpanded ? 'true' : 'false' %>"
-         aria-controls="customerCollapse"
-         role="button"
-         tabindex="0">
-        <span><i class="bi bi-people me-2"></i>PELANGGAN</span>
-        <i class="bi <%= customerExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
+    <div class="sb-nav">
+        <!-- Overview Section -->
+        <div class="sb-section">
+            <div class="sb-section-title">Overview</div>
+            <a href="/admin/dashboard" class="sb-item <%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
+                <i class="bi bi-grid-1x2"></i>
+                <span class="sb-item-text">Dashboard</span>
+            </a>
+            <a href="/admin/billing/dashboard" class="sb-item <%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>">
+                <i class="bi bi-speedometer2"></i>
+                <span class="sb-item-text">Billing & Accounting</span>
+            </a>
+        </div>
+
+        <!-- PELANGGAN -->
+        <% const customerPages = ['customers', 'packages', 'member-data', 'member-packages']; %>
+        <% const customerExpanded = typeof page !== 'undefined' && customerPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="customerCollapse"
+                 aria-expanded="<%= customerExpanded ? 'true' : 'false' %>"
+                 aria-controls="customerCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Pelanggan</span>
+                <i class="bi <%= customerExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= customerExpanded ? 'show' : '' %>" id="customerCollapse">
+                <a href="/admin/billing/customers" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'customers' ? 'active' : '' %>">
+                    <i class="bi bi-person"></i>
+                    <span class="sb-item-text">Pelanggan PPPoE</span>
+                </a>
+                <a href="/admin/billing/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'packages' ? 'active' : '' %>">
+                    <i class="bi bi-box-seam"></i>
+                    <span class="sb-item-text">Paket PPPoE</span>
+                </a>
+                <a href="/admin/member/data" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'member-data' ? 'active' : '' %>">
+                    <i class="bi bi-person-check"></i>
+                    <span class="sb-item-text">Pelanggan Member</span>
+                </a>
+                <a href="/admin/member/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'member-packages' ? 'active' : '' %>">
+                    <i class="bi bi-box-seam"></i>
+                    <span class="sb-item-text">Paket Member</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- INVOICING -->
+        <% const invoicePages = ['invoices', 'auto-invoice', 'invoices-by-type', 'invoice-list']; %>
+        <% const invoiceExpanded = typeof page !== 'undefined' && invoicePages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="invoiceCollapse"
+                 aria-expanded="<%= invoiceExpanded ? 'true' : 'false' %>"
+                 aria-controls="invoiceCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Invoicing</span>
+                <i class="bi <%= invoiceExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= invoiceExpanded ? 'show' : '' %>" id="invoiceCollapse">
+                <a href="/admin/billing/invoices" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'invoices' ? 'active' : '' %>">
+                    <i class="bi bi-file-plus"></i>
+                    <span class="sb-item-text">Buat Invoice</span>
+                </a>
+                <a href="/admin/billing/auto-invoice" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'auto-invoice' ? 'active' : '' %>">
+                    <i class="bi bi-calendar-check"></i>
+                    <span class="sb-item-text">Auto Invoice</span>
+                </a>
+                <a href="/admin/billing/invoices-by-type" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'invoices-by-type' ? 'active' : '' %>">
+                    <i class="bi bi-list-ul"></i>
+                    <span class="sb-item-text">Invoice per Tipe</span>
+                </a>
+                <a href="/admin/billing/invoice-list" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'invoice-list' ? 'active' : '' %>">
+                    <i class="bi bi-receipt"></i>
+                    <span class="sb-item-text">Semua Invoice</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- KEUANGAN -->
+        <% const financePages = ['payments', 'all-payments', 'collectors', 'collector-reports', 'collector-remittance', 'financial-report', 'report-voucher', 'report-pppoe', 'reports', 'expenses', 'income']; %>
+        <% const financeExpanded = typeof page !== 'undefined' && financePages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="financeCollapse"
+                 aria-expanded="<%= financeExpanded ? 'true' : 'false' %>"
+                 aria-controls="financeCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Keuangan</span>
+                <i class="bi <%= financeExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= financeExpanded ? 'show' : '' %>" id="financeCollapse">
+                <a href="/admin/billing/payments" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'payments' ? 'active' : '' %>">
+                    <i class="bi bi-person-check"></i>
+                    <span class="sb-item-text">Transaksi Kolektor</span>
+                </a>
+                <a href="/admin/billing/all-payments" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'all-payments' ? 'active' : '' %>">
+                    <i class="bi bi-credit-card"></i>
+                    <span class="sb-item-text">Riwayat Pembayaran</span>
+                </a>
+                <a href="/admin/collectors" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collectors' ? 'active' : '' %>">
+                    <i class="bi bi-people"></i>
+                    <span class="sb-item-text">Tukang Tagih</span>
+                </a>
+                <a href="/admin/billing/collector-reports" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-reports' ? 'active' : '' %>">
+                    <i class="bi bi-bar-chart"></i>
+                    <span class="sb-item-text">Laporan Kolektor</span>
+                </a>
+                <a href="/admin/billing/collector-remittance" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-remittance' ? 'active' : '' %>">
+                    <i class="bi bi-cash"></i>
+                    <span class="sb-item-text">Terima Setoran</span>
+                </a>
+                <a href="/admin/billing/financial-report" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'financial-report' ? 'active' : '' %>">
+                    <i class="bi bi-graph-up"></i>
+                    <span class="sb-item-text">Laporan Keuangan</span>
+                </a>
+                <a href="/admin/billing/reports/voucher" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'report-voucher' ? 'active' : '' %>">
+                    <i class="bi bi-ticket-perforated"></i>
+                    <span class="sb-item-text">Laporan Voucher</span>
+                </a>
+                <a href="/admin/billing/reports/pppoe" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'report-pppoe' ? 'active' : '' %>">
+                    <i class="bi bi-router"></i>
+                    <span class="sb-item-text">Laporan PPPoE</span>
+                </a>
+                <a href="/admin/billing/reports" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'reports' ? 'active' : '' %>">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <span class="sb-item-text">Laporan Analisis</span>
+                </a>
+                <a href="/admin/billing/expenses" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'expenses' ? 'active' : '' %>">
+                    <i class="bi bi-cash-coin"></i>
+                    <span class="sb-item-text">Manajemen Pengeluaran</span>
+                </a>
+                <a href="/admin/billing/income" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'income' ? 'active' : '' %>">
+                    <i class="bi bi-cash-stack"></i>
+                    <span class="sb-item-text">Manajemen Pemasukan</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- SETTINGAN -->
+        <% const settingPages = ['payment-settings', 'whatsapp-settings', 'email-settings', 'service-suspension', 'mapping-new', 'genieacs']; %>
+        <% const settingExpanded = typeof page !== 'undefined' && settingPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="settingCollapse"
+                 aria-expanded="<%= settingExpanded ? 'true' : 'false' %>"
+                 aria-controls="settingCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Settingan</span>
+                <i class="bi <%= settingExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= settingExpanded ? 'show' : '' %>" id="settingCollapse">
+                <a href="/admin/billing/payment-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'payment-settings' ? 'active' : '' %>">
+                    <i class="bi bi-gear"></i>
+                    <span class="sb-item-text">Pengaturan Pembayaran</span>
+                </a>
+                <a href="/admin/billing/whatsapp-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'whatsapp-settings' ? 'active' : '' %>">
+                    <i class="bi bi-chat-dots"></i>
+                    <span class="sb-item-text">Pengaturan WhatsApp</span>
+                </a>
+                <a href="/admin/billing/email-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'email-settings' ? 'active' : '' %>">
+                    <i class="bi bi-envelope"></i>
+                    <span class="sb-item-text">Pengaturan Email</span>
+                </a>
+                <a href="/admin/billing/service-suspension" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'service-suspension' ? 'active' : '' %>">
+                    <i class="bi bi-pause-circle"></i>
+                    <span class="sb-item-text">Penangguhan Layanan</span>
+                </a>
+                <a href="/admin/billing/mapping-new" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'mapping-new' ? 'active' : '' %>">
+                    <i class="bi bi-map"></i>
+                    <span class="sb-item-text">Network Mapping</span>
+                </a>
+                <a href="/admin/genieacs" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'genieacs' ? 'active' : '' %>">
+                    <i class="bi bi-wifi"></i>
+                    <span class="sb-item-text">GenieACS</span>
+                </a>
+            </div>
+        </div>
     </div>
-    <div class="collapse <%= customerExpanded ? 'show' : '' %>" id="customerCollapse">
-        <a href="/admin/billing/customers" class="<%= typeof page !== 'undefined' && page === 'customers' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-person"></i> Pelanggan PPPoE
+
+    <!-- Sidebar Footer -->
+    <div class="sb-footer">
+        <a href="/admin/logout" class="sb-item sb-logout">
+            <i class="bi bi-box-arrow-right"></i>
+            <span class="sb-item-text">Logout</span>
         </a>
-        <a href="/admin/billing/packages" class="<%= typeof page !== 'undefined' && page === 'packages' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-box-seam"></i> Paket PPPoE
-        </a>
-        <a href="/admin/member/data" class="<%= typeof page !== 'undefined' && page === 'member-data' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-person-check"></i> Pelanggan Member
-        </a>
-        <a href="/admin/member/packages" class="<%= typeof page !== 'undefined' && page === 'member-packages' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-box-seam"></i> Paket Member
-        </a>
-    </div>
-    
-    <!-- INVOICING -->
-    <% const invoicePages = ['invoices', 'auto-invoice', 'invoices-by-type', 'invoice-list']; %>
-    <% const invoiceExpanded = typeof page !== 'undefined' && invoicePages.includes(page); %>
-    <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-manual-toggle="collapse"
-         data-target-id="invoiceCollapse"
-         aria-expanded="<%= invoiceExpanded ? 'true' : 'false' %>"
-         aria-controls="invoiceCollapse"
-         role="button"
-         tabindex="0">
-        <span><i class="bi bi-receipt me-2"></i>INVOICING</span>
-        <i class="bi <%= invoiceExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
-    </div>
-    <div class="collapse <%= invoiceExpanded ? 'show' : '' %>" id="invoiceCollapse">
-        <a href="/admin/billing/invoices" class="<%= typeof page !== 'undefined' && page === 'invoices' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-file-plus"></i> Buat Invoice
-        </a>
-        <a href="/admin/billing/auto-invoice" class="<%= typeof page !== 'undefined' && page === 'auto-invoice' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-calendar-check"></i> Auto Invoice
-        </a>
-        <a href="/admin/billing/invoices-by-type" class="<%= typeof page !== 'undefined' && page === 'invoices-by-type' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-list-ul"></i> Invoice per Tipe
-        </a>
-        <a href="/admin/billing/invoice-list" class="<%= typeof page !== 'undefined' && page === 'invoice-list' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-receipt"></i> Semua Invoice
-        </a>
-    </div>
-    
-    <!-- KEUANGAN -->
-    <% const financePages = ['payments', 'all-payments', 'collectors', 'collector-reports', 'collector-remittance', 'financial-report', 'report-voucher', 'report-pppoe', 'reports', 'expenses', 'income']; %>
-    <% const financeExpanded = typeof page !== 'undefined' && financePages.includes(page); %>
-    <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-manual-toggle="collapse"
-         data-target-id="financeCollapse"
-         aria-expanded="<%= financeExpanded ? 'true' : 'false' %>"
-         aria-controls="financeCollapse"
-         role="button"
-         tabindex="0">
-        <span><i class="bi bi-credit-card me-2"></i>KEUANGAN</span>
-        <i class="bi <%= financeExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
-    </div>
-    <div class="collapse <%= financeExpanded ? 'show' : '' %>" id="financeCollapse">
-        <a href="/admin/billing/payments" class="<%= typeof page !== 'undefined' && page === 'payments' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-person-check"></i> Transaksi Kolektor
-        </a>
-        <a href="/admin/billing/all-payments" class="<%= typeof page !== 'undefined' && page === 'all-payments' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-credit-card"></i> Riwayat Pembayaran
-        </a>
-        <a href="/admin/collectors" class="<%= typeof page !== 'undefined' && page === 'collectors' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-people"></i> Tukang Tagih
-        </a>
-        <a href="/admin/billing/collector-reports" class="<%= typeof page !== 'undefined' && page === 'collector-reports' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-bar-chart"></i> Laporan Kolektor
-        </a>
-        <a href="/admin/billing/collector-remittance" class="<%= typeof page !== 'undefined' && page === 'collector-remittance' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-cash"></i> Terima Setoran
-        </a>
-        <a href="/admin/billing/financial-report" class="<%= typeof page !== 'undefined' && page === 'financial-report' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-graph-up"></i> Laporan Keuangan
-        </a>
-        <a href="/admin/billing/reports/voucher" class="<%= typeof page !== 'undefined' && page === 'report-voucher' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-ticket-perforated"></i> Laporan Voucher
-        </a>
-        <a href="/admin/billing/reports/pppoe" class="<%= typeof page !== 'undefined' && page === 'report-pppoe' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-router"></i> Laporan PPPoE
-        </a>
-        <a href="/admin/billing/reports" class="<%= typeof page !== 'undefined' && page === 'reports' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-graph-up-arrow"></i> Laporan Analisis
-        </a>
-        <a href="/admin/billing/expenses" class="<%= typeof page !== 'undefined' && page === 'expenses' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-cash-coin"></i> Manajemen Pengeluaran
-        </a>
-        <a href="/admin/billing/income" class="<%= typeof page !== 'undefined' && page === 'income' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-cash-stack"></i> Manajemen Pemasukan
-        </a>
-    </div>
-    
-    <!-- SETTINGAN -->
-    <% const settingPages = ['payment-settings', 'whatsapp-settings', 'email-settings', 'service-suspension', 'mapping-new', 'genieacs']; %>
-    <% const settingExpanded = typeof page !== 'undefined' && settingPages.includes(page); %>
-    <div class="sidebar-label d-flex justify-content-between align-items-center"
-         data-manual-toggle="collapse"
-         data-target-id="settingCollapse"
-         aria-expanded="<%= settingExpanded ? 'true' : 'false' %>"
-         aria-controls="settingCollapse"
-         role="button"
-         tabindex="0">
-        <span><i class="bi bi-gear me-2"></i>SETTINGAN</span>
-        <i class="bi <%= settingExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow"></i>
-    </div>
-    <div class="collapse <%= settingExpanded ? 'show' : '' %>" id="settingCollapse">
-        <a href="/admin/billing/payment-settings" class="<%= typeof page !== 'undefined' && page === 'payment-settings' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-gear"></i> Pengaturan Pembayaran
-        </a>
-        <a href="/admin/billing/whatsapp-settings" class="<%= typeof page !== 'undefined' && page === 'whatsapp-settings' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-chat-dots"></i> Pengaturan WhatsApp
-        </a>
-        <a href="/admin/billing/email-settings" class="<%= typeof page !== 'undefined' && page === 'email-settings' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-envelope"></i> Pengaturan Email
-        </a>
-        <a href="/admin/billing/service-suspension" class="<%= typeof page !== 'undefined' && page === 'service-suspension' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-pause-circle"></i> Penangguhan Layanan
-        </a>
-        <a href="/admin/billing/mapping-new" class="<%= typeof page !== 'undefined' && page === 'mapping-new' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-map"></i> Network Mapping
-        </a>
-        <a href="/admin/genieacs" class="<%= typeof page !== 'undefined' && page === 'genieacs' ? 'active submenu' : 'submenu' %>" style="padding-left: 3rem;">
-            <i class="bi bi-wifi"></i> GenieACS
-        </a>
-    </div>
-    <a href="/admin/logout">
-        <i class="bi bi-box-arrow-right"></i> Logout
-    </a>
-    <div class="mt-2" style="padding: 0 24px;">
-        <button id="btnRestartBilling" class="btn btn-sm btn-primary w-100 mb-2">
-            <i class="bi bi-arrow-repeat"></i> Restart Billing System
+        <button id="btnRestartBilling" class="sb-restart-btn">
+            <i class="bi bi-arrow-repeat"></i>
+            <span class="sb-item-text">Restart System</span>
         </button>
-        <div id="billingRestartResult" class="text-light small mb-2" style="display:none;"></div>
-        <div class="server-time-box text-light mb-3">
-            <div class="text-uppercase small opacity-75">Jam Server</div>
-            <div id="serverTimeValue" class="fw-bold fs-6">--:--:--</div>
+        <div id="billingRestartResult" class="small mt-1 px-2" style="display:none;"></div>
+        <div class="sb-server-time">
+            <div class="sb-time-label">SERVER TIME</div>
+            <div class="sb-time-value" id="serverTimeValue">--:--:--</div>
         </div>
-    </div>
-    
-    <!-- Version Info Panel -->
-    <div class="version-info-panel">
-        <div class="version-header">
-            <i class="bi bi-info-circle"></i> Version Info
-        </div>
-        <div class="version-details">
-            <div class="version-item">
-                <span class="version-label">Version:</span>
-                <span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.version : '4.1' %></span>
-            </div>
-            <div class="version-item">
-                <span class="version-label">Build:</span>
-                <span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.buildNumber : 'Unknown' %></span>
-            </div>
-            <div class="version-item">
-                <span class="version-label">Released:</span>
-                <span class="version-value"><%= typeof versionInfo !== 'undefined' ? versionInfo.versionDate : 'Unknown' %></span>
-            </div>
-        </div>
-        <div class="version-badge">
-            <span class="badge <%= typeof versionBadge !== 'undefined' ? versionBadge.class : 'badge-secondary' %>">
-                <%= typeof versionBadge !== 'undefined' ? versionBadge.text : 'v4.1' %>
-            </span>
+        <div class="sb-version-panel">
+            <span class="sb-version-tag"><%= typeof versionInfo !== 'undefined' ? versionInfo.version : 'v5.1.0' %></span>
+            <span class="sb-version-build"><%= typeof versionInfo !== 'undefined' ? versionInfo.buildNumber : '' %></span>
         </div>
     </div>
 </nav>
@@ -356,7 +374,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function showRestartResult(text, success = true) {
         if (!restartResultBox) return;
         restartResultBox.style.display = 'block';
-        restartResultBox.style.color = success ? '#c8e6c9' : '#ffcdd2';
+        restartResultBox.style.color = success ? '#16a34a' : '#dc2626';
         restartResultBox.textContent = text;
     }
 
@@ -387,7 +405,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!confirm('Restart layanan billing sekarang?')) return;
             try {
                 restartBillingBtn.disabled = true;
-                restartBillingBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Restarting...';
+                restartBillingBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span class="sb-item-text">Restarting...</span>';
                 showRestartResult('Memproses restart...', true);
                 const res = await fetch('/admin/billing/system/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                 const data = await res.json();
@@ -401,7 +419,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 showRestartResult('Restart error: ' + error.message, false);
             } finally {
                 restartBillingBtn.disabled = false;
-                restartBillingBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Restart Billing System';
+                restartBillingBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> <span class="sb-item-text">Restart System</span>';
             }
         });
     }
@@ -432,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function updateSidebarActive(url) {
         const path = new URL(url, window.location.origin).pathname;
-        sidebar.querySelectorAll('a').forEach(link => {
+        sidebar.querySelectorAll('a.sb-item').forEach(link => {
             const linkPath = new URL(link.getAttribute('href'), window.location.origin).pathname;
             const isActive = (path === linkPath);
             link.classList.toggle('active', isActive);
@@ -512,43 +530,279 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
-<div id="pjax-loader" style="position: fixed; top: 0; left: 0; height: 3px; background: #fff; width: 0; z-index: 10005; transition: width 0.4s ease;"></div>
+<div id="pjax-loader" style="position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, #2563eb, #3b82f6); width: 0; z-index: 10005; transition: width 0.4s ease;"></div>
 
 <style>
-/* CSS copied from original for consistency */
-.mobile-navbar { background: #3498DB; position: fixed; top: 0; left: 0; right: 0; z-index: 1001; padding: 0.5rem 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-.navbar-brand { font-size: 1.1rem; font-weight: 600; }
-.sidebar-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; opacity: 0; visibility: hidden; transition: 0.3s; }
-.sidebar-overlay.show { opacity: 1; visibility: visible; }
-.sidebar { height: 100vh; overflow-y: auto; background: #3498DB; color: #fff; padding-top: 32px; transition: 0.3s; }
-.sidebar a { color: #fff; text-decoration: none; display: flex; align-items: center; padding: 12px 24px; border-radius: 4px; transition: 0.3s; white-space: nowrap; margin-bottom: 4px; }
-.sidebar a.active, .sidebar a:hover { background: rgba(255,255,255,0.2); }
-.sidebar a i { margin-right: 8px; width: 16px; flex-shrink: 0; }
-.sidebar a.submenu { font-size: 0.9rem; padding-left: 3rem; }
-.sidebar-label { font-size: 0.9rem; font-weight: 600; color: rgba(255,255,255,0.7); padding: 12px 24px; cursor: pointer; transition: 0.3s; outline: none; }
-.sidebar-label:hover, .sidebar-label:focus { background: rgba(255,255,255,0.1); }
-.sidebar .hamburger { display: block; position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 6px 10px; cursor: pointer; transition: 0.3s; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* ===== Light Blue Sidebar Design System ===== */
+:root {
+    --sb-bg: #ffffff;
+    --sb-border: #e2e8f0;
+    --sb-item-hover: #f1f5f9;
+    --sb-item-active: #eff6ff;
+    --sb-item-active-border: #bfdbfe;
+    --sb-text: #1e293b;
+    --sb-muted: #64748b;
+    --sb-subtle: #94a3b8;
+    --sb-primary: #2563eb;
+    --sb-radius: 8px;
+}
+
+/* Mobile Navbar */
+.mobile-navbar { background: var(--sb-primary); border-bottom: 1px solid var(--sb-border); position: fixed; top: 0; left: 0; right: 0; z-index: 1001; padding: 0.5rem 1rem; }
+.navbar-brand { font-size: 1rem; font-weight: 600; font-family: 'Inter', sans-serif; color: #fff; }
+.sidebar-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 999; opacity: 0; visibility: hidden; transition: 0.3s; backdrop-filter: blur(4px); }
+.sidebar-overlay.show { opacity: 1; visibility: visible; }
+
+/* Sidebar Container */
+.sb {
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--sb-bg);
+    border-right: 1px solid var(--sb-border);
+    padding-top: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+.sb::-webkit-scrollbar { width: 4px; }
+.sb::-webkit-scrollbar-track { background: transparent; }
+.sb::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+.sb::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Header / Brand */
+.sb-header {
+    padding: 16px 16px;
+    border-bottom: 1px solid var(--sb-border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.sb-logo-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    border-radius: var(--sb-radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.sb-brand { display: flex; flex-direction: column; }
+.sb-brand-name { font-size: 14px; font-weight: 700; color: var(--sb-text); letter-spacing: -0.02em; }
+.sb-brand-tag { font-size: 10px; color: var(--sb-subtle); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* Navigation */
+.sb-nav { flex: 1; padding: 8px 8px; overflow-y: auto; }
+.sb-section { margin-bottom: 16px; }
+
+.sb-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--sb-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0 12px;
+    margin-bottom: 4px;
+}
+
+.sb-section-title.sb-collapsible {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 6px 12px;
+    border-radius: var(--sb-radius);
+    transition: all 150ms;
+    outline: none;
+}
+
+.sb-section-title.sb-collapsible:hover {
+    background: var(--sb-item-hover);
+    color: var(--sb-muted);
+}
+
+.sb-chevron { font-size: 10px; transition: transform 200ms; }
+
+/* Sidebar Items */
+.sb-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--sb-radius);
+    color: var(--sb-muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid transparent;
+    position: relative;
+    text-decoration: none;
+    white-space: nowrap;
+    margin-bottom: 2px;
+}
+
+.sb-item i { width: 16px; font-size: 14px; flex-shrink: 0; opacity: 0.7; }
+.sb-item:hover { color: var(--sb-text); background: var(--sb-item-hover); text-decoration: none; }
+.sb-item:hover i { opacity: 1; }
+
+.sb-item.active {
+    color: var(--sb-text);
+    background: var(--sb-item-active);
+    border-color: var(--sb-item-active-border);
+}
+
+.sb-item.active::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 18px;
+    background: var(--sb-primary);
+    border-radius: 99px;
+}
+
+.sb-item.active i { opacity: 1; color: var(--sb-primary); }
+
+.sb-item.sb-sub { padding-left: 2.5rem; font-size: 12.5px; }
+
+/* Logout */
+.sb-item.sb-logout { color: var(--sb-subtle); }
+.sb-item.sb-logout:hover { color: #dc2626; background: #fef2f2; }
+
+/* Footer */
+.sb-footer {
+    padding: 8px;
+    border-top: 1px solid var(--sb-border);
+}
+
+.sb-restart-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: var(--sb-radius);
+    background: transparent;
+    border: 1px solid var(--sb-border);
+    color: var(--sb-muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms;
+    font-family: 'Inter', sans-serif;
+    margin-top: 4px;
+}
+
+.sb-restart-btn:hover {
+    background: var(--sb-item-hover);
+    color: var(--sb-primary);
+    border-color: #bfdbfe;
+}
+
+.sb-restart-btn i { font-size: 14px; opacity: 0.7; }
+
+.sb-server-time {
+    padding: 8px 12px;
+    margin-top: 8px;
+}
+
+.sb-time-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--sb-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 2px;
+}
+
+.sb-time-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sb-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.sb-version-panel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+}
+
+.sb-version-tag {
+    font-size: 10px;
+    font-weight: 600;
+    background: #eff6ff;
+    color: var(--sb-primary);
+    padding: 2px 8px;
+    border-radius: 99px;
+    border: 1px solid #bfdbfe;
+}
+
+.sb-version-build {
+    font-size: 10px;
+    color: var(--sb-subtle);
+}
+
+/* Hamburger */
+.sb-hamburger {
+    display: block;
+    position: absolute;
+    top: 16px;
+    right: 12px;
+    background: transparent;
+    color: var(--sb-subtle);
+    border: 1px solid var(--sb-border);
+    border-radius: var(--sb-radius);
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 150ms;
+    z-index: 10;
+}
+
+.sb-hamburger:hover {
+    background: var(--sb-item-hover);
+    color: var(--sb-primary);
+    border-color: #bfdbfe;
+}
+
+/* Desktop Responsive */
 @media (min-width: 768px) {
-    .sidebar { width: 16.666667%; position: fixed; left: 0; top: 0; }
-    .sidebar.collapsed { width: 70px; }
-    .sidebar.collapsed .sidebar-label, .sidebar.collapsed .company-info, .sidebar.collapsed .collapse, .sidebar.collapsed a span, .sidebar.collapsed .version-info-panel, .sidebar.collapsed .company-name, .sidebar.collapsed .version-badge-small, .sidebar.collapsed .mt-2 { display: none !important; }
-    .sidebar.collapsed a { justify-content: center; padding: 12px 0; font-size: 0; }
-    .sidebar.collapsed a i { font-size: 1.3rem; margin: 0; }
+    .sb { width: 16.666667%; position: fixed; left: 0; top: 0; }
+    .sb.collapsed { width: 70px; }
+    .sb.collapsed .sb-section-title,
+    .sb.collapsed .sb-brand,
+    .sb.collapsed .collapse,
+    .sb.collapsed .sb-item-text,
+    .sb.collapsed .sb-version-panel,
+    .sb.collapsed .sb-server-time,
+    .sb.collapsed .sb-restart-btn .sb-item-text { display: none !important; }
+    .sb.collapsed .sb-item { justify-content: center; padding: 10px 0; }
+    .sb.collapsed .sb-item i { font-size: 1.2rem; margin: 0; }
+    .sb.collapsed .sb-logo-icon { margin: 0 auto; }
+    .sb.collapsed .sb-header { justify-content: center; }
+    .sb.collapsed .sb-restart-btn { justify-content: center; padding: 8px; }
+    .sb.collapsed .sb-restart-btn i { margin: 0; }
     .main-content { transition: 0.3s; }
     .main-content.sidebar-expanded { margin-left: 16.666667%; width: 83.333333%; }
     .main-content.sidebar-collapsed { margin-left: 70px; width: calc(100% - 70px); }
-    .sidebar.collapsed .hamburger { position: absolute; right: 8px; top: 10px; width: auto; padding: 4px 8px; font-size: 0.9rem; }
+    .sb.collapsed .sb-hamburger { right: 8px; top: 10px; width: auto; padding: 4px 6px; }
 }
 
+/* Mobile */
 @media (max-width: 767.98px) {
-    .sidebar { position: fixed; top: 0; left: 0; width: 280px; transform: translateX(-100%); z-index: 1000; overflow-y: auto; }
-    .sidebar.show { transform: translateX(0); }
+    .sb { position: fixed; top: 0; left: 0; width: 280px; transform: translateX(-100%); z-index: 1000; overflow-y: auto; }
+    .sb.show { transform: translateX(0); }
     .main-content { margin-top: 60px; padding: 15px; }
 }
-
-.version-info-panel { padding: 15px 24px; background: rgba(255,255,255,0.05); border-radius: 8px; margin: 10px 24px; border: 1px solid rgba(255,255,255,0.1); }
-.version-header { color: #4fc3f7; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; margin-bottom: 10px; }
-.version-item { display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 4px; }
-.version-value { font-weight: 600; }
 </style>
