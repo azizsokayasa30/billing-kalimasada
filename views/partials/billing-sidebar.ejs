@@ -504,6 +504,8 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    window.fPjax = loadPjaxContent;
+
     function loadPjaxContent(url, pushState = true) {
         const loader = document.getElementById('pjax-loader');
         if (loader) loader.style.width = '30%';
@@ -563,17 +565,17 @@ document.addEventListener('DOMContentLoaded', function () {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ===== Light Blue Sidebar Design System ===== */
+/* ===== Shadcn Light Sidebar Design System ===== */
 :root {
     --sb-bg: #ffffff;
     --sb-border: #e2e8f0;
     --sb-item-hover: #f1f5f9;
     --sb-item-active: #eff6ff;
     --sb-item-active-border: #bfdbfe;
-    --sb-text: #1e293b;
+    --sb-text: #020617;
     --sb-muted: #64748b;
     --sb-subtle: #94a3b8;
-    --sb-primary: #2563eb;
+    --sb-primary: #3b82f6;
     --sb-radius: 8px;
 }
 

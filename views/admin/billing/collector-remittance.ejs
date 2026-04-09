@@ -4,350 +4,269 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Terima Setoran Kolektor - <%= appSettings.companyHeader %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-    <link href="/vendor/boxicons/boxicons.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
-    <!-- Admin Mobile Optimizations -->
     <link href="/css/admin-mobile.css" rel="stylesheet">
+    <link href="/css/finance-modern.css" rel="stylesheet">
     <style>
-        body {
-            background: #f5f6fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
-        .remittance-card {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .collector-card {
-            background: linear-gradient(135deg, #28a745, #20c997);
-            color: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+        .collector-selectable-card {
             cursor: pointer;
-            transition: transform 0.3s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--f-border);
+            position: relative;
+            overflow: hidden;
         }
-        
-        .collector-card:hover {
+        .collector-selectable-card:hover {
             transform: translateY(-2px);
+            border-color: var(--f-primary);
+            box-shadow: var(--f-shadow-md);
         }
-        
-        .collector-card.selected {
-            background: linear-gradient(135deg, #007bff, #0056b3);
+        .collector-selectable-card.selected {
+            border-color: var(--f-primary);
+            background-color: var(--f-accent);
+            box-shadow: 0 0 0 2px var(--f-primary);
         }
-        
-        .collector-name {
-            font-size: 1.3rem;
-            font-weight: 700;
-            margin: 0;
+        .collector-selectable-card.selected::after {
+            content: "\F26E";
+            font-family: "bootstrap-icons";
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            color: var(--f-primary);
+            font-size: 1.25rem;
         }
-        
-        .collector-info {
-            font-size: 0.9rem;
-            opacity: 0.9;
-            margin: 0.5rem 0 0;
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
         }
-        
-        .pending-amount {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin: 0.5rem 0 0;
+        .animate-in {
+            animation: f-in 0.4s ease-out forwards;
         }
-        
-        .form-section {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .amount-display {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 1rem;
-            margin: 1rem 0;
-            text-align: center;
-        }
-        
-        .amount-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #28a745;
-            margin: 0;
-        }
-        
-        .amount-label {
-            font-size: 0.9rem;
-            color: #6c757d;
-            margin: 0.25rem 0 0;
-        }
-        
-        .btn-submit {
-            background: #28a745;
-            border: none;
-            border-radius: 8px;
-            padding: 0.75rem 2rem;
-            color: white;
-            font-weight: 600;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-submit:hover {
-            background: #218838;
-            transform: translateY(-2px);
-        }
-        
-        .btn-submit:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
-        }
-        
-        .history-section {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .history-item {
-            display: flex;
-            justify-content: between;
-            align-items: center;
-            padding: 1rem 0;
-            border-bottom: 1px solid #e9ecef;
-        }
-        
-        .history-item:last-child {
-            border-bottom: none;
-        }
-        
-        .history-info h6 {
-            margin: 0;
-            font-weight: 600;
-            color: #333;
-        }
-        
-        .history-info small {
-            color: #6c757d;
-        }
-        
-        .history-amount {
-            font-weight: 700;
-            color: #28a745;
-            font-size: 1.1rem;
-        }
-        
-        .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-        
-        .status-received {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .status-pending {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .alert-info {
-            background: #d1ecf1;
-            border: 1px solid #bee5eb;
-            color: #0c5460;
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        
-        @media (max-width: 768px) {
-            .collector-card {
-                padding: 1rem;
-            }
-            
-            .collector-name {
-                font-size: 1.1rem;
-            }
-            
-            .pending-amount {
-                font-size: 1.2rem;
-            }
-            
-            .amount-value {
-                font-size: 1.5rem;
-            }
+        .form-highlight {
+            background: linear-gradient(to bottom, var(--f-accent), var(--f-card));
+            border: 1px solid var(--f-border);
+            border-radius: var(--f-radius-lg);
         }
     </style>
 </head>
-<body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Include Admin Sidebar -->
-            <%- include('../../partials/billing-sidebar') %>
+<body class="finance-content-area">
+    <div class="f-wrapper">
+        <%- include('../../partials/billing-sidebar') %>
+        
+        <main class="f-main-area main-content">
+            <!-- PAGE HEADER (Glass) -->
+            <header class="f-header-glass">
+                <div>
+                    <h1 class="f-page-title f-premium-text"><i class="bi bi-cash-coin me-2"></i>Terima Setoran</h1>
+                    <p class="f-page-subtitle">Proses penyetoran uang kolektor ke kasir.</p>
+                </div>
+                <div class="f-actions">
+                    <button class="f-btn f-btn-outline" onclick="window.fPjax(window.location.href)" title="Refresh Content">
+                        <i class="bi bi-arrow-clockwise"></i>Refresh
+                    </button>
+                </div>
+            </header>
 
-            <!-- Main content -->
-            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">
-                        <i class="bi bi-cash-coin me-2"></i>Terima Setoran Kolektor
-                    </h1>
+            <div class="f-container">
+
+                <!-- INFO ALERT -->
+                <div class="alert alert-info border-0 shadow-sm mb-4" style="border-radius: var(--f-radius-md);">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-info-circle-fill me-3 fs-5"></i>
+                        <div>
+                            <strong>Petunjuk:</strong> Pilih salah satu kolektor di bawah ini yang akan menyerahkan setoran, kemudian lengkapi formulir penerimaan yang muncul.
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Info Alert -->
-                <div class="alert-info">
-                    <i class="bi bi-info-circle me-2"></i>
-                    <strong>Petunjuk:</strong> Pilih kolektor yang akan menyerahkan setoran, kemudian isi form penerimaan setoran.
-                </div>
-
-                <!-- Collectors List -->
-                <div class="remittance-card">
-                    <h5 class="mb-3">
-                        <i class="bi bi-people me-2"></i>Pilih Kolektor
-                    </h5>
-                    <div class="row">
-                        <% collectors.forEach(function(collector) { %>
-                            <div class="col-md-6 col-lg-4 mb-3">
-                                <div class="collector-card" onclick="selectCollector(this, <%= collector.id %>, '<%= collector.name %>', <%= collector.pending_amount || 0 %>)">
-                                    <div class="collector-name"><%= collector.name %></div>
-                                    <div class="collector-info">
-                                        <i class="bi bi-telephone me-1"></i>
-                                        <%= collector.phone || 'Tidak ada nomor telepon' %>
+                <!-- COLLECTORS SELECTION -->
+                <section class="mb-5">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h2 class="f-card-title" style="font-size: 1.125rem;">Pilih Kolektor</h2>
+                        <span class="text-muted small"><%= collectors.length %> Kolektor Tersedia</span>
+                    </div>
+                    
+                    <div class="f-grid f-grid-3">
+                        <% collectors.forEach(function(collector, index) { %>
+                            <div class="f-card collector-selectable-card" 
+                                 onclick="selectCollector(this, <%= collector.id %>, '<%= collector.name %>', <%= collector.pending_amount || 0 %>)">
+                                <div class="f-card-body">
+                                    <div class="d-flex align-items-center gap-3 mb-3">
+                                        <div class="rounded-circle bg-light d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; border: 1px solid var(--f-border);">
+                                            <i class="bi bi-person text-muted fs-4"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="f-card-title mb-0"><%= collector.name %></h3>
+                                            <p class="f-card-description mb-0"><%= collector.phone || 'N/A' %></p>
+                                        </div>
                                     </div>
-                                    <div class="collector-info">
-                                        <i class="bi bi-percent me-1"></i>
-                                        Komisi: <%= collector.commission_rate || 5 %>%
+                                    
+                                    <div class="p-3 rounded-3 bg-light border mb-2">
+                                        <span class="f-label mb-1" style="font-size: 0.65rem;">SETORAN PENDING</span>
+                                        <div class="font-weight-bold text-success" style="font-size: 1.25rem;">
+                                            Rp <%= (collector.pending_amount || 0).toLocaleString('id-ID') %>
+                                        </div>
                                     </div>
-                                    <div class="pending-amount">
-                                        Rp <%= (collector.pending_amount || 0).toLocaleString('id-ID') %>
+                                    
+                                    <div class="d-flex justify-content-between align-items-center small text-muted">
+                                        <span><i class="bi bi-percent me-1"></i>Komisi <%= collector.commission_rate || 5 %>%</span>
+                                        <span><i class="bi bi-check2-circle me-1"></i>Klik untuk pilih</span>
                                     </div>
-                                    <small>Setoran yang harus diserahkan</small>
                                 </div>
                             </div>
                         <% }); %>
                     </div>
-                </div>
+                </section>
 
-                <!-- Remittance Form -->
-                <div class="form-section" id="remittanceForm" style="display: none;">
-                    <h5 class="mb-3">
-                        <i class="bi bi-receipt me-2"></i>Form Penerimaan Setoran
-                    </h5>
-                    
-                    <form id="remittanceFormData">
-                        <input type="hidden" id="collectorId" name="collector_id">
-                        
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group mb-3">
-                                    <label for="collectorName" class="form-label">Nama Kolektor</label>
-                                    <input type="text" class="form-control" id="collectorName" readonly>
-                                </div>
+                <!-- REMITTANCE FORM -->
+                <section id="remittanceForm" style="display: none;" class="mb-5">
+                    <div class="f-card form-highlight">
+                        <div class="f-card-header">
+                            <div>
+                                <h2 class="f-card-title">Formulir Penerimaan Setoran</h2>
+                                <p class="f-card-description mb-0">Lengkapi detail penerimaan dana dari kolektor yang dipilih.</p>
                             </div>
-                            <div class="col-md-6">
-                                <div class="form-group mb-3">
-                                    <label for="remittanceDate" class="form-label">Tanggal Penerimaan</label>
-                                    <input type="datetime-local" class="form-control" id="remittanceDate" name="remittance_date" required>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group mb-3">
-                                    <label for="remittanceAmount" class="form-label">Jumlah Setoran</label>
-                                    <input type="number" class="form-control" id="remittanceAmount" name="remittance_amount" 
-                                           placeholder="Masukkan jumlah setoran" required>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-group mb-3">
-                                    <label for="paymentMethod" class="form-label">Metode Penerimaan</label>
-                                    <select class="form-control" id="paymentMethod" name="payment_method" required>
-                                        <option value="">Pilih metode</option>
-                                        <option value="cash">Tunai</option>
-                                        <option value="transfer">Transfer Bank</option>
-                                        <option value="check">Cek</option>
-                                        <option value="other">Lainnya</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="form-group mb-3">
-                            <label for="notes" class="form-label">Catatan</label>
-                            <textarea class="form-control" id="notes" name="notes" rows="3" 
-                                      placeholder="Catatan tambahan (opsional)"></textarea>
-                        </div>
-                        
-                        <div class="amount-display">
-                            <div class="amount-value" id="displayAmount">Rp 0</div>
-                            <div class="amount-label">Jumlah yang akan diterima</div>
-                        </div>
-                        
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-submit">
-                                <i class="bi bi-check-circle me-1"></i>Terima Setoran
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary" onclick="cancelRemittance()">
-                                <i class="bi bi-x-circle me-1"></i>Batal
+                            <button class="f-btn f-btn-ghost f-btn-icon" onclick="cancelRemittance()" title="Batal">
+                                <i class="bi bi-x-lg"></i>
                             </button>
                         </div>
-                    </form>
-                </div>
+                        <div class="f-card-body">
+                            <form id="remittanceFormData">
+                                <input type="hidden" id="collectorId" name="collector_id">
+                                
+                                <div class="row g-4 mb-4">
+                                    <div class="col-md-4">
+                                        <div class="f-form-group">
+                                            <label class="f-label" for="collectorName">NAMA KOLEKTOR</label>
+                                            <input type="text" class="f-input" id="collectorName" readonly style="background-color: var(--f-muted);">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="f-form-group">
+                                            <label class="f-label" for="remittanceDate">TANGGAL & WAKTU PENERIMAAN</label>
+                                            <input type="datetime-local" class="f-input" id="remittanceDate" name="remittance_date" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="f-form-group">
+                                            <label class="f-label" for="paymentMethod">METODE PENERIMAAN</label>
+                                            <select class="f-select" id="paymentMethod" name="payment_method" required>
+                                                <option value="">Pilih metode...</option>
+                                                <option value="cash">Tunai (Cash)</option>
+                                                <option value="transfer">Transfer Bank</option>
+                                                <option value="check">Cek / Giro</option>
+                                                <option value="other">Lainnya</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="f-form-group mb-0">
+                                            <label class="f-label" for="remittanceAmount">JUMLAH SETORAN (RP)</label>
+                                            <div class="position-relative">
+                                                <span class="position-absolute translate-middle-y top-50 ps-3 text-muted">Rp</span>
+                                                <input type="number" class="f-input ps-5" id="remittanceAmount" name="remittance_amount" placeholder="0" required style="font-size: 1.125rem; font-weight: 600;">
+                                            </div>
+                                            <p class="text-muted mt-2 mb-0" style="font-size: 0.75rem;">
+                                                <i class="bi bi-info-circle me-1"></i>Maksimal setoran: <span id="maxAmount" class="fw-bold">Rp 0</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <div class="f-form-group mb-0">
+                                            <label class="f-label" for="notes">CATATAN TAMBAHAN</label>
+                                            <input type="text" class="f-input" id="notes" name="notes" placeholder="Contoh: Setoran minggu ke-2, Transfer via BCA, dsb.">
+                                        </div>
+                                    </div>
+                                </div>
 
-                <!-- Recent Remittances -->
-                <div class="history-section">
-                    <h5 class="mb-3">
-                        <i class="bi bi-clock-history me-2"></i>Riwayat Penerimaan Setoran
-                    </h5>
-                    
-                    <% if (remittances.length > 0) { %>
-                        <% remittances.forEach(function(remittance) { %>
-                            <div class="history-item">
-                                <div class="history-info">
-                                    <h6><%= remittance.collector_name %></h6>
-                                    <small>
-                                        <i class="bi bi-calendar me-1"></i>
-                                        <%= new Date(remittance.received_at).toLocaleDateString('id-ID') %>
-                                        <i class="bi bi-clock me-1 ms-2"></i>
-                                        <%= new Date(remittance.received_at).toLocaleTimeString('id-ID') %>
-                                    </small>
-                                    <br>
-                                    <small class="text-muted">
-                                        <i class="bi bi-credit-card me-1"></i>
-                                        <%= remittance.payment_method || 'Tunai' %>
-                                        <% if (remittance.notes) { %>
-                                            <br><i class="bi bi-sticky me-1"></i><%= remittance.notes %>
-                                        <% } %>
-                                    </small>
+                                <div class="p-4 rounded-3 border mb-4 text-center bg-white shadow-sm">
+                                    <div class="f-stat-label mb-2">KONFIRMASI JUMLAH</div>
+                                    <div class="text-success font-weight-bold" id="displayAmount" style="font-size: 2.5rem; letter-spacing: -0.05em;">Rp 0</div>
                                 </div>
-                                <div class="text-end">
-                                    <div class="history-amount">Rp <%= remittance.amount.toLocaleString('id-ID') %></div>
-                                    <span class="status-badge status-received">Diterima</span>
+
+                                <div class="d-flex justify-content-end gap-3">
+                                    <button type="button" class="f-btn f-btn-outline" onclick="cancelRemittance()">Batal</button>
+                                    <button type="submit" class="f-btn f-btn-primary" style="height: 3rem; padding: 0 2rem;">
+                                        <i class="bi bi-check2-circle me-2 fs-5"></i>Proses Terima Setoran
+                                    </button>
                                 </div>
-                            </div>
-                        <% }); %>
-                    <% } else { %>
-                        <div class="text-center py-5">
-                            <i class="bi bi-receipt fs-1 text-muted"></i>
-                            <h5 class="mt-3">Belum ada setoran yang diterima</h5>
-                            <p class="text-muted">Belum ada setoran kolektor yang diterima hari ini.</p>
+                            </form>
                         </div>
-                    <% } %>
-                </div>
-            </main>
-        </div>
+                    </div>
+                </section>
+
+                <!-- HISTORY SECTION -->
+                <section>
+                    <div class="f-page-header mb-3">
+                        <div>
+                            <h2 class="f-card-title"><i class="bi bi-clock-history me-2"></i>Riwayat Setoran Hari Ini</h2>
+                            <p class="f-card-description">Daftar penerimaan setoran yang telah diproses hari ini.</p>
+                        </div>
+                    </div>
+
+                    <div class="f-card overflow-hidden">
+                        <div class="f-table-wrapper">
+                            <table class="f-table">
+                                <thead>
+                                    <tr>
+                                        <th>Kolektor</th>
+                                        <th>Waktu Terima</th>
+                                        <th>Metode</th>
+                                        <th>Catatan</th>
+                                        <th class="text-end">Jumlah</th>
+                                        <th class="text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% if (remittances.length > 0) { %>
+                                        <% remittances.forEach(function(remittance) { %>
+                                            <tr>
+                                                <td>
+                                                    <div class="font-weight-bold text-dark"><%= remittance.collector_name %></div>
+                                                </td>
+                                                <td>
+                                                    <div class="small">
+                                                        <%= new Date(remittance.received_at).toLocaleDateString('id-ID') %>
+                                                        <span class="text-muted ms-1"><%= new Date(remittance.received_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) %></span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="text-capitalize"><%= remittance.payment_method || 'Tunai' %></span>
+                                                </td>
+                                                <td>
+                                                    <span class="text-muted small"><%= remittance.notes || '-' %></span>
+                                                </td>
+                                                <td class="text-end font-weight-bold">
+                                                    Rp <%= remittance.amount.toLocaleString('id-ID') %>
+                                                </td>
+                                                <td class="text-center">
+                                                    <span class="f-badge f-badge-success">Diterima</span>
+                                                </td>
+                                            </tr>
+                                        <% }); %>
+                                    <% } else { %>
+                                        <tr>
+                                            <td colspan="6" class="text-center py-5">
+                                                <div class="text-muted">
+                                                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                                                    Belum ada setoran yang diterima hari ini.
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <% } %>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
     </div>
 
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
@@ -356,7 +275,7 @@
         
         function selectCollector(element, id, name, pendingAmount) {
             // Remove previous selection
-            document.querySelectorAll('.collector-card').forEach(card => {
+            document.querySelectorAll('.collector-selectable-card').forEach(card => {
                 card.classList.remove('selected');
             });
             
@@ -368,6 +287,7 @@
             document.getElementById('collectorName').value = name;
             document.getElementById('remittanceAmount').value = pendingAmount;
             document.getElementById('remittanceAmount').max = pendingAmount;
+            document.getElementById('maxAmount').textContent = `Rp ${pendingAmount.toLocaleString('id-ID')}`;
             
             // Set current date/time
             const now = new Date();
@@ -375,8 +295,9 @@
             document.getElementById('remittanceDate').value = localDateTime;
             
             // Show form
-            document.getElementById('remittanceForm').style.display = 'block';
-            document.getElementById('remittanceForm').scrollIntoView({ behavior: 'smooth' });
+            const formSection = document.getElementById('remittanceForm');
+            formSection.style.display = 'block';
+            formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
             
             // Update display amount
             updateDisplayAmount();
@@ -385,11 +306,13 @@
         }
         
         function cancelRemittance() {
-            document.getElementById('remittanceForm').style.display = 'none';
-            document.querySelectorAll('.collector-card').forEach(card => {
+            const formSection = document.getElementById('remittanceForm');
+            formSection.style.display = 'none';
+            document.querySelectorAll('.collector-selectable-card').forEach(card => {
                 card.classList.remove('selected');
             });
             selectedCollector = null;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         
         function updateDisplayAmount() {
@@ -407,25 +330,37 @@
             const formData = new FormData(this);
             const data = Object.fromEntries(formData);
             
-            try {
-                const response = await fetch('/admin/billing/api/collector-remittance', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data)
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('Setoran berhasil diterima!');
-                    location.reload();
-                } else {
-                    alert('Error: ' + result.message);
+            // Basic validation
+            if (!data.remittance_amount || data.remittance_amount <= 0) {
+                alert('Silakan masukkan jumlah setoran yang valid.');
+                return;
+            }
+
+            if (confirm(`Konfirmasi penerimaan setoran sebesar Rp ${parseInt(data.remittance_amount).toLocaleString('id-ID')} dari ${document.getElementById('collectorName').value}?`)) {
+                try {
+                    const response = await fetch('/admin/billing/api/collector-remittance', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert('Setoran berhasil diterima!');
+                        if (window.fPjax) {
+                            window.fPjax(window.location.href);
+                        } else {
+                            location.reload();
+                        }
+                    } else {
+                        alert('Gagal: ' + result.message);
+                    }
+                } catch (error) {
+                    alert('Terjadi kesalahan system: ' + error.message);
                 }
-            } catch (error) {
-                alert('Error: ' + error.message);
             }
         });
     </script>

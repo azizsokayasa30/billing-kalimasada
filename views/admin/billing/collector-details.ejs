@@ -4,316 +4,291 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detail Kolektor - <%= appSettings.companyHeader %></title>
+    
+    <!-- Modern Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Core CSS -->
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
-    <!-- Admin Mobile Optimizations -->
-    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <link href="/css/finance-modern.css" rel="stylesheet">
+    <link href="/css/dashboard-modern.css" rel="stylesheet">
+    
     <style>
-        body {
-            background: #f5f6fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        :root {
+            --f-primary: #10b981; /* Emerald for Collector context */
+            --f-primary-soft: #ecfdf5;
         }
-        
-        .collector-header {
-            background: linear-gradient(135deg, #28a745, #20c997);
-            color: white;
-            border-radius: 12px;
+
+        .collector-profile-card {
+            background: white;
+            border-radius: var(--f-radius-lg);
             padding: 2rem;
-            margin-bottom: 2rem;
-        }
-        
-        .collector-name {
-            font-size: 2rem;
-            font-weight: 700;
-            margin: 0;
-        }
-        
-        .collector-info {
-            font-size: 1.1rem;
-            opacity: 0.9;
-            margin: 0.5rem 0 0;
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-        
-        .stat-card {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            text-align: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #28a745;
-            margin: 0;
-        }
-        
-        .stat-label {
-            font-size: 0.9rem;
-            color: #6c757d;
-            margin: 0.5rem 0 0;
-        }
-        
-        .payments-section {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .payment-item {
             display: flex;
-            justify-content: between;
             align-items: center;
-            padding: 1rem 0;
-            border-bottom: 1px solid #e9ecef;
-        }
-        
-        .payment-item:last-child {
-            border-bottom: none;
-        }
-        
-        .payment-info h6 {
-            margin: 0;
-            font-weight: 600;
-            color: #333;
-        }
-        
-        .payment-info small {
-            color: #6c757d;
-        }
-        
-        .payment-amount {
-            font-weight: 700;
-            color: #28a745;
-            font-size: 1.1rem;
-        }
-        
-        .commission-amount {
-            font-weight: 600;
-            color: #fd7e14;
-            font-size: 0.9rem;
-        }
-        
-        .filter-section {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
+            gap: 2rem;
             margin-bottom: 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border: 1px solid var(--f-border);
+            position: relative;
+            overflow: hidden;
         }
-        
-        .btn-back {
-            background: #6c757d;
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 1rem;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s ease;
+
+        .collector-profile-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--f-primary);
         }
-        
-        .btn-back:hover {
-            background: #5a6268;
-            transform: translateY(-2px);
+
+        .collector-avatar {
+            width: 80px;
+            height: 80px;
+            background: var(--f-primary-soft);
+            color: var(--f-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 700;
         }
-        
-        .btn-export {
-            background: #17a2b8;
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 1rem;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s ease;
+
+        .collector-meta {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1rem;
         }
-        
-        .btn-export:hover {
-            background: #138496;
-            transform: translateY(-2px);
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--f-text-light);
+            font-size: 0.875rem;
         }
-        
-        .status-badge {
+
+        .meta-item i {
+            color: var(--f-primary);
+        }
+
+        .status-badge-active {
+            background: #dcfce7;
+            color: #166534;
             padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
         }
-        
-        .status-completed {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .status-pending {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
+
         @media (max-width: 768px) {
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .collector-name {
-                font-size: 1.5rem;
-            }
-            
-            .payment-item {
+            .collector-profile-card {
                 flex-direction: column;
-                align-items: flex-start;
+                text-align: center;
+                padding: 1.5rem;
             }
-            
-            .payment-amount {
-                margin-top: 0.5rem;
+            .collector-meta {
+                flex-direction: column;
+                gap: 0.5rem;
+                align-items: center;
             }
         }
     </style>
 </head>
-<body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Include Admin Sidebar -->
-            <%- include('../../partials/billing-sidebar') %>
-
-            <!-- Main content -->
-            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <div class="d-flex align-items-center">
-                        <button class="btn btn-back me-3" onclick="goBack()">
-                            <i class="bi bi-arrow-left me-1"></i>Kembali
-                        </button>
-                        <h1 class="h2">
-                            <i class="bi bi-person-check me-2"></i>Detail Kolektor
-                        </h1>
-                    </div>
-                    <div class="btn-toolbar mb-2 mb-md-0">
-                        <button class="btn btn-export" onclick="exportCollectorDetails()">
-                            <i class="bi bi-download me-1"></i>Export Excel
-                        </button>
-                    </div>
+<body class="finance-content-area">
+    <div class="f-wrapper">
+        <%- include('../../partials/billing-sidebar') %>
+        
+        <main class="f-main-area main-content">
+            <!-- PAGE HEADER (Glass) -->
+            <header class="f-header-glass">
+                <div>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb mb-1" style="background: transparent; padding: 0;">
+                            <li class="breadcrumb-item"><a href="/admin/billing/collector-reports" class="text-muted text-decoration-none small">Laporan Kolektor</a></li>
+                            <li class="breadcrumb-item active small" aria-current="page">Detail Kolektor</li>
+                        </ol>
+                    </nav>
+                    <h1 class="f-page-title f-premium-text">Profil Kolektor</h1>
                 </div>
-
-                <!-- Collector Header -->
-                <div class="collector-header">
-                    <h2 class="collector-name"><%= collector.name %></h2>
-                    <div class="collector-info">
-                        <i class="bi bi-telephone me-1"></i>
-                        <%= collector.phone || 'Tidak ada nomor telepon' %>
-                    </div>
-                    <div class="collector-info">
-                        <i class="bi bi-percent me-1"></i>
-                        Komisi: <%= collector.commission_rate || 5 %>%
-                    </div>
+                <div class="f-actions">
+                    <button class="f-btn f-btn-outline" onclick="window.fPjax(window.location.href)" title="Refresh Content">
+                        <i class="bi bi-arrow-clockwise"></i>Refresh
+                    </button>
+                    <button class="f-btn f-btn-outline" onclick="goBack()">
+                        <i class="bi bi-arrow-left me-2"></i>Kembali
+                    </button>
+                    <button class="f-btn f-btn-primary" onclick="exportCollectorDetails()">
+                        <i class="bi bi-file-earmark-excel me-2"></i>Export .xlsx
+                    </button>
                 </div>
+            </header>
 
-                <!-- Statistics -->
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-value"><%= stats.total_payments || 0 %></div>
-                        <div class="stat-label">Total Pembayaran</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">Rp <%= (stats.total_payment_amount || 0).toLocaleString('id-ID') %></div>
-                        <div class="stat-label">Jumlah Pembayaran</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">Rp <%= (stats.total_commission || 0).toLocaleString('id-ID') %></div>
-                        <div class="stat-label">Total Komisi</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">Rp <%= (stats.total_setoran || 0).toLocaleString('id-ID') %></div>
-                        <div class="stat-label">Total Setoran</div>
-                    </div>
-                </div>
+            <div class="f-container">
 
-                <!-- Filter Section -->
-                <div class="filter-section">
-                    <h5 class="mb-3">
-                        <i class="bi bi-funnel me-2"></i>Filter Pembayaran
-                    </h5>
-                    <div class="row">
-                        <div class="col-md-4">
-                            <label for="dateFrom" class="form-label">Dari Tanggal</label>
-                            <input type="date" class="form-control" id="dateFrom" value="<%= filters.dateFrom %>">
+                <!-- COLLECTOR PROFILE -->
+                <div class="collector-profile-card">
+                    <div class="collector-avatar">
+                        <%= collector.name.charAt(0).toUpperCase() %>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-3">
+                            <h2 class="mb-0" style="font-weight: 700; color: var(--f-text-dark);"><%= collector.name %></h2>
+                            <span class="status-badge-active">Aktif</span>
                         </div>
-                        <div class="col-md-4">
-                            <label for="dateTo" class="form-label">Sampai Tanggal</label>
-                            <input type="date" class="form-control" id="dateTo" value="<%= filters.dateTo %>">
-                        </div>
-                        <div class="col-md-4 d-flex align-items-end">
-                            <button class="btn btn-primary w-100" onclick="applyFilters()">
-                                <i class="bi bi-search me-1"></i>Filter
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Payments List -->
-                <div class="payments-section">
-                    <h5 class="mb-3">
-                        <i class="bi bi-clock-history me-2"></i>Riwayat Pembayaran
-                    </h5>
-                    
-                    <% if (payments.length > 0) { %>
-                        <% payments.forEach(function(payment) { %>
-                            <div class="payment-item">
-                                <div class="payment-info">
-                                    <h6><%= payment.customer_name || 'Customer Tidak Diketahui' %></h6>
-                                    <small>
-                                        <i class="bi bi-calendar me-1"></i>
-                                        <%= new Date(payment.collected_at).toLocaleDateString('id-ID') %>
-                                        <i class="bi bi-clock me-1 ms-2"></i>
-                                        <%= new Date(payment.collected_at).toLocaleTimeString('id-ID') %>
-                                    </small>
-                                    <br>
-                                    <small class="text-muted">
-                                        <i class="bi bi-credit-card me-1"></i>
-                                        <%= payment.payment_method || 'Tunai' %>
-                                        <% if (payment.notes) { %>
-                                            <br><i class="bi bi-sticky me-1"></i><%= payment.notes %>
-                                        <% } %>
-                                    </small>
-                                </div>
-                                <div class="text-end">
-                                    <div class="payment-amount">Rp <%= payment.payment_amount.toLocaleString('id-ID') %></div>
-                                    <div class="commission-amount">
-                                        Komisi: Rp <%= payment.commission_amount.toLocaleString('id-ID') %>
-                                    </div>
-                                    <div class="commission-amount">
-                                        Setoran: Rp <%= (payment.payment_amount - payment.commission_amount).toLocaleString('id-ID') %>
-                                    </div>
-                                    <span class="status-badge status-completed">Selesai</span>
-                                </div>
+                        <div class="collector-meta">
+                            <div class="meta-item">
+                                <i class="bi bi-telephone-fill"></i>
+                                <%= collector.phone || '-' %>
                             </div>
-                        <% }); %>
-                    <% } else { %>
-                        <div class="text-center py-5">
-                            <i class="bi bi-receipt fs-1 text-muted"></i>
-                            <h5 class="mt-3">Belum ada pembayaran</h5>
-                            <p class="text-muted">Kolektor ini belum melakukan pembayaran dalam periode yang dipilih.</p>
+                            <div class="meta-item">
+                                <i class="bi bi-envelope-fill"></i>
+                                <%= collector.email || '-' %>
+                            </div>
+                            <div class="meta-item">
+                                <i class="bi bi-percent"></i>
+                                Komisi: <strong><%= collector.commission_rate || 5 %>%</strong>
+                            </div>
                         </div>
-                    <% } %>
+                    </div>
                 </div>
-            </main>
-        </div>
+
+                <!-- STATS GRID -->
+                <div class="f-grid">
+                    <div class="f-stat-card">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Total Transaksi</span>
+                            <div class="f-stat-icon-wrapper bg-primary-glow">
+                                <i class="bi bi-receipt"></i>
+                            </div>
+                        </div>
+                        <div class="f-stat-value f-premium-text"><%= stats.total_payments || 0 %></div>
+                    </div>
+                    <div class="f-stat-card">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Total Penagihan</span>
+                            <div class="f-stat-icon-wrapper bg-success-glow">
+                                <i class="bi bi-cash-stack"></i>
+                            </div>
+                        </div>
+                        <div class="f-stat-value f-premium-text text-success">Rp <%= (stats.total_payment_amount || 0).toLocaleString('id-ID') %></div>
+                    </div>
+                    <div class="f-stat-card">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Total Komisi</span>
+                            <div class="f-stat-icon-wrapper bg-warning-glow">
+                                <i class="bi bi-piggy-bank"></i>
+                            </div>
+                        </div>
+                        <div class="f-stat-value f-premium-text text-warning">Rp <%= (stats.total_commission || 0).toLocaleString('id-ID') %></div>
+                    </div>
+                    <div class="f-stat-card">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Bersih ke Kantor</span>
+                            <div class="f-stat-icon-wrapper bg-info-glow">
+                                <i class="bi bi-wallet2"></i>
+                            </div>
+                        </div>
+                        <div class="f-stat-value f-premium-text text-info">Rp <%= (stats.total_setoran || 0).toLocaleString('id-ID') %></div>
+                    </div>
+                </div>
+
+                <!-- FILTER & HISTORY -->
+                <div class="row mt-4">
+                    <div class="col-lg-3">
+                        <div class="f-card" style="position: sticky; top: 2rem;">
+                            <div class="f-card-header">
+                                <h3 class="f-card-title"><i class="bi bi-funnel me-2"></i>Filter Data</h3>
+                            </div>
+                            <div class="f-card-body">
+                                <div class="mb-3">
+                                    <label class="f-label">Dari Tanggal</label>
+                                    <input type="date" class="f-control" id="dateFrom" value="<%= filters.dateFrom %>">
+                                </div>
+                                <div class="mb-4">
+                                    <label class="f-label">Sampai Tanggal</label>
+                                    <input type="date" class="f-control" id="dateTo" value="<%= filters.dateTo %>">
+                                </div>
+                                <button class="f-btn f-btn-primary w-100" onclick="applyFilters()">
+                                    <i class="bi bi-search me-2"></i>Terapkan
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-9">
+                        <div class="f-card">
+                            <div class="f-card-header d-flex justify-content-between align-items-center">
+                                <h3 class="f-card-title"><i class="bi bi-clock-history me-2"></i>Riwayat Pembayaran</h3>
+                                <span class="badge bg-light text-dark fw-normal"><%= payments.length %> Transaksi</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="f-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Tanggal</th>
+                                            <th>Pelanggan</th>
+                                            <th>Metode</th>
+                                            <th class="text-end">Jumlah</th>
+                                            <th class="text-end">Komisi</th>
+                                            <th class="text-end">Setoran</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <% if (payments.length > 0) { %>
+                                            <% payments.forEach(function(payment) { %>
+                                                <tr>
+                                                    <td>
+                                                        <div class="d-flex flex-column">
+                                                            <span class="fw-medium"><%= new Date(payment.collected_at).toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'}) %></span>
+                                                            <small class="text-muted"><%= new Date(payment.collected_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) %></small>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="fw-semibold"><%= payment.customer_name || 'Unknown' %></div>
+                                                        <small class="text-muted"><%= payment.customer_phone || '-' %></small>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-light text-dark fw-normal">
+                                                            <%= payment.payment_method || 'Tunai' %>
+                                                        </span>
+                                                    </td>
+                                                    <td class="text-end fw-semibold">
+                                                        Rp <%= payment.payment_amount.toLocaleString('id-ID') %>
+                                                    </td>
+                                                    <td class="text-end text-warning">
+                                                        Rp <%= payment.commission_amount.toLocaleString('id-ID') %>
+                                                    </td>
+                                                    <td class="text-end text-success fw-bold">
+                                                        Rp <%= (payment.payment_amount - payment.commission_amount).toLocaleString('id-ID') %>
+                                                    </td>
+                                                </tr>
+                                            <% }); %>
+                                        <% } else { %>
+                                            <tr>
+                                                <td colspan="6" class="text-center py-5">
+                                                    <div class="text-muted mb-2"><i class="bi bi-inbox fs-1"></i></div>
+                                                    <p class="mb-0">Tidak ada data pembayaran untuk periode ini.</p>
+                                                </td>
+                                            </tr>
+                                        <% } %>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 
+    <!-- Scripts -->
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
-        function goBack() {
-            window.history.back();
-        }
-        
         function applyFilters() {
             const dateFrom = document.getElementById('dateFrom').value;
             const dateTo = document.getElementById('dateTo').value;
@@ -322,7 +297,21 @@
             if (dateFrom) params.append('dateFrom', dateFrom);
             if (dateTo) params.append('dateTo', dateTo);
             
-            window.location.href = `/admin/billing/collector-details/<%= collector.id %>?${params.toString()}`;
+            const url = `/admin/billing/collector-details/<%= collector.id %>?${params.toString()}`;
+            if (window.fPjax) {
+                window.fPjax(url);
+            } else {
+                window.location.href = url;
+            }
+        }
+        
+        function goBack() {
+            const url = '/admin/billing/collector-reports';
+            if (window.fPjax) {
+                window.fPjax(url);
+            } else {
+                window.location.href = url;
+            }
         }
         
         function exportCollectorDetails() {
@@ -332,10 +321,19 @@
             const params = new URLSearchParams();
             if (dateFrom) params.append('dateFrom', dateFrom);
             if (dateTo) params.append('dateTo', dateTo);
-            params.append('export', 'excel');
             
             window.location.href = `/admin/billing/collector-details/<%= collector.id %>/export?${params.toString()}`;
         }
+
+        // Handle sidebar toggle
+        document.addEventListener('DOMContentLoaded', () => {
+            const sidebarToggle = document.getElementById('sidebarCollapse');
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', () => {
+                    document.querySelector('.f-wrapper').classList.toggle('sidebar-collapsed');
+                });
+            }
+        });
     </script>
 </body>
 </html>

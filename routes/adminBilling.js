@@ -685,6 +685,90 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
     }
 });
 
+// Export Collector Reports to Excel
+router.get('/collector-reports/export', getAppSettings, async (req, res) => {
+    try {
+        const { dateFrom, dateTo, collector } = req.query;
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const now = new Date();
+        const startDate = dateFrom || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const endDate = dateTo || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        
+        let collectorFilter = '';
+        const params = [startDate, endDate + ' 23:59:59'];
+        
+        if (collector) {
+            collectorFilter = ' AND c.id = ?';
+            params.push(collector);
+        }
+
+        const collectors = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT 
+                    c.*,
+                    COUNT(cp.id) as payment_count,
+                    COALESCE(SUM(cp.payment_amount), 0) as total_payment,
+                    COALESCE(SUM(cp.commission_amount), 0) as total_commission,
+                    COALESCE(SUM(cp.payment_amount - cp.commission_amount), 0) as total_setoran
+                FROM collectors c
+                LEFT JOIN collector_payments cp ON c.id = cp.collector_id 
+                    AND cp.status = 'completed'
+                    AND cp.collected_at >= ? AND cp.collected_at <= ?
+                WHERE c.status = 'active' ${collectorFilter}
+                GROUP BY c.id
+                ORDER BY c.name
+            `, params, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        db.close();
+
+        const ExcelJS = require('exceljs');
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Laporan Kolektor');
+
+        worksheet.columns = [
+            { header: 'Nama Kolektor', key: 'name', width: 25 },
+            { header: 'Telepon', key: 'phone', width: 15 },
+            { header: 'Email', key: 'email', width: 25 },
+            { header: 'Jml Transaksi', key: 'payment_count', width: 15 },
+            { header: 'Total Penagihan', key: 'total_payment', width: 20 },
+            { header: 'Total Komisi', key: 'total_commission', width: 20 },
+            { header: 'Total Setoran', key: 'total_setoran', width: 20 }
+        ];
+
+        collectors.forEach(c => {
+            worksheet.addRow({
+                name: c.name,
+                phone: c.phone,
+                email: c.email || '-',
+                payment_count: c.payment_count,
+                total_payment: c.total_payment,
+                total_commission: c.total_commission,
+                total_setoran: c.total_setoran
+            });
+        });
+
+        worksheet.getColumn('total_payment').numFmt = '"Rp" #,##0.00';
+        worksheet.getColumn('total_commission').numFmt = '"Rp" #,##0.00';
+        worksheet.getColumn('total_setoran').numFmt = '"Rp" #,##0.00';
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=laporan-kolektor-${startDate}-to-${endDate}.xlsx`);
+        
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        logger.error('Error exporting collector reports:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // Collector Details
 router.get('/collector-details/:id', getAppSettings, async (req, res) => {
     try {
@@ -777,6 +861,91 @@ router.get('/collector-details/:id', getAppSettings, async (req, res) => {
             message: 'Error loading collector details',
             error: process.env.NODE_ENV === 'development' ? error : {}
         });
+    }
+});
+
+// Export Collector Details to Excel
+router.get('/collector-details/:id/export', getAppSettings, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { dateFrom, dateTo } = req.query;
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        
+        const now = new Date();
+        const startDate = dateFrom || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const endDate = dateTo || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        
+        const collector = await new Promise((resolve, reject) => {
+            db.get('SELECT * FROM collectors WHERE id = ?', [id], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+        
+        if (!collector) {
+            db.close();
+            return res.status(404).send('Collector not found');
+        }
+        
+        const payments = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT cp.*, c.name as customer_name
+                FROM collector_payments cp
+                LEFT JOIN customers c ON cp.customer_id = c.id
+                WHERE cp.collector_id = ? 
+                AND cp.collected_at >= ? 
+                AND cp.collected_at <= ?
+                ORDER BY cp.collected_at DESC
+            `, [id, startDate, endDate + ' 23:59:59'], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+        
+        db.close();
+
+        const ExcelJS = require('exceljs');
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('History Penagihan');
+
+        worksheet.columns = [
+            { header: 'Tanggal', key: 'collected_at', width: 20 },
+            { header: 'Pelanggan', key: 'customer_name', width: 25 },
+            { header: 'Invoice', key: 'invoice_id', width: 15 },
+            { header: 'Jumlah Bayar', key: 'payment_amount', width: 20 },
+            { header: 'Komisi', key: 'commission_amount', width: 20 },
+            { header: 'Setoran', key: 'setoran', width: 20 },
+            { header: 'Metode', key: 'payment_method', width: 15 },
+            { header: 'Status', key: 'status', width: 15 }
+        ];
+
+        payments.forEach(p => {
+            worksheet.addRow({
+                collected_at: new Date(p.collected_at).toLocaleString('id-ID'),
+                customer_name: p.customer_name || '-',
+                invoice_id: p.invoice_id,
+                payment_amount: p.payment_amount,
+                commission_amount: p.commission_amount,
+                setoran: p.payment_amount - p.commission_amount,
+                payment_method: p.payment_method,
+                status: p.status
+            });
+        });
+
+        worksheet.getColumn('payment_amount').numFmt = '"Rp" #,##0.00';
+        worksheet.getColumn('commission_amount').numFmt = '"Rp" #,##0.00';
+        worksheet.getColumn('setoran').numFmt = '"Rp" #,##0.00';
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=penagihan-${collector.name.replace(/\s+/g, '-')}-${startDate}-to-${endDate}.xlsx`);
+        
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        logger.error('Error exporting collector details:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 

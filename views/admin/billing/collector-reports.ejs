@@ -6,39 +6,75 @@
     <title>Laporan Kolektor - <%= appSettings.companyHeader %></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="/css/admin-mobile.css" rel="stylesheet">
-    <link href="/css/dashboard-modern.css" rel="stylesheet">
+    <link href="/css/finance-modern.css" rel="stylesheet">
+    <style>
+        .collector-avatar-modern {
+            width: 54px;
+            height: 54px;
+            background: var(--f-muted);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: var(--f-primary);
+            border: 1px solid var(--f-border);
+            transition: all 0.3s ease;
+        }
+        .f-card:hover .collector-avatar-modern {
+            background-color: var(--f-primary);
+            color: white;
+            transform: scale(1.05);
+        }
+        .mini-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin: 1rem 0;
+            padding: 0.75rem;
+            background-color: var(--f-muted);
+            border-radius: var(--f-radius-sm);
+        }
+        .animate-in {
+            animation: f-in 0.4s ease-out forwards;
+        }
+    </style>
 </head>
-<body>
-    <div class="container-fluid">
-        <div class="row">
-            <%- include('../../partials/billing-sidebar') %>
-            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
-                <!-- PAGE HEADER -->
-                <div class="page-header-bar">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <nav aria-label="breadcrumb">
-                                <ol class="breadcrumb mb-1">
-                                    <li class="breadcrumb-item"><a href="/admin/dashboard">Dashboard</a></li>
-                                    <li class="breadcrumb-item active" aria-current="page">Laporan Kolektor</li>
-                                </ol>
-                            </nav>
-                            <h1>Laporan Kolektor</h1>
-                        </div>
-                        <div>
-                            <button class="btn btn-export" onclick="exportReport()">
-                                <i class="bi bi-file-earmark-excel me-1"></i>Export Excel
-                            </button>
-                        </div>
-                    </div>
+<body class="finance-content-area">
+    <div class="f-wrapper">
+        <%- include('../../partials/billing-sidebar') %>
+        
+        <main class="f-main-area main-content">
+            <!-- PAGE HEADER (Glass) -->
+            <header class="f-header-glass">
+                <div>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb mb-1" style="background: transparent; padding: 0;">
+                            <li class="breadcrumb-item"><a href="/admin/dashboard" class="text-muted text-decoration-none small">Dashboard</a></li>
+                            <li class="breadcrumb-item active small" aria-current="page">Laporan Kolektor</li>
+                        </ol>
+                    </nav>
+                    <h1 class="f-page-title f-premium-text">Laporan Kolektor</h1>
                 </div>
+                <div class="f-actions">
+                    <button class="f-btn f-btn-outline" onclick="window.fPjax(window.location.href)" title="Refresh Content">
+                        <i class="bi bi-arrow-clockwise"></i>Refresh
+                    </button>
+                    <button class="f-btn f-btn-primary" onclick="exportReport()">
+                        <i class="bi bi-file-earmark-excel"></i>Export .xlsx
+                    </button>
+                </div>
+            </header>
+
+            <div class="f-container">
 
                 <% if (typeof error !== 'undefined' && error) { %>
-                    <div class="alert alert-warning mb-3 animate-fade" role="alert">
+                    <div class="alert alert-warning border-0 shadow-sm mb-4" role="alert" style="border-radius: var(--f-radius-md);">
                         <div class="d-flex align-items-center">
                             <i class="bi bi-exclamation-circle-fill me-2"></i>
                             <div><%= error %></div>
@@ -47,148 +83,146 @@
                 <% } %>
 
                 <!-- STAT CARDS -->
-                <div class="row g-3 mb-3">
-                    <div class="col-md-3">
-                        <div class="metric-card animate-fade" style="animation-delay: 0.05s">
-                            <div class="metric-card-icon" style="background: var(--primary-muted); color: var(--primary);">
+                 <div class="f-grid f-grid-4 mb-5">
+                    <div class="f-stat-card">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Total Kolektor</span>
+                            <div class="f-stat-icon-wrapper bg-primary-glow">
                                 <i class="bi bi-people"></i>
                             </div>
-                            <div class="metric-card-value"><%= summary.total_collectors || 0 %></div>
-                            <div class="metric-card-label">Total Kolektor</div>
                         </div>
+                        <div class="f-stat-value f-premium-text"><%= summary.total_collectors || 0 %></div>
+                        <div class="f-stat-desc">Personil aktif</div>
                     </div>
-                    <div class="col-md-3">
-                        <div class="metric-card animate-fade" style="animation-delay: 0.1s">
-                            <div class="metric-card-icon" style="background: var(--success-muted); color: var(--success);">
+                    <div class="f-stat-card">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Total Pembayaran</span>
+                            <div class="f-stat-icon-wrapper bg-success-glow">
                                 <i class="bi bi-wallet2"></i>
                             </div>
-                            <div class="metric-card-value">Rp <%= (summary.total_payments || 0).toLocaleString('id-ID') %></div>
-                            <div class="metric-card-label">Total Pembayaran</div>
                         </div>
+                        <div class="f-stat-value f-premium-text text-success">Rp <%= (summary.total_payments || 0).toLocaleString('id-ID') %></div>
+                        <div class="f-stat-desc">Akumulasi bruto</div>
                     </div>
-                    <div class="col-md-3">
-                        <div class="metric-card animate-fade" style="animation-delay: 0.15s">
-                            <div class="metric-card-icon" style="background: var(--info-muted); color: var(--info);">
+                    <div class="f-stat-card">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Total Komisi</span>
+                            <div class="f-stat-icon-wrapper bg-info-glow">
                                 <i class="bi bi-pie-chart"></i>
                             </div>
-                            <div class="metric-card-value">Rp <%= (summary.total_commissions || 0).toLocaleString('id-ID') %></div>
-                            <div class="metric-card-label">Total Komisi</div>
                         </div>
+                        <div class="f-stat-value f-premium-text text-info">Rp <%= (summary.total_commissions || 0).toLocaleString('id-ID') %></div>
+                        <div class="f-stat-desc">Bagi hasil</div>
                     </div>
-                    <div class="col-md-3">
-                        <div class="metric-card animate-fade" style="animation-delay: 0.2s">
-                            <div class="metric-card-icon" style="background: var(--warning-muted); color: var(--warning);">
+                    <div class="f-stat-card">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Neto Setoran</span>
+                            <div class="f-stat-icon-wrapper bg-warning-glow">
                                 <i class="bi bi-cash-stack"></i>
                             </div>
-                            <div class="metric-card-value">Rp <%= (summary.total_setoran || 0).toLocaleString('id-ID') %></div>
-                            <div class="metric-card-label">Total Setoran</div>
                         </div>
+                        <div class="f-stat-value f-premium-text text-warning">Rp <%= (summary.total_setoran || 0).toLocaleString('id-ID') %></div>
+                        <div class="f-stat-desc">Total harus diterima</div>
                     </div>
                 </div>
 
                 <!-- FILTER -->
-                <div class="card mb-3 animate-fade" style="animation-delay: 0.25s">
-                    <div class="card-body" style="padding: 16px 20px;">
-                        <div class="filter-header">
-                            <i class="bi bi-sliders2"></i>Filter Laporan
-                        </div>
-                        <div class="row g-3">
+                <div class="f-card mb-4">
+                    <div class="f-card-body">
+                        <div class="row g-3 align-items-end">
                             <div class="col-md-3">
-                                <label class="form-label">DARI TANGGAL</label>
-                                <input type="date" class="form-control" id="dateFrom" value="<%= filters.dateFrom %>">
+                                <label class="f-label">DARI TANGGAL</label>
+                                <input type="date" class="f-input" id="dateFrom" value="<%= filters.dateFrom %>">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label">SAMPAI TANGGAL</label>
-                                <input type="date" class="form-control" id="dateTo" value="<%= filters.dateTo %>">
+                                <label class="f-label">SAMPAI TANGGAL</label>
+                                <input type="date" class="f-input" id="dateTo" value="<%= filters.dateTo %>">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label">KOLEKTOR</label>
-                                <select class="form-select" id="collectorFilter">
+                                <label class="f-label">KOLEKTOR</label>
+                                <select class="f-select" id="collectorFilter">
                                     <option value="">Semua Kolektor</option>
                                     <% collectors.forEach(function(collector) { %>
                                         <option value="<%= collector.id %>" <%= filters.collector == collector.id ? 'selected' : '' %>><%= collector.name %></option>
                                     <% }); %>
                                 </select>
                             </div>
-                            <div class="col-md-3 d-flex align-items-end">
-                                <button class="btn btn-filter w-100" onclick="applyFilters()">
-                                    <i class="bi bi-filter me-1"></i>Terapkan Filter
+                            <div class="col-md-3">
+                                <button class="f-btn f-btn-primary w-100" onclick="applyFilters()">
+                                    <i class="bi bi-filter"></i>Terapkan Filter
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- COLLECTOR CARDS -->
-                <div class="row g-3">
+                <!-- COLLECTOR LIST -->
+                <div class="f-grid f-grid-3">
                     <% if (collectors.length > 0) { %>
                         <% collectors.forEach(function(collector, index) { %>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card animate-fade" style="animation-delay: <%= 0.3 + (index * 0.04) %>s">
-                                    <div class="card-body" style="padding: 16px;">
-                                        <div class="d-flex justify-content-between align-items-start mb-2">
-                                            <div class="d-flex align-items-center gap-3">
-                                                <div class="collector-avatar">
-                                                    <i class="bi bi-person"></i>
-                                                </div>
-                                                <div>
-                                                    <h6 class="collector-name"><%= collector.name %></h6>
-                                                    <small style="color: var(--fg-muted); font-size: 0.75rem;">
-                                                        <i class="bi bi-telephone me-1"></i><%= collector.phone || '-' %>
-                                                    </small>
-                                                </div>
-                                            </div>
-                                            <span class="badge-status">AKTIF</span>
-                                        </div>
-
-                                        <div class="stats-summary">
-                                            <div>
-                                                <span class="mini-stat-label">Transaksi</span>
-                                                <span class="mini-stat-value"><%= collector.total_payments || 0 %> Items</span>
+                            <div class="f-card">
+                                <div class="f-card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="collector-avatar-modern">
+                                                <i class="bi bi-person"></i>
                                             </div>
                                             <div>
-                                                <span class="mini-stat-label">Omzet</span>
-                                                <span class="mini-stat-value text-primary">Rp <%= (collector.total_payment_amount || 0).toLocaleString('id-ID') %></span>
-                                            </div>
-                                            <div>
-                                                <span class="mini-stat-label">Komisi</span>
-                                                <span class="mini-stat-value text-warning">Rp <%= (collector.total_commission || 0).toLocaleString('id-ID') %></span>
-                                            </div>
-                                            <div>
-                                                <span class="mini-stat-label">Setoran</span>
-                                                <span class="mini-stat-value text-success">Rp <%= (collector.total_setoran || 0).toLocaleString('id-ID') %></span>
+                                                <h3 class="f-card-title"><%= collector.name %></h3>
+                                                <p class="f-card-description mb-0"><i class="bi bi-telephone me-1"></i><%= collector.phone || '-' %></p>
                                             </div>
                                         </div>
+                                        <span class="f-badge f-badge-success">Aktif</span>
+                                    </div>
 
-                                        <div class="d-flex justify-content-between align-items-center pt-1">
-                                            <div style="font-size: 0.75rem; color: var(--fg-muted); font-weight: 500;">
-                                                <i class="bi bi-award me-1"></i>Rate: <%= collector.commission_rate || 5 %>%
+                                    <div class="mini-stat-grid">
+                                        <div>
+                                            <span class="f-stat-label" style="font-size: 0.65rem;">Transaksi</span>
+                                            <div class="f-mono font-weight-bold" style="font-size: 0.875rem;"><%= collector.total_payments || 0 %> Tx</div>
+                                        </div>
+                                        <div>
+                                            <span class="f-stat-label" style="font-size: 0.65rem;">Rate Komisi</span>
+                                            <div class="f-mono text-info font-weight-bold" style="font-size: 0.875rem;"><%= collector.commission_rate || 5 %>%</div>
+                                        </div>
+                                        <div class="col-span-2 mt-1 pt-1 border-top" style="grid-column: span 2;">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="f-stat-label" style="font-size: 0.65rem;">Omzet Bruto</span>
+                                                <span class="f-mono font-weight-bold" style="font-size: 0.875rem;">Rp <%= (collector.total_payment_amount || 0).toLocaleString('id-ID') %></span>
                                             </div>
-                                            <button class="btn-detail" onclick="viewCollectorDetails(<%= collector.id %>)">
-                                                Lihat Detail <i class="bi bi-arrow-right ms-1"></i>
-                                            </button>
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="f-stat-label" style="font-size: 0.65rem;">Komisi</span>
+                                                <span class="f-mono text-error font-weight-bold" style="font-size: 0.875rem;">-Rp <%= (collector.total_commission || 0).toLocaleString('id-ID') %></span>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center pt-1 mt-1 border-top" style="border-top-style: dashed !important;">
+                                                <span class="f-stat-label" style="font-weight: 600; color: var(--f-foreground);">Neto Setoran</span>
+                                                <span class="f-mono text-success font-weight-bold" style="font-size: 1rem;">Rp <%= (collector.total_setoran || 0).toLocaleString('id-ID') %></span>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    <button class="f-btn f-btn-outline w-100" onclick="viewCollectorDetails(<%= collector.id %>)">
+                                        Detail Performa <i class="bi bi-arrow-right"></i>
+                                    </button>
                                 </div>
                             </div>
                         <% }); %>
                     <% } else { %>
-                        <div class="col-12 text-center py-5">
-                            <div class="card">
-                                <div class="card-body py-5">
-                                    <i class="bi bi-inbox" style="font-size: 2.5rem; color: var(--fg-subtle);"></i>
-                                    <h6 style="color: var(--fg-muted); margin-top: 12px;">Tidak ada data ditemukan</h6>
-                                    <p style="font-size: 0.8rem; color: var(--fg-subtle); margin-bottom: 16px;">Coba sesuaikan filter tanggal atau pilih kolektor lain.</p>
-                                    <a href="/admin/billing/collector-reports" class="btn btn-filter">
-                                        <i class="bi bi-arrow-clockwise me-1"></i>Reset Filter
+                        <div class="col-span-full py-5 text-center" style="grid-column: 1 / -1;">
+                            <div class="f-card py-5">
+                                <div class="f-card-body">
+                                    <i class="bi bi-inbox text-muted mb-3" style="font-size: 3rem;"></i>
+                                    <h3 class="f-card-title text-muted">Data Tidak Ditemukan</h3>
+                                    <p class="f-card-description">Coba sesuaikan filter tanggal atau pilih kolektor lain.</p>
+                                    <a href="/admin/billing/collector-reports" class="f-btn f-btn-ghost mt-2">
+                                        <i class="bi bi-arrow-clockwise"></i>Reset Filter
                                     </a>
                                 </div>
                             </div>
                         </div>
                     <% } %>
                 </div>
-            </main>
-        </div>
+            </div>
+        </main>
     </div>
 
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
@@ -203,11 +237,21 @@
             if (dateTo) params.append('dateTo', dateTo);
             if (collectorFilter) params.append('collector', collectorFilter);
             
-            window.location.href = `/admin/billing/collector-reports?${params.toString()}`;
+            const url = `/admin/billing/collector-reports?${params.toString()}`;
+            if (window.fPjax) {
+                window.fPjax(url);
+            } else {
+                window.location.href = url;
+            }
         }
         
         function viewCollectorDetails(collectorId) {
-            window.location.href = `/admin/billing/collector-details/${collectorId}`;
+            const url = `/admin/billing/collector-details/${collectorId}`;
+            if (window.fPjax) {
+                window.fPjax(url);
+            } else {
+                window.location.href = url;
+            }
         }
         
         function exportReport() {
@@ -226,3 +270,4 @@
     </script>
 </body>
 </html>
+
