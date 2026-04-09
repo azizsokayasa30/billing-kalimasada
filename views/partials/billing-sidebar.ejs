@@ -47,16 +47,29 @@
     <!-- Navigation Links -->
     <div class="sb-nav">
         <!-- Overview Section -->
+        <% const overviewPages = ['dashboard', 'billing']; %>
+        <% const overviewExpanded = typeof page !== 'undefined' && overviewPages.includes(page); %>
         <div class="sb-section">
-            <div class="sb-section-title">Overview</div>
-            <a href="/admin/dashboard" class="sb-item <%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
-                <i class="bi bi-grid-1x2"></i>
-                <span class="sb-item-text">Dashboard</span>
-            </a>
-            <a href="/admin/billing/dashboard" class="sb-item <%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>">
-                <i class="bi bi-speedometer2"></i>
-                <span class="sb-item-text">Billing & Accounting</span>
-            </a>
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="overviewCollapse"
+                 aria-expanded="<%= overviewExpanded ? 'true' : 'false' %>"
+                 aria-controls="overviewCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Overview</span>
+                <i class="bi <%= overviewExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= overviewExpanded ? 'show' : '' %>" id="overviewCollapse">
+                <a href="/admin/dashboard" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
+                    <i class="bi bi-grid-1x2"></i>
+                    <span class="sb-item-text">Dashboard</span>
+                </a>
+                <a href="/admin/billing/dashboard" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>">
+                    <i class="bi bi-speedometer2"></i>
+                    <span class="sb-item-text">Billing & Accounting</span>
+                </a>
+            </div>
         </div>
 
         <!-- PELANGGAN -->
@@ -366,7 +379,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
     
-    ['customerCollapse','invoiceCollapse','financeCollapse', 'settingCollapse'].forEach(setupCollapseToggle);
+    ['overviewCollapse','customerCollapse','invoiceCollapse','financeCollapse', 'settingCollapse'].forEach(setupCollapseToggle);
 
     // Restart Billing System
     const restartBillingBtn = document.getElementById('btnRestartBilling');
