@@ -234,15 +234,6 @@
 
     <!-- Sidebar Footer -->
     <div class="sb-footer">
-        <a href="/admin/logout" class="sb-item sb-logout">
-            <i class="bi bi-box-arrow-right"></i>
-            <span class="sb-item-text">Logout</span>
-        </a>
-        <button id="btnRestartBilling" class="sb-restart-btn">
-            <i class="bi bi-arrow-repeat"></i>
-            <span class="sb-item-text">Restart System</span>
-        </button>
-        <div id="billingRestartResult" class="small mt-1 px-2" style="display:none;"></div>
         <div class="sb-server-time">
             <div class="sb-time-label">SERVER TIME</div>
             <div class="sb-time-value" id="serverTimeValue">--:--:--</div>
@@ -253,6 +244,24 @@
         </div>
     </div>
 </nav>
+
+<!-- Top Header Bar -->
+<div class="sb-topbar" id="sbTopbar">
+    <div class="sb-topbar-left">
+        <span class="sb-topbar-time" id="topbarTimeValue"></span>
+    </div>
+    <div class="sb-topbar-right">
+        <button id="btnRestartBilling" class="sb-topbar-btn" title="Restart Billing System">
+            <i class="bi bi-arrow-repeat"></i>
+            <span>Restart</span>
+        </button>
+        <div id="billingRestartResult" class="small" style="display:none;"></div>
+        <a href="/admin/logout" class="sb-topbar-btn sb-topbar-logout" title="Logout">
+            <i class="bi bi-box-arrow-right"></i>
+            <span>Logout</span>
+        </a>
+    </div>
+</div>
 
 
 <script>
@@ -265,9 +274,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const mainContent = document.querySelector('.main-content');
 
     // Desktop sidebar collapse logic
+    const topbar = document.getElementById('sbTopbar');
+    function syncTopbar() {
+        if (!topbar || window.innerWidth < 768) return;
+        topbar.style.left = sidebar.classList.contains('collapsed') ? '70px' : '16.666667%';
+    }
+
     if (hamburgerBtn) {
         hamburgerBtn.addEventListener('click', function() {
             sidebar.classList.toggle('collapsed');
+            syncTopbar();
             if (mainContent) {
                 if (sidebar.classList.contains('collapsed')) {
                     mainContent.classList.remove('sidebar-expanded');
@@ -307,6 +323,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 mainContent.classList.remove('sidebar-collapsed');
             }
         }
+        syncTopbar();
     } else {
         if (mainContent) {
             mainContent.classList.remove('sidebar-expanded', 'sidebar-collapsed');
@@ -405,7 +422,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!confirm('Restart layanan billing sekarang?')) return;
             try {
                 restartBillingBtn.disabled = true;
-                restartBillingBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span class="sb-item-text">Restarting...</span>';
+                restartBillingBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span>Restarting...</span>';
                 showRestartResult('Memproses restart...', true);
                 const res = await fetch('/admin/billing/system/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                 const data = await res.json();
@@ -419,7 +436,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 showRestartResult('Restart error: ' + error.message, false);
             } finally {
                 restartBillingBtn.disabled = false;
-                restartBillingBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> <span class="sb-item-text">Restart System</span>';
+                restartBillingBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> <span>Restart</span>';
             }
         });
     }
@@ -675,45 +692,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
 .sb-item.sb-sub { padding-left: 2.5rem; font-size: 12.5px; }
 
-/* Logout */
-.sb-item.sb-logout { color: var(--sb-subtle); }
-.sb-item.sb-logout:hover { color: #dc2626; background: #fef2f2; }
-
 /* Footer */
 .sb-footer {
     padding: 8px;
     border-top: 1px solid var(--sb-border);
 }
 
-.sb-restart-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 8px 12px;
-    border-radius: var(--sb-radius);
-    background: transparent;
-    border: 1px solid var(--sb-border);
-    color: var(--sb-muted);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms;
-    font-family: 'Inter', sans-serif;
-    margin-top: 4px;
-}
-
-.sb-restart-btn:hover {
-    background: var(--sb-item-hover);
-    color: var(--sb-primary);
-    border-color: #bfdbfe;
-}
-
-.sb-restart-btn i { font-size: 14px; opacity: 0.7; }
-
 .sb-server-time {
     padding: 8px 12px;
-    margin-top: 8px;
 }
 
 .sb-time-label {
@@ -754,6 +740,73 @@ document.addEventListener('DOMContentLoaded', function () {
     color: var(--sb-subtle);
 }
 
+/* ===== Top Header Bar ===== */
+.sb-topbar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 16.666667%;
+    height: 48px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--sb-border);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 20px;
+    z-index: 100;
+    gap: 8px;
+    font-family: 'Inter', sans-serif;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sb-topbar-left {
+    margin-right: auto;
+}
+
+.sb-topbar-time {
+    font-size: 12px;
+    color: var(--sb-subtle);
+    font-variant-numeric: tabular-nums;
+}
+
+.sb-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sb-topbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: var(--sb-radius);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 150ms;
+    border: 1px solid var(--sb-border);
+    background: transparent;
+    color: var(--sb-muted);
+    text-decoration: none;
+}
+
+.sb-topbar-btn:hover {
+    background: var(--sb-item-hover);
+    color: var(--sb-primary);
+    border-color: #bfdbfe;
+    text-decoration: none;
+}
+
+.sb-topbar-btn i { font-size: 13px; }
+
+.sb-topbar-logout:hover {
+    color: #dc2626;
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
 /* Hamburger */
 .sb-hamburger {
     display: block;
@@ -785,17 +838,15 @@ document.addEventListener('DOMContentLoaded', function () {
     .sb.collapsed .collapse,
     .sb.collapsed .sb-item-text,
     .sb.collapsed .sb-version-panel,
-    .sb.collapsed .sb-server-time,
-    .sb.collapsed .sb-restart-btn .sb-item-text { display: none !important; }
+    .sb.collapsed .sb-server-time { display: none !important; }
     .sb.collapsed .sb-item { justify-content: center; padding: 10px 0; }
     .sb.collapsed .sb-item i { font-size: 1.2rem; margin: 0; }
     .sb.collapsed .sb-logo-icon { margin: 0 auto; }
     .sb.collapsed .sb-header { justify-content: center; }
-    .sb.collapsed .sb-restart-btn { justify-content: center; padding: 8px; }
-    .sb.collapsed .sb-restart-btn i { margin: 0; }
-    .main-content { transition: 0.3s; }
+    .main-content { transition: 0.3s; padding-top: 48px; }
     .main-content.sidebar-expanded { margin-left: 16.666667%; width: 83.333333%; }
     .main-content.sidebar-collapsed { margin-left: 70px; width: calc(100% - 70px); }
+    .sb.collapsed ~ .sb-topbar { left: 70px; }
     .sb.collapsed .sb-hamburger { right: 8px; top: 10px; width: auto; padding: 4px 6px; }
 }
 
@@ -803,6 +854,7 @@ document.addEventListener('DOMContentLoaded', function () {
 @media (max-width: 767.98px) {
     .sb { position: fixed; top: 0; left: 0; width: 280px; transform: translateX(-100%); z-index: 1000; overflow-y: auto; }
     .sb.show { transform: translateX(0); }
+    .sb-topbar { left: 0; display: none; }
     .main-content { margin-top: 60px; padding: 15px; }
 }
 </style>
