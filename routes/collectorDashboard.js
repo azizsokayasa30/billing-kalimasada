@@ -72,10 +72,17 @@ router.get('/dashboard', collectorAuth, async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Error loading collector dashboard:', error);
+        console.error('❌ Error loading collector dashboard:', error);
+        
+        // Detailed error for server logs
+        if (error.stack) console.error(error.stack);
+
         res.status(500).render('error', { 
-            message: 'Error loading dashboard',
-            error: process.env.NODE_ENV === 'development' ? error : {}
+            message: 'Terjadi kesalahan saat memuat dashboard. Silakan coba lagi nanti.',
+            error: process.env.NODE_ENV === 'development' ? error : { 
+                status: 500, 
+                stack: 'Internal Server Error (Detail logged to server console)' 
+            }
         });
     }
 });
@@ -85,6 +92,9 @@ router.get('/payment', collectorAuth, async (req, res) => {
     try {
         const dbPath = path.join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
+        
+        const appSettings = await getAppSettings();
+        const collector = req.collector;
         
         // Get active assigned customers
         const customers = await new Promise((resolve, reject) => {
@@ -100,9 +110,6 @@ router.get('/payment', collectorAuth, async (req, res) => {
                 else resolve(rows || []);
             });
         });
-        
-        const appSettings = await getAppSettings();
-        const collector = req.collector;
         
         db.close();
         

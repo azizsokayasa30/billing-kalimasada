@@ -94,6 +94,21 @@ router.post('/', async (req, res) => {
             }
         }
 
+        // Technician Login
+        if (role === 'technician') {
+            const technician = await new Promise((resolve) => {
+                db.get('SELECT * FROM technicians WHERE (phone = ? OR email = ?) AND is_active = 1', [username || phone, username || phone], (err, row) => resolve(row));
+            });
+
+            if (technician && technician.password && bcrypt.compareSync(password, technician.password)) {
+                const { authManager } = require('./technicianAuth');
+                const sess = await authManager.createTechnicianSession(technician, req);
+                req.session.technicianSessionId = sess.sessionId;
+                req.session.technicianId = technician.id;
+                return res.json({ success: true, redirect: '/technician/dashboard' });
+            }
+        }
+
         // 4. Customer / Member Login via Password
         if (role === 'customer' && password && !otp) {
             const targetPhone = normalizePhone(username || phone);
@@ -135,22 +150,6 @@ router.post('/', async (req, res) => {
         if (otp && (phone || username)) {
             const targetPhone = normalizePhone(phone || username);
             
-            // 5. Technician Login
-            if (role === 'technician') {
-                const apiAuth = require('./api/auth');
-                const { authManager } = require('./technicianAuth');
-                const isValid = apiAuth.verifyOTP(targetPhone, otp);
-                
-                if (isValid) {
-                    const technician = await apiAuth.findUserByPhone(targetPhone);
-                    if (technician && technician.role === 'technician') {
-                        const sess = await authManager.createTechnicianSession(technician, req);
-                        req.session.technicianSessionId = sess.sessionId;
-                        req.session.technicianId = technician.id;
-                        return res.json({ success: true, redirect: '/technician/dashboard' });
-                    }
-                }
-            }
 
             // 6. Customer / Member Login via OTP
             if (role === 'customer') {

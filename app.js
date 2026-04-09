@@ -141,6 +141,15 @@ const collectorSync = {
                     FOREIGN KEY (collector_id) REFERENCES collectors(id),
                     FOREIGN KEY (customer_id) REFERENCES customers(id),
                     UNIQUE(collector_id, customer_id)
+                )`,
+                // Table: collector_areas
+                `CREATE TABLE IF NOT EXISTS collector_areas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    collector_id INTEGER NOT NULL,
+                    area TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(collector_id, area),
+                    FOREIGN KEY (collector_id) REFERENCES collectors(id) ON DELETE CASCADE
                 )`
             ];
 

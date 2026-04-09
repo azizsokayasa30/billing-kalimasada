@@ -82,17 +82,15 @@ router.post('/request-otp', async (req, res) => {
     const placeholders = variants.map(() => '?').join(',');
 
     try {
-        // Check if phone exists as Technician or Customer/Member
+        // Check if phone exists as Customer or Member (Technicians use password only now)
         const user = await new Promise((resolve, reject) => {
             const sql = `
-                SELECT 'technician' as type FROM technicians WHERE phone IN (${placeholders}) AND is_active = 1
-                UNION
                 SELECT 'customer' as type FROM customers WHERE phone IN (${placeholders}) AND status = 'active'
                 UNION
                 SELECT 'member' as type FROM members WHERE phone IN (${placeholders}) AND status = 'active'
                 LIMIT 1
             `;
-            db.get(sql, [...variants, ...variants, ...variants], (err, row) => {
+            db.get(sql, [...variants, ...variants], (err, row) => {
                 if (err) reject(err);
                 else resolve(row);
             });
@@ -257,7 +255,7 @@ router.post('/login', async (req, res) => {
                 SELECT id, name, phone, 'member' as role FROM members WHERE phone IN (${placeholders}) AND status = 'active'
                 LIMIT 1
             `;
-            db.get(sql, [...variants, ...variants, ...variants], (err, row) => resolve(row));
+            db.get(sql, [...variants, ...variants], (err, row) => resolve(row));
         });
 
         if (user) {
