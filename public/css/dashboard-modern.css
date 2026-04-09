@@ -72,20 +72,20 @@ body {
 }
 
 .main-content {
-    padding: 24px 28px;
+    padding: 16px 20px;
 }
 
 /* ===== PAGE HEADER ===== */
 .dashboard-header {
-    padding: 0 0 20px;
-    margin-bottom: 24px;
+    padding: 0 0 12px;
+    margin-bottom: 16px;
     border-bottom: 1px solid var(--border);
 }
 .dashboard-header h5 {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: var(--fg);
-    margin: 0 0 4px;
+    margin: 0 0 2px;
     letter-spacing: -0.02em;
 }
 .dashboard-header .page-desc {
@@ -114,7 +114,7 @@ body {
 /* ===== METRIC CARDS ===== */
 .metric-card {
     border-radius: var(--radius-lg);
-    padding: 20px;
+    padding: 14px 16px;
     box-shadow: var(--shadow-sm);
     transition: all 200ms ease;
     border: 1px solid var(--border);
@@ -128,20 +128,20 @@ body {
     border-color: var(--border-hover);
 }
 .metric-card-icon {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 14px;
-    font-size: 18px;
+    margin-bottom: 10px;
+    font-size: 16px;
 }
 .metric-card-value {
-    font-size: 2rem;
+    font-size: 1.6rem;
     font-weight: 700;
     color: var(--fg);
-    margin: 4px 0;
+    margin: 2px 0;
     line-height: 1.1;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
