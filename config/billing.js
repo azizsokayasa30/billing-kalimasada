@@ -649,6 +649,19 @@ class BillingManager {
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )`,
 
+            // Tabel voucher_revenue
+            `CREATE TABLE IF NOT EXISTS voucher_revenue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                profile TEXT,
+                status TEXT DEFAULT 'unpaid' CHECK(status IN ('unpaid', 'paid')),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                used_at DATETIME,
+                usage_count INTEGER DEFAULT 0,
+                notes TEXT
+            )`,
+
             // Tabel ODP (Optical Distribution Point)
             `CREATE TABLE IF NOT EXISTS odps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
