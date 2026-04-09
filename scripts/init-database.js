@@ -297,11 +297,36 @@ function createBaseTables() {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 collector_id INTEGER NOT NULL,
                 invoice_id INTEGER NOT NULL,
-                amount DECIMAL(10,2) NOT NULL,
-                commission_amount DECIMAL(10,2) NOT NULL,
-                status TEXT DEFAULT 'pending',
+                amount DECIMAL(15,2) NOT NULL,
+                payment_amount DECIMAL(15,2) NOT NULL,
+                commission_amount DECIMAL(15,2) NOT NULL,
+                payment_method TEXT DEFAULT 'cash',
+                payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                notes TEXT,
+                status TEXT DEFAULT 'completed',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                paid_at DATETIME
+                paid_at DATETIME,
+                FOREIGN KEY (collector_id) REFERENCES collectors(id),
+                FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+            )`,
+            `CREATE TABLE IF NOT EXISTS collector_areas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collector_id INTEGER NOT NULL,
+                area_name TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (collector_id) REFERENCES collectors(id) ON DELETE CASCADE
+            )`,
+            `CREATE TABLE IF NOT EXISTS voucher_revenue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                profile TEXT,
+                status TEXT DEFAULT 'unpaid' CHECK(status IN ('unpaid', 'paid')),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                used_at DATETIME,
+                usage_count INTEGER DEFAULT 0,
+                notes TEXT
             )`,
             `CREATE TABLE IF NOT EXISTS app_settings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -354,7 +379,9 @@ async function initDatabase() {
                 "ALTER TABLE payments ADD COLUMN payment_type TEXT DEFAULT 'direct' CHECK(payment_type IN ('direct', 'collector', 'online', 'manual'))",
                 "ALTER TABLE payments ADD COLUMN remittance_status TEXT CHECK(remittance_status IN ('pending', 'remitted', 'cancelled'))",
                 'ALTER TABLE payments ADD COLUMN remittance_date DATETIME',
-                'ALTER TABLE payments ADD COLUMN remittance_notes TEXT'
+                'ALTER TABLE payments ADD COLUMN remittance_notes TEXT',
+                'ALTER TABLE collector_payments ADD COLUMN collected_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+                'ALTER TABLE collector_payments ADD COLUMN amount DECIMAL(15,2)'
             ];
             
             let count = 0;

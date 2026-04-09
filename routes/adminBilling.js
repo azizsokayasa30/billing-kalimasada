@@ -672,10 +672,15 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
         });
         
     } catch (error) {
-        logger.error('Error loading collector reports:', error);
+        logger.error('❌ Error loading collector reports:', error);
+        if (error.stack) console.error(error.stack);
+
         res.status(500).render('error', { 
-            message: 'Error loading collector reports',
-            error: process.env.NODE_ENV === 'development' ? error : {}
+            message: 'Terjadi kesalahan saat memuat laporan kolektor. Pastikan tabel database sudah sinkron.',
+            error: process.env.NODE_ENV === 'development' ? error : { 
+                status: 500, 
+                stack: 'Internal Server Error (Detail logged to server console)' 
+            }
         });
     }
 });
@@ -1017,10 +1022,15 @@ router.get('/reports/voucher', getAppSettings, adminAuth, async (req, res) => {
             page: 'report-voucher'
         });
     } catch (error) {
-        logger.error('Error loading voucher report:', error);
+        logger.error('❌ Error loading voucher report:', error);
+        if (error.stack) console.error(error.stack);
+
         res.status(500).render('error', { 
-            message: 'Gagal memuat laporan keuangan voucher',
-            error: error.message 
+            message: 'Gagal memuat laporan keuangan voucher. Pastikan tabel voucher_revenue sudah ada.',
+            error: process.env.NODE_ENV === 'development' ? error : { 
+                status: 500, 
+                stack: 'Internal Server Error (Detail logged to server console)' 
+            }
         });
     }
 });

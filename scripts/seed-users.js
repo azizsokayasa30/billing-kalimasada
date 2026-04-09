@@ -52,11 +52,18 @@ async function seed() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             collector_id INTEGER NOT NULL,
             invoice_id INTEGER NOT NULL,
-            amount DECIMAL(10,2) NOT NULL,
-            commission_amount DECIMAL(10,2) NOT NULL,
-            status TEXT DEFAULT 'pending',
+            amount DECIMAL(15,2) NOT NULL,
+            payment_amount DECIMAL(15,2) NOT NULL,
+            commission_amount DECIMAL(15,2) NOT NULL,
+            payment_method TEXT DEFAULT 'cash',
+            payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            collected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            notes TEXT,
+            status TEXT DEFAULT 'completed',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            paid_at DATETIME
+            paid_at DATETIME,
+            FOREIGN KEY (collector_id) REFERENCES collectors(id),
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id)
         )`, (err) => {
             if (err) reject(err);
             else resolve();
@@ -412,9 +419,9 @@ async function seed() {
         for (let i = 1; i <= 5; i++) {
             await new Promise((resolve, reject) => {
                 db.run(
-                    `INSERT OR REPLACE INTO collector_payments (collector_id, invoice_id, amount, commission_amount, status) 
-                     VALUES (?, ?, ?, ?, ?)`,
-                    [collectorId, i * 2, 150000, 7500, 'completed'], // Link to the even (paid) invoices
+                    `INSERT OR REPLACE INTO collector_payments (collector_id, invoice_id, amount, payment_amount, commission_amount, status) 
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [collectorId, i * 2, 150000, 150000, 7500, 'completed'], // Link to the even (paid) invoices
                     (err) => err ? reject(err) : resolve()
                 );
             });

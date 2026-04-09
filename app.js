@@ -165,6 +165,19 @@ const collectorSync = {
                     // Ignore other errors
                 }
             });
+
+            // Migrate missing columns for collector_payments
+            const paymentMigrations = [
+                'ALTER TABLE collector_payments ADD COLUMN collected_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+                'ALTER TABLE collector_payments ADD COLUMN amount DECIMAL(15,2)'
+            ];
+            paymentMigrations.forEach(m => {
+                db.run(m, (err) => {
+                    if (err && !err.message.includes('duplicate column')) {
+                        // Column already exists, ignore
+                    }
+                });
+            });
         };
         
         sync();
@@ -174,6 +187,50 @@ const collectorSync = {
 
 // Start collector sync service
 collectorSync.start();
+
+// Import voucher sync service
+const voucherSync = {
+    start() {
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database('./data/billing.db');
+        
+        const sync = () => {
+            const sql = `CREATE TABLE IF NOT EXISTS voucher_revenue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                profile TEXT,
+                status TEXT DEFAULT 'unpaid' CHECK(status IN ('unpaid', 'paid')),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                used_at DATETIME,
+                usage_count INTEGER DEFAULT 0,
+                notes TEXT
+            )`;
+            db.run(sql, (err) => {
+                if (err) console.error('Failed to ensure voucher_revenue table:', err.message);
+                else {
+                    // Create indexes for better performance
+                    const indexes = [
+                        'CREATE INDEX IF NOT EXISTS idx_voucher_revenue_username ON voucher_revenue(username)',
+                        'CREATE INDEX IF NOT EXISTS idx_voucher_revenue_status ON voucher_revenue(status)',
+                        'CREATE INDEX IF NOT EXISTS idx_voucher_revenue_created_at ON voucher_revenue(created_at)'
+                    ];
+                    indexes.forEach(idx => {
+                        db.run(idx, (idxErr) => {
+                            if (idxErr) console.error('Failed to create voucher index:', idxErr.message);
+                        });
+                    });
+                }
+            });
+        };
+        
+        sync();
+        console.log('🔄 Voucher system sync enabled');
+    }
+};
+
+// Start voucher sync service
+voucherSync.start();
 
 // Inisialisasi aplikasi Express
 const app = express();
