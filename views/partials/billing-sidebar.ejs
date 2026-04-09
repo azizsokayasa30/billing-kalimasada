@@ -43,19 +43,6 @@
             <span class="sb-brand-tag">Billing System</span>
         </div>
     </div>
-
-    <!-- Quick Actions -->
-    <div class="sb-actions">
-        <button id="btnRestartBilling" class="sb-action-btn" title="Restart System">
-            <i class="bi bi-arrow-repeat"></i>
-            <span class="sb-item-text">Restart</span>
-        </button>
-        <a href="/admin/logout" class="sb-action-btn sb-action-logout" title="Logout">
-            <i class="bi bi-box-arrow-right"></i>
-            <span class="sb-item-text">Logout</span>
-        </a>
-    </div>
-    <div id="billingRestartResult" class="small px-3" style="display:none;"></div>
     
     <!-- Navigation Links -->
     <div class="sb-nav">
@@ -247,6 +234,17 @@
 
     <!-- Sidebar Footer -->
     <div class="sb-footer">
+        <div class="sb-actions">
+            <button id="btnRestartBilling" class="sb-action-btn" title="Restart System">
+                <i class="bi bi-arrow-repeat"></i>
+                <span class="sb-item-text">Restart</span>
+            </button>
+            <a href="/admin/logout" class="sb-action-btn sb-action-logout" title="Logout">
+                <i class="bi bi-box-arrow-right"></i>
+                <span class="sb-item-text">Logout</span>
+            </a>
+        </div>
+        <div id="billingRestartResult" class="small px-2" style="display:none;"></div>
         <div class="sb-server-time">
             <div class="sb-time-label">SERVER TIME</div>
             <div class="sb-time-value" id="serverTimeValue">--:--:--</div>
