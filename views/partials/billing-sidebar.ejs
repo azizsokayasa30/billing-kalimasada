@@ -46,29 +46,28 @@
     
     <!-- Navigation Links -->
     <div class="sb-nav">
-        <!-- Overview Section -->
-        <% const overviewPages = ['dashboard', 'billing']; %>
-        <% const overviewExpanded = typeof page !== 'undefined' && overviewPages.includes(page); %>
+        <!-- App Switcher -->
         <div class="sb-section">
-            <div class="sb-section-title sb-collapsible"
-                 data-manual-toggle="collapse"
-                 data-target-id="overviewCollapse"
-                 aria-expanded="<%= overviewExpanded ? 'true' : 'false' %>"
-                 aria-controls="overviewCollapse"
-                 role="button"
-                 tabindex="0">
-                <span>Overview</span>
-                <i class="bi <%= overviewExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
-            </div>
-            <div class="collapse <%= overviewExpanded ? 'show' : '' %>" id="overviewCollapse">
-                <a href="/admin/dashboard" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
-                    <i class="bi bi-grid-1x2"></i>
-                    <span class="sb-item-text">Dashboard</span>
-                </a>
-                <a href="/admin/billing/dashboard" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>">
-                    <i class="bi bi-speedometer2"></i>
-                    <span class="sb-item-text">Billing & Accounting</span>
-                </a>
+            <div class="sb-app-switcher">
+                <button class="sb-app-switcher-btn" id="appSwitcherBtn">
+                    <div class="sb-app-current">
+                        <i class="bi <%= typeof page !== 'undefined' && page === 'dashboard' ? 'bi-grid-1x2' : 'bi-speedometer2' %>"></i>
+                        <span class="sb-item-text"><%= typeof page !== 'undefined' && page === 'dashboard' ? 'Dashboard' : 'Billing & Accounting' %></span>
+                    </div>
+                    <i class="bi bi-chevron-expand sb-item-text" style="font-size: 11px; opacity: 0.5;"></i>
+                </button>
+                <div class="sb-app-dropdown" id="appSwitcherDropdown">
+                    <a href="/admin/dashboard" class="sb-app-option <%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
+                        <i class="bi bi-grid-1x2"></i>
+                        <span>Dashboard</span>
+                        <% if (typeof page !== 'undefined' && page === 'dashboard') { %><i class="bi bi-check2 ms-auto"></i><% } %>
+                    </a>
+                    <a href="/admin/billing/dashboard" class="sb-app-option <%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>">
+                        <i class="bi bi-speedometer2"></i>
+                        <span>Billing & Accounting</span>
+                        <% if (typeof page !== 'undefined' && page === 'billing') { %><i class="bi bi-check2 ms-auto"></i><% } %>
+                    </a>
+                </div>
             </div>
         </div>
 
@@ -379,7 +378,20 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
     
-    ['overviewCollapse','customerCollapse','invoiceCollapse','financeCollapse', 'settingCollapse'].forEach(setupCollapseToggle);
+    ['customerCollapse','invoiceCollapse','financeCollapse', 'settingCollapse'].forEach(setupCollapseToggle);
+
+    // App Switcher dropdown
+    const appSwitcherBtn = document.getElementById('appSwitcherBtn');
+    const appSwitcherDropdown = document.getElementById('appSwitcherDropdown');
+    if (appSwitcherBtn && appSwitcherDropdown) {
+        appSwitcherBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            appSwitcherDropdown.classList.toggle('show');
+        });
+        document.addEventListener('click', function() {
+            appSwitcherDropdown.classList.remove('show');
+        });
+    }
 
     // Restart Billing System
     const restartBillingBtn = document.getElementById('btnRestartBilling');
@@ -645,6 +657,79 @@ document.addEventListener('DOMContentLoaded', function () {
 }
 
 .sb-chevron { font-size: 10px; transition: transform 200ms; }
+
+/* App Switcher */
+.sb-app-switcher { position: relative; }
+
+.sb-app-switcher-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: var(--sb-radius);
+    border: 1px solid var(--sb-border);
+    background: var(--sb-item-hover);
+    color: var(--sb-text);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 150ms;
+}
+
+.sb-app-switcher-btn:hover { border-color: #bfdbfe; }
+
+.sb-app-current {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sb-app-current i { font-size: 14px; color: var(--sb-primary); }
+
+.sb-app-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid var(--sb-border);
+    border-radius: var(--sb-radius);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    z-index: 20;
+    padding: 4px;
+}
+
+.sb-app-dropdown.show { display: block; }
+
+.sb-app-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    color: var(--sb-muted);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 150ms;
+}
+
+.sb-app-option:hover {
+    background: var(--sb-item-hover);
+    color: var(--sb-text);
+    text-decoration: none;
+}
+
+.sb-app-option.active {
+    color: var(--sb-primary);
+    background: #eff6ff;
+}
+
+.sb-app-option i { font-size: 14px; }
 
 /* Sidebar Items */
 .sb-item {
