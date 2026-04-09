@@ -11,13 +11,15 @@
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="/css/admin-mobile.css" rel="stylesheet">
     <link href="/css/dashboard-modern.css" rel="stylesheet">
-    <link href="/css/collector-reports.css" rel="stylesheet">
 </head>
 <body>
     <div class="container-fluid">
         <div class="row">
             <%- include('../../partials/billing-sidebar') %>
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <!-- Page Specific CSS (Must be inside main-content for PJAX) -->
+                <link href="/css/collector-reports.css" rel="stylesheet">
+                
                 <!-- PAGE HEADER -->
                 <div class="page-header-bar">
                     <div class="d-flex justify-content-between align-items-center">
