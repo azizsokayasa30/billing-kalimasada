@@ -965,10 +965,15 @@ router.get('/financial-report', getAppSettings, async (req, res) => {
             page: 'financial-report'
         });
     } catch (error) {
-        logger.error('Error loading financial report:', error);
+        logger.error('❌ Error loading financial report:', error);
+        if (error.stack) console.error(error.stack);
+
         res.status(500).render('error', { 
-            message: 'Gagal memuat laporan keuangan',
-            error: error.message 
+            message: 'Gagal memuat laporan keuangan. Pastikan tabel voucher_revenue sudah ada.',
+            error: process.env.NODE_ENV === 'development' ? error : { 
+                status: 500, 
+                stack: 'Internal Server Error (Detail logged to server console)' 
+            }
         });
     }
 });
