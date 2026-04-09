@@ -222,7 +222,10 @@
             <!-- DASHBOARD HEADER -->
             <div class="dashboard-header">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h5>Dashboard Sistem</h5>
+                    <div>
+                        <h5>Dashboard Sistem</h5>
+                        <p class="page-desc">Overview monitoring perangkat, koneksi, dan performa sistem.</p>
+                    </div>
                     <div class="d-flex align-items-center gap-2">
                         <!-- LICENSE STATUS -->
                         <% if (typeof licenseStatus !== 'undefined' && licenseStatus && licenseStatus.status === 'active') { %>
@@ -231,13 +234,13 @@
                             <strong>License Aktif</strong>
                         </div>
                         <% } %>
-                        <button type="button" class="btn btn-outline-primary btn-sm" id="validateConfigBtn">
+                        <button type="button" class="btn btn-sm" id="validateConfigBtn">
                             <i class="bi bi-gear me-1"></i>Validasi
                         </button>
-                        <a href="/admin/settings" class="btn btn-outline-success btn-sm">
+                        <a href="/admin/settings" class="btn btn-sm">
                             <i class="bi bi-sliders me-1"></i>Pengaturan
                         </a>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshDashboardBtn">
+                        <button type="button" class="btn btn-sm" id="refreshDashboardBtn">
                             <i class="bi bi-arrow-clockwise me-1"></i>Refresh
                         </button>
                     </div>

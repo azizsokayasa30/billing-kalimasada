@@ -1,7 +1,8 @@
-/* Responsive sidebar & hamburger for admin panel */
+/* Responsive sidebar & layout for admin panel */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* Global sidebar scrolling fix */
-.sidebar {
+/* Global sidebar scrolling fix — support both .sidebar and .sb */
+.sidebar, .sb {
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
@@ -9,118 +10,84 @@
 
 /* Hide sidebar by default on mobile */
 @media (max-width: 991.98px) {
-  .sidebar {
-    position: fixed;
-    left: -220px;
-    top: 0;
-    width: 220px;
-    height: 100vh;
-    background: #222e3c;
-    z-index: 1050;
-    transition: left 0.3s;
-    box-shadow: 2px 0 8px rgba(0,0,0,0.07);
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch !important;
-  }
-  .sidebar.show {
-    left: 0;
-  }
-  .main-content {
-    padding: 24px 8px;
-  }
-  .hamburger {
-    display: inline-block;
-    cursor: pointer;
-    padding: 12px 18px;
-    font-size: 1.7rem;
-    color: #222e3c;
-    background: transparent;
-    border: none;
-    outline: none;
-    margin-bottom: 18px;
-  }
+    .sidebar {
+        position: fixed;
+        left: -280px;
+        top: 0;
+        width: 280px;
+        height: 100vh;
+        z-index: 1050;
+        transition: left 0.3s;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+    .sidebar.show { left: 0; }
+    .main-content { padding: 24px 8px; }
+    .hamburger {
+        display: inline-block;
+        cursor: pointer;
+        padding: 12px 18px;
+        font-size: 1.7rem;
+        color: var(--fg, #09090b);
+        background: transparent;
+        border: none;
+        outline: none;
+        margin-bottom: 18px;
+    }
 }
 
 /* Show sidebar as column on desktop */
 @media (min-width: 992px) {
-  .hamburger {
-    display: none;
-  }
-  
-  .sidebar {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-  }
+    .hamburger { display: none; }
+    .sidebar, .sb {
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
 }
 
 /* Overlay for mobile sidebar */
-.sidebar-overlay {
-  display: none;
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.2);
-  z-index: 1049;
+.sidebar-overlay, .sb-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.25);
+    z-index: 1049;
+    backdrop-filter: blur(2px);
 }
-.sidebar-overlay.show {
-  display: block;
+.sidebar-overlay.show, .sb-overlay.show {
+    display: block;
 }
 
 /* Mobile specific improvements */
 @media (max-width: 767.98px) {
-  .sidebar {
-    width: 280px !important;
-    left: -280px !important;
-  }
-  
-  .sidebar.show {
-    left: 0 !important;
-  }
-  
-  /* Ensure sidebar content is scrollable */
-  .sidebar > * {
-    flex-shrink: 0 !important;
-  }
-  
-  /* Fix for version info panel */
-  .sidebar .version-info-panel {
-    margin-top: auto !important;
-    flex-shrink: 0 !important;
-    position: sticky !important;
-    bottom: 0 !important;
-    background: inherit !important;
-  }
-  
-  /* Improve touch scrolling */
-  .sidebar {
-    -webkit-overflow-scrolling: touch !important;
-    scrollbar-width: thin !important;
-    scrollbar-color: rgba(255,255,255,0.3) transparent !important;
-  }
-  
-  /* Custom scrollbar for webkit browsers */
-  .sidebar::-webkit-scrollbar {
-    width: 6px !important;
-  }
-  
-  .sidebar::-webkit-scrollbar-track {
-    background: transparent !important;
-  }
-  
-  .sidebar::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.3) !important;
-    border-radius: 3px !important;
-  }
-  
-  .sidebar::-webkit-scrollbar-thumb:hover {
-    background: rgba(255,255,255,0.5) !important;
-  }
+    .sidebar {
+        width: 280px !important;
+        left: -280px !important;
+    }
+    .sidebar.show { left: 0 !important; }
+
+    /* Ensure sidebar content is scrollable */
+    .sidebar > *, .sb > * {
+        flex-shrink: 0 !important;
+    }
+
+    /* Improve touch scrolling */
+    .sidebar, .sb {
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: thin !important;
+    }
+
+    /* Custom scrollbar */
+    .sidebar::-webkit-scrollbar, .sb::-webkit-scrollbar { width: 4px !important; }
+    .sidebar::-webkit-scrollbar-track, .sb::-webkit-scrollbar-track { background: transparent !important; }
+    .sidebar::-webkit-scrollbar-thumb, .sb::-webkit-scrollbar-thumb { background: #cbd5e1 !important; border-radius: 99px !important; }
 }
 
 /* Extra small devices */
 @media (max-width: 575.98px) {
-  .sidebar {
-    width: 260px !important;
-    left: -260px !important;
-  }
+    .sidebar {
+        width: 260px !important;
+        left: -260px !important;
+    }
 }
