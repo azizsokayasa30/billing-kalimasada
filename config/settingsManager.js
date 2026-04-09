@@ -115,15 +115,17 @@ function getServerTimezone() {
             // File tidak ada, lanjut ke metode lain
         }
         
-        // Coba baca dari timedatectl output
-        try {
-            const { execSync } = require('child_process');
-            const output = execSync('timedatectl show -p Timezone --value', { encoding: 'utf8' }).trim();
-            if (output) {
-                return output;
+        // Coba baca dari timedatectl output (Linux only)
+        if (process.platform !== 'win32') {
+            try {
+                const { execSync } = require('child_process');
+                const output = execSync('timedatectl show -p Timezone --value', { encoding: 'utf8' }).trim();
+                if (output) {
+                    return output;
+                }
+            } catch (e) {
+                // Command tidak tersedia, lanjuti
             }
-        } catch (e) {
-            // Command tidak tersedia, gunakan default
         }
         
         // Fallback: gunakan UTC (default server biasanya UTC)
