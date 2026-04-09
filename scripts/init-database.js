@@ -48,31 +48,88 @@ function runSQLFile(filePath) {
         
         const sql = fs.readFileSync(filePath, 'utf-8');
         
-        // Use db.exec() to run multiple statements at once natively.
-        // This handles semicolons inside strings (like HTML/CSS) correctly.
-        db.exec(sql, (err) => {
-            if (err) {
-                // Ignore expected errors (table already exists, etc.)
-                const ignorableErrors = [
-                    'already exists',
-                    'duplicate column',
-                    'no such table',
-                    'cannot commit - no transaction is active'
-                ];
-                
-                const isIgnorable = ignorableErrors.some(msg => err.message.includes(msg));
-                
-                if (isIgnorable) {
-                    // console.log(`    ℹ️  Notice: ${err.message}`);
-                    resolve();
-                } else {
-                    console.error(`    ❌ Error in ${path.basename(filePath)}: ${err.message}`);
-                    reject(err);
+        // Robust SQL splitting: handles semicolons inside single quotes and handles triggers
+        const statements = [];
+        let currentStatement = '';
+        let inQuotes = false;
+        let inTrigger = false;
+        
+        for (let i = 0; i < sql.length; i++) {
+            const char = sql[i];
+            const nextChar = sql[i + 1];
+            
+            // Handle single quotes (sql escape '' handled by skipping next quote)
+            if (char === "'" && (i === 0 || sql[i - 1] !== "\\")) {
+                if (nextChar === "'") {
+                    currentStatement += "''";
+                    i++; 
+                    continue;
                 }
-            } else {
-                resolve();
+                inQuotes = !inQuotes;
             }
-        });
+            
+            currentStatement += char;
+            
+            if (!inQuotes) {
+                const upperSoFar = currentStatement.toUpperCase();
+                if (upperSoFar.includes('CREATE TRIGGER') && !inTrigger) {
+                    inTrigger = true;
+                }
+                
+                if (inTrigger && upperSoFar.endsWith('END;')) {
+                    inTrigger = false;
+                    statements.push(currentStatement.trim());
+                    currentStatement = '';
+                    continue;
+                }
+                
+                if (!inTrigger && char === ';') {
+                    statements.push(currentStatement.trim());
+                    currentStatement = '';
+                }
+            }
+        }
+        if (currentStatement.trim()) statements.push(currentStatement.trim());
+
+        // Execute statements one by one for better control and error reporting
+        const executeNext = async (index) => {
+            if (index >= statements.length) {
+                resolve();
+                return;
+            }
+
+            const statement = statements[index];
+            if (!statement) {
+                executeNext(index + 1);
+                return;
+            }
+
+            db.run(statement, (err) => {
+                if (err) {
+                    const ignorableErrors = [
+                        'already exists',
+                        'duplicate column',
+                        'no such table',
+                        'cannot commit - no transaction is active'
+                    ];
+                    
+                    const isIgnorable = ignorableErrors.some(msg => err.message.includes(msg));
+                    
+                    if (isIgnorable) {
+                        executeNext(index + 1);
+                    } else {
+                        console.error(`    ❌ Error in ${path.basename(filePath)} (Statement ${index + 1}): ${err.message}`);
+                        // Log a snippet of the problematic statement for debugging
+                        console.error(`    Statement: ${statement.substring(0, 50)}...`);
+                        reject(err);
+                    }
+                } else {
+                    executeNext(index + 1);
+                }
+            });
+        };
+
+        executeNext(0);
     });
 }
 

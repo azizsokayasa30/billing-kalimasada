@@ -62,37 +62,47 @@ async function runMigrations() {
             const migrationPath = path.join(migrationsDir, filename);
             const sql = fs.readFileSync(migrationPath, 'utf8');
             
-            // Split SQL by semicolon, but handle triggers specially
+            // Robust SQL splitting: handles semicolons inside single quotes and handles triggers
             const statements = [];
             let currentStatement = '';
+            let inQuotes = false;
             let inTrigger = false;
             
-            const lines = sql.split('\n');
-            for (const line of lines) {
-                const trimmedLine = line.trim();
+            for (let i = 0; i < sql.length; i++) {
+                const char = sql[i];
+                const nextChar = sql[i + 1];
                 
-                // Skip comments
-                if (trimmedLine.startsWith('--')) continue;
-                
-                currentStatement += line + '\n';
-                
-                // Check if we're entering a trigger
-                if (trimmedLine.toUpperCase().includes('CREATE TRIGGER')) {
-                    inTrigger = true;
+                // Handle single quotes (escape '' ignored for simplicity as it naturally stays inQuotes)
+                if (char === "'" && (i === 0 || sql[i - 1] !== "\\")) {
+                    // Check if it's an escaped single quote in SQL ('' )
+                    if (char === "'" && nextChar === "'") {
+                        currentStatement += "''";
+                        i++; // skip next quote
+                        continue;
+                    }
+                    inQuotes = !inQuotes;
                 }
                 
-                // Check if we're exiting a trigger
-                if (inTrigger && trimmedLine.toUpperCase() === 'END;') {
-                    inTrigger = false;
-                    statements.push(currentStatement.trim());
-                    currentStatement = '';
-                    continue;
-                }
+                currentStatement += char;
                 
-                // If not in trigger and line ends with semicolon, end statement
-                if (!inTrigger && trimmedLine.endsWith(';')) {
-                    statements.push(currentStatement.trim());
-                    currentStatement = '';
+                // Check for trigger boundaries (very basic check)
+                if (!inQuotes) {
+                    const upperSoFar = currentStatement.toUpperCase();
+                    if (upperSoFar.includes('CREATE TRIGGER') && !inTrigger) {
+                        inTrigger = true;
+                    }
+                    
+                    if (inTrigger && upperSoFar.endsWith('END;')) {
+                        inTrigger = false;
+                        statements.push(currentStatement.trim());
+                        currentStatement = '';
+                        continue;
+                    }
+                    
+                    if (!inTrigger && char === ';') {
+                        statements.push(currentStatement.trim());
+                        currentStatement = '';
+                    }
                 }
             }
             
