@@ -79,6 +79,15 @@
   </ul>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      // Hard Reload for CSS detection
+      (function() {
+    var pKey = 'simple_reload_' + location.pathname;
+    if (!sessionStorage.getItem(pKey)) {
+        sessionStorage.setItem(pKey, 'true');
+        window.location.reload();
+    }
+})();
+
       var toggler = document.querySelector('[data-bs-target="#sidebarHotspotCollapse"]');
       var collapseEl = document.getElementById('sidebarHotspotCollapse');
       if (toggler && collapseEl && typeof bootstrap !== 'undefined') {

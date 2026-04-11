@@ -272,6 +272,15 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // Hard Reload for CSS detection
+    (function() {
+    var pKey = 'simple_reload_' + location.pathname;
+    if (!sessionStorage.getItem(pKey)) {
+        sessionStorage.setItem(pKey, 'true');
+        window.location.reload();
+    }
+})();
+
     const sidebar = document.getElementById('billingSidebar');
     const hamburgerBtn = document.getElementById('hamburgerBtn');
     const sidebarClose = document.getElementById('sidebarClose');
@@ -504,33 +513,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    window.fPjax = loadPjaxContent;
+    window.fPjax = function(url) { window.location.href = url; };
 
     function loadPjaxContent(url, pushState = true) {
-        const loader = document.getElementById('pjax-loader');
-        if (loader) loader.style.width = '30%';
-        
-        fetch(url)
-            .then(res => { if (!res.ok) throw new Error(); return res.text(); })
-            .then(html => {
-                const doc = new DOMParser().parseFromString(html, 'text/html');
-                const newContent = doc.querySelector('#pjax-container') || doc.querySelector('.main-content');
-                const current = document.getElementById('pjax-container') || document.querySelector('.main-content');
-                
-                if (newContent && current) {
-                    current.innerHTML = newContent.innerHTML;
-                    Array.from(newContent.attributes).forEach(attr => current.setAttribute(attr.name, attr.value));
-                    document.title = doc.title;
-                    if (pushState) history.pushState({ url }, doc.title, url);
-                    updateSidebarActive(url);
-                    executeScripts(current);
-                    if (window.innerWidth < 768) closeSidebar();
-                    window.scrollTo(0, 0);
-                    if (loader) loader.style.width = '100%';
-                    setTimeout(() => { if(loader) loader.style.width = '0'; }, 300);
-                } else { window.location.href = url; }
-            })
-            .catch(() => { window.location.href = url; });
+        window.location.href = url;
     }
 
     // Helper: check if URL belongs to billing sidebar
@@ -543,20 +529,28 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!link) return;
         const url = link.getAttribute('href');
         if (!url || url.startsWith('#') || url.startsWith('javascript:') || url.includes('logout') || link.target === '_blank' || link.hasAttribute('data-no-pjax')) return;
+        
+        // Disable PJAX navigation to force full page loads and prevent CSS/Bootstrap clashes
+        /* 
         if (url.startsWith('/admin')) {
             e.preventDefault();
-            // If navigating to non-billing admin pages, force full reload so admin sidebar loads
             if (!isBillingUrl(url)) {
                 window.location.href = url;
             } else {
                 loadPjaxContent(url);
             }
         }
+        */
     });
 
     window.addEventListener('popstate', e => {
-        loadPjaxContent(e.state && e.state.url ? e.state.url : window.location.pathname, false);
+        // loadPjaxContent(e.state && e.state.url ? e.state.url : window.location.pathname, false);
     });
+
+    // Initial highlight and expansion based on the current URL
+    if (typeof updateSidebarActive === 'function') {
+        updateSidebarActive(window.location.href);
+    }
 });
 </script>
 

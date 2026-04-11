@@ -659,6 +659,7 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
         
         db.close();
         
+        const settings = getSettingsWithCache();
         res.render('admin/billing/collector-reports', {
             title: 'Laporan Kolektor',
             appSettings: req.appSettings,
@@ -668,7 +669,9 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
                 dateFrom: startDate,
                 dateTo: endDate,
                 collector: collector || ''
-            }
+            },
+            settings: settings,
+            page: 'collector-reports'
         });
         
     } catch (error) {
@@ -843,6 +846,7 @@ router.get('/collector-details/:id', getAppSettings, async (req, res) => {
         
         db.close();
         
+        const settings = getSettingsWithCache();
         res.render('admin/billing/collector-details', {
             title: `Detail Kolektor - ${collector.name}`,
             appSettings: req.appSettings,
@@ -852,7 +856,9 @@ router.get('/collector-details/:id', getAppSettings, async (req, res) => {
             filters: {
                 dateFrom: startDate,
                 dateTo: endDate
-            }
+            },
+            settings: settings,
+            page: 'collector-reports'
         });
         
     } catch (error) {
@@ -958,11 +964,14 @@ router.get('/collector-remittance', getAppSettings, async (req, res) => {
         // Get recent remittances from expenses table (commission expenses)
         const remittances = await billingManager.getCommissionExpenses();
         
+        const settings = getSettingsWithCache();
         res.render('admin/billing/collector-remittance', {
             title: 'Terima Setoran Kolektor',
             appSettings: req.appSettings,
             collectors: collectors,
-            remittances: remittances
+            remittances: remittances,
+            settings: settings,
+            page: 'collector-remittance'
         });
         
     } catch (error) {
@@ -3033,6 +3042,11 @@ router.post('/system/restart', async (req, res) => {
     } catch (e) {
         res.status(500).json({ success: false, message: 'Unexpected error', error: e.message });
     }
+});
+
+// Alias for backward compatibility
+router.get('/api/server-info', async (req, res) => {
+    res.redirect('/admin/billing/system/server-info');
 });
 
 router.get('/system/server-info', async (req, res) => {
@@ -5623,12 +5637,15 @@ router.get('/payments', getAppSettings, async (req, res) => {
         // Get collectors list for dropdown
         const collectors = await billingManager.getAllCollectors();
         
+        const settings = getSettingsWithCache();
         res.render('admin/billing/payments', {
             title: 'Transaksi Kolektor',
             payments,
             collectors,
             filters,
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            settings: settings,
+            page: 'payments'
         });
     } catch (error) {
         logger.error('Error loading payments:', error);
@@ -5645,10 +5662,13 @@ router.get('/all-payments', getAppSettings, async (req, res) => {
     try {
         const payments = await billingManager.getPayments();
         
+        const settings = getSettingsWithCache();
         res.render('admin/billing/payments', {
             title: 'Riwayat Pembayaran',
             payments,
-            appSettings: req.appSettings
+            appSettings: req.appSettings,
+            settings: settings,
+            page: 'all-payments'
         });
     } catch (error) {
         logger.error('Error loading all payments:', error);

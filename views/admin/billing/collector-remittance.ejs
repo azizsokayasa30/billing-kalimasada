@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <%- include('../../partials/hard-reload') %>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Terima Setoran Kolektor - <%= appSettings.companyHeader %></title>
@@ -67,7 +68,7 @@
                     <p class="f-page-subtitle">Proses penyetoran uang kolektor ke kasir.</p>
                 </div>
                 <div class="f-actions">
-                    <button class="f-btn f-btn-outline" onclick="window.fPjax(window.location.href)" title="Refresh Content">
+                    <button class="f-btn f-btn-outline" onclick="window.location.reload()" title="Refresh Content">
                         <i class="bi bi-arrow-clockwise"></i>Refresh
                     </button>
                 </div>
@@ -89,10 +90,11 @@
                 <section class="mb-5">
                     <div class="d-flex align-items-center justify-content-between mb-3">
                         <h2 class="f-card-title" style="font-size: 1.125rem;">Pilih Kolektor</h2>
-                        <span class="text-muted small"><%= collectors.length %> Kolektor Tersedia</span>
+                        <span class="text-muted small"><%= (typeof collectors !== 'undefined' ? collectors.length : 0) %> Kolektor Tersedia</span>
                     </div>
                     
                     <div class="f-grid f-grid-3">
+                        <% if (typeof collectors !== 'undefined') { %>
                         <% collectors.forEach(function(collector, index) { %>
                             <div class="f-card collector-selectable-card" 
                                  onclick="selectCollector(this, <%= collector.id %>, '<%= collector.name %>', <%= collector.pending_amount || 0 %>)">
@@ -121,6 +123,7 @@
                                 </div>
                             </div>
                         <% }); %>
+                        <% } %>
                     </div>
                 </section>
 
@@ -224,7 +227,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <% if (remittances.length > 0) { %>
+                                    <% if (typeof remittances !== 'undefined' && remittances.length > 0) { %>
                                         <% remittances.forEach(function(remittance) { %>
                                             <tr>
                                                 <td>
@@ -269,6 +272,7 @@
         </main>
     </div>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
         let selectedCollector = null;
@@ -350,11 +354,7 @@
                     
                     if (result.success) {
                         alert('Setoran berhasil diterima!');
-                        if (window.fPjax) {
-                            window.fPjax(window.location.href);
-                        } else {
-                            location.reload();
-                        }
+                        location.reload();
                     } else {
                         alert('Gagal: ' + result.message);
                     }

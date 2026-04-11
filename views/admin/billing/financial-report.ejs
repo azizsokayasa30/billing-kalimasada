@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <%- include('../../partials/hard-reload') %>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
@@ -30,7 +31,7 @@
                     <h1 class="f-page-title f-premium-text">Laporan Keuangan</h1>
                 </div>
                 <div class="f-actions">
-                    <button class="f-btn f-btn-outline" onclick="window.fPjax(window.location.href)" title="Refresh Data">
+                    <button class="f-btn f-btn-outline" onclick="window.location.reload()" title="Refresh Data">
                         <i class="bi bi-arrow-clockwise"></i>Refresh
                     </button>
                     <button class="f-btn f-btn-primary" onclick="exportProfitLossToExcel()">
@@ -111,9 +112,6 @@
                 <div class="f-card mb-4">
                     <div class="f-card-header">
                         <h5 class="f-card-title f-premium-text"><i class="bi bi-file-earmark-text me-2"></i>Laporan Laba Rugi</h5>
-                        <button class="f-btn f-btn-outline" onclick="exportProfitLossToExcel()">
-                            <i class="bi bi-download me-2"></i>Export Excel
-                        </button>
                     </div>
                     <div class="f-card-body">
                         <div class="table-responsive">
@@ -243,6 +241,9 @@
                                                 </td>
                                             </tr>
                                         <% }); %>
+                                    <% if (financialData.transactions.length > 20) { %>
+                                        <tr><td colspan="6" class="text-center py-5">Gunakan filter untuk melihat data lebih lengkap</td></tr>
+                                    <% } %>
                                     <% } else { %>
                                         <tr><td colspan="6" class="text-center py-5">Belum ada data transaksi</td></tr>
                                     <% } %>
@@ -255,8 +256,10 @@
         </main>
     </div>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
         function applyFinancialFilters() {
             const startDate = document.getElementById('start_date').value;
             const endDate = document.getElementById('end_date').value;
@@ -267,18 +270,13 @@
             if (endDate) params.append('end_date', endDate);
             if (type) params.append('type', type);
             
-            const url = `/admin/billing/financial-report?${params.toString()}`;
-            if (window.fPjax) {
-                window.fPjax(url);
-            } else {
-                window.location.href = url;
-            }
+            window.location.href = `/admin/billing/financial-report?${params.toString()}`;
         }
 
         function exportProfitLossToExcel() {
             const sd = document.getElementById('start_date').value;
             const ed = document.getElementById('end_date').value;
-            window.location.href = `/admin/billing/export/profit-loss.xlsx?start_date=${sd}&end_date=${ed}`;
+            window.location.href = `/admin/billing/export/financial-report.xlsx?start_date=${sd}&end_date=${ed}`;
         }
 
         function exportToCSV() {

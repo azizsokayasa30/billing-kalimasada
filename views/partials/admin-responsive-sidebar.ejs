@@ -100,7 +100,7 @@
         </div>
 
         <!-- HOTSPOT & VOUCHER -->
-        <% const hotspotPages = ['hotspot-settings','hotspot-master','hotspot-users','hotspot-profiles','hotspot-server-profiles','voucher-template','member-list']; %>
+        <% const hotspotPages = ['hotspot-settings','hotspot-master','hotspot-users','hotspot-profiles','hotspot-server-profiles','voucher-template','member-list','routers']; %>
         <% const hotspotExpanded = typeof page !== 'undefined' && hotspotPages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -121,6 +121,10 @@
                 <a href="/admin/mikrotik/hotspot-profiles" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'hotspot-profiles' ? 'active' : '' %>">
                     <i class="bi bi-wifi"></i>
                     <span class="sb-item-text">Users Profiles</span>
+                </a>
+                <a href="/admin/routers" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'routers' ? 'active' : '' %>">
+                    <i class="bi bi-hdd-network"></i>
+                    <span class="sb-item-text">Kelola NAS</span>
                 </a>
                 <a href="/admin/hotspot/voucher" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'hotspot-settings' ? 'active' : '' %>">
                     <i class="bi bi-sliders"></i>
@@ -297,9 +301,17 @@
     </div>
 </nav>
 
-
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // Hard Reload for CSS detection
+    (function() {
+        var pKey = 'simple_reload_' + location.pathname;
+        if (!sessionStorage.getItem(pKey)) {
+            sessionStorage.setItem(pKey, 'true');
+            window.location.reload();
+        }
+    })();
+
     const sidebar = document.getElementById('adminSidebar');
     const sidebarToggle = document.getElementById('sidebarToggle');
     const hamburgerBtn = document.getElementById('hamburgerBtn');
@@ -417,7 +429,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     async function fetchServerInfo() {
         try {
-            const res = await fetch('/admin/billing/api/server-info');
+            const res = await fetch('/admin/billing/system/server-info');
             const data = await res.json();
             if (data.serverTimeIso) {
                 serverTimeOffset = new Date(data.serverTimeIso).getTime() - Date.now();
@@ -430,89 +442,42 @@ document.addEventListener('DOMContentLoaded', function () {
     fetchServerInfo();
     setInterval(renderServerTime, 1000);
 
-    // PJAX Navigation
-    function executeScripts(container) {
-        container.querySelectorAll('script').forEach(oldScript => {
-            const newScript = document.createElement('script');
-            Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
-            newScript.appendChild(document.createTextNode(oldScript.innerHTML));
-            oldScript.parentNode.replaceChild(newScript, oldScript);
-        });
-    }
-
     function updateSidebarActive(url) {
         const path = new URL(url, window.location.origin).pathname;
         sidebar.querySelectorAll('.sb-item').forEach(link => {
             const href = link.getAttribute('href');
-            if (!href) return;
-            const linkPath = new URL(href, window.location.origin).pathname;
-            link.classList.toggle('active', path === linkPath);
-            if (path === linkPath) {
-                let parent = link.closest('.collapse');
-                while (parent) {
-                    if (typeof bootstrap !== 'undefined') {
-                        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(parent, { toggle: false });
-                        if (!parent.classList.contains('show')) bsCollapse.show();
+            if (!href || href === '#' || href.startsWith('javascript:')) return;
+            try {
+                const linkPath = new URL(href, window.location.origin).pathname;
+                const isActive = (path === linkPath);
+                link.classList.toggle('active', isActive);
+                
+                if (isActive) {
+                    let parent = link.closest('.collapse');
+                    while (parent) {
+                        if (typeof bootstrap !== 'undefined') {
+                            const bsCollapse = bootstrap.Collapse.getOrCreateInstance(parent, { toggle: false });
+                            if (!parent.classList.contains('show')) bsCollapse.show();
+                        }
+                        const toggler = document.querySelector('[data-target-id="' + parent.id + '"]');
+                        if (toggler) {
+                            const arrow = toggler.querySelector('.toggle-arrow');
+                            if (arrow) arrow.classList.replace('bi-chevron-down', 'bi-chevron-up');
+                            toggler.setAttribute('aria-expanded', 'true');
+                        }
+                        parent = parent.parentElement.closest('.collapse');
                     }
-                    const toggler = document.querySelector('[data-target-id="' + parent.id + '"]');
-                    if (toggler) {
-                        const arrow = toggler.querySelector('.toggle-arrow');
-                        if (arrow) arrow.classList.replace('bi-chevron-down', 'bi-chevron-up');
-                        toggler.setAttribute('aria-expanded', 'true');
-                    }
-                    parent = parent.parentElement.closest('.collapse');
                 }
-            }
+            } catch (e) { /* ignore invalid urls */ }
         });
     }
 
-    function isBillingUrl(url) {
-        return url.startsWith('/admin/billing') || url.startsWith('/admin/collectors') || url.startsWith('/admin/member');
-    }
+    // PJAX Navigation SHIM (Disabled)
+    window.fPjax = function(url) { window.location.href = url; };
+    function loadPjaxContent(url) { window.location.href = url; }
 
-    function loadPjaxContent(url, pushState = true) {
-        const loader = document.getElementById('pjax-loader');
-        if (loader) loader.style.width = '30%';
-        fetch(url)
-            .then(res => { if (!res.ok) throw new Error(); return res.text(); })
-            .then(html => {
-                const doc = new DOMParser().parseFromString(html, 'text/html');
-                const newContent = doc.querySelector('#pjax-container') || doc.querySelector('.main-content');
-                const current = document.getElementById('pjax-container') || document.querySelector('.main-content');
-                if (newContent && current) {
-                    current.innerHTML = newContent.innerHTML;
-                    Array.from(newContent.attributes).forEach(attr => current.setAttribute(attr.name, attr.value));
-                    document.title = doc.title;
-                    if (pushState) history.pushState({ url }, doc.title, url);
-                    updateSidebarActive(url);
-                    executeScripts(current);
-                    if (window.innerWidth < 768) closeSidebar();
-                    window.scrollTo(0, 0);
-                    if (loader) loader.style.width = '100%';
-                    setTimeout(() => { if(loader) loader.style.width = '0'; }, 300);
-                } else { window.location.href = url; }
-            })
-            .catch(() => { window.location.href = url; });
-    }
-
-    document.addEventListener('click', e => {
-        const link = e.target.closest('a');
-        if (!link) return;
-        const url = link.getAttribute('href');
-        if (!url || url.startsWith('#') || url.startsWith('javascript:') || url.includes('logout') || link.target === '_blank' || link.hasAttribute('data-no-pjax')) return;
-        if (url.startsWith('/admin')) {
-            e.preventDefault();
-            if (isBillingUrl(url)) {
-                window.location.href = url;
-            } else {
-                loadPjaxContent(url);
-            }
-        }
-    });
-
-    window.addEventListener('popstate', e => {
-        loadPjaxContent(e.state && e.state.url ? e.state.url : window.location.pathname, false);
-    });
+    // Initial highlight and expansion
+    updateSidebarActive(window.location.href);
 });
 </script>
 

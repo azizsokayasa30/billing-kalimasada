@@ -134,7 +134,7 @@ async function getMikrotikConnectionForRouter(routerObj) {
     if (!password) throw new Error('Koneksi router gagal: Password tidak ditemukan');
     
     logger.info(`[MIKROTIK] Creating new connection to ${host}:${port} with user ${user}`);
-    const conn = new RouterOSAPI({ host, port, user, password, keepalive: true, timeout: 10000 });
+    const conn = new RouterOSAPI({ host, port, user, password, keepalive: true, timeout: 5000 });
     
     try {
         await conn.connect();
@@ -204,8 +204,25 @@ async function getRadiusConnection() {
     const user = radiusConfig.radius_user || 'radius';
     const password = radiusConfig.radius_password || 'radius';
     const database = radiusConfig.radius_database || 'radius';
-    
-    return await mysql.createConnection({ host, user, password, database });
+
+    try {
+        const conn = await mysql.createConnection({ 
+            host, 
+            user, 
+            password, 
+            database,
+            enableKeepAlive: true,
+            keepAliveInitialDelay: 10000,
+            connectTimeout: 5000
+        });
+        return conn;
+    } catch (error) {
+        if (error.code === 'ER_PLUGIN_IS_NOT_LOADED' || error.message.includes('mysql_native_password')) {
+            logger.error(`[RADIUS] ERROR: Plugin 'mysql_native_password' is not loaded on your RADIUS server.`);
+            logger.error(`[RADIUS] FIX: Run 'ALTER USER "${user}"@"%" IDENTIFIED WITH caching_sha2_password BY "${password}";' on your MySQL server.`);
+        }
+        throw error;
+    }
 }
 
 // Fungsi untuk mendapatkan seluruh user PPPoE dari RADIUS (BUKAN hotspot voucher DAN BUKAN member hotspot)

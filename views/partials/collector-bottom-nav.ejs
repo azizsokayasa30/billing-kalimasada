@@ -26,6 +26,17 @@
     </a>
 </div>
 
+<script>
+    // Hard Reload for CSS detection
+    (function() {
+    var pKey = 'simple_reload_' + location.pathname;
+    if (!sessionStorage.getItem(pKey)) {
+        sessionStorage.setItem(pKey, 'true');
+        window.location.reload();
+    }
+})();
+</script>
+
 <style>
 /* Collector Bottom Navigation Styles */
 .collector-bottom-nav {

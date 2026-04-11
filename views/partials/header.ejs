@@ -15,5 +15,14 @@
     /* background handled by theme.css */
     .sidebar { min-height: 100vh; }
   </style>
+  <script>
+    (function() {
+    var pKey = 'simple_reload_' + location.pathname;
+    if (!sessionStorage.getItem(pKey)) {
+        sessionStorage.setItem(pKey, 'true');
+        window.location.reload();
+    }
+})();
+    </script>
 </head>
 <body>

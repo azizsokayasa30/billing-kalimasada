@@ -2,6 +2,7 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <%- include('partials/hard-reload') %>
     <meta charset="UTF-8">
     <title>Profile Hotspot - Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -63,36 +64,7 @@
                 font-size: 0.75rem;
             }
         }
-        @media (max-width: 991.98px) {
-            .sidebar {
-                position: fixed;
-                left: -260px;
-                top: 0;
-                width: 260px;
-                height: 100vh;
-                z-index: 1050;
-                transition: left 0.3s;
-            }
-            .sidebar.show {
-                left: 0;
-            }
-            .sidebar-overlay {
-                display: none;
-                position: fixed;
-                top: 0; left: 0; right: 0; bottom: 0;
-                background: rgba(0,0,0,0.3);
-                z-index: 1049;
-            }
-            .sidebar-overlay.show {
-                display: block;
-            }
-            .main-content {
-                padding-left: 0 !important;
-            }
-            .row.mb-4 > [class^='col-'] {
-                margin-bottom: 1rem !important;
-            }
-        }
+
     </style>
 </head>
 <body>
@@ -102,7 +74,7 @@
         <%- include('partials/admin-responsive-sidebar', { page: 'hotspot-profiles', settings: settings }) %>
 
         <main class="col-md-10 main-content ms-sm-auto">
-            <button class="hamburger d-block d-md-none mb-3" id="hamburgerBtn" aria-label="Menu"><i class="bi bi-list"></i></button>
+
 
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h3>Profile Hotspot</h3>

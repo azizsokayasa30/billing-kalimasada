@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <%- include('../../partials/hard-reload') %>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Laporan Kolektor - <%= appSettings.companyHeader %></title>
@@ -62,7 +63,7 @@
                     <h1 class="f-page-title f-premium-text">Laporan Kolektor</h1>
                 </div>
                 <div class="f-actions">
-                    <button class="f-btn f-btn-outline" onclick="window.fPjax(window.location.href)" title="Refresh Content">
+                    <button class="f-btn f-btn-outline" onclick="window.location.reload()" title="Refresh Content">
                         <i class="bi bi-arrow-clockwise"></i>Refresh
                     </button>
                     <button class="f-btn f-btn-primary" onclick="exportReport()">
@@ -225,6 +226,7 @@
         </main>
     </div>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
         function applyFilters() {
@@ -237,21 +239,11 @@
             if (dateTo) params.append('dateTo', dateTo);
             if (collectorFilter) params.append('collector', collectorFilter);
             
-            const url = `/admin/billing/collector-reports?${params.toString()}`;
-            if (window.fPjax) {
-                window.fPjax(url);
-            } else {
-                window.location.href = url;
-            }
+            window.location.href = `/admin/billing/collector-reports?${params.toString()}`;
         }
         
         function viewCollectorDetails(collectorId) {
-            const url = `/admin/billing/collector-details/${collectorId}`;
-            if (window.fPjax) {
-                window.fPjax(url);
-            } else {
-                window.location.href = url;
-            }
+            window.location.href = `/admin/billing/collector-details/${collectorId}`;
         }
         
         function exportReport() {
@@ -270,4 +262,3 @@
     </script>
 </body>
 </html>
-

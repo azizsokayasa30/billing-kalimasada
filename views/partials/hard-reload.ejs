@@ -1,0 +1,10 @@
+<!-- Simple page reload for CSS detection -->
+<script>
+(function() {
+    var pKey = 'simple_reload_' + location.pathname;
+    if (!sessionStorage.getItem(pKey)) {
+        sessionStorage.setItem(pKey, 'true');
+        window.location.reload();
+    }
+})();
+</script>

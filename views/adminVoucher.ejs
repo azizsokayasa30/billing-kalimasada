@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <%- include('partials/hard-reload') %>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Voucher Hotspot</title>
@@ -22,14 +23,15 @@
         }
         .card {
             border: none;
-            border-radius: 10px;
-            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
-            margin-bottom: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
         }
         .card-header {
-            background-color: #fff;
+            padding: 1rem 1.25rem;
             border-bottom: 1px solid rgba(0,0,0,0.05);
-            font-weight: 600;
+            font-weight: 700;
         }
         .btn-primary {
             background-color: #007bff;
@@ -98,24 +100,7 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
-        @media (max-width: 768px) {
-            .sidebar {
-                margin-left: -250px;
-            }
-            .sidebar.show {
-                margin-left: 0;
-            }
-            .content {
-                margin-left: 0;
-            }
-            .hamburger {
-                display: block;
-            }
-            .overlay.show {
-                display: block;
-                opacity: 1;
-            }
-        }
+
     </style>
 </head>
 <body data-logo-url="<%= settings && settings.logo_filename ? ('/img/' + settings.logo_filename + '?ts=' + Date.now()) : '/img/logo.png' %>">
@@ -124,17 +109,7 @@
         <!-- Include Responsive Admin Sidebar -->
         <%- include('partials/admin-responsive-sidebar', { page: 'hotspot-settings', settings: settings }) %>
         <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
-        <nav class="navbar navbar-expand-lg mb-4">
-            <div class="container-fluid">
-                <button class="hamburger" id="hamburgerBtn">
-                    <i class="bi bi-list"></i>
-                </button>
-                <h4 class="mb-0">Manajemen Voucher Hotspot</h4>
-                <div class="ms-auto">
-                    <span class="badge bg-primary">Admin</span>
-                </div>
-            </div>
-        </nav>
+
 
         <!-- Notifikasi -->
         <% if (locals.success) { %>
@@ -167,7 +142,14 @@
                                 <label for="voucherPrefix" class="form-label"><i class="bi bi-type me-1"></i>Prefix Username</label>
                                 <input type="text" class="form-control" id="voucherPrefix" name="prefix" placeholder="contoh: wifi-" value="wifi-">
                             </div>
-                            <% if (userAuthMode !== 'radius') { %>
+                            <% if (userAuthMode === 'radius') { %>
+                            <div class="mb-3">
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle me-2"></i>Mode RADIUS aktif. Silakan pilih NAS (Router) sasaran.
+                                </div>
+                            </div>
+                            <% } %>
+
                             <div class="mb-3">
                                 <label for="voucherRouterId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
                                 <select class="form-select" id="voucherRouterId" name="router_id" required>
@@ -180,14 +162,6 @@
                                     <% } %>
                                 </select>
                             </div>
-                            <% } else { %>
-                            <input type="hidden" id="voucherRouterId" name="router_id" value="">
-                            <div class="mb-3">
-                                <div class="alert alert-info">
-                                    <i class="bi bi-info-circle me-2"></i>Mode RADIUS aktif. NAS selection otomatis.
-                                </div>
-                            </div>
-                            <% } %>
                             <div class="mb-3">
                                 <label for="voucherProfile" class="form-label"><i class="bi bi-speedometer2 me-1"></i>Profile</label>
                                 <select class="form-select" id="voucherProfile" name="profile" required>
@@ -777,9 +751,11 @@
                 </div>
             </div>
         </div>
+        </main>
     </div>
+</div>
 
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>

@@ -8,6 +8,8 @@ const path = require('path');
 const { getSettingsWithCache } = require('../config/settingsManager')
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const sqlite3 = require('sqlite3').verbose();
+const DB_PATH = path.join(__dirname, '../data/billing.db');
+const billingManager = require('../config/billing');
 console.log('[HOTSPOT] adminHotspot routes module loaded');
 
 const VOUCHER_PAGE_TIMEOUT_MS = 8000;
@@ -39,12 +41,9 @@ async function safeCall(promiseFactory, contextDescription, timeoutMs = VOUCHER_
 
 // Helper function untuk mengambil setting voucher online
 async function getVoucherOnlineSettings() {
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database('./data/billing.db');
-
     return new Promise((resolve, reject) => {
         // Ensure table exists
-        db.run(`
+        billingManager.db.run(`
             CREATE TABLE IF NOT EXISTS voucher_online_settings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 package_id TEXT NOT NULL UNIQUE,
@@ -57,13 +56,13 @@ async function getVoucherOnlineSettings() {
             )
         `, (err) => {
             if (err) {
-                console.error('Error creating voucher_online_settings table:', err);
+                logger.error('Error creating voucher_online_settings table:', err);
                 resolve({});
                 return;
             }
 
             // Insert default settings if table is empty
-            db.get('SELECT COUNT(*) as count FROM voucher_online_settings', (err, row) => {
+            billingManager.db.get('SELECT COUNT(*) as count FROM voucher_online_settings', (err, row) => {
                 if (err || row.count === 0) {
                     // Get first available profile from Mikrotik as default
                     const { getHotspotProfiles } = require('../config/mikrotik');
@@ -83,7 +82,7 @@ async function getVoucherOnlineSettings() {
 
                         const insertPromises = defaultSettings.map(([packageId, name, profile, digits, enabled]) => {
                             return new Promise((resolveInsert, rejectInsert) => {
-                                db.run(
+                                billingManager.db.run(
                                     'INSERT OR IGNORE INTO voucher_online_settings (package_id, name, profile, digits, enabled) VALUES (?, ?, ?, ?, ?)',
                                     [packageId, name, profile, digits, enabled],
                                     (err) => {
@@ -96,9 +95,9 @@ async function getVoucherOnlineSettings() {
 
                         Promise.all(insertPromises).then(() => {
                             // Now get all settings
-                            db.all('SELECT * FROM voucher_online_settings', (err, rows) => {
+                            billingManager.db.all('SELECT * FROM voucher_online_settings', (err, rows) => {
                                 if (err) {
-                                    console.error('Error getting voucher online settings:', err);
+                                    logger.error('Error getting voucher online settings:', err);
                                     resolve({});
                                 } else {
                                     const settings = {};
@@ -110,17 +109,15 @@ async function getVoucherOnlineSettings() {
                                             enabled: row.enabled === 1
                                         };
                                     });
-                                    db.close();
                                     resolve(settings);
                                 }
                             });
                         }).catch((err) => {
-                            console.error('Error inserting default settings:', err);
-                            db.close();
+                            logger.error('Error inserting default settings:', err);
                             resolve({});
                         });
                     }).catch((err) => {
-                        console.error('Error getting Mikrotik profiles for default settings:', err);
+                        logger.error('Error getting Mikrotik profiles for default settings:', err);
                         // Fallback to hardcoded defaults
                         const fallbackSettings = [
                             ['3k', '3rb - 1 Hari', 'default', 5, 1],
@@ -133,7 +130,7 @@ async function getVoucherOnlineSettings() {
                         
                         const insertPromises = fallbackSettings.map(([packageId, name, profile, digits, enabled]) => {
                             return new Promise((resolveInsert, rejectInsert) => {
-                                db.run(
+                                billingManager.db.run(
                                     'INSERT OR IGNORE INTO voucher_online_settings (package_id, name, profile, digits, enabled) VALUES (?, ?, ?, ?, ?)',
                                     [packageId, name, profile, digits, enabled],
                                     (err) => {
@@ -145,9 +142,9 @@ async function getVoucherOnlineSettings() {
                         });
 
                         Promise.all(insertPromises).then(() => {
-                            db.all('SELECT * FROM voucher_online_settings', (err, rows) => {
+                            billingManager.db.all('SELECT * FROM voucher_online_settings', (err, rows) => {
                                 if (err) {
-                                    console.error('Error getting voucher online settings:', err);
+                                    logger.error('Error getting voucher online settings:', err);
                                     resolve({});
                                 } else {
                                     const settings = {};
@@ -159,21 +156,19 @@ async function getVoucherOnlineSettings() {
                                             enabled: row.enabled === 1
                                         };
                                     });
-                                    db.close();
                                     resolve(settings);
                                 }
                             });
                         }).catch((err) => {
-                            console.error('Error inserting fallback settings:', err);
-                            db.close();
+                            logger.error('Error inserting fallback settings:', err);
                             resolve({});
                         });
                     });
                 } else {
                     // Get existing settings
-                    db.all('SELECT * FROM voucher_online_settings', (err, rows) => {
+                    billingManager.db.all('SELECT * FROM voucher_online_settings', (err, rows) => {
                         if (err) {
-                            console.error('Error getting voucher online settings:', err);
+                            logger.error('Error getting voucher online settings:', err);
                             resolve({});
                         } else {
                             const settings = {};
@@ -185,7 +180,6 @@ async function getVoucherOnlineSettings() {
                                     enabled: row.enabled === 1
                                 };
                             });
-                            db.close();
                             resolve(settings);
                         }
                     });
@@ -404,14 +398,20 @@ async function loadHotspotPageData() {
         // fallback to mikrotik
     }
 
-    const db = new sqlite3.Database('./data/billing.db');
-    const routers = await new Promise((resolve, reject) => {
-        db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows || []);
+    logger.info(`[DIAGNOSTIC] loadHotspotPageData: fetching routers via billingManager (authMode: ${userAuthMode})`);
+    
+    const routers = await new Promise((resolve) => {
+        billingManager.db.all('SELECT * FROM routers ORDER BY id', [], (err, rows) => {
+            if (err) {
+                logger.error('[DIAGNOSTIC] Hotspot: error fetching routers:', err.message);
+                resolve([]);
+            } else {
+                logger.info(`[DIAGNOSTIC] Hotspot: found ${rows ? rows.length : 0} routers`);
+                resolve(rows || []);
+            }
         });
     });
-    db.close();
+
 
     const settings = getSettingsWithCache();
     const company_header = settings.company_header || 'Voucher Hotspot';
@@ -620,14 +620,12 @@ async function loadHotspotUsersPageDataSimple() {
         // fallback tetap mikrotik
     }
 
-    const db = new sqlite3.Database('./data/billing.db');
     const routers = await new Promise((resolve, reject) => {
-        db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
+        billingManager.db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
             if (err) reject(err);
             else resolve(rows || []);
         });
     });
-    db.close();
 
     const settings = getSettingsWithCache();
     const company_header = settings.company_header || 'Voucher Hotspot';
@@ -852,7 +850,9 @@ router.get('/users', async (req, res) => {
                 allUsers: [],
                 routers: [],
                 success: null,
-                error: 'Gagal memuat daftar user hotspot: ' + (error && error.message ? error.message : String(error)),
+                error: (error.code === 'ER_PLUGIN_IS_NOT_LOADED' || (error.message && error.message.includes('mysql_native_password'))) 
+                    ? 'ERROR: Database RADIUS menolak koneksi (Plugin mysql_native_password tidak dimuat). Silakan update user database RADIUS Anda ke caching_sha2_password.' 
+                    : 'Gagal memuat daftar user hotspot: ' + (error && error.message ? error.message : String(error)),
                 company_header: settings.company_header || 'Voucher Hotspot',
                 adminKontak: settings['admins.0'] || '-',
                 settings: settings,
@@ -875,7 +875,7 @@ router.post('/delete', async (req, res) => {
     try {
         let routerObj = null;
         if (router_id) {
-            const db = new sqlite3.Database('./data/billing.db');
+            const db = new sqlite3.Database(DB_PATH);
             routerObj = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
                     db.close();
@@ -898,7 +898,7 @@ router.post('/delete-selected', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Tidak ada voucher yang dipilih.' });
     }
 
-    const db = new sqlite3.Database('./data/billing.db');
+    const db = new sqlite3.Database(DB_PATH);
     const routerCache = new Map();
     const getRouterById = async (id) => {
         if (!id) return null;
@@ -960,7 +960,7 @@ router.post('/remove-expired', async (req, res) => {
         const { getRadiusConnection } = require('../config/mikrotik');
         const conn = await getRadiusConnection();
         const sqlite3 = require('sqlite3').verbose();
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
         
         // Ambil semua voucher yang memiliki Expire-After
         const [allVouchersWithExpire] = await conn.execute(`
@@ -1188,7 +1188,7 @@ router.post('/', async (req, res) => {
         if (!router_id) {
             return res.redirect('/admin/hotspot/users?error=Pilih+NAS+(router)+terlebih+dahulu');
         }
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
         const routerObj = await new Promise((resolve, reject) => {
             db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
                 db.close();
@@ -1235,7 +1235,7 @@ router.post('/edit', async (req, res) => {
         if (!router_id) {
             return res.redirect('/admin/hotspot/users?error=Pilih+NAS+(router)+terlebih+dahulu');
         }
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
         const routerObj = await new Promise((resolve, reject) => {
             db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
                 db.close();
@@ -1308,7 +1308,7 @@ router.post('/generate-vouchers', async (req, res) => {
         // Fetch router object if router_id is provided
         let routerObj = null;
         if (router_id) {
-            const db = new sqlite3.Database('./data/billing.db');
+            const db = new sqlite3.Database(DB_PATH);
             routerObj = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
                     db.close();
@@ -1346,7 +1346,7 @@ router.post('/generate-vouchers', async (req, res) => {
 
         // Jika router belum ditentukan tapi metadata menyediakan nasId, ambil dari database
         if (!routerObj && serverMetadata.nasId) {
-            const db = new sqlite3.Database('./data/billing.db');
+            const db = new sqlite3.Database(DB_PATH);
             routerObj = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM routers WHERE id=?', [serverMetadata.nasId], (err, row) => {
                     db.close();
@@ -1482,7 +1482,7 @@ router.get('/voucher', async (req, res) => {
         }
 
         // Fetch routers from database
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
         const routers = await new Promise((resolve, reject) => {
             db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
                 if (err) reject(err);
@@ -1495,33 +1495,51 @@ router.get('/voucher', async (req, res) => {
         if (userAuthMode === 'radius') {
             try {
                 // Aggregate hotspot profiles dari semua router Mikrotik
-                let profiles = [];
-                for (const router of routers) {
+                // Ambil data secara paralel untuk performa maksimal
+                const routerProfilesPromises = routers.map(async (router) => {
                     try {
                         const profilesResult = await getHotspotProfiles(router);
                         if (profilesResult.success && Array.isArray(profilesResult.data)) {
-                            profilesResult.data.forEach(prof => {
-                                const name = prof.name || prof['name'] || '';
-                                if (!name) return;
-                                const existing = profiles.find(p => p.name === name && p.nas_id === router.id);
-                                if (!existing) {
-                                    profiles.push({
-                                        ...prof,
-                                        name,
-                                        nas_id: router.id,
-                                        nas_name: router.name,
-                                        nas_ip: router.nas_ip
-                                    });
-                                }
-                            });
+                            return profilesResult.data.map(prof => ({
+                                ...prof,
+                                name: prof.name || prof['name'] || '',
+                                nas_id: router.id,
+                                nas_name: router.name,
+                                nas_ip: router.nas_ip
+                            }));
                         }
                     } catch (e) {
-                        console.error(`Error getting profiles from ${router.name} (RADIUS voucher page):`, e.message);
+                        console.error(`Error getting profiles from ${router.name}:`, e.message);
                     }
-                }
+                    return [];
+                });
 
-                // Get Server Profiles dari RADIUS (tetap sama seperti sebelumnya)
-                const serverProfilesResult = await getHotspotServerProfilesRadius();
+                // Jalankan semua fetch (Routers + RADIUS) secara paralel
+                const [
+                    routersProfilesResults,
+                    serverProfilesResult,
+                    activeResult,
+                    allUsersResult
+                ] = await Promise.all([
+                    Promise.all(routerProfilesPromises),
+                    getHotspotServerProfilesRadius(),
+                    getActiveHotspotUsers(),
+                    getHotspotUsersRadius()
+                ]);
+
+                // Gabungkan hasil router profiles
+                let profiles = [];
+                routersProfilesResults.forEach(routerProfiles => {
+                    routerProfiles.forEach(prof => {
+                        if (!prof.name) return;
+                        const existing = profiles.find(p => p.name === prof.name && p.nas_id === prof.nas_id);
+                        if (!existing) {
+                            profiles.push(prof);
+                        }
+                    });
+                });
+
+                // Server Profiles dari RADIUS
                 let serverProfiles = [];
                 if (serverProfilesResult.success && Array.isArray(serverProfilesResult.data)) {
                     serverProfiles = serverProfilesResult.data.map(prof => ({
@@ -1532,8 +1550,7 @@ router.get('/voucher', async (req, res) => {
                     }));
                 }
 
-                // Ambil Server Hotspot dari Database (prioritas utama)
-                // Pastikan table hotspot_servers ada
+                // Database setup (tables) - keep this for safety but consider moving to a separate init
                 await new Promise((resolve, reject) => {
                     db.run(`
                         CREATE TABLE IF NOT EXISTS hotspot_servers (
@@ -1549,7 +1566,7 @@ router.get('/voucher', async (req, res) => {
                     });
                 });
                 
-                // Ambil server hotspot dari database
+                // Ambil data pendukung lainnya
                 const hotspotServersDB = await new Promise((resolve, reject) => {
                     db.all('SELECT * FROM hotspot_servers ORDER BY name', [], (err, rows) => {
                         if (err) reject(err);
@@ -1557,7 +1574,6 @@ router.get('/voucher', async (req, res) => {
                     });
                 });
                 
-                // Konversi ke format yang sama dengan servers dari API
                 let servers = hotspotServersDB.map(server => ({
                     name: server.name,
                     nas_id: null,
@@ -1566,14 +1582,10 @@ router.get('/voucher', async (req, res) => {
                     description: server.description || ''
                 }));
 
-                // Get active users untuk check status
-                const activeResult = await getActiveHotspotUsers();
                 const activeUsernames = activeResult.success && Array.isArray(activeResult.data)
                     ? activeResult.data.map(u => u.user || u.name || '').filter(Boolean)
                     : [];
 
-                // Get all hotspot users from RADIUS (filter voucher)
-                const allUsersResult = await getHotspotUsersRadius();
                 const allUsers = allUsersResult.success && Array.isArray(allUsersResult.data)
                     ? allUsersResult.data
                     : [];
@@ -1700,7 +1712,9 @@ router.get('/voucher', async (req, res) => {
                     voucherHistory: [],
                     routers: [],
                     success: null,
-                    error: `Gagal mengambil data dari RADIUS: ${radiusError.message}`,
+                    error: (radiusError.code === 'ER_PLUGIN_IS_NOT_LOADED' || (radiusError.message && radiusError.message.includes('mysql_native_password')))
+                        ? 'ERROR RADIUS: Database menolak koneksi (Plugin mysql_native_password tidak dimuat). Silakan update user database RADIUS Anda ke caching_sha2_password.'
+                        : `Gagal mengambil data dari RADIUS: ${radiusError.message}`,
                     company_header,
                     adminKontak,
                     settings,
@@ -2037,7 +2051,7 @@ router.post('/generate-voucher', async (req, res) => {
             // Mode RADIUS: Jika Server Hotspot dipilih (bukan "all"), cari router yang memiliki server tersebut
             if (server && server !== 'all' && server.trim() !== '') {
                 // Cari router yang memiliki server hotspot ini
-                const db = new sqlite3.Database('./data/billing.db');
+                const db = new sqlite3.Database(DB_PATH);
                 try {
                     // Ambil semua router dan cek server hotspot mereka
                     const routers = await new Promise((resolve, reject) => {
@@ -2082,7 +2096,7 @@ router.post('/generate-voucher', async (req, res) => {
             }
             
             // Fetch router object dari database
-            const db = new sqlite3.Database('./data/billing.db');
+            const db = new sqlite3.Database(DB_PATH);
             routerObj = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
                     db.close();
@@ -2207,7 +2221,7 @@ router.post('/delete-voucher', async (req, res) => {
     try {
         let routerObj = null;
         if (router_id) {
-            const db = new sqlite3.Database('./data/billing.db');
+            const db = new sqlite3.Database(DB_PATH);
             routerObj = await new Promise((resolve, reject) => {
                 db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
                     db.close();
@@ -2277,7 +2291,7 @@ router.post('/generate-manual-voucher', async (req, res) => {
         }
 
         // Fetch router object
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
         const routerObj = await new Promise((resolve, reject) => {
             db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
                 db.close();
@@ -2357,7 +2371,7 @@ router.post('/generate-auto-voucher', async (req, res) => {
         }
 
         // Fetch router object
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
             routerObj = await new Promise((resolve, reject) => {
             db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
                 db.close();
@@ -2436,7 +2450,7 @@ router.post('/generate-auto-voucher', async (req, res) => {
 router.post('/reset-voucher-online-settings', async (req, res) => {
     try {
         const sqlite3 = require('sqlite3').verbose();
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
 
         // Get first available profile from Mikrotik
         const { getHotspotProfiles } = require('../config/mikrotik');
@@ -2491,7 +2505,7 @@ router.post('/save-voucher-online-settings', async (req, res) => {
         }
 
         const sqlite3 = require('sqlite3').verbose();
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
 
         // Ensure voucher_online_settings table exists
         await new Promise((resolve, reject) => {
@@ -2550,7 +2564,7 @@ router.post('/save-voucher-online-settings', async (req, res) => {
 router.get('/voucher-templates', async (req, res) => {
     try {
         const sqlite3 = require('sqlite3').verbose();
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
         
         // Pastikan tabel template ada
         await new Promise((resolve, reject) => {
@@ -2611,7 +2625,7 @@ router.post('/print-vouchers', async (req, res) => {
         
         // Ambil template dari database (gunakan template_id jika ada, jika tidak gunakan default)
         const sqlite3 = require('sqlite3').verbose();
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
         
         // Pastikan tabel template ada
         await new Promise((resolve, reject) => {
@@ -3355,7 +3369,7 @@ router.post('/save-voucher-generation-settings', async (req, res) => {
         }
 
         const sqlite3 = require('sqlite3').verbose();
-        const db = new sqlite3.Database('./data/billing.db');
+        const db = new sqlite3.Database(DB_PATH);
 
         // Ensure voucher_generation_settings table exists
         await new Promise((resolve, reject) => {

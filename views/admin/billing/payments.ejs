@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <%- include('../../partials/hard-reload') %>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
@@ -99,8 +100,12 @@
             <% } %>
         </small>
     </div>
+    </main>
     </div>
 </div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 
 <script>
         // Reset filters function
@@ -130,22 +135,6 @@
             const a = document.createElement('a');
             a.href = url; a.download = 'payments.csv'; a.click();
             URL.revokeObjectURL(url);
-        });
-
-        // Show technician navigation if accessed by technician
-        document.addEventListener('DOMContentLoaded', function() {
-            // Check if this is technician view
-            const isTechnicianView = window.location.pathname.includes('/technician/') ||
-                                   document.body.classList.contains('technician-view');
-
-            if (isTechnicianView) {
-                // Hide admin nav and show technician nav
-                const adminNav = document.querySelector('.bottom-nav');
-                const technicianNav = document.getElementById('technicianNav');
-
-                if (adminNav) adminNav.style.display = 'none';
-                if (technicianNav) technicianNav.style.display = 'block';
-            }
         });
     </script>
 

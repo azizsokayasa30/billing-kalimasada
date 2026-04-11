@@ -156,6 +156,15 @@ function navigateTo(url) {
 
 // Add active state management
 document.addEventListener('DOMContentLoaded', function() {
+    // Hard Reload for CSS detection
+    (function() {
+    var pKey = 'simple_reload_' + location.pathname;
+    if (!sessionStorage.getItem(pKey)) {
+        sessionStorage.setItem(pKey, 'true');
+        window.location.reload();
+    }
+})();
+
     const currentPath = window.location.pathname;
     const navItems = document.querySelectorAll('.admin-mobile-bottom-nav .nav-item');
     
