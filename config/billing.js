@@ -1,802 +1,802 @@
-const path = require('path');
-const fs = require('fs');
-const sqlite3 = require('sqlite3').verbose();
-const PaymentGatewayManager = require('./paymentGateway');
-const logger = require('./logger'); // Added logger import
-const { getCompanyHeader } = require('./message-templates');
-const { getSetting } = require('./settingsManager');
+    const path = require('path');
+    const fs = require('fs');
+    const sqlite3 = require('sqlite3').verbose();
+    const PaymentGatewayManager = require('./paymentGateway');
+    const logger = require('./logger'); // Added logger import
+    const { getCompanyHeader } = require('./message-templates');
+    const { getSetting } = require('./settingsManager');
 
-class BillingManager {
-    constructor() {
-        this.dbPath = path.join(__dirname, '../data/billing.db');
-        this.paymentGateway = new PaymentGatewayManager();
-        this.initDatabase();
-    }
-
-    // Hot-reload payment gateway configuration
-    async reloadPaymentGateway() {
-        try {
-            const result = await this.paymentGateway.reload();
-            return result;
-        } catch (e) {
-            try { logger.error('[BILLING] Failed to reload payment gateways:', e.message); } catch (_) {}
-            return { error: true, message: e.message };
+    class BillingManager {
+        constructor() {
+            this.dbPath = path.join(__dirname, '../data/billing.db');
+            this.paymentGateway = new PaymentGatewayManager();
+            this.initDatabase();
         }
-    }
 
-    /**
-     * Helper function untuk auto-sync status ke RADIUS
-     * Dipanggil saat status customer berubah menjadi 'suspended' atau 'active'
-     */
-    async _autoSyncStatusToRadius(customer, oldStatus, newStatus) {
-        try {
-            // Hanya sync jika status benar-benar berubah
-            if (newStatus === 'suspended' && oldStatus !== 'suspended') {
-                // Status berubah menjadi suspended - langsung sync ke RADIUS
-                const { getUserAuthModeAsync } = require('./mikrotik');
-                const authMode = await getUserAuthModeAsync();
-                
-                if (authMode === 'radius') {
-                    const pppUser = (customer.pppoe_username && String(customer.pppoe_username).trim()) || 
-                                   (customer.username && String(customer.username).trim());
-                    
-                    if (pppUser) {
-                        logger.info(`[BILLING] Auto-syncing ${pppUser} to isolir group in RADIUS...`);
-                        const { suspendUserRadius, getRouterForCustomer, getMikrotikConnectionForRouter, disconnectPPPoEUser } = require('./mikrotik');
-                        
-                        // Disconnect active session TERLEBIH DAHULU
-                        try {
-                            let routerObj = null;
-                            try {
-                                routerObj = await getRouterForCustomer(customer);
-                            } catch (routerError) {
-                                // Jika customer tidak punya router mapping, cari di semua router
-                                logger.warn(`[BILLING] Customer tidak punya router mapping, mencari di semua router untuk ${pppUser}`);
-                                const sqlite3 = require('sqlite3').verbose();
-                                const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
-                                const routers = await new Promise((resolve) => 
-                                    db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []))
-                                );
-                                db.close();
-                                
-                                // Cari router yang memiliki user aktif
-                                for (const router of routers) {
-                                    try {
-                                        const conn = await getMikrotikConnectionForRouter(router);
-                                        const activeSessions = await conn.write('/ppp/active/print', [`?name=${pppUser}`]);
-                                        if (activeSessions && activeSessions.length > 0) {
-                                            routerObj = router;
-                                            logger.info(`[BILLING] Found active session for ${pppUser} on router ${router.name}`);
-                                            break;
-                                        }
-                                    } catch (e) {
-                                        // Continue to next router
-                                    }
-                                }
-                                
-                                // Jika tidak ditemukan, gunakan router pertama sebagai fallback
-                                if (!routerObj && routers.length > 0) {
-                                    routerObj = routers[0];
-                                    logger.warn(`[BILLING] No active session found, using first router as fallback: ${routerObj.name}`);
-                                }
-                            }
-                            
-                            if (routerObj) {
-                                const disconnectResult = await disconnectPPPoEUser(pppUser, routerObj);
-                                
-                                if (disconnectResult.success && disconnectResult.disconnected > 0) {
-                                    logger.info(`[BILLING] Disconnected ${disconnectResult.disconnected} active session(s) for ${pppUser} before isolir`);
-                                    
-                                    // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
-                                    await new Promise(resolve => setTimeout(resolve, 1000));
-                                } else if (disconnectResult.disconnected === 0) {
-                                    logger.info(`[BILLING] User ${pppUser} tidak sedang online, langsung isolir`);
-                                } else {
-                                    logger.warn(`[BILLING] Disconnect result: ${disconnectResult.message}`);
-                                }
-                            } else {
-                                logger.warn(`[BILLING] Tidak ada router yang tersedia untuk disconnect ${pppUser}`);
-                            }
-                        } catch (disconnectError) {
-                            logger.warn(`[BILLING] Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
-                        }
-                        
-                        // Pindahkan ke group isolir
-                        const suspendResult = await suspendUserRadius(pppUser);
-                        if (suspendResult && suspendResult.success) {
-                            logger.info(`[BILLING] ✅ ${pppUser} successfully moved to isolir group`);
-                        } else {
-                            logger.error(`[BILLING] ❌ Failed to move ${pppUser} to isolir: ${suspendResult?.message || 'Unknown error'}`);
-                        }
-                    }
-                }
-            } else if (newStatus === 'active' && oldStatus === 'suspended') {
-                // Status berubah dari suspended ke active - restore dari isolir
-                const { getUserAuthModeAsync } = require('./mikrotik');
-                const authMode = await getUserAuthModeAsync();
-                
-                if (authMode === 'radius') {
-                    const pppUser = (customer.pppoe_username && String(customer.pppoe_username).trim()) || 
-                                   (customer.username && String(customer.username).trim());
-                    
-                    if (pppUser) {
-                        logger.info(`[BILLING] Auto-restoring ${pppUser} from isolir group in RADIUS...`);
-                        const { unsuspendUserRadius, getRouterForCustomer, getMikrotikConnectionForRouter, disconnectPPPoEUser } = require('./mikrotik');
-                        
-                        // Disconnect active session TERLEBIH DAHULU
-                        try {
-                            let routerObj = null;
-                            try {
-                                routerObj = await getRouterForCustomer(customer);
-                            } catch (routerError) {
-                                // Jika customer tidak punya router mapping, cari di semua router
-                                logger.warn(`[BILLING] Customer tidak punya router mapping, mencari di semua router untuk ${pppUser}`);
-                                const sqlite3 = require('sqlite3').verbose();
-                                const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
-                                const routers = await new Promise((resolve) => 
-                                    db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []))
-                                );
-                                db.close();
-                                
-                                // Cari router yang memiliki user aktif
-                                for (const router of routers) {
-                                    try {
-                                        const conn = await getMikrotikConnectionForRouter(router);
-                                        const activeSessions = await conn.write('/ppp/active/print', [`?name=${pppUser}`]);
-                                        if (activeSessions && activeSessions.length > 0) {
-                                            routerObj = router;
-                                            logger.info(`[BILLING] Found active session for ${pppUser} on router ${router.name}`);
-                                            break;
-                                        }
-                                    } catch (e) {
-                                        // Continue to next router
-                                    }
-                                }
-                                
-                                // Jika tidak ditemukan, gunakan router pertama sebagai fallback
-                                if (!routerObj && routers.length > 0) {
-                                    routerObj = routers[0];
-                                    logger.warn(`[BILLING] No active session found, using first router as fallback: ${routerObj.name}`);
-                                }
-                            }
-                            
-                            if (routerObj) {
-                                const disconnectResult = await disconnectPPPoEUser(pppUser, routerObj);
-                                
-                                if (disconnectResult.success && disconnectResult.disconnected > 0) {
-                                    logger.info(`[BILLING] Disconnected ${disconnectResult.disconnected} active session(s) for ${pppUser} before restore`);
-                                    
-                                    // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
-                                    await new Promise(resolve => setTimeout(resolve, 1000));
-                                } else if (disconnectResult.disconnected === 0) {
-                                    logger.info(`[BILLING] User ${pppUser} tidak sedang online, langsung restore`);
-                                } else {
-                                    logger.warn(`[BILLING] Disconnect result: ${disconnectResult.message}`);
-                                }
-                            } else {
-                                logger.warn(`[BILLING] Tidak ada router yang tersedia untuk disconnect ${pppUser}`);
-                            }
-                        } catch (disconnectError) {
-                            logger.warn(`[BILLING] Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
-                        }
-                        
-                        // Restore ke package sebelumnya
-                        const restoreResult = await unsuspendUserRadius(pppUser);
-                        if (restoreResult && restoreResult.success) {
-                            logger.info(`[BILLING] ✅ ${pppUser} successfully restored from isolir group`);
-                        } else {
-                            logger.error(`[BILLING] ❌ Failed to restore ${pppUser} from isolir: ${restoreResult?.message || 'Unknown error'}`);
-                        }
-                    }
-                }
-            }
-        } catch (syncError) {
-            logger.error(`[BILLING] Error auto-syncing status to RADIUS: ${syncError.message}`);
-            // Jangan throw error, karena update status sudah berhasil
-        }
-    }
-
-    async setCustomerStatusById(id, status) {
-        return new Promise(async (resolve, reject) => {
+        // Hot-reload payment gateway configuration
+        async reloadPaymentGateway() {
             try {
-                const existing = await this.getCustomerById(id);
-                if (!existing) return reject(new Error('Customer not found'));
-                const oldStatus = existing.status;
-                const sql = `UPDATE customers SET status = ? WHERE id = ?`;
-                this.db.run(sql, [status, id], async (err) => {
-                    if (err) return reject(err);
-                    try {
-                        logger.info(`[BILLING] setCustomerStatusById: id=${id}, username=${existing.username}, from=${oldStatus} -> to=${status}`);
-                        
-                        // PENTING: Auto-sync ke RADIUS jika status berubah menjadi 'suspended' atau 'active'
-                        await this._autoSyncStatusToRadius(existing, oldStatus, status);
-                    } catch (_) {}
-                    resolve({ id, status });
-                });
+                const result = await this.paymentGateway.reload();
+                return result;
             } catch (e) {
-                reject(e);
+                try { logger.error('[BILLING] Failed to reload payment gateways:', e.message); } catch (_) {}
+                return { error: true, message: e.message };
             }
-        });
-    }
-
-    initDatabase() {
-        // Pastikan direktori data ada
-        const dataDir = path.dirname(this.dbPath);
-        if (!fs.existsSync(dataDir)) {
-            fs.mkdirSync(dataDir, { recursive: true });
         }
 
-        // Inisialisasi database secara synchronous
-        try {
-            this.db = new sqlite3.Database(this.dbPath);
-            console.log('Billing database connected');
-            
-            // Enable foreign key constraints for cascade delete
-            this.db.run("PRAGMA foreign_keys = ON", (err) => {
-                if (err) {
-                    console.error('Error enabling foreign keys:', err);
-                } else {
-                    console.log('✅ Foreign keys enabled for cascade delete');
+        /**
+         * Helper function untuk auto-sync status ke RADIUS
+         * Dipanggil saat status customer berubah menjadi 'suspended' atau 'active'
+         */
+        async _autoSyncStatusToRadius(customer, oldStatus, newStatus) {
+            try {
+                // Hanya sync jika status benar-benar berubah
+                if (newStatus === 'suspended' && oldStatus !== 'suspended') {
+                    // Status berubah menjadi suspended - langsung sync ke RADIUS
+                    const { getUserAuthModeAsync } = require('./mikrotik');
+                    const authMode = await getUserAuthModeAsync();
+                    
+                    if (authMode === 'radius') {
+                        const pppUser = (customer.pppoe_username && String(customer.pppoe_username).trim()) || 
+                                    (customer.username && String(customer.username).trim());
+                        
+                        if (pppUser) {
+                            logger.info(`[BILLING] Auto-syncing ${pppUser} to isolir group in RADIUS...`);
+                            const { suspendUserRadius, getRouterForCustomer, getMikrotikConnectionForRouter, disconnectPPPoEUser } = require('./mikrotik');
+                            
+                            // Disconnect active session TERLEBIH DAHULU
+                            try {
+                                let routerObj = null;
+                                try {
+                                    routerObj = await getRouterForCustomer(customer);
+                                } catch (routerError) {
+                                    // Jika customer tidak punya router mapping, cari di semua router
+                                    logger.warn(`[BILLING] Customer tidak punya router mapping, mencari di semua router untuk ${pppUser}`);
+                                    const sqlite3 = require('sqlite3').verbose();
+                                    const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
+                                    const routers = await new Promise((resolve) => 
+                                        db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []))
+                                    );
+                                    db.close();
+                                    
+                                    // Cari router yang memiliki user aktif
+                                    for (const router of routers) {
+                                        try {
+                                            const conn = await getMikrotikConnectionForRouter(router);
+                                            const activeSessions = await conn.write('/ppp/active/print', [`?name=${pppUser}`]);
+                                            if (activeSessions && activeSessions.length > 0) {
+                                                routerObj = router;
+                                                logger.info(`[BILLING] Found active session for ${pppUser} on router ${router.name}`);
+                                                break;
+                                            }
+                                        } catch (e) {
+                                            // Continue to next router
+                                        }
+                                    }
+                                    
+                                    // Jika tidak ditemukan, gunakan router pertama sebagai fallback
+                                    if (!routerObj && routers.length > 0) {
+                                        routerObj = routers[0];
+                                        logger.warn(`[BILLING] No active session found, using first router as fallback: ${routerObj.name}`);
+                                    }
+                                }
+                                
+                                if (routerObj) {
+                                    const disconnectResult = await disconnectPPPoEUser(pppUser, routerObj);
+                                    
+                                    if (disconnectResult.success && disconnectResult.disconnected > 0) {
+                                        logger.info(`[BILLING] Disconnected ${disconnectResult.disconnected} active session(s) for ${pppUser} before isolir`);
+                                        
+                                        // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
+                                        await new Promise(resolve => setTimeout(resolve, 1000));
+                                    } else if (disconnectResult.disconnected === 0) {
+                                        logger.info(`[BILLING] User ${pppUser} tidak sedang online, langsung isolir`);
+                                    } else {
+                                        logger.warn(`[BILLING] Disconnect result: ${disconnectResult.message}`);
+                                    }
+                                } else {
+                                    logger.warn(`[BILLING] Tidak ada router yang tersedia untuk disconnect ${pppUser}`);
+                                }
+                            } catch (disconnectError) {
+                                logger.warn(`[BILLING] Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
+                            }
+                            
+                            // Pindahkan ke group isolir
+                            const suspendResult = await suspendUserRadius(pppUser);
+                            if (suspendResult && suspendResult.success) {
+                                logger.info(`[BILLING] ✅ ${pppUser} successfully moved to isolir group`);
+                            } else {
+                                logger.error(`[BILLING] ❌ Failed to move ${pppUser} to isolir: ${suspendResult?.message || 'Unknown error'}`);
+                            }
+                        }
+                    }
+                } else if (newStatus === 'active' && oldStatus === 'suspended') {
+                    // Status berubah dari suspended ke active - restore dari isolir
+                    const { getUserAuthModeAsync } = require('./mikrotik');
+                    const authMode = await getUserAuthModeAsync();
+                    
+                    if (authMode === 'radius') {
+                        const pppUser = (customer.pppoe_username && String(customer.pppoe_username).trim()) || 
+                                    (customer.username && String(customer.username).trim());
+                        
+                        if (pppUser) {
+                            logger.info(`[BILLING] Auto-restoring ${pppUser} from isolir group in RADIUS...`);
+                            const { unsuspendUserRadius, getRouterForCustomer, getMikrotikConnectionForRouter, disconnectPPPoEUser } = require('./mikrotik');
+                            
+                            // Disconnect active session TERLEBIH DAHULU
+                            try {
+                                let routerObj = null;
+                                try {
+                                    routerObj = await getRouterForCustomer(customer);
+                                } catch (routerError) {
+                                    // Jika customer tidak punya router mapping, cari di semua router
+                                    logger.warn(`[BILLING] Customer tidak punya router mapping, mencari di semua router untuk ${pppUser}`);
+                                    const sqlite3 = require('sqlite3').verbose();
+                                    const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
+                                    const routers = await new Promise((resolve) => 
+                                        db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []))
+                                    );
+                                    db.close();
+                                    
+                                    // Cari router yang memiliki user aktif
+                                    for (const router of routers) {
+                                        try {
+                                            const conn = await getMikrotikConnectionForRouter(router);
+                                            const activeSessions = await conn.write('/ppp/active/print', [`?name=${pppUser}`]);
+                                            if (activeSessions && activeSessions.length > 0) {
+                                                routerObj = router;
+                                                logger.info(`[BILLING] Found active session for ${pppUser} on router ${router.name}`);
+                                                break;
+                                            }
+                                        } catch (e) {
+                                            // Continue to next router
+                                        }
+                                    }
+                                    
+                                    // Jika tidak ditemukan, gunakan router pertama sebagai fallback
+                                    if (!routerObj && routers.length > 0) {
+                                        routerObj = routers[0];
+                                        logger.warn(`[BILLING] No active session found, using first router as fallback: ${routerObj.name}`);
+                                    }
+                                }
+                                
+                                if (routerObj) {
+                                    const disconnectResult = await disconnectPPPoEUser(pppUser, routerObj);
+                                    
+                                    if (disconnectResult.success && disconnectResult.disconnected > 0) {
+                                        logger.info(`[BILLING] Disconnected ${disconnectResult.disconnected} active session(s) for ${pppUser} before restore`);
+                                        
+                                        // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
+                                        await new Promise(resolve => setTimeout(resolve, 1000));
+                                    } else if (disconnectResult.disconnected === 0) {
+                                        logger.info(`[BILLING] User ${pppUser} tidak sedang online, langsung restore`);
+                                    } else {
+                                        logger.warn(`[BILLING] Disconnect result: ${disconnectResult.message}`);
+                                    }
+                                } else {
+                                    logger.warn(`[BILLING] Tidak ada router yang tersedia untuk disconnect ${pppUser}`);
+                                }
+                            } catch (disconnectError) {
+                                logger.warn(`[BILLING] Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
+                            }
+                            
+                            // Restore ke package sebelumnya
+                            const restoreResult = await unsuspendUserRadius(pppUser);
+                            if (restoreResult && restoreResult.success) {
+                                logger.info(`[BILLING] ✅ ${pppUser} successfully restored from isolir group`);
+                            } else {
+                                logger.error(`[BILLING] ❌ Failed to restore ${pppUser} from isolir: ${restoreResult?.message || 'Unknown error'}`);
+                            }
+                        }
+                    }
+                }
+            } catch (syncError) {
+                logger.error(`[BILLING] Error auto-syncing status to RADIUS: ${syncError.message}`);
+                // Jangan throw error, karena update status sudah berhasil
+            }
+        }
+
+        async setCustomerStatusById(id, status) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    const existing = await this.getCustomerById(id);
+                    if (!existing) return reject(new Error('Customer not found'));
+                    const oldStatus = existing.status;
+                    const sql = `UPDATE customers SET status = ? WHERE id = ?`;
+                    this.db.run(sql, [status, id], async (err) => {
+                        if (err) return reject(err);
+                        try {
+                            logger.info(`[BILLING] setCustomerStatusById: id=${id}, username=${existing.username}, from=${oldStatus} -> to=${status}`);
+                            
+                            // PENTING: Auto-sync ke RADIUS jika status berubah menjadi 'suspended' atau 'active'
+                            await this._autoSyncStatusToRadius(existing, oldStatus, status);
+                        } catch (_) {}
+                        resolve({ id, status });
+                    });
+                } catch (e) {
+                    reject(e);
                 }
             });
-            
-            this.createTables();
-        } catch (err) {
-            console.error('Error opening billing database:', err);
-            throw err;
         }
-    }
 
-    async updateCustomerById(id, customerData) {
-        return new Promise(async (resolve, reject) => {
-            const { name, username, pppoe_username, email, address, latitude, longitude, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, renewal_type, fix_date, cable_type, cable_length, port_number, cable_status, cable_notes } = customerData;
+        initDatabase() {
+            // Pastikan direktori data ada
+            const dataDir = path.dirname(this.dbPath);
+            if (!fs.existsSync(dataDir)) {
+                fs.mkdirSync(dataDir, { recursive: true });
+            }
+
+            // Inisialisasi database secara synchronous
             try {
-                const oldCustomer = await this.getCustomerById(id);
-                if (!oldCustomer) return reject(new Error('Customer not found'));
-
-                const normBillingDay = Math.min(Math.max(parseInt(billing_day !== undefined ? billing_day : (oldCustomer?.billing_day ?? 15), 10) || 15, 1), 28);
+                this.db = new sqlite3.Database(this.dbPath);
+                console.log('Billing database connected');
                 
-                // Normalisasi renewal_type dan fix_date
-                const normRenewalType = renewal_type || oldCustomer.renewal_type || 'renewal';
-                const normFixDate = renewal_type === 'fix_date' ? 
-                    (fix_date !== undefined ? Math.min(Math.max(parseInt(fix_date, 10) || 15, 1), 28) : (oldCustomer.fix_date || 15)) : 
-                    null;
+                // Enable foreign key constraints for cascade delete
+                this.db.run("PRAGMA foreign_keys = ON", (err) => {
+                    if (err) {
+                        console.error('Error enabling foreign keys:', err);
+                    } else {
+                        console.log('✅ Foreign keys enabled for cascade delete');
+                    }
+                });
+                
+                this.createTables();
+            } catch (err) {
+                console.error('Error opening billing database:', err);
+                throw err;
+            }
+        }
 
-                const sql = `UPDATE customers SET name = ?, username = ?, pppoe_username = ?, email = ?, address = ?, latitude = ?, longitude = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ? WHERE id = ?`;
-                this.db.run(sql, [
-                    name ?? oldCustomer.name,
-                    username ?? oldCustomer.username,
-                    pppoe_username ?? oldCustomer.pppoe_username,
-                    email ?? oldCustomer.email,
-                    address ?? oldCustomer.address,
-                    latitude !== undefined ? parseFloat(latitude) : oldCustomer.latitude,
-                    longitude !== undefined ? parseFloat(longitude) : oldCustomer.longitude,
-                    package_id ?? oldCustomer.package_id,
-                    odp_id !== undefined ? odp_id : oldCustomer.odp_id,
-                    pppoe_profile ?? oldCustomer.pppoe_profile,
-                    status ?? oldCustomer.status,
-                    auto_suspension !== undefined ? auto_suspension : oldCustomer.auto_suspension,
-                    normBillingDay,
-                    normRenewalType,
-                    normFixDate,
-                    cable_type !== undefined ? cable_type : oldCustomer.cable_type,
-                    cable_length !== undefined ? cable_length : oldCustomer.cable_length,
-                    port_number !== undefined ? port_number : oldCustomer.port_number,
-                    cable_status !== undefined ? cable_status : oldCustomer.cable_status,
-                    cable_notes !== undefined ? cable_notes : oldCustomer.cable_notes,
-                    id
-                ], async (err) => {
+        async updateCustomerById(id, customerData) {
+            return new Promise(async (resolve, reject) => {
+                const { name, username, pppoe_username, email, address, latitude, longitude, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, renewal_type, fix_date, cable_type, cable_length, port_number, cable_status, cable_notes } = customerData;
+                try {
+                    const oldCustomer = await this.getCustomerById(id);
+                    if (!oldCustomer) return reject(new Error('Customer not found'));
+
+                    const normBillingDay = Math.min(Math.max(parseInt(billing_day !== undefined ? billing_day : (oldCustomer?.billing_day ?? 15), 10) || 15, 1), 28);
+                    
+                    // Normalisasi renewal_type dan fix_date
+                    const normRenewalType = renewal_type || oldCustomer.renewal_type || 'renewal';
+                    const normFixDate = renewal_type === 'fix_date' ? 
+                        (fix_date !== undefined ? Math.min(Math.max(parseInt(fix_date, 10) || 15, 1), 28) : (oldCustomer.fix_date || 15)) : 
+                        null;
+
+                    const sql = `UPDATE customers SET name = ?, username = ?, pppoe_username = ?, email = ?, address = ?, latitude = ?, longitude = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ? WHERE id = ?`;
+                    this.db.run(sql, [
+                        name ?? oldCustomer.name,
+                        username ?? oldCustomer.username,
+                        pppoe_username ?? oldCustomer.pppoe_username,
+                        email ?? oldCustomer.email,
+                        address ?? oldCustomer.address,
+                        latitude !== undefined ? parseFloat(latitude) : oldCustomer.latitude,
+                        longitude !== undefined ? parseFloat(longitude) : oldCustomer.longitude,
+                        package_id ?? oldCustomer.package_id,
+                        odp_id !== undefined ? odp_id : oldCustomer.odp_id,
+                        pppoe_profile ?? oldCustomer.pppoe_profile,
+                        status ?? oldCustomer.status,
+                        auto_suspension !== undefined ? auto_suspension : oldCustomer.auto_suspension,
+                        normBillingDay,
+                        normRenewalType,
+                        normFixDate,
+                        cable_type !== undefined ? cable_type : oldCustomer.cable_type,
+                        cable_length !== undefined ? cable_length : oldCustomer.cable_length,
+                        port_number !== undefined ? port_number : oldCustomer.port_number,
+                        cable_status !== undefined ? cable_status : oldCustomer.cable_status,
+                        cable_notes !== undefined ? cable_notes : oldCustomer.cable_notes,
+                        id
+                    ], async (err) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            // PENTING: Auto-sync ke RADIUS jika status berubah menjadi 'suspended' atau 'active'
+                            const newStatus = status !== undefined ? status : oldCustomer.status;
+                            const oldStatus = oldCustomer.status;
+                            if (newStatus !== oldStatus) {
+                                // Buat customer object dengan data terbaru untuk sync
+                                const updatedCustomer = {
+                                    ...oldCustomer,
+                                    ...customerData,
+                                    id,
+                                    status: newStatus
+                                };
+                                await this._autoSyncStatusToRadius(updatedCustomer, oldStatus, newStatus);
+                            }
+                            
+                            // Sinkronisasi cable routes jika ada data ODP atau cable
+                            if (odp_id !== undefined || cable_type !== undefined) {
+                                console.log(`🔧 Updating cable route for customer ${oldCustomer.username}, odp_id: ${odp_id}, cable_type: ${cable_type}`);
+                                try {
+                                    const db = this.db;
+                                    const customerId = id;
+                                    
+                                    // Cek apakah sudah ada cable route untuk customer ini
+                                    const existingRoute = await new Promise((resolve, reject) => {
+                                        db.get('SELECT * FROM cable_routes WHERE customer_id = ?', [customerId], (err, row) => {
+                                            if (err) reject(err);
+                                            else resolve(row);
+                                        });
+                                    });
+                                    
+                                    if (existingRoute) {
+                                        // Update cable route yang ada
+                                        console.log(`📝 Found existing cable route for customer ${oldCustomer.username}, updating...`);
+                                        console.log(`🔧 ODP: ${odp_id !== undefined ? odp_id : existingRoute.odp_id}, Port: ${port_number !== undefined ? port_number : existingRoute.port_number}`);
+                                        const updateSql = `
+                                            UPDATE cable_routes 
+                                            SET odp_id = ?, cable_type = ?, cable_length = ?, port_number = ?, status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+                                            WHERE customer_id = ?
+                                        `;
+                                        
+                                        db.run(updateSql, [
+                                            odp_id !== undefined ? odp_id : existingRoute.odp_id,
+                                            cable_type !== undefined ? cable_type : existingRoute.cable_type,
+                                            cable_length !== undefined ? cable_length : existingRoute.cable_length,
+                                            port_number !== undefined ? port_number : existingRoute.port_number,
+                                            cable_status !== undefined ? cable_status : existingRoute.status,
+                                            cable_notes !== undefined ? cable_notes : existingRoute.notes,
+                                            customerId
+                                        ], function(err) {
+                                            if (err) {
+                                                console.error(`❌ Error updating cable route for customer ${oldCustomer.username}:`, err.message);
+                                            } else {
+                                                console.log(`✅ Successfully updated cable route for customer ${oldCustomer.username}`);
+                                            }
+                                        });
+                                    } else if (odp_id) {
+                                        // Buat cable route baru jika belum ada
+                                        console.log(`📝 Creating new cable route for customer ${oldCustomer.username}...`);
+                                        const cableRouteSql = `
+                                            INSERT INTO cable_routes (customer_id, odp_id, cable_type, cable_length, port_number, status, notes)
+                                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                                        `;
+                                        
+                                        db.run(cableRouteSql, [
+                                            customerId,
+                                            odp_id,
+                                            cable_type || 'Fiber Optic',
+                                            cable_length || 0,
+                                            port_number || 1,
+                                            cable_status || 'connected',
+                                            cable_notes || `Auto-created for customer ${oldCustomer.name}`
+                                        ], function(err) {
+                                            if (err) {
+                                                console.error(`❌ Error creating cable route for customer ${oldCustomer.username}:`, err.message);
+                                            } else {
+                                                console.log(`✅ Successfully created cable route for customer ${oldCustomer.username}`);
+                                            }
+                                        });
+                                    }
+                                } catch (cableError) {
+                                    console.error(`❌ Error handling cable route for customer ${oldCustomer.username}:`, cableError.message);
+                                    // Jangan reject, karena customer sudah berhasil diupdate di billing
+                                }
+                            }
+                            
+                            resolve({ username: oldCustomer.username, id, ...customerData });
+                        }
+                    });
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+
+        // Update customer coordinates untuk mapping
+        async updateCustomerCoordinates(id, coordinates) {
+            return new Promise((resolve, reject) => {
+                const { latitude, longitude } = coordinates;
+                
+                if (latitude === undefined || longitude === undefined) {
+                    return reject(new Error('Latitude dan longitude wajib diisi'));
+                }
+
+                const sql = `UPDATE customers SET latitude = ?, longitude = ? WHERE id = ?`;
+                this.db.run(sql, [latitude, longitude, id], function(err) {
                     if (err) {
                         reject(err);
                     } else {
-                        // PENTING: Auto-sync ke RADIUS jika status berubah menjadi 'suspended' atau 'active'
-                        const newStatus = status !== undefined ? status : oldCustomer.status;
-                        const oldStatus = oldCustomer.status;
-                        if (newStatus !== oldStatus) {
-                            // Buat customer object dengan data terbaru untuk sync
-                            const updatedCustomer = {
-                                ...oldCustomer,
-                                ...customerData,
-                                id,
-                                status: newStatus
-                            };
-                            await this._autoSyncStatusToRadius(updatedCustomer, oldStatus, newStatus);
-                        }
-                        
-                        // Sinkronisasi cable routes jika ada data ODP atau cable
-                        if (odp_id !== undefined || cable_type !== undefined) {
-                            console.log(`🔧 Updating cable route for customer ${oldCustomer.username}, odp_id: ${odp_id}, cable_type: ${cable_type}`);
-                            try {
-                                const db = this.db;
-                                const customerId = id;
-                                
-                                // Cek apakah sudah ada cable route untuk customer ini
-                                const existingRoute = await new Promise((resolve, reject) => {
-                                    db.get('SELECT * FROM cable_routes WHERE customer_id = ?', [customerId], (err, row) => {
-                                        if (err) reject(err);
-                                        else resolve(row);
-                                    });
-                                });
-                                
-                                if (existingRoute) {
-                                    // Update cable route yang ada
-                                    console.log(`📝 Found existing cable route for customer ${oldCustomer.username}, updating...`);
-                                    console.log(`🔧 ODP: ${odp_id !== undefined ? odp_id : existingRoute.odp_id}, Port: ${port_number !== undefined ? port_number : existingRoute.port_number}`);
-                                    const updateSql = `
-                                        UPDATE cable_routes 
-                                        SET odp_id = ?, cable_type = ?, cable_length = ?, port_number = ?, status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
-                                        WHERE customer_id = ?
-                                    `;
-                                    
-                                    db.run(updateSql, [
-                                        odp_id !== undefined ? odp_id : existingRoute.odp_id,
-                                        cable_type !== undefined ? cable_type : existingRoute.cable_type,
-                                        cable_length !== undefined ? cable_length : existingRoute.cable_length,
-                                        port_number !== undefined ? port_number : existingRoute.port_number,
-                                        cable_status !== undefined ? cable_status : existingRoute.status,
-                                        cable_notes !== undefined ? cable_notes : existingRoute.notes,
-                                        customerId
-                                    ], function(err) {
-                                        if (err) {
-                                            console.error(`❌ Error updating cable route for customer ${oldCustomer.username}:`, err.message);
-                                        } else {
-                                            console.log(`✅ Successfully updated cable route for customer ${oldCustomer.username}`);
-                                        }
-                                    });
-                                } else if (odp_id) {
-                                    // Buat cable route baru jika belum ada
-                                    console.log(`📝 Creating new cable route for customer ${oldCustomer.username}...`);
-                                    const cableRouteSql = `
-                                        INSERT INTO cable_routes (customer_id, odp_id, cable_type, cable_length, port_number, status, notes)
-                                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                                    `;
-                                    
-                                    db.run(cableRouteSql, [
-                                        customerId,
-                                        odp_id,
-                                        cable_type || 'Fiber Optic',
-                                        cable_length || 0,
-                                        port_number || 1,
-                                        cable_status || 'connected',
-                                        cable_notes || `Auto-created for customer ${oldCustomer.name}`
-                                    ], function(err) {
-                                        if (err) {
-                                            console.error(`❌ Error creating cable route for customer ${oldCustomer.username}:`, err.message);
-                                        } else {
-                                            console.log(`✅ Successfully created cable route for customer ${oldCustomer.username}`);
-                                        }
-                                    });
-                                }
-                            } catch (cableError) {
-                                console.error(`❌ Error handling cable route for customer ${oldCustomer.username}:`, cableError.message);
-                                // Jangan reject, karena customer sudah berhasil diupdate di billing
-                            }
-                        }
-                        
-                        resolve({ username: oldCustomer.username, id, ...customerData });
+                        resolve({ id, latitude, longitude, changes: this.changes });
                     }
                 });
-            } catch (error) {
-                reject(error);
-            }
-        });
-    }
+            });
+        }
 
-    // Update customer coordinates untuk mapping
-    async updateCustomerCoordinates(id, coordinates) {
-        return new Promise((resolve, reject) => {
-            const { latitude, longitude } = coordinates;
-            
-            if (latitude === undefined || longitude === undefined) {
-                return reject(new Error('Latitude dan longitude wajib diisi'));
-            }
+        // Get customer by serial number (untuk mapping device)
+        async getCustomerBySerialNumber(serialNumber) {
+            return new Promise((resolve, reject) => {
+                const sql = `SELECT * FROM customers WHERE serial_number = ?`;
+                this.db.get(sql, [serialNumber], (err, row) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(row || null);
+                    }
+                });
+            });
+        }
 
-            const sql = `UPDATE customers SET latitude = ?, longitude = ? WHERE id = ?`;
-            this.db.run(sql, [latitude, longitude, id], function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve({ id, latitude, longitude, changes: this.changes });
+        // Get customer by PPPoE username (untuk mapping device)
+        async getCustomerByPPPoE(pppoeUsername) {
+            return new Promise((resolve, reject) => {
+                const sql = `SELECT * FROM customers WHERE pppoe_username = ?`;
+                this.db.get(sql, [pppoeUsername], (err, row) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(row || null);
+                    }
+                });
+            });
+        }
+
+        createTables() {
+            const tables = [
+                // Tabel paket internet
+                `CREATE TABLE IF NOT EXISTS packages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    speed TEXT NOT NULL,
+                    price DECIMAL(10,2) NOT NULL,
+                    tax_rate DECIMAL(5,2) DEFAULT 11.00,
+                    description TEXT,
+                    pppoe_profile TEXT DEFAULT 'default',
+                    router_id INTEGER,
+                    upload_limit TEXT,
+                    download_limit TEXT,
+                    burst_limit_upload TEXT,
+                    burst_limit_download TEXT,
+                    burst_threshold TEXT,
+                    burst_time TEXT,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (router_id) REFERENCES routers(id)
+                )`,
+
+                // Tabel pelanggan
+                `CREATE TABLE IF NOT EXISTS customers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    name TEXT NOT NULL,
+                    phone TEXT UNIQUE NOT NULL,
+                    pppoe_username TEXT,
+                    email TEXT,
+                    address TEXT,
+                    latitude DECIMAL(10,8),
+                    longitude DECIMAL(11,8),
+                    package_id INTEGER,
+                    pppoe_profile TEXT,
+                    status TEXT DEFAULT 'active',
+                    join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    -- Cable connection fields
+                    cable_type TEXT,
+                    cable_length INTEGER,
+                    port_number INTEGER,
+                    cable_status TEXT DEFAULT 'connected',
+                    cable_notes TEXT,
+                    area TEXT,
+                    FOREIGN KEY (package_id) REFERENCES packages (id)
+                )`,
+
+                // Tabel routers (NAS) untuk RADIUS mapping
+                `CREATE TABLE IF NOT EXISTS routers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    nas_ip TEXT NOT NULL,
+                    nas_identifier TEXT,
+                    secret TEXT,
+                    UNIQUE(nas_ip)
+                )`,
+
+                // Tabel Paket Member (mirip dengan packages untuk PPPoE)
+                `CREATE TABLE IF NOT EXISTS member_packages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    speed TEXT NOT NULL,
+                    price DECIMAL(10,2) NOT NULL,
+                    tax_rate DECIMAL(5,2) DEFAULT 11.00,
+                    description TEXT,
+                    hotspot_profile TEXT DEFAULT 'default',
+                    upload_limit TEXT,
+                    download_limit TEXT,
+                    burst_limit_upload TEXT,
+                    burst_limit_download TEXT,
+                    burst_threshold TEXT,
+                    burst_time TEXT,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+
+                // Tabel Members (mirip dengan customers untuk PPPoE, tapi menggunakan Hotspot)
+                `CREATE TABLE IF NOT EXISTS members (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    name TEXT NOT NULL,
+                    phone TEXT UNIQUE NOT NULL,
+                    hotspot_username TEXT,
+                    email TEXT,
+                    address TEXT,
+                    latitude DECIMAL(10,8),
+                    longitude DECIMAL(11,8),
+                    package_id INTEGER,
+                    hotspot_profile TEXT,
+                    status TEXT DEFAULT 'active',
+                    join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    server_hotspot TEXT,
+                    auto_suspension BOOLEAN DEFAULT 1,
+                    billing_day INTEGER DEFAULT 15,
+                    renewal_type TEXT DEFAULT 'renewal',
+                    fix_date INTEGER,
+                    area TEXT,
+                    ktp_photo_path TEXT,
+                    house_photo_path TEXT,
+                    password TEXT,
+                    FOREIGN KEY (package_id) REFERENCES member_packages (id)
+                )`,
+
+                // Mapping customer ke router (tanpa ubah skema customers)
+                `CREATE TABLE IF NOT EXISTS customer_router_map (
+                    customer_id INTEGER NOT NULL,
+                    router_id INTEGER NOT NULL,
+                    PRIMARY KEY (customer_id),
+                    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+                    FOREIGN KEY (router_id) REFERENCES routers(id) ON DELETE CASCADE
+                )`,
+
+                // Tabel Assignment Collector (Lama - Masih dipertahankan sebagai fallback/manual)
+                `CREATE TABLE IF NOT EXISTS collector_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    collector_id INTEGER NOT NULL,
+                    customer_id INTEGER NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(collector_id, customer_id),
+                    FOREIGN KEY (collector_id) REFERENCES collectors(id) ON DELETE CASCADE,
+                    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+                )`,
+
+                // Tabel Mapping Area ke Collector (Baru)
+                `CREATE TABLE IF NOT EXISTS collector_areas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    collector_id INTEGER NOT NULL,
+                    area TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(collector_id, area),
+                    FOREIGN KEY (collector_id) REFERENCES collectors(id) ON DELETE CASCADE
+                )`,
+
+                // Tabel tagihan
+                `CREATE TABLE IF NOT EXISTS invoices (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    customer_id INTEGER NULL,
+                    member_id INTEGER NULL,
+                    package_id INTEGER NOT NULL,
+                    invoice_number TEXT UNIQUE NOT NULL,
+                    amount DECIMAL(10,2) NOT NULL,
+                    due_date DATE NOT NULL,
+                    status TEXT DEFAULT 'unpaid',
+                    payment_date DATETIME,
+                    payment_method TEXT,
+                    payment_gateway TEXT,
+                    payment_token TEXT,
+                    payment_url TEXT,
+                    payment_status TEXT DEFAULT 'pending',
+                    notes TEXT,
+                    description TEXT,
+                    invoice_type TEXT DEFAULT 'monthly',
+                    package_name TEXT,
+                    base_amount DECIMAL(10,2),
+                    tax_rate DECIMAL(5,2),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (customer_id) REFERENCES customers (id),
+                    FOREIGN KEY (member_id) REFERENCES members (id),
+                    FOREIGN KEY (package_id) REFERENCES packages (id),
+                    CHECK ((customer_id IS NOT NULL) OR (member_id IS NOT NULL))
+                )`,
+
+                // Tabel pembayaran
+                `CREATE TABLE IF NOT EXISTS payments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    invoice_id INTEGER NOT NULL,
+                    amount DECIMAL(10,2) NOT NULL,
+                    payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    payment_method TEXT NOT NULL,
+                    reference_number TEXT,
+                    notes TEXT,
+                    FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+                )`,
+
+                // Tabel transaksi payment gateway
+                `CREATE TABLE IF NOT EXISTS payment_gateway_transactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    invoice_id INTEGER NOT NULL,
+                    gateway TEXT NOT NULL,
+                    order_id TEXT NOT NULL,
+                    payment_url TEXT,
+                    token TEXT,
+                    amount DECIMAL(10,2) NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    payment_type TEXT,
+                    fraud_status TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (invoice_id) REFERENCES invoices (id)
+                )`,
+
+                // Tabel expenses untuk pengeluaran
+                `CREATE TABLE IF NOT EXISTS expenses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    description TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    category TEXT NOT NULL,
+                    account_expenses TEXT,
+                    expense_date DATE NOT NULL,
+                    payment_method TEXT,
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+
+                // Tabel income (pemasukan)
+                `CREATE TABLE IF NOT EXISTS income (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    description TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    category TEXT NOT NULL,
+                    income_date DATE NOT NULL,
+                    payment_method TEXT,
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+
+                // Tabel voucher_revenue
+                `CREATE TABLE IF NOT EXISTS voucher_revenue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                    profile TEXT,
+                    status TEXT DEFAULT 'unpaid' CHECK(status IN ('unpaid', 'paid')),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    used_at DATETIME,
+                    usage_count INTEGER DEFAULT 0,
+                    notes TEXT
+                )`,
+
+                // Tabel ODP (Optical Distribution Point)
+                `CREATE TABLE IF NOT EXISTS odps (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(100) NOT NULL UNIQUE,
+                    code VARCHAR(50) NOT NULL UNIQUE,
+                    latitude DECIMAL(10,8) NOT NULL,
+                    longitude DECIMAL(11,8) NOT NULL,
+                    address TEXT,
+                    capacity INTEGER DEFAULT 64,
+                    used_ports INTEGER DEFAULT 0,
+                    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'inactive')),
+                    installation_date DATE,
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+
+                // Tabel Cable Routes (Jalur Kabel dari ODP ke Pelanggan)
+                `CREATE TABLE IF NOT EXISTS cable_routes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    customer_id INTEGER NOT NULL,
+                    odp_id INTEGER NOT NULL,
+                    cable_length DECIMAL(8,2),
+                    cable_type VARCHAR(50) DEFAULT 'Fiber Optic',
+                    installation_date DATE,
+                    status VARCHAR(20) DEFAULT 'connected' CHECK (status IN ('connected', 'disconnected', 'maintenance', 'damaged')),
+                    port_number INTEGER,
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+                    FOREIGN KEY (odp_id) REFERENCES odps(id) ON DELETE CASCADE
+                )`,
+
+                // Tabel Network Segments (Segmen Jaringan)
+                `CREATE TABLE IF NOT EXISTS network_segments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(100) NOT NULL,
+                    start_odp_id INTEGER NOT NULL,
+                    end_odp_id INTEGER,
+                    segment_type VARCHAR(50) DEFAULT 'Backbone' CHECK (segment_type IN ('Backbone', 'Distribution', 'Access')),
+                    cable_length DECIMAL(10,2),
+                    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'damaged', 'inactive')),
+                    installation_date DATE,
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (start_odp_id) REFERENCES odps(id) ON DELETE CASCADE,
+                    FOREIGN KEY (end_odp_id) REFERENCES odps(id) ON DELETE CASCADE
+                )`,
+                
+                // Tabel ODP Connections (Backbone Network)
+                `CREATE TABLE IF NOT EXISTS odp_connections (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    from_odp_id INTEGER NOT NULL,
+                    to_odp_id INTEGER NOT NULL,
+                    connection_type VARCHAR(50) DEFAULT 'fiber' CHECK (connection_type IN ('fiber', 'copper', 'wireless', 'microwave')),
+                    cable_length DECIMAL(8,2),
+                    cable_capacity VARCHAR(20) DEFAULT '1G' CHECK (cable_capacity IN ('100M', '1G', '10G', '100G')),
+                    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'inactive', 'damaged')),
+                    installation_date DATE,
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (from_odp_id) REFERENCES odps(id) ON DELETE CASCADE,
+                    FOREIGN KEY (to_odp_id) REFERENCES odps(id) ON DELETE CASCADE,
+                    UNIQUE(from_odp_id, to_odp_id)
+                )`,
+
+                // Tabel Cable Maintenance Log
+                `CREATE TABLE IF NOT EXISTS cable_maintenance_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    cable_route_id INTEGER,
+                    network_segment_id INTEGER,
+                    maintenance_type VARCHAR(50) NOT NULL CHECK (maintenance_type IN ('repair', 'replacement', 'inspection', 'upgrade')),
+                    description TEXT NOT NULL,
+                    performed_by INTEGER,
+                    maintenance_date DATE NOT NULL,
+                    duration_hours DECIMAL(4,2),
+                    cost DECIMAL(12,2),
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (cable_route_id) REFERENCES cable_routes(id) ON DELETE CASCADE,
+                    FOREIGN KEY (network_segment_id) REFERENCES network_segments(id) ON DELETE CASCADE
+                )`
+            ];
+
+            // Create tables sequentially to ensure proper order
+            this.createTablesSequentially(tables);
+
+            // Tambahkan kolom payment_status jika belum ada
+            this.db.run("ALTER TABLE invoices ADD COLUMN payment_status TEXT DEFAULT 'pending'", (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error('Error adding payment_status column:', err);
                 }
             });
-        });
-    }
 
-    // Get customer by serial number (untuk mapping device)
-    async getCustomerBySerialNumber(serialNumber) {
-        return new Promise((resolve, reject) => {
-            const sql = `SELECT * FROM customers WHERE serial_number = ?`;
-            this.db.get(sql, [serialNumber], (err, row) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(row || null);
+            // Tambahkan kolom pppoe_profile ke packages jika belum ada
+            this.db.run("ALTER TABLE packages ADD COLUMN pppoe_profile TEXT DEFAULT 'default'", (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error('Error adding pppoe_profile column to packages:', err);
+                } else if (!err) {
+                    console.log('Added pppoe_profile column to packages table');
                 }
             });
-        });
-    }
 
-    // Get customer by PPPoE username (untuk mapping device)
-    async getCustomerByPPPoE(pppoeUsername) {
-        return new Promise((resolve, reject) => {
-            const sql = `SELECT * FROM customers WHERE pppoe_username = ?`;
-            this.db.get(sql, [pppoeUsername], (err, row) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(row || null);
+            // Tambahkan kolom pppoe_profile ke customers jika belum ada
+            this.db.run("ALTER TABLE customers ADD COLUMN pppoe_profile TEXT", (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error('Error adding pppoe_profile column to customers:', err);
+                } else if (!err) {
+                    console.log('Added pppoe_profile column to customers table');
                 }
             });
-        });
-    }
 
-    createTables() {
-        const tables = [
-            // Tabel paket internet
-            `CREATE TABLE IF NOT EXISTS packages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                speed TEXT NOT NULL,
-                price DECIMAL(10,2) NOT NULL,
-                tax_rate DECIMAL(5,2) DEFAULT 11.00,
-                description TEXT,
-                pppoe_profile TEXT DEFAULT 'default',
-                router_id INTEGER,
-                upload_limit TEXT,
-                download_limit TEXT,
-                burst_limit_upload TEXT,
-                burst_limit_download TEXT,
-                burst_threshold TEXT,
-                burst_time TEXT,
-                is_active BOOLEAN DEFAULT 1,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (router_id) REFERENCES routers(id)
-            )`,
+            // Tambahkan kolom cable connection ke customers jika belum ada
+            this.addCableFieldsToCustomers();
 
-            // Tabel pelanggan
-            `CREATE TABLE IF NOT EXISTS customers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                name TEXT NOT NULL,
-                phone TEXT UNIQUE NOT NULL,
-                pppoe_username TEXT,
-                email TEXT,
-                address TEXT,
-                latitude DECIMAL(10,8),
-                longitude DECIMAL(11,8),
-                package_id INTEGER,
-                pppoe_profile TEXT,
-                status TEXT DEFAULT 'active',
-                join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                -- Cable connection fields
-                cable_type TEXT,
-                cable_length INTEGER,
-                port_number INTEGER,
-                cable_status TEXT DEFAULT 'connected',
-                cable_notes TEXT,
-                area TEXT,
-                FOREIGN KEY (package_id) REFERENCES packages (id)
-            )`,
+            // Tambahkan kolom auto_suspension ke customers jika belum ada
+            this.db.run("ALTER TABLE customers ADD COLUMN auto_suspension BOOLEAN DEFAULT 1", (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error('Error adding auto_suspension column:', err);
+                } else if (!err) {
+                    console.log('Added auto_suspension column to customers table');
+                }
+            });
 
-            // Tabel routers (NAS) untuk RADIUS mapping
-            `CREATE TABLE IF NOT EXISTS routers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                nas_ip TEXT NOT NULL,
-                nas_identifier TEXT,
-                secret TEXT,
-                UNIQUE(nas_ip)
-            )`,
-
-            // Tabel Paket Member (mirip dengan packages untuk PPPoE)
-            `CREATE TABLE IF NOT EXISTS member_packages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                speed TEXT NOT NULL,
-                price DECIMAL(10,2) NOT NULL,
-                tax_rate DECIMAL(5,2) DEFAULT 11.00,
-                description TEXT,
-                hotspot_profile TEXT DEFAULT 'default',
-                upload_limit TEXT,
-                download_limit TEXT,
-                burst_limit_upload TEXT,
-                burst_limit_download TEXT,
-                burst_threshold TEXT,
-                burst_time TEXT,
-                is_active BOOLEAN DEFAULT 1,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )`,
-
-            // Tabel Members (mirip dengan customers untuk PPPoE, tapi menggunakan Hotspot)
-            `CREATE TABLE IF NOT EXISTS members (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                name TEXT NOT NULL,
-                phone TEXT UNIQUE NOT NULL,
-                hotspot_username TEXT,
-                email TEXT,
-                address TEXT,
-                latitude DECIMAL(10,8),
-                longitude DECIMAL(11,8),
-                package_id INTEGER,
-                hotspot_profile TEXT,
-                status TEXT DEFAULT 'active',
-                join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                server_hotspot TEXT,
-                auto_suspension BOOLEAN DEFAULT 1,
-                billing_day INTEGER DEFAULT 15,
-                renewal_type TEXT DEFAULT 'renewal',
-                fix_date INTEGER,
-                area TEXT,
-                ktp_photo_path TEXT,
-                house_photo_path TEXT,
-                password TEXT,
-                FOREIGN KEY (package_id) REFERENCES member_packages (id)
-            )`,
-
-            // Mapping customer ke router (tanpa ubah skema customers)
-            `CREATE TABLE IF NOT EXISTS customer_router_map (
-                customer_id INTEGER NOT NULL,
-                router_id INTEGER NOT NULL,
-                PRIMARY KEY (customer_id),
-                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
-                FOREIGN KEY (router_id) REFERENCES routers(id) ON DELETE CASCADE
-            )`,
-
-            // Tabel Assignment Collector (Lama - Masih dipertahankan sebagai fallback/manual)
-            `CREATE TABLE IF NOT EXISTS collector_assignments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                collector_id INTEGER NOT NULL,
-                customer_id INTEGER NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(collector_id, customer_id),
-                FOREIGN KEY (collector_id) REFERENCES collectors(id) ON DELETE CASCADE,
-                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-            )`,
-
-            // Tabel Mapping Area ke Collector (Baru)
-            `CREATE TABLE IF NOT EXISTS collector_areas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                collector_id INTEGER NOT NULL,
-                area TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(collector_id, area),
-                FOREIGN KEY (collector_id) REFERENCES collectors(id) ON DELETE CASCADE
-            )`,
-
-            // Tabel tagihan
-            `CREATE TABLE IF NOT EXISTS invoices (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NULL,
-                member_id INTEGER NULL,
-                package_id INTEGER NOT NULL,
-                invoice_number TEXT UNIQUE NOT NULL,
-                amount DECIMAL(10,2) NOT NULL,
-                due_date DATE NOT NULL,
-                status TEXT DEFAULT 'unpaid',
-                payment_date DATETIME,
-                payment_method TEXT,
-                payment_gateway TEXT,
-                payment_token TEXT,
-                payment_url TEXT,
-                payment_status TEXT DEFAULT 'pending',
-                notes TEXT,
-                description TEXT,
-                invoice_type TEXT DEFAULT 'monthly',
-                package_name TEXT,
-                base_amount DECIMAL(10,2),
-                tax_rate DECIMAL(5,2),
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (customer_id) REFERENCES customers (id),
-                FOREIGN KEY (member_id) REFERENCES members (id),
-                FOREIGN KEY (package_id) REFERENCES packages (id),
-                CHECK ((customer_id IS NOT NULL) OR (member_id IS NOT NULL))
-            )`,
-
-            // Tabel pembayaran
-            `CREATE TABLE IF NOT EXISTS payments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                invoice_id INTEGER NOT NULL,
-                amount DECIMAL(10,2) NOT NULL,
-                payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                payment_method TEXT NOT NULL,
-                reference_number TEXT,
-                notes TEXT,
-                FOREIGN KEY (invoice_id) REFERENCES invoices (id)
-            )`,
-
-            // Tabel transaksi payment gateway
-            `CREATE TABLE IF NOT EXISTS payment_gateway_transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                invoice_id INTEGER NOT NULL,
-                gateway TEXT NOT NULL,
-                order_id TEXT NOT NULL,
-                payment_url TEXT,
-                token TEXT,
-                amount DECIMAL(10,2) NOT NULL,
-                status TEXT DEFAULT 'pending',
-                payment_type TEXT,
-                fraud_status TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (invoice_id) REFERENCES invoices (id)
-            )`,
-
-            // Tabel expenses untuk pengeluaran
-            `CREATE TABLE IF NOT EXISTS expenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                description TEXT NOT NULL,
-                amount REAL NOT NULL,
-                category TEXT NOT NULL,
-                account_expenses TEXT,
-                expense_date DATE NOT NULL,
-                payment_method TEXT,
-                notes TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )`,
-
-            // Tabel income (pemasukan)
-            `CREATE TABLE IF NOT EXISTS income (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                description TEXT NOT NULL,
-                amount REAL NOT NULL,
-                category TEXT NOT NULL,
-                income_date DATE NOT NULL,
-                payment_method TEXT,
-                notes TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )`,
-
-            // Tabel voucher_revenue
-            `CREATE TABLE IF NOT EXISTS voucher_revenue (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                price DECIMAL(10,2) NOT NULL DEFAULT 0,
-                profile TEXT,
-                status TEXT DEFAULT 'unpaid' CHECK(status IN ('unpaid', 'paid')),
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                used_at DATETIME,
-                usage_count INTEGER DEFAULT 0,
-                notes TEXT
-            )`,
-
-            // Tabel ODP (Optical Distribution Point)
-            `CREATE TABLE IF NOT EXISTS odps (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name VARCHAR(100) NOT NULL UNIQUE,
-                code VARCHAR(50) NOT NULL UNIQUE,
-                latitude DECIMAL(10,8) NOT NULL,
-                longitude DECIMAL(11,8) NOT NULL,
-                address TEXT,
-                capacity INTEGER DEFAULT 64,
-                used_ports INTEGER DEFAULT 0,
-                status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'inactive')),
-                installation_date DATE,
-                notes TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )`,
-
-            // Tabel Cable Routes (Jalur Kabel dari ODP ke Pelanggan)
-            `CREATE TABLE IF NOT EXISTS cable_routes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                odp_id INTEGER NOT NULL,
-                cable_length DECIMAL(8,2),
-                cable_type VARCHAR(50) DEFAULT 'Fiber Optic',
-                installation_date DATE,
-                status VARCHAR(20) DEFAULT 'connected' CHECK (status IN ('connected', 'disconnected', 'maintenance', 'damaged')),
-                port_number INTEGER,
-                notes TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
-                FOREIGN KEY (odp_id) REFERENCES odps(id) ON DELETE CASCADE
-            )`,
-
-            // Tabel Network Segments (Segmen Jaringan)
-            `CREATE TABLE IF NOT EXISTS network_segments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name VARCHAR(100) NOT NULL,
-                start_odp_id INTEGER NOT NULL,
-                end_odp_id INTEGER,
-                segment_type VARCHAR(50) DEFAULT 'Backbone' CHECK (segment_type IN ('Backbone', 'Distribution', 'Access')),
-                cable_length DECIMAL(10,2),
-                status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'damaged', 'inactive')),
-                installation_date DATE,
-                notes TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (start_odp_id) REFERENCES odps(id) ON DELETE CASCADE,
-                FOREIGN KEY (end_odp_id) REFERENCES odps(id) ON DELETE CASCADE
-            )`,
-            
-            // Tabel ODP Connections (Backbone Network)
-            `CREATE TABLE IF NOT EXISTS odp_connections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                from_odp_id INTEGER NOT NULL,
-                to_odp_id INTEGER NOT NULL,
-                connection_type VARCHAR(50) DEFAULT 'fiber' CHECK (connection_type IN ('fiber', 'copper', 'wireless', 'microwave')),
-                cable_length DECIMAL(8,2),
-                cable_capacity VARCHAR(20) DEFAULT '1G' CHECK (cable_capacity IN ('100M', '1G', '10G', '100G')),
-                status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'inactive', 'damaged')),
-                installation_date DATE,
-                notes TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (from_odp_id) REFERENCES odps(id) ON DELETE CASCADE,
-                FOREIGN KEY (to_odp_id) REFERENCES odps(id) ON DELETE CASCADE,
-                UNIQUE(from_odp_id, to_odp_id)
-            )`,
-
-            // Tabel Cable Maintenance Log
-            `CREATE TABLE IF NOT EXISTS cable_maintenance_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cable_route_id INTEGER,
-                network_segment_id INTEGER,
-                maintenance_type VARCHAR(50) NOT NULL CHECK (maintenance_type IN ('repair', 'replacement', 'inspection', 'upgrade')),
-                description TEXT NOT NULL,
-                performed_by INTEGER,
-                maintenance_date DATE NOT NULL,
-                duration_hours DECIMAL(4,2),
-                cost DECIMAL(12,2),
-                notes TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (cable_route_id) REFERENCES cable_routes(id) ON DELETE CASCADE,
-                FOREIGN KEY (network_segment_id) REFERENCES network_segments(id) ON DELETE CASCADE
-            )`
-        ];
-
-        // Create tables sequentially to ensure proper order
-        this.createTablesSequentially(tables);
-
-        // Tambahkan kolom payment_status jika belum ada
-        this.db.run("ALTER TABLE invoices ADD COLUMN payment_status TEXT DEFAULT 'pending'", (err) => {
-            if (err && !err.message.includes('duplicate column name')) {
-                console.error('Error adding payment_status column:', err);
-            }
-        });
-
-        // Tambahkan kolom pppoe_profile ke packages jika belum ada
-        this.db.run("ALTER TABLE packages ADD COLUMN pppoe_profile TEXT DEFAULT 'default'", (err) => {
-            if (err && !err.message.includes('duplicate column name')) {
-                console.error('Error adding pppoe_profile column to packages:', err);
-            } else if (!err) {
-                console.log('Added pppoe_profile column to packages table');
-            }
-        });
-
-        // Tambahkan kolom pppoe_profile ke customers jika belum ada
-        this.db.run("ALTER TABLE customers ADD COLUMN pppoe_profile TEXT", (err) => {
-            if (err && !err.message.includes('duplicate column name')) {
-                console.error('Error adding pppoe_profile column to customers:', err);
-            } else if (!err) {
-                console.log('Added pppoe_profile column to customers table');
-            }
-        });
-
-        // Tambahkan kolom cable connection ke customers jika belum ada
-        this.addCableFieldsToCustomers();
-
-        // Tambahkan kolom auto_suspension ke customers jika belum ada
-        this.db.run("ALTER TABLE customers ADD COLUMN auto_suspension BOOLEAN DEFAULT 1", (err) => {
-            if (err && !err.message.includes('duplicate column name')) {
-                console.error('Error adding auto_suspension column:', err);
-            } else if (!err) {
-                console.log('Added auto_suspension column to customers table');
-            }
-        });
-
-        // Tambahkan kolom billing_day ke customers jika belum ada
-        this.db.run("ALTER TABLE customers ADD COLUMN billing_day INTEGER DEFAULT 15", (err) => {
-            if (err && !err.message.includes('duplicate column name')) {
-                console.error('Error adding billing_day column:', err);
-            } else if (!err) {
-                console.log('Added billing_day column to customers table');
-            }
-        });
+            // Tambahkan kolom billing_day ke customers jika belum ada
+            this.db.run("ALTER TABLE customers ADD COLUMN billing_day INTEGER DEFAULT 15", (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error('Error adding billing_day column:', err);
+                } else if (!err) {
+                    console.log('Added billing_day column to customers table');
+                }
+            });
 
         // Tambahkan kolom tax_rate ke packages jika belum ada
         this.db.run("ALTER TABLE packages ADD COLUMN tax_rate DECIMAL(5,2) DEFAULT 11.00", (err) => {

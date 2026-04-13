@@ -1471,9 +1471,16 @@ router.get('/active-users', async (req, res) => {
 
 // GET: Tampilkan halaman voucher hotspot
 router.get('/voucher', async (req, res) => {
+    let userAuthMode = 'mikrotik';
+    let routers = [];
+    let routersProfiles = [];
+    let serverProfiles = [];
+    let servers = [];
+    let voucherHistory = [];
+    let settings = getSettingsWithCache();
+
     try {
         // Check auth mode - RADIUS atau Mikrotik API
-        let userAuthMode = 'mikrotik';
         try {
             const mode = await getRadiusConfigValue('user_auth_mode', null);
             userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
@@ -1481,12 +1488,13 @@ router.get('/voucher', async (req, res) => {
             // Fallback
         }
 
-        // Fetch routers from database
-        const db = new sqlite3.Database(DB_PATH);
-        const routers = await new Promise((resolve, reject) => {
-            db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows || []);
+        // Fetch routers from database using centralized manager
+        routers = await new Promise((resolve) => {
+            billingManager.db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
+                if (err) {
+                    logger.error('[Voucher Page] Error fetching routers:', err.message);
+                    resolve([]);
+                } else resolve(rows || []);
             });
         });
 
@@ -1959,14 +1967,26 @@ router.get('/voucher', async (req, res) => {
         const company_header = settings.company_header || 'Voucher Hotspot';
         const adminKontak = settings['footer_info'] || '-';
         
-        db.close();
+        // Final sanity check for routers before rendering
+        if (!routers || routers.length === 0) {
+            logger.warn('[Voucher Page] Rendering with zero routers');
+        }
+
+        // Ambil data pendukung lainnya (Voucher Online settings)
+        let onlineSettings = {};
+        try {
+            onlineSettings = await getVoucherOnlineSettings();
+        } catch (e) {
+            logger.warn('[Voucher Page] Failed to load online settings:', e.message);
+        }
 
         res.render('adminVoucher', {
-            profiles,
+            profiles: profiles,
             serverProfiles: serverProfiles,
-            servers,
-            voucherHistory,
-            routers,
+            servers: servers,
+            voucherHistory: voucherHistory,
+            routers: routers,
+            onlineSettings: onlineSettings,
             success: req.query.success,
             error: req.query.error,
             company_header,
@@ -1977,26 +1997,33 @@ router.get('/voucher', async (req, res) => {
             userAuthMode: userAuthMode,
             page: 'hotspot-settings'
         });
-    } catch (error) {
-        console.error('Error rendering voucher page:', error);
-        const settings = getSettingsWithCache();
-        const company_header = settings.company_header || 'Voucher Hotspot';
-        const adminKontak = settings['footer_info'] || '-';
+    } catch (err) {
+        logger.error('Error in voucher page route:', err);
+        
+        // Robust Error Fallback: Refetch routers if needed to ensure dropdown isn't empty
+        if (!routers || routers.length === 0) {
+            try {
+                routers = await new Promise((resolve) => {
+                    billingManager.db.all('SELECT * FROM routers ORDER BY id', (e, rows) => resolve(rows || []));
+                });
+            } catch (_) {
+                logger.error('[Voucher Page] Failed to fetch routers even in error fallback');
+            }
+        }
+
         res.render('adminVoucher', {
+            routers: routers, // Ensure dropdown isn't empty on error
+            userAuthMode: userAuthMode || 'mikrotik',
             profiles: [],
             serverProfiles: [],
             servers: [],
             voucherHistory: [],
-            routers: [],
-            success: null,
-            error: 'Gagal memuat halaman voucher: ' + error.message,
-            company_header,
-            adminKontak,
+            onlineSettings: {},
+            error: `Terjadi kesalahan saat memuat data: ${err.message}`,
+            page: 'hotspot-settings',
             settings,
             versionInfo: getVersionInfo(),
-            versionBadge: getVersionBadge(),
-            userAuthMode: 'mikrotik',
-            page: 'hotspot-settings'
+            versionBadge: getVersionBadge()
         });
     }
 });

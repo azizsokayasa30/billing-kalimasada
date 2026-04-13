@@ -217,11 +217,22 @@ async function getRadiusConnection() {
         });
         return conn;
     } catch (error) {
-        if (error.code === 'ER_PLUGIN_IS_NOT_LOADED' || error.message.includes('mysql_native_password')) {
-            logger.error(`[RADIUS] ERROR: Plugin 'mysql_native_password' is not loaded on your RADIUS server.`);
+        let enhancedMessage = error.message || 'Unknown error';
+        if (error.code === 'ECONNREFUSED' || error.errno === -4078) {
+            enhancedMessage = `Koneksi ke database RADIUS ditolak (${host}:${user}). Pastikan service MySQL/MariaDB sudah dijalankan.`;
+        } else if (error.code === 'ER_ACCESS_DENIED_ERROR') {
+            enhancedMessage = `Akses ke database RADIUS ditolak. Cek Username/Password di pengaturan RADIUS.`;
+        } else if (error.code === 'ER_BAD_DB_ERROR') {
+            enhancedMessage = `Database '${database}' tidak ditemukan di MySQL.`;
+        } else if (error.code === 'ER_PLUGIN_IS_NOT_LOADED' || enhancedMessage.includes('mysql_native_password')) {
+            enhancedMessage = `Plugin 'mysql_native_password' tidak dimuat di server MySQL RADIUS.`;
             logger.error(`[RADIUS] FIX: Run 'ALTER USER "${user}"@"%" IDENTIFIED WITH caching_sha2_password BY "${password}";' on your MySQL server.`);
         }
-        throw error;
+        
+        const enhancedError = new Error(enhancedMessage);
+        enhancedError.code = error.code;
+        enhancedError.errno = error.errno;
+        throw enhancedError;
     }
 }
 
@@ -8593,7 +8604,6 @@ async function addPPPoEProfile(profileData, routerObj = null) {
         if (profileData['use-encryption'] && profileData['use-encryption'] !== 'default') params.push('=use-encryption=' + profileData['use-encryption']);
         if (profileData['only-one'] && profileData['only-one'] !== 'default') params.push('=only-one=' + profileData['only-one']);
         if (profileData['change-tcp-mss'] && profileData['change-tcp-mss'] !== 'default') params.push('=change-tcp-mss=' + profileData['change-tcp-mss']);
-        
         await conn.write('/ppp/profile/add', params);
         
         return { success: true };

@@ -329,13 +329,15 @@ router.post('/mikrotik/delete-user', adminAuth, async (req, res) => {
 
 // GET: List Profile PPPoE
 router.get('/mikrotik/profiles', adminAuth, async (req, res) => {
+  let profiles = [];
+  let routers = [];
+  let authMode = 'mikrotik';
+  let settings = getSettingsWithCache();
+
   try {
     // Check auth mode
     const { getUserAuthModeAsync } = require('../config/mikrotik');
-    const authMode = await getUserAuthModeAsync();
-    
-    let profiles = [];
-    let routers = [];
+    authMode = await getUserAuthModeAsync();
     
     // Always fetch routers regardless of authMode to ensure dropdown is populated
     logger.info(`[DIAGNOSTIC] Fetching routers via billingManager (authMode: ${authMode})`);
@@ -381,7 +383,6 @@ router.get('/mikrotik/profiles', adminAuth, async (req, res) => {
       }
     }
 
-    const settings = getSettingsWithCache();
     res.render('adminMikrotikProfiles', { 
       profiles: profiles, 
       routers: routers,
@@ -393,65 +394,25 @@ router.get('/mikrotik/profiles', adminAuth, async (req, res) => {
     });
   } catch (err) {
     logger.error('Error loading PPPoE profiles:', err);
-    const settings = getSettingsWithCache();
+    
+    // Ensure routers is defined for the error block render
+    if (!routers || routers.length === 0) {
+      try {
+        routers = await getAllRoutersHelper();
+      } catch (dbErr) {
+        routers = [];
+      }
+    }
+
     res.render('adminMikrotikProfiles', { 
       profiles: [], 
-      routers: [],
-      authMode: 'mikrotik',
-      error: 'Gagal mengambil data profile PPPoE.', 
+      routers: routers, // Use preserved or refetched routers
+      authMode: authMode || 'mikrotik',
+      error: 'Gagal mengambil data profile PPPoE: ' + err.message, 
       settings,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge()
     });
-  }
-});
-
-// GET: Diagnostic dump for NAS selection issues
-router.get('/mikrotik/diag/dump', adminAuth, async (req, res) => {
-  try {
-    const cwd = process.cwd();
-    const configPath = path.join(__dirname, '../config/billing.js');
-    const dbPathResolved = path.join(__dirname, '../data/billing.db');
-    
-    // Check if files exist
-    const dbExists = fs.existsSync(dbPathResolved);
-    
-    // Fetch routers using BOTH ways to see difference
-    const routersFromCentral = await getAllRoutersHelper();
-    
-    // Fetch manually just to be 100% sure
-    const sqlite3Manual = require('sqlite3').verbose();
-    const routersManual = await new Promise((resolve) => {
-      const dbTemp = new sqlite3Manual.Database(dbPathResolved, sqlite3Manual.OPEN_READONLY, (err) => {
-        if (err) resolve({ error: err.message });
-        else {
-          dbTemp.all('SELECT * FROM routers', [], (err, rows) => {
-            dbTemp.close();
-            if (err) resolve({ error: err.message });
-            else resolve(rows || []);
-          });
-        }
-      });
-    });
-
-    res.json({
-      success: true,
-      diagnostics: {
-        cwd: cwd,
-        dirname: __dirname,
-        dbPathResolved: dbPathResolved,
-        dbExists: dbExists,
-        node_env: process.env.NODE_ENV,
-        timestamp: new Date().toISOString()
-      },
-      routers_summary: {
-        count_from_helper: Array.isArray(routersFromCentral) ? routersFromCentral.length : 'error',
-        count_manual: Array.isArray(routersManual) ? routersManual.length : 'error'
-      },
-      raw_routers_data: routersManual
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message, stack: err.stack });
   }
 });
 
@@ -586,36 +547,23 @@ router.get('/mikrotik/profile/:id', adminAuth, async (req, res) => {
 
 // POST: Tambah Profile PPPoE
 router.post('/mikrotik/add-profile', adminAuth, async (req, res) => {
+  let routerObj = null;
+  let profileData = {};
+  let authMode = 'mikrotik';
+
   try {
-    const { router_id, ...profileData } = req.body;
+    const { router_id, ...data } = req.body;
+    profileData = data;
     
     // Check auth mode
     const { getUserAuthModeAsync } = require('../config/mikrotik');
-    const authMode = await getUserAuthModeAsync();
-    
-    if (authMode === 'radius') {
-      // RADIUS mode: Save to radgroupreply
-      logger.info('RADIUS mode: Adding profile to RADIUS database');
-      const result = await addPPPoEProfile(profileData);
-      if (result.success) {
-        return res.json({ success: true, message: result.message });
-      } else {
-        return res.json({ success: false, message: result.message });
-      }
+    authMode = await getUserAuthModeAsync();
+
+    if (router_id) {
+      routerObj = await findRouterHelper(router_id);
     }
     
-    // Mikrotik API mode: Need router_id
-    if (!router_id) {
-      return res.json({ success: false, message: 'Pilih NAS (router) terlebih dahulu' });
-    }
-    
-    const sqlite3 = require('sqlite3').verbose();
-    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
-      resolve(row || null);
-    }));
-    
-    if (!routerObj) {
+    if (!routerObj && authMode !== 'radius') {
       return res.json({ success: false, message: 'Router tidak ditemukan' });
     }
     
@@ -623,18 +571,22 @@ router.post('/mikrotik/add-profile', adminAuth, async (req, res) => {
     if (result.success) {
       res.json({ success: true });
     } else {
-      res.json({ success: false, message: result.message });
+      res.json({ success: false, message: result.message || 'Gagal menyimpan profile' });
     }
   } catch (err) {
     logger.error('Error adding PPPoE profile:', err);
-    res.json({ success: false, message: err.message });
+    res.json({ success: false, message: err.message || 'Terjadi kesalahan sistem saat menyimpan profile' });
   }
 });
 
 // POST: Edit Profile PPPoE
 router.post('/mikrotik/edit-profile', adminAuth, async (req, res) => {
+  let routerObj = null;
+  let profileData = {};
+
   try {
-    const { router_id, ...profileData } = req.body;
+    const { router_id, ...data } = req.body;
+    profileData = data;
     
     // Check auth mode
     const { getUserAuthModeAsync } = require('../config/mikrotik');
@@ -643,31 +595,18 @@ router.post('/mikrotik/edit-profile', adminAuth, async (req, res) => {
     if (authMode === 'radius') {
       // RADIUS mode: Update in radgroupreply
       logger.info('RADIUS mode: Updating profile in RADIUS database');
-      logger.info(`📝 Data yang diterima untuk edit profile:`, {
-        name: profileData.name,
-        'remote-address': profileData['remote-address'],
-        'local-address': profileData['local-address'],
-        'rate-limit': profileData['rate-limit'],
-        'dns-server': profileData['dns-server']
-      });
       const result = await editPPPoEProfile(profileData);
       if (result.success) {
         return res.json({ success: true, message: result.message });
       } else {
-        return res.json({ success: false, message: result.message });
+        return res.json({ success: false, message: result.message || 'Gagal mengubah profile' });
       }
     }
     
-    // Mikrotik API mode: Need router_id
-    if (!router_id) {
-      return res.json({ success: false, message: 'Pilih NAS (router) terlebih dahulu' });
+    // Mikrotik API mode
+    if (router_id) {
+      routerObj = await findRouterHelper(router_id);
     }
-    
-    const sqlite3 = require('sqlite3').verbose();
-    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
-      resolve(row || null);
-    }));
     
     if (!routerObj) {
       return res.json({ success: false, message: 'Router tidak ditemukan' });
@@ -677,11 +616,11 @@ router.post('/mikrotik/edit-profile', adminAuth, async (req, res) => {
     if (result.success) {
       res.json({ success: true });
     } else {
-      res.json({ success: false, message: result.message });
+      res.json({ success: false, message: result.message || 'Gagal mengubah profile' });
     }
   } catch (err) {
     logger.error('Error editing PPPoE profile:', err);
-    res.json({ success: false, message: err.message });
+    res.json({ success: false, message: err.message || 'Terjadi kesalahan sistem saat mengubah profile' });
   }
 });
 
@@ -708,11 +647,7 @@ router.post('/mikrotik/delete-profile', adminAuth, async (req, res) => {
     // Mikrotik API mode
     let routerObj = null;
     if (router_id) {
-      const sqlite3 = require('sqlite3').verbose();
-      routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-        db.close();
-        resolve(row || null);
-      }));
+      routerObj = await findRouterHelper(router_id);
     }
     const result = await deletePPPoEProfile(id, routerObj);
     if (result.success) {
@@ -730,8 +665,21 @@ router.post('/mikrotik/delete-profile', adminAuth, async (req, res) => {
 // Catatan: Selalu ambil langsung dari Mikrotik (RouterOS),
 // tidak lagi menggunakan profile dari RADIUS.
 router.get('/mikrotik/hotspot-profiles', adminAuth, async (req, res) => {
+  let combined = [];
+  let errorMessages = [];
+  let routers = [];
+  let settings = getSettingsWithCache();
+  let userAuthMode = 'mikrotik';
+
   try {
-    const routers = await new Promise((resolve) => {
+    // Try to get userAuthMode
+    try {
+      const { getRadiusConfigValue } = require('../config/radiusConfig');
+      const mode = await getRadiusConfigValue('user_auth_mode', null);
+      if (mode) userAuthMode = mode;
+    } catch (e) {}
+
+    routers = await new Promise((resolve) => {
       billingManager.db.all('SELECT * FROM routers ORDER BY id', [], (err, rows) => {
         if (err) {
           logger.error('[DIAGNOSTIC] Hotspot Profiles: error fetching routers:', err.message);
@@ -808,7 +756,6 @@ router.get('/mikrotik/hotspot-profiles', adminAuth, async (req, res) => {
     
     console.log(`=== Total profiles collected: ${combined.length} ===`);
     
-    const settings = getSettingsWithCache();
     res.render('adminMikrotikHotspotProfiles', { 
       profiles: combined, 
       routers,
@@ -816,26 +763,23 @@ router.get('/mikrotik/hotspot-profiles', adminAuth, async (req, res) => {
       error: errorMessages.length > 0 ? `Beberapa router gagal: ${errorMessages.join('; ')}` : null,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge(),
-      userAuthMode: 'mikrotik',
+      userAuthMode: userAuthMode,
       page: 'hotspot-profiles'
     });
   } catch (err) {
     console.error('Error in hotspot profiles GET route:', err);
-    // Try to get userAuthMode for error page
-    let userAuthMode = 'mikrotik';
-    try {
-      const { getRadiusConfigValue } = require('../config/radiusConfig');
-      const mode = await getRadiusConfigValue('user_auth_mode', null);
-      userAuthMode = mode !== null && mode !== undefined ? mode : 'mikrotik';
-    } catch (e) {
-      // Fallback
-    }
     
-    const settings = getSettingsWithCache();
+    // Robust Error Fallback: Refetch routers if they aren't populated yet
+    if (!routers || routers.length === 0) {
+      try {
+        routers = await getAllRoutersHelper();
+      } catch (_) {}
+    }
+
     res.render('adminMikrotikHotspotProfiles', { 
       profiles: [], 
-      routers: [],
-      error: `Gagal mengambil data profile Hotspot: ${err.message}`, 
+      routers: routers, // Preserve NAS list even on error
+      error: `Terjadi kesalahan: ${err.message}`, 
       settings,
       versionInfo: getVersionInfo(),
       versionBadge: getVersionBadge(),
