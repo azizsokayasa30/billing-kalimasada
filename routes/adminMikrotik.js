@@ -446,9 +446,7 @@ router.get('/mikrotik/profiles/api', adminAuth, async (req, res) => {
     
     // If router_id is provided, only fetch from that router
     if (router_id) {
-      const sqlite3 = require('sqlite3').verbose();
       const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-        db.close();
         resolve(row || null);
       }));
       
@@ -795,9 +793,7 @@ router.get('/mikrotik/hotspot-profiles/api', adminAuth, async (req, res) => {
     
     // If router_id is provided, only fetch from that router
     if (router_id) {
-      const sqlite3 = require('sqlite3').verbose();
       const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-        db.close();
         resolve(row || null);
       }));
       if (!routerObj) {
@@ -902,10 +898,7 @@ router.post('/mikrotik/hotspot-profiles/add', adminAuth, async (req, res) => {
     if (!router_id) {
       return res.json({ success: false, message: 'Pilih NAS (router) terlebih dahulu' });
     }
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
+    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
       resolve(row || null);
     }));
     if (!routerObj) {
@@ -950,10 +943,7 @@ router.post('/mikrotik/hotspot-profiles/edit', adminAuth, async (req, res) => {
     if (!id) {
       return res.json({ success: false, message: 'ID profile tidak ditemukan' });
     }
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
+    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
       resolve(row || null);
     }));
     if (!routerObj) {
@@ -996,10 +986,7 @@ router.post('/mikrotik/hotspot-profiles/delete', adminAuth, async (req, res) => 
     if (!id) {
       return res.json({ success: false, message: 'ID profile tidak ditemukan' });
     }
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
+    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
       resolve(row || null);
     }));
     if (!routerObj) {
@@ -1029,10 +1016,7 @@ router.post('/mikrotik/disconnect-session', adminAuth, async (req, res) => {
     logger.info(`${authMode} mode: Disconnecting session for user ${username}`);
     
     // Ambil daftar router
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
-    db.close();
+    const routers = await new Promise((resolve) => billingManager.db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
     
     if (!routers || routers.length === 0) {
       return res.json({ success: false, message: 'Tidak ada router yang dikonfigurasi' });
@@ -1109,10 +1093,7 @@ router.get('/mikrotik/user-stats', adminAuth, async (req, res) => {
     
     // Mikrotik API mode: Get statistics from routers
     logger.info('Mikrotik API mode: Getting user statistics from routers');
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
-    db.close();
+    const routers = await new Promise((resolve) => billingManager.db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || [])));
     let totalUsers = 0, activeUsers = 0;
     for (const r of routers) {
       try {
@@ -1194,22 +1175,18 @@ function getHotspotServersFromDB(db) {
 }
 
 router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
-  let db = null;
   try {
     // Check auth mode
     const { getUserAuthModeAsync } = require('../config/mikrotik');
     const authMode = await getUserAuthModeAsync();
     
-    const sqlite3 = require('sqlite3').verbose();
-    db = new sqlite3.Database(DB_PATH);
-    
     // Pastikan table hotspot_servers ada
-    await ensureHotspotServersTable(db);
+    await ensureHotspotServersTable(billingManager.db);
     
     // Ambil daftar server hotspot dari database
     let hotspotServersDB = [];
     try {
-      hotspotServersDB = await getHotspotServersFromDB(db);
+      hotspotServersDB = await getHotspotServersFromDB(billingManager.db);
     } catch (dbErr) {
       console.error('Error fetching hotspot servers from DB:', dbErr);
       hotspotServersDB = [];
@@ -1218,7 +1195,6 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
     if (authMode === 'radius') {
       // Mode RADIUS: Hanya tampilkan daftar server hotspot dari database (tidak perlu API)
       const settings = getSettingsWithCache();
-      if (db) db.close();
       return res.render('admin/mikrotik/hotspot-server-profiles', {
         servers: [],
         profiles: [],
@@ -1235,7 +1211,7 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
     
     // Mode Mikrotik API: Ambil routers
     const routers = await new Promise((resolve) => {
-      db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
+      billingManager.db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
         if (err) {
           console.error('Error fetching routers:', err);
           resolve([]);
@@ -1249,15 +1225,14 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
     if (!routers || routers.length === 0) {
       console.warn('No routers found in database');
       const settings = getSettingsWithCache();
-      // Ambil server hotspot dari database sebelum menutup db
+      // Ambil server hotspot dari database
       let hotspotServersDBFinal = [];
       try {
-        hotspotServersDBFinal = await getHotspotServersFromDB(db);
+        hotspotServersDBFinal = await getHotspotServersFromDB(billingManager.db);
       } catch (dbErr) {
         console.error('Error fetching hotspot servers from DB:', dbErr);
         hotspotServersDBFinal = [];
       }
-      if (db) db.close();
       return res.render('admin/mikrotik/hotspot-server-profiles', {
         servers: [],
         profiles: [], 
@@ -1335,12 +1310,11 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
     // Ambil daftar server hotspot dari database untuk mode Mikrotik API juga
     let hotspotServersDBFinal = [];
     try {
-      hotspotServersDBFinal = await getHotspotServersFromDB(db);
+      hotspotServersDBFinal = await getHotspotServersFromDB(billingManager.db);
     } catch (dbErr) {
       console.error('Error fetching hotspot servers from DB (Mikrotik API mode):', dbErr);
       hotspotServersDBFinal = [];
     }
-    if (db) db.close();
     
     // Sanitize data untuk memastikan JSON valid (menghilangkan undefined, null, circular references)
     const sanitizedServers = servers.map(server => ({
@@ -1385,15 +1359,6 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
     console.error('Error in hotspot server/profiles GET route:', err);
     console.error('Error stack:', err.stack);
     
-    // Pastikan database ditutup jika masih terbuka
-    if (db) {
-      try {
-        db.close();
-      } catch (closeErr) {
-        console.error('Error closing database:', closeErr);
-      }
-    }
-    
     const settings = getSettingsWithCache();
     // Check auth mode untuk error handler juga
     let userAuthMode = 'mikrotik';
@@ -1404,11 +1369,8 @@ router.get('/mikrotik/hotspot-server-profiles', adminAuth, async (req, res) => {
       
       // Coba ambil server hotspot dari database jika memungkinkan
       try {
-        const sqlite3 = require('sqlite3').verbose();
-        const errorDb = new sqlite3.Database(DB_PATH);
-        await ensureHotspotServersTable(errorDb);
-        hotspotServersDB = await getHotspotServersFromDB(errorDb);
-        errorDb.close();
+        await ensureHotspotServersTable(billingManager.db);
+        hotspotServersDB = await getHotspotServersFromDB(billingManager.db);
       } catch (dbErr) {
         console.error('Error fetching hotspot servers from DB in error handler:', dbErr);
       }
@@ -1480,10 +1442,7 @@ router.get('/mikrotik/hotspot-server-profiles/api', adminAuth, async (req, res) 
     }
 
     // Fetch from all routers
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
-      db.close();
+    const routers = await new Promise((resolve) => billingManager.db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
       if (err) {
         console.error('Error fetching routers:', err);
         resolve([]);
@@ -1559,10 +1518,7 @@ router.post('/mikrotik/hotspot-server-profiles/add', adminAuth, async (req, res)
       return res.json({ success: false, message: 'Router ID harus diisi' });
     }
 
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
+    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
       resolve(row || null);
     }));
 
@@ -1674,13 +1630,9 @@ router.post('/mikrotik/hotspot-server-profiles/delete', adminAuth, async (req, r
 // GET: API untuk mengambil daftar server hotspot dari semua Mikrotik
 router.get('/mikrotik/hotspot-server-profiles/api-servers-from-mikrotik', adminAuth, async (req, res) => {
   try {
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    
     // Ambil semua router yang terdaftar
     const routers = await new Promise((resolve) => {
-      db.all('SELECT * FROM routers ORDER BY name', (err, rows) => {
-        db.close();
+      billingManager.db.all('SELECT * FROM routers ORDER BY name', (err, rows) => {
         if (err) {
           console.error('Error fetching routers:', err);
           resolve([]);
@@ -1750,28 +1702,24 @@ router.post('/mikrotik/hotspot-server-profiles/add-server', adminAuth, async (re
       return res.json({ success: false, message: 'Nama server hotspot harus diisi' });
     }
     
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    
     // Pastikan table ada
-    await ensureHotspotServersTable(db);
+    await ensureHotspotServersTable(billingManager.db);
     
     // Cek apakah nama sudah ada
     const existing = await new Promise((resolve, reject) => {
-      db.get('SELECT id FROM hotspot_servers WHERE name = ?', [name.trim()], (err, row) => {
+      billingManager.db.get('SELECT id FROM hotspot_servers WHERE name = ?', [name.trim()], (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });
     });
     
     if (existing) {
-      db.close();
       return res.json({ success: false, message: 'Nama server hotspot sudah ada' });
     }
     
     // Insert server hotspot baru
     await new Promise((resolve, reject) => {
-      db.run(
+      billingManager.db.run(
         'INSERT INTO hotspot_servers (name, description) VALUES (?, ?)',
         [name.trim(), description ? description.trim() : null],
         function(err) {
@@ -1781,7 +1729,6 @@ router.post('/mikrotik/hotspot-server-profiles/add-server', adminAuth, async (re
       );
     });
     
-    db.close();
     return res.json({ success: true, message: 'Server hotspot berhasil ditambahkan' });
   } catch (err) {
     console.error('Error adding hotspot server:', err);
@@ -1802,41 +1749,36 @@ router.post('/mikrotik/hotspot-server-profiles/edit-server', adminAuth, async (r
       return res.json({ success: false, message: 'Nama server hotspot harus diisi' });
     }
     
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    
     // Pastikan table ada
-    await ensureHotspotServersTable(db);
+    await ensureHotspotServersTable(billingManager.db);
     
     // Cek apakah server dengan ID ini ada
     const existing = await new Promise((resolve, reject) => {
-      db.get('SELECT id FROM hotspot_servers WHERE id = ?', [parseInt(id)], (err, row) => {
+      billingManager.db.get('SELECT id FROM hotspot_servers WHERE id = ?', [parseInt(id)], (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });
     });
     
     if (!existing) {
-      db.close();
       return res.json({ success: false, message: 'Server hotspot tidak ditemukan' });
     }
     
     // Cek apakah nama sudah digunakan oleh server lain
     const nameExists = await new Promise((resolve, reject) => {
-      db.get('SELECT id FROM hotspot_servers WHERE name = ? AND id != ?', [name.trim(), parseInt(id)], (err, row) => {
+      billingManager.db.get('SELECT id FROM hotspot_servers WHERE name = ? AND id != ?', [name.trim(), parseInt(id)], (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });
     });
     
     if (nameExists) {
-      db.close();
       return res.json({ success: false, message: 'Nama server hotspot sudah digunakan oleh server lain' });
     }
     
     // Update server hotspot
     await new Promise((resolve, reject) => {
-      db.run(
+      billingManager.db.run(
         'UPDATE hotspot_servers SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         [name.trim(), description ? description.trim() : null, parseInt(id)],
         function(err) {
@@ -1846,7 +1788,6 @@ router.post('/mikrotik/hotspot-server-profiles/edit-server', adminAuth, async (r
       );
     });
     
-    db.close();
     return res.json({ success: true, message: 'Server hotspot berhasil diupdate' });
   } catch (err) {
     console.error('Error editing hotspot server:', err);
@@ -1863,34 +1804,29 @@ router.post('/mikrotik/hotspot-server-profiles/delete-server', adminAuth, async 
       return res.json({ success: false, message: 'ID server hotspot harus diisi' });
     }
     
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    
     // Pastikan table ada
-    await ensureHotspotServersTable(db);
+    await ensureHotspotServersTable(billingManager.db);
     
     // Cek apakah server dengan ID ini ada
     const existing = await new Promise((resolve, reject) => {
-      db.get('SELECT id FROM hotspot_servers WHERE id = ?', [parseInt(id)], (err, row) => {
+      billingManager.db.get('SELECT id FROM hotspot_servers WHERE id = ?', [parseInt(id)], (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });
     });
     
     if (!existing) {
-      db.close();
       return res.json({ success: false, message: 'Server hotspot tidak ditemukan' });
     }
     
     // Hapus server hotspot
     await new Promise((resolve, reject) => {
-      db.run('DELETE FROM hotspot_servers WHERE id = ?', [parseInt(id)], (err) => {
+      billingManager.db.run('DELETE FROM hotspot_servers WHERE id = ?', [parseInt(id)], (err) => {
         if (err) reject(err);
         else resolve();
       });
     });
     
-    db.close();
     return res.json({ success: true, message: 'Server hotspot berhasil dihapus' });
   } catch (err) {
     console.error('Error deleting hotspot server:', err);
@@ -1911,10 +1847,7 @@ router.get('/mikrotik/interfaces/api', adminAuth, async (req, res) => {
       return res.json({ success: false, interfaces: [], message: 'Router ID harus diisi' });
     }
 
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
+    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
       resolve(row || null);
     }));
 
@@ -1945,10 +1878,7 @@ router.get('/mikrotik/address-pools/api', adminAuth, async (req, res) => {
       return res.json({ success: false, pools: [], message: 'Router ID harus diisi' });
     }
 
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
+    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
       resolve(row || null);
     }));
 
@@ -1973,13 +1903,9 @@ router.get('/mikrotik/address-pools/api', adminAuth, async (req, res) => {
 // GET: API Address Pools dari semua router yang terdaftar
 router.get('/mikrotik/address-pools/api/all', adminAuth, async (req, res) => {
   try {
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    
     // Get all routers
     const routers = await new Promise((resolve) => {
-      db.all('SELECT * FROM routers ORDER BY name', (err, rows) => {
-        db.close();
+      billingManager.db.all('SELECT * FROM routers ORDER BY name', (err, rows) => {
         resolve(rows || []);
       });
     });
@@ -2072,8 +1998,7 @@ router.get('/mikrotik/hotspot-servers/api', adminAuth, async (req, res) => {
     const db = new sqlite3.Database(DB_PATH);
     
     if (router_id) {
-      const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-        db.close();
+      const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
         resolve(row || null);
       }));
       if (!routerObj) {
@@ -2095,8 +2020,7 @@ router.get('/mikrotik/hotspot-servers/api', adminAuth, async (req, res) => {
     }
 
     // Ambil dari semua router
-    const routers = await new Promise((resolve) => db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
-      db.close();
+    const routers = await new Promise((resolve) => billingManager.db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
       if (err) {
         console.error('Error fetching routers:', err);
         resolve([]);
@@ -2161,10 +2085,7 @@ router.post('/mikrotik/hotspot-servers/add', adminAuth, async (req, res) => {
       return res.json({ success: false, message: 'Router ID harus diisi' });
     }
 
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
+    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
       resolve(row || null);
     }));
 
@@ -2206,10 +2127,7 @@ router.post('/mikrotik/hotspot-servers/edit', adminAuth, async (req, res) => {
       return res.json({ success: false, message: 'Router ID harus diisi' });
     }
 
-    const sqlite3 = require('sqlite3').verbose();
-    const db = new sqlite3.Database(DB_PATH);
-    const routerObj = await new Promise((resolve) => db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
-      db.close();
+    const routerObj = await new Promise((resolve) => billingManager.db.get('SELECT * FROM routers WHERE id=?', [parseInt(router_id)], (err, row) => {
       resolve(row || null);
     }));
 
