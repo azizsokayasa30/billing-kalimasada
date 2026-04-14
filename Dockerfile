@@ -1,36 +1,47 @@
-# Dockerfile untuk Billing-System
-# Build dengan: docker build -t gembok-bill .
-# Run dengan: docker run -d -p 22917:22917 --name gembok-bill gembok-bill
+# Stage 1: Build
+FROM node:20-bullseye-slim AS build
 
-FROM node:20-bullseye-slim
-
-# Set working directory
 WORKDIR /app
 
-# Install sistem dependencies untuk native modules
+# Install system dependencies for native modules
 RUN apt-get update && apt-get install -y \
     build-essential \
-    python3-dev \
+    python3 \
     libsqlite3-dev \
-    curl \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies dengan rebuild otomatis
-RUN npm install && npm rebuild
+# Install all dependencies (including devDependencies for potential build steps)
+RUN npm install
 
-# Copy aplikasi files
+# Copy application files
 COPY . .
 
-# Create required directories
+# Rebuild native modules for the current architecture
+RUN npm rebuild
+
+# Stage 2: Production
+FROM node:20-bullseye-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libsqlite3-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy from build stage
+COPY --from=build /app /app
+
+# Create required directories for persistence
 RUN mkdir -p data/backup logs whatsapp-session
 
-# Set permissions
-RUN chmod 755 data/ logs/ whatsapp-session/ && \
-    chmod 644 settings.json
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=22917
 
 # Expose port
 EXPOSE 22917
@@ -39,5 +50,6 @@ EXPOSE 22917
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:22917/health || exit 1
 
-# Start aplikasi (Inisialisasi database dulu baru start)
-CMD ["sh", "-c", "node scripts/init-database.js && npm start"]
+# Start application (Initialize database then start)
+CMD ["sh", "-c", "node scripts/init-database.js && node app.js"]
+

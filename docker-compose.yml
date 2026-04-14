@@ -6,7 +6,7 @@ services:
     container_name: gembok-bill
     restart: unless-stopped
     ports:
-      - "22917:22917"
+      - "${PORT:-22917}:${PORT:-22917}"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -14,9 +14,15 @@ services:
       - ./settings.json:/app/settings.json
     environment:
       - NODE_ENV=production
-      - PORT=22917
+      - PORT=${PORT:-22917}
     networks:
       - gembok-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-22917}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   tunnel:
     image: cloudflare/cloudflared:latest
@@ -31,3 +37,4 @@ services:
 networks:
   gembok-network:
     driver: bridge
+
