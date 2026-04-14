@@ -6,7 +6,7 @@ services:
     container_name: gembok-bill
     restart: unless-stopped
     ports:
-      - "22917:22917"
+      - "22916:22916"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -14,11 +14,11 @@ services:
       - ./settings.json:/app/settings.json
     environment:
       - NODE_ENV=production
-      - PORT=22917
+      - PORT=22916
     networks:
       - gembok-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:22917/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:22916/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -28,7 +28,7 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared-tunnel
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run --token eyJhIjoiYTQyYmFlZTg4MThjZTJjOTFkNmNiMTI3NDY5NDA0MWEiLCJ0IjoiZGZkOGJkNGQtOTc5My00ODMzLThmZmItOTgxYWYzOTgyMGZiIiwicyI6Ik0yRTBaRGMzWW1NdE1UZzBNeTAwTURsbExXRTJNalF0WmpOaU9XUTJZV1E1WmpjeCJ9
     networks:
       - gembok-network
     depends_on:

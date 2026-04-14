@@ -41,14 +41,14 @@ RUN mkdir -p data/backup logs whatsapp-session
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=22917
+ENV PORT=22916
 
 # Expose port
-EXPOSE 22917
+EXPOSE 22916
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:22917/health || exit 1
+    CMD curl -f http://localhost:22916/health || exit 1
 
 # Start application (Initialize database then start)
 CMD ["sh", "-c", "node scripts/init-database.js && node app.js"]

@@ -34,7 +34,7 @@ fi
 if [ ! -f .env ]; then
     echo -e "${YELLOW}⚠️  .env not found! Creating from example...${NC}"
     cat <<EOF > .env
-PORT=22917
+PORT=22916
 TUNNEL_TOKEN=your_cloudflare_tunnel_token_here
 EOF
     echo -e "${GREEN}✅ Created .env. Please update TUNNEL_TOKEN if needed.${NC}"
@@ -53,7 +53,7 @@ docker compose up -d --build
 
 echo ""
 echo -e "${GREEN}✅ Gembok-Bill is starting!${NC}"
-echo -e "  - Web UI: http://localhost:$(grep PORT .env | cut -d '=' -f2 || echo 22917)"
+echo -e "  - Web UI: http://localhost:$(grep PORT .env | cut -d '=' -f2 || echo 22916)"
 echo -e "  - Logs: docker compose logs -f gembok-bill"
 echo ""
 echo -e "${YELLOW}📌 Note: Scan the WhatsApp QR code by viewing logs: docker compose logs -f gembok-bill${NC}"
