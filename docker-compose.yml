@@ -6,7 +6,7 @@ services:
     container_name: gembok-bill
     restart: unless-stopped
     ports:
-      - "22916:22916"
+      - "22917:22917"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -14,7 +14,7 @@ services:
       - ./settings.json:/app/settings.json
     environment:
       - NODE_ENV=production
-      - PORT=22916
+      - PORT=22917
     networks:
       - gembok-network
 
