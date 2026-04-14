@@ -2,6 +2,10 @@ const express = require('express');
 const path = require('path');
 const axios = require('axios');
 const logger = require('./config/logger');
+console.log('🚀 [BOOTSTRAP] CVLMEDIA Application is starting...');
+console.log(`🚀 [BOOTSTRAP] Current working directory: ${process.cwd()}`);
+console.log(`🚀 [BOOTSTRAP] NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`🚀 [BOOTSTRAP] PORT from ENV: ${process.env.PORT}`);
 const whatsapp = require('./config/whatsapp');
 const { monitorPPPoEConnections } = require('./config/mikrotik');
 const fs = require('fs');
@@ -912,6 +916,7 @@ const port = process.env.PORT || getSetting('server_port', 4555);
 logger.info(`Attempting to start server on port: ${port} (Source: ${process.env.PORT ? 'Environment' : 'Settings'})`);
 
 // Mulai server dengan port dari konfigurasi
+console.log(`🚀 [BOOTSTRAP] Final port selected: ${port}`);
 startServer(port);
 
 // Auto setup GenieACS DNS untuk development (DISABLED - menggunakan web interface)
