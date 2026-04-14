@@ -2,7 +2,7 @@
 const { RouterOSAPI } = require('node-routeros');
 const logger = require('./logger');
 const { getSetting } = require('./settingsManager');
-const mysql = require('mysql2/promise');
+const { getRadiusConnection: getRadiusConnectionSQLite } = require('./radiusSQLite');
 const fs = require('fs');
 const path = require('path');
 const cacheManager = require('./cacheManager');
@@ -40,7 +40,7 @@ async function connectToMikrotik() {
             user,
             password,
             keepalive: true,
-            timeout: 5000 // 5 second timeout
+            timeout: 10000 // 10 second timeout (aligned with production)
         });
         
         // Connect ke Mikrotik
@@ -134,7 +134,7 @@ async function getMikrotikConnectionForRouter(routerObj) {
     if (!password) throw new Error('Koneksi router gagal: Password tidak ditemukan');
     
     logger.info(`[MIKROTIK] Creating new connection to ${host}:${port} with user ${user}`);
-    const conn = new RouterOSAPI({ host, port, user, password, keepalive: true, timeout: 5000 });
+    const conn = new RouterOSAPI({ host, port, user, password, keepalive: true, timeout: 10000 });
     
     try {
         await conn.connect();
@@ -182,57 +182,13 @@ async function getMikrotikConnectionForCustomer(customer) {
     return await getMikrotikConnectionForRouter(router);
 }
 
-// Fungsi untuk koneksi ke database RADIUS (MySQL)
+// Fungsi untuk koneksi ke database RADIUS (SQLite)
 async function getRadiusConnection() {
-    // Prioritaskan ambil dari database (app_settings), fallback ke settings.json
-    let radiusConfig;
     try {
-        const { getRadiusConfig } = require('./radiusConfig');
-        radiusConfig = await getRadiusConfig();
-    } catch (e) {
-        // Fallback ke settings.json jika database tidak bisa diakses
-        logger.warn('Failed to get radius config from database, using settings.json fallback:', e.message);
-        radiusConfig = {
-            radius_host: getSetting('radius_host', 'localhost'),
-            radius_user: getSetting('radius_user', 'radius'),
-            radius_password: getSetting('radius_password', 'radius'),
-            radius_database: getSetting('radius_database', 'radius')
-        };
-    }
-    
-    const host = radiusConfig.radius_host || 'localhost';
-    const user = radiusConfig.radius_user || 'radius';
-    const password = radiusConfig.radius_password || 'radius';
-    const database = radiusConfig.radius_database || 'radius';
-
-    try {
-        const conn = await mysql.createConnection({ 
-            host, 
-            user, 
-            password, 
-            database,
-            enableKeepAlive: true,
-            keepAliveInitialDelay: 10000,
-            connectTimeout: 5000
-        });
-        return conn;
+        return await getRadiusConnectionSQLite();
     } catch (error) {
-        let enhancedMessage = error.message || 'Unknown error';
-        if (error.code === 'ECONNREFUSED' || error.errno === -4078) {
-            enhancedMessage = `Koneksi ke database RADIUS ditolak (${host}:${user}). Pastikan service MySQL/MariaDB sudah dijalankan.`;
-        } else if (error.code === 'ER_ACCESS_DENIED_ERROR') {
-            enhancedMessage = `Akses ke database RADIUS ditolak. Cek Username/Password di pengaturan RADIUS.`;
-        } else if (error.code === 'ER_BAD_DB_ERROR') {
-            enhancedMessage = `Database '${database}' tidak ditemukan di MySQL.`;
-        } else if (error.code === 'ER_PLUGIN_IS_NOT_LOADED' || enhancedMessage.includes('mysql_native_password')) {
-            enhancedMessage = `Plugin 'mysql_native_password' tidak dimuat di server MySQL RADIUS.`;
-            logger.error(`[RADIUS] FIX: Run 'ALTER USER "${user}"@"%" IDENTIFIED WITH caching_sha2_password BY "${password}";' on your MySQL server.`);
-        }
-        
-        const enhancedError = new Error(enhancedMessage);
-        enhancedError.code = error.code;
-        enhancedError.errno = error.errno;
-        throw enhancedError;
+        logger.error(`[RADIUS] Failed to get SQLite connection: ${error.message}`);
+        throw error;
     }
 }
 
@@ -481,7 +437,7 @@ async function getActivePPPoEConnectionsRadius() {
                 acctinputoctets,
                 acctoutputoctets,
                 nasipaddress,
-                TIMESTAMPDIFF(SECOND, acctstarttime, NOW()) as session_time
+                (strftime('%s', 'now') - strftime('%s', acctstarttime)) as session_time
             FROM radacct
             WHERE acctstoptime IS NULL
         `;
@@ -626,7 +582,7 @@ async function addPPPoEUserRadius({ username, password, profile = null }) {
         
         // Insert atau update password di radcheck
         await conn.execute(
-            "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
             [username, password, password]
         );
         logger.info(`[RADIUS] Password inserted/updated for user ${username}`);
@@ -863,7 +819,7 @@ async function ensureIsolirProfileRadius() {
                 logger.warn('Profile isolir tidak punya Framed-Pool atau Framed-IP-Address, menambahkan Framed-Pool default...');
                 const isolirPool = getSetting('isolir_pool', 'isolir-pool');
                 await conn.execute(
-                    "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-Pool', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                    "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-Pool', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
                     [isolirPool, isolirPool]
                 );
                 logger.info(`Profile isolir sekarang menggunakan Framed-Pool: ${isolirPool}`);
@@ -891,7 +847,7 @@ async function ensureIsolirProfileRadius() {
         // Pool ini biasanya dibuat dari script generator isolir Mikrotik
         const isolirPool = getSetting('isolir_pool', 'isolir-pool');
         await conn.execute(
-            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-Pool', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-Pool', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
             [isolirPool, isolirPool]
         );
         logger.info(`Profile isolir menggunakan Framed-Pool: ${isolirPool}`);
@@ -904,7 +860,7 @@ async function ensureIsolirProfileRadius() {
                 "DELETE FROM radgroupreply WHERE groupname = 'isolir' AND attribute = 'Framed-Pool'"
             );
             await conn.execute(
-                "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-IP-Address', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-IP-Address', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
                 [isolirIpRange, isolirIpRange]
             );
             logger.info(`Profile isolir menggunakan Framed-IP-Address: ${isolirIpRange}`);
@@ -1126,7 +1082,7 @@ async function enableHotspotUserRadius(username) {
             const oldPassword = oldPasswordRows[0].value;
             // Restore password
             await conn.execute(
-                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
                 [username, oldPassword, oldPassword]
             );
             // Hapus X-Old-Password
@@ -1144,7 +1100,7 @@ async function enableHotspotUserRadius(username) {
                     // Gunakan hotspot_username sebagai password default jika tidak ada password tersimpan
                     const defaultPassword = member.hotspot_username;
                     await conn.execute(
-                        "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                        "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
                         [username, defaultPassword, defaultPassword]
                     );
                     logger.info(`[RADIUS] Restored password from billing DB for ${username}`);
@@ -2686,7 +2642,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
 
         // Insert password ke radcheck
         await conn.execute(
-            "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+            "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
             [username, password, password]
         );
         
@@ -2740,7 +2696,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
                     
                     // Sync rate limit ke radgroupreply
                     await conn.execute(
-                        "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'MikroTik-Rate-Limit', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                        "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'MikroTik-Rate-Limit', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
                         [profileToUse, rateLimitStr, rateLimitStr]
                     );
                     
@@ -2759,7 +2715,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         const mikrotikProfileName = profile || profileToUse;
         if (mikrotikProfileName) {
             await conn.execute(
-                "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Group', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Group', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
                 [profileToUse, mikrotikProfileName, mikrotikProfileName]
             );
             logger.info(`✅ Ensured Mikrotik-Group=${mikrotikProfileName} for RADIUS profile/group ${profileToUse}`);
@@ -2774,7 +2730,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         // Add comment to radreply table if provided
         if (comment) {
             await conn.execute(
-                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Reply-Message', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Reply-Message', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
                 [username, comment, comment]
             );
         }
@@ -2808,18 +2764,18 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         if (!isGlobalServer) {
             if (nasPortId) {
                 await conn.execute(
-                    "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'NAS-Port-Id', '==', ?) ON DUPLICATE KEY UPDATE value = ?",
+                    "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'NAS-Port-Id', '==', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
                     [username, nasPortId, nasPortId]
                 );
             }
 
             await conn.execute(
-                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Called-Station-Id', '==', ?) ON DUPLICATE KEY UPDATE value = ?",
+                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Called-Station-Id', '==', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
                 [username, sanitizedServer, sanitizedServer]
             );
 
             await conn.execute(
-                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Mikrotik-Server', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Mikrotik-Server', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
                 [username, sanitizedServer, sanitizedServer]
             );
 
@@ -2830,13 +2786,13 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
 
         if (uptimeSeconds) {
             await conn.execute(
-                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Max-All-Session', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Max-All-Session', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
                 [username, uptimeSeconds.toString(), uptimeSeconds.toString()]
             );
             logger.info(`Voucher ${username} uptime limit set to ${uptimeSeconds} seconds`);
 
             await conn.execute(
-                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
                 [username, uptimeSeconds.toString(), uptimeSeconds.toString()]
             );
             logger.info(`Voucher ${username} session timeout set to ${uptimeSeconds} seconds`);
@@ -2849,7 +2805,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
 
         if (validitySeconds) {
             await conn.execute(
-                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Expire-After', ':=', ?) ON DUPLICATE KEY UPDATE value = ?",
+                "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Expire-After', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
                 [username, validitySeconds.toString(), validitySeconds.toString()]
             );
             logger.info(`Voucher ${username} validity set to ${validitySeconds} seconds`);
@@ -4924,16 +4880,10 @@ async function disconnectHotspotUser(username, routerObj = null) {
 }
 // Fungsi untuk menambah profile hotspot
 async function addHotspotProfile(profileData, routerObj = null) {
-    let conn = null;
     try {
+        let conn = null;
         if (routerObj) {
-            logger.info(`Connecting to router for add profile: ${routerObj.name} (${routerObj.nas_ip}:${routerObj.port || 8728})`);
-            try {
-                conn = await getMikrotikConnectionForRouter(routerObj);
-            } catch (connError) {
-                logger.error(`Connection failed to ${routerObj.name}:`, connError.message);
-                return { success: false, message: `Koneksi gagal ke router ${routerObj.name}: ${connError.message}` };
-            }
+            conn = await getMikrotikConnectionForRouter(routerObj);
         } else {
             conn = await getMikrotikConnection();
         }
@@ -4942,13 +4892,9 @@ async function addHotspotProfile(profileData, routerObj = null) {
             return { success: false, message: 'Koneksi ke Mikrotik gagal' };
         }
         
-        // Extract only valid fields, exclude router_id and id
         const {
             name,
             comment,
-            // rateLimit di sini boleh berupa:
-            // - string langsung format Mikrotik (contoh "2M/5M 5M/10M")
-            // - atau legacy: angka + unit yang akan diformat otomatis
             rateLimit,
             rateLimitUnit,
             sessionTimeout,
@@ -4967,48 +4913,31 @@ async function addHotspotProfile(profileData, routerObj = null) {
             validityUnit
         } = profileData;
         
-        if (!name || !name.trim()) {
-            return { success: false, message: 'Nama profile harus diisi' };
-        }
+        // PENTING: Gunakan hanya parameter yang didukung oleh /ip/hotspot/user/profile/add
+        // Beberapa parameter mungkin menyebabkan "unknown parameter" error pada versi ROS tertentu
         
-        // Build parameters array - ONLY include core parameters that are definitely supported
-        // Skip all optional parameters that might cause "unknown parameter" error
-        const params = [];
+        const params = [
+            '=name=' + String(name).trim()
+        ];
         
-        // Name is required
-        if (!name || !String(name).trim()) {
-            return { success: false, message: 'Nama profile harus diisi' };
-        }
-        params.push('=name=' + String(name).trim());
-        
-        // Comment - safe parameter
-        if (comment !== undefined && comment !== null && String(comment).trim() !== '') {
+        // Comment - safe field
+        if (comment && comment.trim()) {
             params.push('=comment=' + String(comment).trim());
         }
         
-        // Rate limit
-        // - Jika user mengisi string langsung (mis. "2M/5M 5M/10M"), kirim apa adanya.
-        // - Jika tidak, fallback ke format legacy angka + unit.
-        if (rateLimit && String(rateLimit).trim() !== '') {
-            const rateLimitStr = String(rateLimit).trim();
-            // Jika kelihatan sudah dalam format Mikrotik (mengandung '/' atau huruf satuan), kirim langsung
-            if (/[kKmMgG]/.test(rateLimitStr) || rateLimitStr.includes('/')) {
-                params.push('=rate-limit=' + rateLimitStr);
-                logger.info(`Rate limit (raw) dikirim: ${rateLimitStr}`);
-            } else if (rateLimitUnit && String(rateLimitUnit).trim() !== '') {
-                // Legacy: angka + unit
-                const rateLimitValue = rateLimitStr;
-                let rateLimitUnitValue = String(rateLimitUnit).trim().toLowerCase();
-                if (['k', 'm', 'g'].includes(rateLimitUnitValue)) {
-                    if (rateLimitUnitValue === 'm') rateLimitUnitValue = 'M';
-                    if (rateLimitUnitValue === 'g') rateLimitUnitValue = 'G';
-                    if (rateLimitUnitValue === 'k') rateLimitUnitValue = 'K';
-                    const numValue = parseInt(rateLimitValue);
-                    if (!isNaN(numValue) && numValue > 0) {
-                        const rateLimitFormatted = numValue + rateLimitUnitValue + '/' + numValue + rateLimitUnitValue;
-                        params.push('=rate-limit=' + rateLimitFormatted);
-                        logger.info(`Rate limit formatted (legacy): ${rateLimitFormatted}`);
-                    }
+        // Rate limit: format 'upload/download' (same value for both if only one provided)
+        if (rateLimit && rateLimitUnit && String(rateLimit).trim() !== '' && String(rateLimitUnit).trim() !== '') {
+            const rateLimitValue = String(rateLimit).trim();
+            let rateLimitUnitValue = String(rateLimitUnit).trim().toLowerCase();
+            if (['k', 'm', 'g', 'K', 'M', 'G'].includes(rateLimitUnitValue)) {
+                if (rateLimitUnitValue === 'm' || rateLimitUnitValue === 'M') rateLimitUnitValue = 'M';
+                else if (rateLimitUnitValue === 'g' || rateLimitUnitValue === 'G') rateLimitUnitValue = 'G';
+                else if (rateLimitUnitValue === 'k' || rateLimitUnitValue === 'K') rateLimitUnitValue = 'K';
+                const numValue = parseInt(rateLimitValue);
+                if (!isNaN(numValue) && numValue > 0) {
+                    // Format: upload/download (same value for both)
+                    const rateLimitFormatted = numValue + rateLimitUnitValue + '/' + numValue + rateLimitUnitValue;
+                    params.push('=rate-limit=' + rateLimitFormatted);
                 }
             }
         }
@@ -5068,222 +4997,18 @@ async function addHotspotProfile(profileData, routerObj = null) {
             }
         }
         
-        // Log parameters for debugging
-        logger.info('=== Adding Hotspot Profile ===');
-        logger.info('Name:', name);
-        logger.info('Router:', routerObj ? `${routerObj.name} (${routerObj.nas_ip}:${routerObj.port || 8728})` : 'default');
-        logger.info('Total params:', params.length);
-        logger.info('Raw params:', JSON.stringify(params));
-        params.forEach((p, idx) => {
-            logger.info(`  Param ${idx + 1}: ${p}`);
-        });
+        logger.info(`Adding hotspot profile with params: ${JSON.stringify(params)}`);
         
-        try {
-            await conn.write('/ip/hotspot/user/profile/add', params);
-            logger.info('✓ Successfully added hotspot profile:', name);
-            return { success: true, message: 'Profile hotspot berhasil ditambahkan' };
-        } catch (apiError) {
-            // Try to identify which parameter is causing the issue
-            logger.error('✗ Mikrotik API Error:', apiError.message);
-            logger.error('Error stack:', apiError.stack);
-            logger.error('Parameters that were sent:', JSON.stringify(params));
-            
-            // If error mentions "unknown parameter", try with minimal parameters (name only first)
-            if (apiError.message && apiError.message.toLowerCase().includes('unknown parameter')) {
-                logger.warn('=== Unknown parameter error, trying minimal approach ===');
-                
-                // Try with name only first
-                try {
-                    logger.info('Attempt 1: Name only');
-                    const nameOnlyParams = ['=name=' + String(name).trim()];
-                    await conn.write('/ip/hotspot/user/profile/add', nameOnlyParams);
-                    logger.info('✓ Success with name only, now updating with other params');
-                    
-                    // Get the profile ID we just created
-                    const profiles = await conn.write('/ip/hotspot/user/profile/print', ['?name=' + String(name).trim()]);
-                    if (!profiles || profiles.length === 0) {
-                        throw new Error('Profile created but not found');
-                    }
-                    const profileId = profiles[0]['.id'];
-                    
-                    // Now update with other parameters ONE BY ONE to avoid "unknown parameter" error
-                    logger.info('Updating profile parameters one by one...');
-                    
-                    // Update comment
-                    if (comment && comment.trim()) {
-                        try {
-                            await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + profileId, '=comment=' + String(comment).trim()]);
-                            logger.info(`✓ Comment updated: ${comment}`);
-                        } catch (e) {
-                            logger.warn(`✗ Failed to update comment: ${e.message}`);
-                        }
-                    }
-                    
-                    // Update rate-limit
-                    if (rateLimit && rateLimitUnit && String(rateLimit).trim() !== '' && String(rateLimitUnit).trim() !== '') {
-                        const rateLimitValue = String(rateLimit).trim();
-                        let rateLimitUnitValue = String(rateLimitUnit).trim().toLowerCase();
-                        if (['k', 'm', 'g', 'K', 'M', 'G'].includes(rateLimitUnitValue)) {
-                            if (rateLimitUnitValue === 'm' || rateLimitUnitValue === 'M') rateLimitUnitValue = 'M';
-                            else if (rateLimitUnitValue === 'g' || rateLimitUnitValue === 'G') rateLimitUnitValue = 'G';
-                            else if (rateLimitUnitValue === 'k' || rateLimitUnitValue === 'K') rateLimitUnitValue = 'K';
-                            const numValue = parseInt(rateLimitValue);
-                            if (!isNaN(numValue) && numValue > 0) {
-                                // Format: upload/download (same value for both)
-                                const rateLimitFormatted = numValue + rateLimitUnitValue + '/' + numValue + rateLimitUnitValue;
-                                try {
-                                    await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + profileId, '=rate-limit=' + rateLimitFormatted]);
-                                    logger.info(`✓ Rate limit updated: ${rateLimitFormatted}`);
-                                } catch (e) {
-                                    logger.warn(`✗ Failed to update rate limit: ${e.message}`);
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Update session-timeout
-                    if (sessionTimeout && sessionTimeoutUnit && String(sessionTimeout).trim() !== '' && String(sessionTimeoutUnit).trim() !== '') {
-                        const sessionTimeoutValue = String(sessionTimeout).trim();
-                        let sessionTimeoutUnitValue = String(sessionTimeoutUnit).trim().toLowerCase();
-                        // Map ke format standar Mikrotik: S, m, h, d
-                        const timeoutUnitMap = { 
-                            's': 's', 'detik': 's',           // detik
-                            'm': 'm', 'menit': 'm', 'men': 'm', // menit (lowercase)
-                            'h': 'h', 'jam': 'h',              // jam
-                            'd': 'd', 'hari': 'd'              // hari
-                        };
-                        if (timeoutUnitMap[sessionTimeoutUnitValue]) {
-                            sessionTimeoutUnitValue = timeoutUnitMap[sessionTimeoutUnitValue];
-                            const numValue = parseInt(sessionTimeoutValue);
-                            if (!isNaN(numValue) && numValue > 0) {
-                                try {
-                                    await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + profileId, '=session-timeout=' + numValue + sessionTimeoutUnitValue]);
-                                    logger.info(`✓ Session timeout updated: ${numValue}${sessionTimeoutUnitValue}`);
-                                } catch (e) {
-                                    logger.warn(`✗ Failed to update session timeout: ${e.message}`);
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Update idle-timeout
-                    if (idleTimeout && idleTimeoutUnit && String(idleTimeout).trim() !== '' && String(idleTimeoutUnit).trim() !== '') {
-                        const idleTimeoutValue = String(idleTimeout).trim();
-                        let idleTimeoutUnitValue = String(idleTimeoutUnit).trim().toLowerCase();
-                        // Map ke format standar Mikrotik: S, m, h, d
-                        const timeoutUnitMap = { 
-                            's': 's', 'detik': 's',           // detik
-                            'm': 'm', 'menit': 'm', 'men': 'm', // menit (lowercase)
-                            'h': 'h', 'jam': 'h',              // jam
-                            'd': 'd', 'hari': 'd'              // hari
-                        };
-                        if (timeoutUnitMap[idleTimeoutUnitValue]) {
-                            idleTimeoutUnitValue = timeoutUnitMap[idleTimeoutUnitValue];
-                            const numValue = parseInt(idleTimeoutValue);
-                            if (!isNaN(numValue) && numValue > 0) {
-                                try {
-                                    await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + profileId, '=idle-timeout=' + numValue + idleTimeoutUnitValue]);
-                                    logger.info(`✓ Idle timeout updated: ${numValue}${idleTimeoutUnitValue}`);
-                                } catch (e) {
-                                    logger.warn(`✗ Failed to update idle timeout: ${e.message}`);
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Update shared-users
-                    if (sharedUsers !== undefined && sharedUsers !== null && String(sharedUsers).trim() !== '' && String(sharedUsers).trim() !== '0') {
-                        const sharedUsersValue = parseInt(String(sharedUsers).trim());
-                        if (!isNaN(sharedUsersValue) && sharedUsersValue > 0) {
-                            try {
-                                await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + profileId, '=shared-users=' + sharedUsersValue]);
-                                logger.info(`✓ Shared users updated: ${sharedUsersValue}`);
-                            } catch (e) {
-                                logger.warn(`✗ Failed to update shared users: ${e.message}`);
-                            }
-                        }
-                    }
-                    
-                    // Update limit-uptime
-                    if (limitUptimeValue !== undefined && limitUptimeValue !== null && String(limitUptimeValue).trim() !== '' && String(limitUptimeValue).trim() !== '0') {
-                        const limitUptimeValueValue = parseInt(String(limitUptimeValue).trim());
-                        if (!isNaN(limitUptimeValueValue) && limitUptimeValueValue > 0) {
-                            try {
-                                await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + profileId, '=limit-uptime=' + limitUptimeValueValue]);
-                                logger.info(`✓ Limit uptime updated: ${limitUptimeValueValue}`);
-                            } catch (e) {
-                                logger.warn(`✗ Failed to update limit uptime: ${e.message}`);
-                            }
-                        }
-                    }
-                    
-                    // Update validity
-                    if (validityValue !== undefined && validityValue !== null && String(validityValue).trim() !== '' && String(validityValue).trim() !== '0') {
-                        const validityValueValue = parseInt(String(validityValue).trim());
-                        if (!isNaN(validityValueValue) && validityValueValue > 0) {
-                            try {
-                                await conn.write('/ip/hotspot/user/profile/set', ['=.id=' + profileId, '=validity=' + validityValueValue]);
-                                logger.info(`✓ Validity updated: ${validityValueValue}`);
-                            } catch (e) {
-                                logger.warn(`✗ Failed to update validity: ${e.message}`);
-                            }
-                        }
-                    }
-                    
-                    logger.info('✓ Successfully added and updated profile');
-                    
-                    // Close connection if created for this request
-                    if (routerObj && conn && typeof conn.close === 'function') {
-                        try {
-                            await conn.close();
-                        } catch (closeError) {
-                            logger.warn('Error closing connection:', closeError.message);
-                        }
-                    }
-                    
-                    return { success: true, message: 'Profile hotspot berhasil ditambahkan' };
-                } catch (fallbackError) {
-                    logger.error(`Fallback approach also failed: ${fallbackError.message}`);
-                    
-                    // Close connection on error
-                    if (routerObj && conn && typeof conn.close === 'function') {
-                        try {
-                            await conn.close();
-                        } catch (closeError) {
-                            // Ignore
-                        }
-                    }
-                    
-                    return { success: false, message: `Gagal menambah profile: ${fallbackError.message}. Coba dengan nama profile yang berbeda atau pastikan koneksi ke router berhasil.` };
-                }
-            }
-            
-            // Close connection before throwing
-            if (routerObj && conn && typeof conn.close === 'function') {
-                try {
-                    await conn.close();
-                } catch (closeError) {
-                    // Ignore
-                }
-            }
-            
-            throw apiError;
-        } finally {
-            // Ensure connection is closed if it was created for this request
-            if (routerObj && conn && typeof conn.close === 'function') {
-                try {
-                    await conn.close();
-                } catch (closeError) {
-                    // Ignore close errors
-                }
-            }
-        }
+        await conn.write('/ip/hotspot/user/profile/add', params);
+        
+        logger.info(`Hotspot profile '${String(profileData.name).trim()}' berhasil ditambahkan`);
+        return { success: true, message: 'Profile hotspot berhasil ditambahkan' };
     } catch (error) {
         logger.error(`Error adding hotspot profile: ${error.message}`);
-        logger.error(`Error stack:`, error.stack);
-        return { success: false, message: `Gagal menambah profile: ${error.message}` };
+        return { success: false, message: error.message || 'Gagal menambahkan profile hotspot' };
     }
 }
+
 // Fungsi untuk edit profile hotspot
 async function editHotspotProfile(profileData, routerObj = null) {
     try {
@@ -6399,33 +6124,30 @@ async function getHotspotServerProfiles(routerObj = null) {
 async function ensureHotspotServerProfilesTable(conn) {
     try {
         const [tableCheck] = await conn.execute(`
-            SELECT COUNT(*) as count
-            FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-            AND table_name = 'hotspot_server_profiles'
+            SELECT name as count FROM sqlite_master WHERE type='table' AND name='hotspot_server_profiles'
         `);
         
-        if (tableCheck.length === 0 || tableCheck[0].count === 0) {
+        if (!tableCheck || tableCheck.length === 0) {
             logger.info('Tabel hotspot_server_profiles belum ada, mencoba membuat...');
             try {
                 await conn.execute(`
                     CREATE TABLE IF NOT EXISTS hotspot_server_profiles (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        name VARCHAR(128) NOT NULL UNIQUE,
-                        rate_limit VARCHAR(64) NULL,
-                        session_timeout INT NULL,
-                        idle_timeout INT NULL,
-                        shared_users INT DEFAULT 1,
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL UNIQUE,
+                        rate_limit TEXT NULL,
+                        session_timeout INTEGER NULL,
+                        idle_timeout INTEGER NULL,
+                        shared_users INTEGER DEFAULT 1,
                         open_status_page BOOLEAN DEFAULT 1,
-                        http_cookie_lifetime INT NULL,
+                        http_cookie_lifetime INTEGER NULL,
                         split_user_domain BOOLEAN DEFAULT 0,
-                        status_autorefresh INT NULL,
-                        copy_from VARCHAR(128) NULL,
+                        status_autorefresh INTEGER NULL,
+                        copy_from TEXT NULL,
                         disabled BOOLEAN DEFAULT 0,
                         comment TEXT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
                 `);
                 logger.info('✅ Tabel hotspot_server_profiles berhasil dibuat');
             } catch (createError) {
@@ -6665,54 +6387,46 @@ let hotspotProfilesPermissionDenied = false; // Flag untuk menandai bahwa permis
 async function ensureHotspotProfilesMetadataTable(conn) {
     try {
         const [tableCheck] = await conn.execute(`
-            SELECT COUNT(*) as count
-            FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-            AND table_name = 'hotspot_profiles'
+            SELECT name as count FROM sqlite_master WHERE type='table' AND name='hotspot_profiles'
         `);
 
-        if (!tableCheck || tableCheck.length === 0 || tableCheck[0].count === 0) {
+        if (!tableCheck || tableCheck.length === 0) {
             logger.info('Tabel hotspot_profiles belum ada, mencoba membuat...');
             try {
                 // Buat tabel hotspot_profiles dengan struktur dasar
                 await conn.execute(`
                     CREATE TABLE IF NOT EXISTS hotspot_profiles (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        groupname VARCHAR(128) NOT NULL UNIQUE,
-                        display_name VARCHAR(128) NOT NULL,
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        groupname TEXT NOT NULL UNIQUE,
+                        display_name TEXT NOT NULL,
                         comment TEXT NULL,
-                        rate_limit_value VARCHAR(32) NULL,
-                        rate_limit_unit VARCHAR(10) NULL,
-                        burst_limit_value VARCHAR(32) NULL,
-                        burst_limit_unit VARCHAR(10) NULL,
-                        session_timeout_value INT DEFAULT NULL,
-                        session_timeout_unit VARCHAR(10) NULL,
-                        idle_timeout_value INT DEFAULT NULL,
-                        idle_timeout_unit VARCHAR(10) NULL,
-                        limit_uptime_value INT DEFAULT NULL,
-                        limit_uptime_unit VARCHAR(10) NULL,
-                        validity_value INT DEFAULT NULL,
-                        validity_unit VARCHAR(10) NULL,
-                        shared_users INT DEFAULT 1,
-                        local_address VARCHAR(64) NULL,
-                        remote_address VARCHAR(64) NULL,
-                        dns_server VARCHAR(255) NULL,
-                        parent_queue VARCHAR(64) NULL,
-                        address_list VARCHAR(64) NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        rate_limit_value TEXT NULL,
+                        rate_limit_unit TEXT NULL,
+                        burst_limit_value TEXT NULL,
+                        burst_limit_unit TEXT NULL,
+                        session_timeout_value INTEGER DEFAULT NULL,
+                        session_timeout_unit TEXT NULL,
+                        idle_timeout_value INTEGER DEFAULT NULL,
+                        idle_timeout_unit TEXT NULL,
+                        limit_uptime_value INTEGER DEFAULT NULL,
+                        limit_uptime_unit TEXT NULL,
+                        validity_value INTEGER DEFAULT NULL,
+                        validity_unit TEXT NULL,
+                        shared_users INTEGER DEFAULT 1,
+                        local_address TEXT NULL,
+                        remote_address TEXT NULL,
+                        dns_server TEXT NULL,
+                        parent_queue TEXT NULL,
+                        address_list TEXT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                 `);
                 logger.info('✅ Tabel hotspot_profiles berhasil dibuat');
                 // Set cache untuk kolom yang baru dibuat
-                const [newColumnRows] = await conn.execute(`
-                    SELECT COLUMN_NAME
-                    FROM information_schema.columns
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'hotspot_profiles'
-                `);
+                const [newColumnRows] = await conn.execute(`PRAGMA table_info(hotspot_profiles)`);
                 hotspotProfilesColumnsCache = new Set(
-                    (newColumnRows || []).map(row => String(row.COLUMN_NAME).toLowerCase())
+                    (newColumnRows || []).map(row => String(row.name).toLowerCase())
                 );
                 return true;
             } catch (createError) {
@@ -6943,7 +6657,7 @@ async function saveHotspotProfileMetadata(conn, metadata) {
             placeholders.push('?');
             values.push(value !== undefined ? value : null);
             if (includeInUpdate) {
-                updateClauses.push(`${columnName} = VALUES(${columnName})`);
+                updateClauses.push(`${columnName} = excluded.${columnName}`);
             }
         }
     };
@@ -6975,13 +6689,13 @@ async function saveHotspotProfileMetadata(conn, metadata) {
     }
 
     if (updateClauses.length === 0) {
-        updateClauses.push('groupname = VALUES(groupname)');
+        updateClauses.push('groupname = excluded.groupname');
     }
 
     const sql = `
         INSERT INTO hotspot_profiles (${insertColumns.join(', ')})
         VALUES (${placeholders.join(', ')})
-        ON DUPLICATE KEY UPDATE ${updateClauses.join(', ')}
+        ON CONFLICT(groupname) DO UPDATE SET ${updateClauses.join(', ')}
     `;
 
     await conn.execute(sql, values);
@@ -6998,36 +6712,33 @@ async function deleteHotspotProfileMetadata(conn, groupname) {
 async function ensurePPPoEProfilesMetadataTable(conn) {
     try {
         const [tableCheck] = await conn.execute(`
-            SELECT COUNT(*) as count
-            FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-            AND table_name = 'pppoe_profiles'
+            SELECT name as count FROM sqlite_master WHERE type='table' AND name='pppoe_profiles'
         `);
 
-        if (!tableCheck || tableCheck.length === 0 || tableCheck[0].count === 0) {
+        if (!tableCheck || tableCheck.length === 0) {
             logger.info('Tabel pppoe_profiles belum ada, mencoba membuat...');
             try {
                 await conn.execute(`
                     CREATE TABLE IF NOT EXISTS pppoe_profiles (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        groupname VARCHAR(128) NOT NULL UNIQUE,
-                        display_name VARCHAR(128) NOT NULL,
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        groupname TEXT NOT NULL UNIQUE,
+                        display_name TEXT NOT NULL,
                         comment TEXT NULL,
-                        rate_limit VARCHAR(128) NULL,
-                        local_address VARCHAR(64) NULL,
-                        remote_address VARCHAR(64) NULL,
-                        dns_server VARCHAR(128) NULL,
-                        parent_queue VARCHAR(128) NULL,
-                        address_list VARCHAR(128) NULL,
-                        bridge_learning VARCHAR(16) NOT NULL DEFAULT 'default',
-                        use_mpls VARCHAR(16) NOT NULL DEFAULT 'default',
-                        use_compression VARCHAR(16) NOT NULL DEFAULT 'default',
-                        use_encryption VARCHAR(16) NOT NULL DEFAULT 'default',
-                        only_one VARCHAR(16) NOT NULL DEFAULT 'default',
-                        change_tcp_mss VARCHAR(16) NOT NULL DEFAULT 'default',
-                        use_upnp VARCHAR(16) NOT NULL DEFAULT 'default',
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        rate_limit TEXT NULL,
+                        local_address TEXT NULL,
+                        remote_address TEXT NULL,
+                        dns_server TEXT NULL,
+                        parent_queue TEXT NULL,
+                        address_list TEXT NULL,
+                        bridge_learning TEXT NOT NULL DEFAULT 'default',
+                        use_mpls TEXT NOT NULL DEFAULT 'default',
+                        use_compression TEXT NOT NULL DEFAULT 'default',
+                        use_encryption TEXT NOT NULL DEFAULT 'default',
+                        only_one TEXT NOT NULL DEFAULT 'default',
+                        change_tcp_mss TEXT NOT NULL DEFAULT 'default',
+                        use_upnp TEXT NOT NULL DEFAULT 'default',
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                 `);
                 logger.info('✅ Tabel pppoe_profiles berhasil dibuat');
@@ -7100,22 +6811,22 @@ async function savePPPoEProfileMetadata(conn, metadata) {
             bridge_learning, use_mpls, use_compression,
             use_encryption, only_one, change_tcp_mss, use_upnp
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            display_name = VALUES(display_name),
-            comment = VALUES(comment),
-            rate_limit = VALUES(rate_limit),
-            local_address = VALUES(local_address),
-            remote_address = VALUES(remote_address),
-            dns_server = VALUES(dns_server),
-            parent_queue = VALUES(parent_queue),
-            address_list = VALUES(address_list),
-            bridge_learning = VALUES(bridge_learning),
-            use_mpls = VALUES(use_mpls),
-            use_compression = VALUES(use_compression),
-            use_encryption = VALUES(use_encryption),
-            only_one = VALUES(only_one),
-            change_tcp_mss = VALUES(change_tcp_mss),
-            use_upnp = VALUES(use_upnp)
+        ON CONFLICT(groupname) DO UPDATE SET
+            display_name = excluded.display_name,
+            comment = excluded.comment,
+            rate_limit = excluded.rate_limit,
+            local_address = excluded.local_address,
+            remote_address = excluded.remote_address,
+            dns_server = excluded.dns_server,
+            parent_queue = excluded.parent_queue,
+            address_list = excluded.address_list,
+            bridge_learning = excluded.bridge_learning,
+            use_mpls = excluded.use_mpls,
+            use_compression = excluded.use_compression,
+            use_encryption = excluded.use_encryption,
+            only_one = excluded.only_one,
+            change_tcp_mss = excluded.change_tcp_mss,
+            use_upnp = excluded.use_upnp
     `, [
         metadata.groupname,
         metadata.displayName,

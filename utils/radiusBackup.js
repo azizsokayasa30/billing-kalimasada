@@ -4,7 +4,6 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 const logger = require('../config/logger');
 const { getRadiusConfig } = require('../config/radiusConfig');
-const mysql = require('mysql2/promise');
 
 const execAsync = promisify(exec);
 
@@ -35,96 +34,19 @@ async function backupRadius() {
         const dbPassword = config.radius_password || '';
         const dbName = config.radius_database || 'radius';
         
-        // 1. Backup Database
-        logger.info('Backing up RADIUS database...');
-        const dbBackupFile = path.join(tempDir, 'radius-database.sql');
-        
-        // Build mysqldump command
-        let mysqldumpCmd = `mysqldump -h ${dbHost} -u ${dbUser}`;
-        if (dbPassword) {
-            mysqldumpCmd += ` -p${dbPassword}`;
-        }
-        mysqldumpCmd += ` ${dbName} > ${dbBackupFile}`;
+        // 1. Backup Database (SQLite)
+        logger.info('Backing up RADIUS database (SQLite)...');
+        const dbFileName = dbName.endsWith('.db') ? dbName : `${dbName}.db`;
+        const sourceDbPath = path.join(process.cwd(), 'data', dbFileName);
+        const targetDbPath = path.join(tempDir, 'radius-database.db');
         
         try {
-            await execAsync(mysqldumpCmd);
-            logger.info('Database backup completed');
+            await fs.access(sourceDbPath);
+            await fs.copyFile(sourceDbPath, targetDbPath);
+            logger.info('Database backup completed (copied SQLite file)');
         } catch (error) {
-            // Try alternative: use mysql connection
-            logger.warn('mysqldump failed, trying alternative method...');
-            const connection = await mysql.createConnection({
-                host: dbHost,
-                user: dbUser,
-                password: dbPassword,
-                database: dbName
-            });
-            
-            // Get all tables
-            const [tables] = await connection.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = ?",
-                [dbName]
-            );
-            
-            let sqlDump = `-- RADIUS Database Backup\n`;
-            sqlDump += `-- Generated: ${new Date().toISOString()}\n`;
-            sqlDump += `-- Database: ${dbName}\n\n`;
-            sqlDump += `SET FOREIGN_KEY_CHECKS=0;\n\n`;
-            
-            // Dump each table
-            for (const table of tables) {
-                const tableName = table.table_name;
-                logger.info(`Dumping table: ${tableName}`);
-                
-                // Get table structure
-                const [createTable] = await connection.execute(
-                    `SHOW CREATE TABLE \`${tableName}\``
-                );
-                sqlDump += `\n-- Table structure for ${tableName}\n`;
-                sqlDump += `DROP TABLE IF EXISTS \`${tableName}\`;\n`;
-                sqlDump += `${createTable[0]['Create Table']};\n\n`;
-                
-                // Get table data
-                const [rows] = await connection.execute(`SELECT * FROM \`${tableName}\``);
-                if (rows.length > 0) {
-                    sqlDump += `-- Data for table ${tableName}\n`;
-                    sqlDump += `LOCK TABLES \`${tableName}\` WRITE;\n`;
-                    
-                    // Batch insert for better performance
-                    if (rows.length > 0) {
-                        const columns = Object.keys(rows[0]);
-                        const columnList = columns.map(c => `\`${c}\``).join(', ');
-                        
-                        // Insert in batches of 100
-                        for (let i = 0; i < rows.length; i += 100) {
-                            const batch = rows.slice(i, i + 100);
-                            const valuesList = batch.map(row => {
-                                const values = columns.map(col => {
-                                    const val = row[col];
-                                    if (val === null) return 'NULL';
-                                    if (typeof val === 'string') {
-                                        // Escape single quotes and backslashes
-                                        return `'${val.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`;
-                                    }
-                                    if (val instanceof Date) {
-                                        return `'${val.toISOString().slice(0, 19).replace('T', ' ')}'`;
-                                    }
-                                    return val;
-                                });
-                                return `(${values.join(', ')})`;
-                            });
-                            sqlDump += `INSERT INTO \`${tableName}\` (${columnList}) VALUES ${valuesList.join(', ')};\n`;
-                        }
-                    }
-                    
-                    sqlDump += `UNLOCK TABLES;\n\n`;
-                }
-            }
-            
-            sqlDump += `SET FOREIGN_KEY_CHECKS=1;\n`;
-            
-            await fs.writeFile(dbBackupFile, sqlDump, 'utf8');
-            await connection.end();
-            logger.info('Database backup completed (alternative method)');
+            logger.error(`Database file not found at ${sourceDbPath}: ${error.message}`);
+            // If file not found, we still continue with config backup
         }
         
         // 2. Backup FreeRADIUS Configuration
@@ -241,49 +163,31 @@ async function restoreRadius(backupFilePath) {
                 logger.warn('Backup info file not found, continuing...');
             }
             
-            // 3. Restore Database
-            logger.info('Restoring RADIUS database...');
-            const dbBackupFile = path.join(tempDir, 'radius-database.sql');
+            // 3. Restore Database (SQLite)
+            logger.info('Restoring RADIUS database (SQLite)...');
+            const dbBackupFile = path.join(tempDir, 'radius-database.db');
             
             if (await fs.access(dbBackupFile).then(() => true).catch(() => false)) {
-                // Create database if not exists
-                const adminConnection = await mysql.createConnection({
-                    host: dbHost,
-                    user: dbUser,
-                    password: dbPassword
-                });
+                const dbFileName = dbName.endsWith('.db') ? dbName : `${dbName}.db`;
+                const targetDbPath = path.join(process.cwd(), 'data', dbFileName);
                 
-                await adminConnection.execute(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
-                await adminConnection.end();
-                
-                // Restore database
-                let mysqlCmd = `mysql -h ${dbHost} -u ${dbUser}`;
-                if (dbPassword) {
-                    mysqlCmd += ` -p${dbPassword}`;
+                // Backup existing database first
+                if (await fs.access(targetDbPath).then(() => true).catch(() => false)) {
+                    await fs.copyFile(targetDbPath, `${targetDbPath}.bak-${Date.now()}`);
                 }
-                mysqlCmd += ` ${dbName} < ${dbBackupFile}`;
                 
-                try {
-                    await execAsync(mysqlCmd);
-                    logger.info('Database restore completed');
-                } catch (error) {
-                    // Try alternative: use mysql connection
-                    logger.warn('mysql command failed, trying alternative method...');
-                    const connection = await mysql.createConnection({
-                        host: dbHost,
-                        user: dbUser,
-                        password: dbPassword,
-                        database: dbName,
-                        multipleStatements: true
-                    });
-                    
-                    const sqlContent = await fs.readFile(dbBackupFile, 'utf8');
-                    await connection.query(sqlContent);
-                    await connection.end();
-                    logger.info('Database restore completed (alternative method)');
-                }
+                // Replace with backup file
+                await fs.copyFile(dbBackupFile, targetDbPath);
+                logger.info('Database restore (SQLite) completed');
             } else {
-                throw new Error('Database backup file tidak ditemukan');
+                // Check if it's an old .sql backup
+                const sqlBackupFile = path.join(tempDir, 'radius-database.sql');
+                if (await fs.access(sqlBackupFile).then(() => true).catch(() => false)) {
+                    logger.warn('Found legacy .sql backup, but system is now using SQLite. SQL restore skipped.');
+                    // In a future version, we could implement SQL to SQLite conversion here
+                } else {
+                    throw new Error('Database backup file tidak ditemukan');
+                }
             }
             
             // 4. Restore FreeRADIUS Configuration
