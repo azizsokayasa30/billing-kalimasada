@@ -233,6 +233,17 @@ function writeClientsConf(clients) {
  */
 function restartFreeRADIUS() {
     try {
+        // Check if systemctl exists
+        try {
+            execSync('command -v systemctl', { stdio: 'ignore' });
+        } catch (e) {
+            logger.warn('systemctl not found. If running in Docker, please restart FreeRADIUS on the host manually.');
+            return { 
+                success: false, 
+                message: 'systemctl tidak ditemukan. Jika Anda menggunakan Docker, silakan restart FreeRADIUS secara manual di host Ubuntu: sudo systemctl restart freeradius'
+            };
+        }
+
         // Try with sudo first
         try {
             execSync('sudo systemctl restart freeradius', { encoding: 'utf8', timeout: 10000 });
@@ -248,7 +259,7 @@ function restartFreeRADIUS() {
                 logger.warn(`FreeRADIUS restart failed. Please restart manually: sudo systemctl restart freeradius`);
                 return { 
                     success: false, 
-                    message: 'Gagal restart FreeRADIUS secara otomatis. Silakan restart manual: sudo systemctl restart freeradius',
+                    message: 'Gagal restart FreeRADIUS secara otomatis. Silakan restart manual di host: sudo systemctl restart freeradius',
                     error: directError.message
                 };
             }

@@ -12,6 +12,7 @@ services:
       - ./logs:/app/logs
       - ./whatsapp-session:/app/whatsapp-session
       - ./settings.json:/app/settings.json
+      - /etc/freeradius/3.0:/etc/freeradius/3.0
     environment:
       - NODE_ENV=production
       - PORT=22916
