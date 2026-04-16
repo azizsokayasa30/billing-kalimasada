@@ -51,6 +51,7 @@ function parseClientsConf() {
                 currentClient = {
                     name: clientMatch[1],
                     ipaddr: null,
+                    addrType: 'ipaddr', // Default type
                     secret: null,
                     nas_type: 'other',
                     require_message_authenticator: 'no',
@@ -77,10 +78,11 @@ function parseClientsConf() {
             if (inClientBlock && currentClient) {
                 currentClient.rawLines.push(lines[i]);
                 
-                // Parse ipaddr
-                const ipaddrMatch = line.match(/ipaddr\s*=\s*(.+)/);
-                if (ipaddrMatch) {
-                    currentClient.ipaddr = ipaddrMatch[1].trim();
+                // Parse ipaddr, ipv4addr, or ipv6addr
+                const addrMatch = line.match(/(ipaddr|ipv4addr|ipv6addr)\s*=\s*(.+)/);
+                if (addrMatch) {
+                    currentClient.addrType = addrMatch[1].trim();
+                    currentClient.ipaddr = addrMatch[2].trim();
                 }
 
                 // Parse secret
@@ -183,10 +185,25 @@ function writeClientsConf(clients) {
         // Build clients section
         let clientsSection = '';
         clients.forEach(client => {
-            clientsSection += `client ${client.name} {\n`;
-            if (client.ipaddr) {
-                clientsSection += `\tipaddr = ${client.ipaddr}\n`;
+            // Safety check for localhost_ipv6
+            if (client.name === 'localhost_ipv6' && !client.ipaddr) {
+                client.ipaddr = '::1';
+                client.addrType = 'ipv6addr';
             }
+
+            clientsSection += `client ${client.name} {\n`;
+            
+            if (client.ipaddr) {
+                // Determine address keyword
+                let keyword = client.addrType || 'ipaddr';
+                if (client.ipaddr.includes(':')) {
+                    keyword = 'ipv6addr';
+                }
+                clientsSection += `\t${keyword} = ${client.ipaddr}\n`;
+            } else if (client.name === 'localhost') {
+                clientsSection += `\tipaddr = 127.0.0.1\n`;
+            }
+
             if (client.secret) {
                 clientsSection += `\tsecret = ${client.secret}\n`;
             }
@@ -216,6 +233,22 @@ function writeClientsConf(clients) {
             } catch (sudoWriteError) {
                 logger.error(`Cannot write clients.conf: ${writeError.message}`);
                 throw new Error(`Tidak dapat menulis file clients.conf: ${writeError.message}`);
+            }
+        }
+        
+        // Ensure secure permissions (not globally writable)
+        try {
+            // Try 640 (rw-r-----) or 660 (rw-rw----)
+            const secureMode = 0o660; 
+            fs.chmodSync(CLIENTS_CONF_PATH, secureMode);
+            logger.info(`Set secure permissions (660) on clients.conf`);
+        } catch (chmodError) {
+            // If direct chmod fails, try with sudo
+            try {
+                execSync(`sudo chmod 660 ${CLIENTS_CONF_PATH}`);
+                logger.info(`Set secure permissions (660) on clients.conf via sudo`);
+            } catch (sudoChmodError) {
+                logger.warn(`Could not set secure permissions: ${chmodError.message}. FreeRADIUS might fail start if globally writable.`);
             }
         }
         
