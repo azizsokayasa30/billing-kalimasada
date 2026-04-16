@@ -547,11 +547,15 @@
                 `CREATE TABLE IF NOT EXISTS collector_assignments (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     collector_id INTEGER NOT NULL,
-                    customer_id INTEGER NOT NULL,
+                    customer_id INTEGER NULL,
+                    member_id INTEGER NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(collector_id, customer_id),
+                    UNIQUE(collector_id, member_id),
                     FOREIGN KEY (collector_id) REFERENCES collectors(id) ON DELETE CASCADE,
-                    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+                    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+                    FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
+                    CHECK ((customer_id IS NOT NULL) OR (member_id IS NOT NULL))
                 )`,
 
                 // Tabel Mapping Area ke Collector (Baru)
@@ -1052,6 +1056,15 @@
                 console.error('Error adding image column to packages:', err);
             } else if (!err) {
                 console.log('Added image column to packages table');
+            }
+        });
+
+        // Tambahkan kolom member_id ke collector_assignments jika belum ada
+        this.db.run("ALTER TABLE collector_assignments ADD COLUMN member_id INTEGER REFERENCES members(id)", (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding member_id column to collector_assignments:', err);
+            } else if (!err) {
+                console.log('Added member_id column to collector_assignments table');
             }
         });
 
@@ -1776,9 +1789,10 @@
             
             // Get total count untuk pagination
             const countSql = `
-                SELECT COUNT(*) as total
+                SELECT COUNT(DISTINCT c.id) as total
                 FROM customers c
                 LEFT JOIN customer_router_map m ON m.customer_id = c.id
+                LEFT JOIN collector_assignments ca ON ca.customer_id = c.id
                 WHERE 1=1 ${whereClause}
             `;
             
@@ -6858,7 +6872,8 @@ billingManager.getAllMembers = function(filters = {}) {
     return new Promise((resolve, reject) => {
         let sql = `SELECT m.*, mp.name as package_name, mp.speed as package_speed, mp.price as package_price 
                    FROM members m 
-                   LEFT JOIN member_packages mp ON m.package_id = mp.id`;
+                   LEFT JOIN member_packages mp ON m.package_id = mp.id
+                   LEFT JOIN collector_assignments ca ON ca.member_id = m.id`;
         
         const conditions = [];
         const params = [];
