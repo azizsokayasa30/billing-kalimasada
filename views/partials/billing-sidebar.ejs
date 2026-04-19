@@ -257,6 +257,7 @@
             </a>
         </div>
         <div id="billingRestartResult" class="small px-2" style="display:none;"></div>
+        <div id="billingRestartToast" class="alert alert-success position-fixed top-0 end-0 m-4 d-none" style="z-index: 1060; min-width: 300px;"></div>
         <div class="sb-server-time">
             <div class="sb-time-label">SERVER TIME</div>
             <div class="sb-time-value" id="serverTimeValue">--:--:--</div>
@@ -408,11 +409,28 @@ document.addEventListener('DOMContentLoaded', function () {
     const serverTimeValue = document.getElementById('serverTimeValue');
     let serverTimeOffset = null;
 
+    const billingRestartToast = document.getElementById('billingRestartToast');
+    let billingToastHideTimer = null;
+
     function showRestartResult(text, success = true) {
         if (!restartResultBox) return;
         restartResultBox.style.display = 'block';
         restartResultBox.style.color = success ? '#16a34a' : '#dc2626';
         restartResultBox.textContent = text;
+    }
+
+    function showBillingToast(text, success = true) {
+        if (!billingRestartToast) return;
+        if (billingToastHideTimer) {
+            clearTimeout(billingToastHideTimer);
+            billingToastHideTimer = null;
+        }
+        billingRestartToast.classList.remove('d-none', 'alert-danger', 'alert-success');
+        billingRestartToast.classList.add(success ? 'alert-success' : 'alert-danger');
+        billingRestartToast.textContent = text;
+        billingToastHideTimer = setTimeout(() => {
+            billingRestartToast.classList.add('d-none');
+        }, success ? 12000 : 6000);
     }
 
     function renderServerTime() {
@@ -437,9 +455,44 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function pollLoginAndRedirect(messagePrefix) {
+        const message = 'Menunggu server billing siap. Mengalihkan ke login saat sudah siap...';
+        showRestartResult(message, true);
+        showBillingToast(message, true);
+        const pollInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/admin/login', { method: 'GET', cache: 'no-store' });
+                if (res.ok) {
+                    clearInterval(pollInterval);
+                    window.location.href = '/admin/login';
+                }
+            } catch (_err) {
+                // server belum siap, tunggu
+            }
+        }, 1500);
+    }
+
+    function startBillingCountdown(messagePrefix, seconds) {
+        let remaining = seconds;
+        const updateMessage = () => `${messagePrefix} ${remaining} detik...`;
+        showRestartResult(updateMessage(), true);
+        showBillingToast(updateMessage(), true);
+        const intervalId = setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+                clearInterval(intervalId);
+                pollLoginAndRedirect(messagePrefix);
+            } else {
+                showRestartResult(updateMessage(), true);
+                showBillingToast(updateMessage(), true);
+            }
+        }, 1000);
+    }
+
     if (restartBillingBtn) {
         restartBillingBtn.addEventListener('click', async () => {
             if (!confirm('Restart layanan billing sekarang?')) return;
+            let restartSuccess = false;
             try {
                 restartBillingBtn.disabled = true;
                 restartBillingBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> <span class="sb-item-text">Restarting...</span>';
@@ -449,14 +502,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!data.success) {
                     showRestartResult('Restart gagal: ' + (data.message || 'Error'), false);
                 } else {
-                    showRestartResult('Restart berhasil.', true);
-                    await fetchServerInfo();
+                    restartSuccess = true;
+                    startBillingCountdown('Billing berhasil direstart. Mengalihkan ke login dalam', 5);
                 }
             } catch (error) {
                 showRestartResult('Restart error: ' + error.message, false);
             } finally {
-                restartBillingBtn.disabled = false;
-                restartBillingBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> <span class="sb-item-text">Restart</span>';
+                if (!restartSuccess) {
+                    restartBillingBtn.disabled = false;
+                    restartBillingBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> <span class="sb-item-text">Restart</span>';
+                }
             }
         });
     }

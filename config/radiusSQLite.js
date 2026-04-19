@@ -209,21 +209,17 @@ class RADIUSDatabase {
     }
 }
 
-let instance = null;
-
 async function getRadiusConnection() {
-    if (!instance) {
-        const { getRadiusConfig } = require('./radiusConfig');
-        const config = await getRadiusConfig();
-        
-        // We use the database name as the SQLite file name
-        const dbName = config.radius_database || 'radius';
-        const dbPath = path.join(process.cwd(), 'data', dbName.endsWith('.db') ? dbName : `${dbName}.db`);
-        
-        instance = new RADIUSDatabase(dbPath);
-    }
-    await instance.connect();
-    return instance;
+    const { getRadiusConfig } = require('./radiusConfig');
+    const config = await getRadiusConfig();
+    
+    // We use the database name as the SQLite file name
+    const dbName = config.radius_database || 'radius';
+    const dbPath = path.join(process.cwd(), 'data', dbName.endsWith('.db') ? dbName : `${dbName}.db`);
+    
+    const conn = new RADIUSDatabase(dbPath);
+    await conn.connect();
+    return conn;
 }
 
 module.exports = { getRadiusConnection };

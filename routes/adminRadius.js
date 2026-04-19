@@ -9,7 +9,7 @@ const { adminAuth } = require('./adminAuth');
 const { getRadiusConfig, saveRadiusConfig } = require('../config/radiusConfig');
 const logger = require('../config/logger');
 const { getRadiusConnection } = require('../config/mikrotik');
-const { parseClientsConf, writeClientsConf, restartFreeRADIUS, validateClient } = require('../config/radiusClients');
+const { parseClientsConf, parseClientsConfFromDB, writeClientsConf, writeClientsConfToDB, restartFreeRADIUS, validateClient } = require('../config/radiusClients');
 const { backupRadius, restoreRadius, listBackups } = require('../utils/radiusBackup');
 
 // Configure multer for file upload
@@ -374,7 +374,7 @@ router.get('/radius/test', adminAuth, async (req, res) => {
 // GET: Halaman Manage RADIUS Clients
 router.get('/radius/clients', adminAuth, async (req, res) => {
   try {
-    const clients = parseClientsConf();
+    const clients = await parseClientsConfFromDB();
     const settings = await getRadiusConfig();
     
     res.render('adminRadiusClients', {
@@ -399,7 +399,7 @@ router.get('/radius/clients', adminAuth, async (req, res) => {
 // GET: API - Get all clients
 router.get('/radius/clients/api', adminAuth, async (req, res) => {
   try {
-    const clients = parseClientsConf();
+    const clients = await parseClientsConfFromDB();
     res.json({ success: true, clients });
   } catch (error) {
     logger.error('Error getting clients:', error);
@@ -419,7 +419,7 @@ router.post('/radius/clients/add', adminAuth, async (req, res) => {
     }
 
     // Get existing clients
-    const clients = parseClientsConf();
+    const clients = await parseClientsConfFromDB();
 
     // Check duplicate name
     if (clients.some(c => c.name === name.trim())) {
@@ -441,8 +441,8 @@ router.post('/radius/clients/add', adminAuth, async (req, res) => {
       comment: comment || null
     });
 
-    // Write to file
-    writeClientsConf(clients);
+    // Write to database
+    await writeClientsConfToDB(clients);
 
     // Restart FreeRADIUS
     const restartResult = restartFreeRADIUS();
@@ -471,7 +471,7 @@ router.post('/radius/clients/edit', adminAuth, async (req, res) => {
     }
 
     // Get existing clients
-    const clients = parseClientsConf();
+    const clients = await parseClientsConfFromDB();
 
     // Find client index
     const clientIndex = clients.findIndex(c => c.name === oldName);
@@ -499,8 +499,8 @@ router.post('/radius/clients/edit', adminAuth, async (req, res) => {
       comment: comment || null
     };
 
-    // Write to file
-    writeClientsConf(clients);
+    // Write to database
+    await writeClientsConfToDB(clients);
 
     // Restart FreeRADIUS
     const restartResult = restartFreeRADIUS();
@@ -527,7 +527,7 @@ router.post('/radius/clients/delete', adminAuth, async (req, res) => {
     }
 
     // Get existing clients
-    const clients = parseClientsConf();
+    const clients = await parseClientsConfFromDB();
 
     // Filter out the client to delete
     const filteredClients = clients.filter(c => c.name !== name);
@@ -536,8 +536,8 @@ router.post('/radius/clients/delete', adminAuth, async (req, res) => {
       return res.json({ success: false, message: 'Client tidak ditemukan' });
     }
 
-    // Write to file
-    writeClientsConf(filteredClients);
+    // Write to database
+    await writeClientsConfToDB(filteredClients);
 
     // Restart FreeRADIUS
     const restartResult = restartFreeRADIUS();

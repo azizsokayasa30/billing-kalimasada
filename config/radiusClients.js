@@ -1,14 +1,82 @@
 // Functions untuk manage FreeRADIUS clients.conf
+// Sekarang menggunakan RADIUS SQLite database sebagai primary storage
 const fs = require('fs');
 const { execSync } = require('child_process');
 const logger = require('./logger');
 
 const CLIENTS_CONF_PATH = '/etc/freeradius/3.0/clients.conf';
 
+// Import RADIUS connection
+const { getRadiusConnection } = require('./radiusSQLite');
+
 /**
- * Parse clients.conf file dan return array of clients
+ * Initialize clients management using existing FreeRADIUS nas table
+ * The nas table is already created in radiusSQLite.js schema
  */
-function parseClientsConf() {
+async function initializeClientsTable() {
+    try {
+        const conn = await getRadiusConnection();
+        // Table nas already exists from radiusSQLite.js schema
+        // Just verify connection works
+        const result = await conn.execute('SELECT COUNT(*) as count FROM nas');
+        logger.info('[RADIUS-CLIENTS] Clients table ready - using nas table from FreeRADIUS schema');
+        await conn.end();
+        return true;
+    } catch (error) {
+        logger.error('[RADIUS-CLIENTS] Error verifying clients table:', error.message);
+        return false;
+    }
+}
+
+// Initialize table on load (non-blocking)
+initializeClientsTable().catch(err => {
+    logger.warn('[RADIUS-CLIENTS] Table initialization warning:', err.message);
+    // Don't fail startup if initialization has issues
+});
+
+/**
+ * Parse clients dari RADIUS SQLite database (primary)
+ * Uses the nas table which stores FreeRADIUS NAS clients
+ * Fallback ke file jika database tidak tersedia
+ */
+async function parseClientsConfFromDB() {
+    try {
+        const conn = await getRadiusConnection();
+        // Query nas table: nasname=client name, community/shortname=IP, secret=shared secret
+        const [rows] = await conn.execute(`
+            SELECT id, nasname, shortname, type, secret, description 
+            FROM nas 
+            ORDER BY nasname
+        `);
+        await conn.end();
+        
+        if (rows && rows.length > 0) {
+            logger.info(`[RADIUS-CLIENTS] Loaded ${rows.length} clients dari nas table`);
+            return rows.map(row => ({
+                id: row.id,
+                name: row.nasname,
+                ipaddr: row.shortname || row.nasname,  // Use shortname as IP if available
+                secret: row.secret || '',
+                nas_type: row.type || 'other',
+                require_message_authenticator: 'no',  // Default
+                comment: row.description || null,
+                fromDB: true
+            }));
+        }
+        
+        logger.warn('[RADIUS-CLIENTS] No clients found in nas table, attempting file read');
+        const fileClients = await parseClientsConfFromFile();
+        return fileClients;
+    } catch (error) {
+        logger.warn(`[RADIUS-CLIENTS] Database read failed, falling back to file: ${error.message}`);
+        return await parseClientsConfFromFile();
+    }
+}
+
+/**
+ * Parse clients.conf file (fallback/compatibility)
+ */
+async function parseClientsConfFromFile() {
     try {
         if (!fs.existsSync(CLIENTS_CONF_PATH)) {
             logger.warn(`clients.conf not found at ${CLIENTS_CONF_PATH}`);
@@ -337,9 +405,109 @@ function validateClient(client) {
     };
 }
 
+/**
+ * Write clients to RADIUS SQLite database using nas table
+ * PRIMARY METHOD - replaces file writing
+ */
+async function writeClientsConfToDB(clients) {
+    try {
+        const conn = await getRadiusConnection();
+        
+        // Clear existing clients (truncate nas table)
+        await conn.execute('DELETE FROM nas');
+        
+        // Insert new clients
+        for (const client of clients) {
+            if (!client.name || !client.secret) {
+                logger.warn(`[RADIUS-CLIENTS] Skipping incomplete client: ${client.name}`);
+                continue;
+            }
+            
+            try {
+                await conn.execute(`
+                    INSERT INTO nas (nasname, shortname, type, secret, description)
+                    VALUES (?, ?, ?, ?, ?)
+                `, [
+                    client.name,
+                    client.ipaddr || client.name,
+                    client.nas_type || 'other',
+                    client.secret,
+                    client.comment || null
+                ]);
+            } catch (insertError) {
+                logger.warn(`[RADIUS-CLIENTS] Error inserting client ${client.name}: ${insertError.message}`);
+                // Continue with next client
+            }
+        }
+        
+        await conn.end();
+        logger.info(`[RADIUS-CLIENTS] Saved ${clients.length} clients to nas table`);
+        return true;
+    } catch (error) {
+        logger.error(`[RADIUS-CLIENTS] Error writing clients to database: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Wrapper sync function untuk backward compatibility (deprecated - gunakan async version)
+ */
+function parseClientsConf() {
+    logger.warn('[RADIUS-CLIENTS] parseClientsConf() is deprecated. Use parseClientsConfFromDB() instead');
+    // Return empty array or try read from file as fallback
+    if (fs.existsSync(CLIENTS_CONF_PATH)) {
+        try {
+            const content = fs.readFileSync(CLIENTS_CONF_PATH, 'utf8');
+            // Simple parse dari file
+            const clients = [];
+            let currentClient = null;
+            const lines = content.split('\n');
+            
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('client ') && trimmed.endsWith('{')) {
+                    const nameMatch = trimmed.match(/^client\s+([^\s{]+)\s*\{/);
+                    if (nameMatch) {
+                        currentClient = {
+                            name: nameMatch[1],
+                            ipaddr: null,
+                            secret: null,
+                            nas_type: 'other',
+                            require_message_authenticator: 'no'
+                        };
+                    }
+                } else if (trimmed === '}' && currentClient) {
+                    clients.push(currentClient);
+                    currentClient = null;
+                } else if (currentClient) {
+                    const ipMatch = trimmed.match(/(ipaddr|ipv4addr|ipv6addr)\s*=\s*(.+)/);
+                    if (ipMatch) currentClient.ipaddr = ipMatch[2].trim();
+                    
+                    const secretMatch = trimmed.match(/secret\s*=\s*(.+)/);
+                    if (secretMatch) currentClient.secret = secretMatch[1].trim();
+                    
+                    const typeMatch = trimmed.match(/nas_type\s*=\s*(.+)/);
+                    if (typeMatch) currentClient.nas_type = typeMatch[1].trim();
+                }
+            }
+            
+            logger.info(`[RADIUS-CLIENTS] Loaded ${clients.length} clients from file (sync fallback)`);
+            return clients;
+        } catch (error) {
+            logger.error(`[RADIUS-CLIENTS] Error reading file sync: ${error.message}`);
+            return [];
+        }
+    }
+    return [];
+}
+
 module.exports = {
+    initializeClientsTable,
     parseClientsConf,
+    parseClientsConfFromDB,
+    parseClientsConfFromFile,
     writeClientsConf,
+    writeClientsConfToDB,
     restartFreeRADIUS,
     validateClient,
     CLIENTS_CONF_PATH

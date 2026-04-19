@@ -281,7 +281,7 @@
     <!-- Sidebar Footer -->
     <div class="sb-footer">
         <div class="sb-actions">
-            <a href="#" id="restartMikrotikBtn" class="sb-action-btn" title="Restart Mikrotik">
+            <a href="#" id="btnRestartBilling" class="sb-action-btn" title="Restart Billing">
                 <i class="bi bi-arrow-repeat"></i>
                 <span class="sb-item-text">Restart</span>
             </a>
@@ -405,16 +405,54 @@ document.addEventListener('DOMContentLoaded', function () {
 
     window.addEventListener('resize', function() { if (window.innerWidth >= 768) closeSidebar(); });
 
-    // Restart Mikrotik
-    const restartBtn = document.getElementById('restartMikrotikBtn');
+    // Restart Billing Application
+    const restartBtn = document.getElementById('btnRestartBilling');
     if (restartBtn) {
         restartBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            if (confirm('Restart Mikrotik?')) {
-                fetch('/admin/mikrotik/restart', { method: 'POST' })
+            if (confirm('Restart aplikasi billing sekarang?')) {
+                fetch('/admin/billing/system/restart', { method: 'POST' })
                 .then(res => res.json())
-                .then(data => { alert(data.success ? 'Berhasil restart' : 'Gagal restart'); })
-                .catch(() => alert('Error restart'));
+                .then(data => {
+                    if (data.success) {
+                        let countdown = 5;
+                        const toast = document.createElement('div');
+                        toast.style.position = 'fixed';
+                        toast.style.top = '20px';
+                        toast.style.right = '20px';
+                        toast.style.zIndex = '1050';
+                        toast.style.padding = '14px 18px';
+                        toast.style.background = '#10b981';
+                        toast.style.color = '#ffffff';
+                        toast.style.borderRadius = '12px';
+                        toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)';
+                        toast.textContent = `Billing berhasil direstart. Mengalihkan ke login dalam ${countdown} detik...`;
+                        document.body.appendChild(toast);
+                        const intervalId = setInterval(() => {
+                            countdown -= 1;
+                            if (countdown <= 0) {
+                                clearInterval(intervalId);
+                                const pollLogin = setInterval(async () => {
+                                    try {
+                                        const res = await fetch('/admin/login', { method: 'GET', cache: 'no-store' });
+                                        if (res.ok) {
+                                            clearInterval(pollLogin);
+                                            window.location.href = '/admin/login';
+                                        }
+                                    } catch (_err) {
+                                        // tunggu server siap
+                                    }
+                                }, 1500);
+                                toast.textContent = 'Menunggu server billing siap. Mengalihkan ke login saat sudah siap...';
+                            } else {
+                                toast.textContent = `Billing berhasil direstart. Mengalihkan ke login dalam ${countdown} detik...`;
+                            }
+                        }, 1000);
+                    } else {
+                        alert('Gagal restart billing: ' + (data.message || 'Error'));
+                    }
+                })
+                .catch(() => alert('Error restart billing'));
             }
         });
     }

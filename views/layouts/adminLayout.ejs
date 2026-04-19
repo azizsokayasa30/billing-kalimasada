@@ -61,20 +61,20 @@
     </div>
 </div>
 
-<!-- Modal Konfirmasi Restart Mikrotik -->
-<div class="modal fade" id="restartMikrotikModal" tabindex="-1" aria-labelledby="restartMikrotikModalLabel" aria-hidden="true">
+<!-- Modal Konfirmasi Restart Billing -->
+<div class="modal fade" id="restartBillingModal" tabindex="-1" aria-labelledby="restartBillingModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="restartMikrotikModalLabel"><i class="bi bi-arrow-repeat"></i> Konfirmasi Restart Mikrotik</h5>
+        <h5 class="modal-title" id="restartBillingModalLabel"><i class="bi bi-arrow-repeat"></i> Konfirmasi Restart Billing</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        Apakah Anda yakin ingin <b>restart Mikrotik</b>?<br>Router akan reboot dan koneksi internet pelanggan akan terputus sementara.
+        Apakah Anda yakin ingin <b>restart aplikasi billing</b>?<br>Proses ini akan memulai ulang server aplikasi billing.<br>Pastikan Anda mempunyai akses PM2 di server.
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-        <button type="button" class="btn btn-danger" id="confirmRestartMikrotik">Restart</button>
+        <button type="button" class="btn btn-danger" id="confirmRestartBilling">Restart</button>
       </div>
     </div>
   </div>
@@ -87,31 +87,72 @@
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script>
 $(function() {
+  function pollLoginAndRedirect(container) {
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch('/admin/login', { method: 'GET', cache: 'no-store' });
+        if (res.ok) {
+          clearInterval(pollInterval);
+          window.location.href = '/admin/login';
+        }
+      } catch (_err) {
+        // server masih restart, tunggu
+      }
+    }, 1500);
+    container.text('Server billing sedang memulai ulang. Mengalihkan ke login saat server siap...');
+  }
+
+  function startBillingRedirectCountdown(container, seconds) {
+    let remaining = seconds;
+    container.removeClass('d-none alert-danger').addClass('alert-success');
+    container.text(`Billing berhasil direstart. Mengalihkan ke login dalam ${remaining} detik...`);
+    const intervalId = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(intervalId);
+        pollLoginAndRedirect(container);
+      } else {
+        container.text(`Billing berhasil direstart. Mengalihkan ke login dalam ${remaining} detik...`);
+      }
+    }, 1000);
+  }
+
   // Tampilkan modal saat tombol sidebar diklik
-  $(document).on('click', '#restartMikrotikBtn', function(e) {
+  $(document).on('click', '#btnRestartBilling', function(e) {
     e.preventDefault();
-    $('#restartMikrotikModal').modal('show');
+    $('#restartBillingModal').modal('show');
   });
   // Handle konfirmasi restart
-  $('#confirmRestartMikrotik').on('click', function() {
-    $('#restartMikrotikModal').modal('hide');
+  $('#confirmRestartBilling').on('click', function() {
+    $('#restartBillingModal').modal('hide');
+    const $btn = $(this);
+    const originalText = $btn.html();
+    let restartSuccess = false;
+    $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Restarting...');
+
     // Kirim request ke backend
     $.ajax({
-      url: '/admin/mikrotik/restart',
+      url: '/admin/billing/system/restart',
       method: 'POST',
       success: function(res) {
         let notif = $('#restartNotif');
-        if(res.success) {
-          notif.removeClass('d-none alert-danger').addClass('alert-success').text(res.message || 'Mikrotik berhasil direstart!');
+        if (res.success) {
+          restartSuccess = true;
+          startBillingRedirectCountdown(notif, 5);
         } else {
-          notif.removeClass('d-none alert-success').addClass('alert-danger').text(res.message || 'Gagal restart Mikrotik!');
+          notif.removeClass('d-none alert-success').addClass('alert-danger').text(res.message || 'Gagal restart billing!');
+          setTimeout(function() { notif.addClass('d-none'); }, 4000);
         }
-        setTimeout(function() { notif.addClass('d-none'); }, 4000);
       },
       error: function() {
         let notif = $('#restartNotif');
         notif.removeClass('d-none alert-success').addClass('alert-danger').text('Gagal menghubungi server!');
         setTimeout(function() { notif.addClass('d-none'); }, 4000);
+      },
+      complete: function() {
+        if (!restartSuccess) {
+          $btn.prop('disabled', false).html(originalText);
+        }
       }
     });
   });

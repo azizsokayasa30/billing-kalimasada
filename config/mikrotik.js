@@ -583,17 +583,37 @@ async function addPPPoEUserRadius({ username, password, profile = null }) {
         // Insert atau update password di radcheck
         await conn.execute(
             "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-            [username, password, password]
+            [username, password]
         );
         logger.info(`[RADIUS] Password inserted/updated for user ${username}`);
         
         // Assign user ke group/package jika profile diberikan
         if (profile) {
-            // Convert profile ke format groupname (misal: "paket_10mbps" atau "default")
-            const groupname = profile.toLowerCase().replace(/\s+/g, '_');
-            
-            logger.info(`[RADIUS] Setting groupname ${groupname} for user ${username}`);
-            
+            // Determine groupname from profile
+            let profileToUse = profile;
+            const [profileCheck] = await conn.execute(
+                "SELECT DISTINCT groupname FROM radgroupreply WHERE groupname = ? LIMIT 1",
+                [profileToUse]
+            );
+
+            if (profileCheck.length === 0) {
+                const normalizedProfile = profile.toLowerCase().replace(/\s+/g, '_');
+                const [normalizedCheck] = await conn.execute(
+                    "SELECT DISTINCT groupname FROM radgroupreply WHERE groupname = ? LIMIT 1",
+                    [normalizedProfile]
+                );
+                if (normalizedCheck.length > 0) {
+                    profileToUse = normalizedProfile;
+                }
+            }
+
+            const mikrotikProfileName = profile || profileToUse;
+            await conn.execute(
+                "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Group', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
+                [profileToUse, mikrotikProfileName]
+            );
+            logger.info(`[RADIUS] Ensured Mikrotik-Group=${mikrotikProfileName} for profile ${profileToUse}`);
+
             // HAPUS SEMUA groupname untuk username ini terlebih dahulu untuk menghindari duplikasi
             await conn.execute(
                 "DELETE FROM radusergroup WHERE username = ?",
@@ -603,9 +623,9 @@ async function addPPPoEUserRadius({ username, password, profile = null }) {
             // Insert groupname yang baru
             await conn.execute(
                 "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
-                [username, groupname]
+                [username, profileToUse]
             );
-            logger.info(`[RADIUS] Groupname ${groupname} assigned to user ${username}`);
+            logger.info(`[RADIUS] Groupname ${profileToUse} assigned to user ${username}`);
         }
         
         await conn.end();
@@ -820,7 +840,7 @@ async function ensureIsolirProfileRadius() {
                 const isolirPool = getSetting('isolir_pool', 'isolir-pool');
                 await conn.execute(
                     "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-Pool', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
-                    [isolirPool, isolirPool]
+                    [isolirPool]
                 );
                 logger.info(`Profile isolir sekarang menggunakan Framed-Pool: ${isolirPool}`);
             }
@@ -848,7 +868,7 @@ async function ensureIsolirProfileRadius() {
         const isolirPool = getSetting('isolir_pool', 'isolir-pool');
         await conn.execute(
             "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-Pool', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
-            [isolirPool, isolirPool]
+            [isolirPool]
         );
         logger.info(`Profile isolir menggunakan Framed-Pool: ${isolirPool}`);
         
@@ -861,7 +881,7 @@ async function ensureIsolirProfileRadius() {
             );
             await conn.execute(
                 "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES ('isolir', 'Framed-IP-Address', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
-                [isolirIpRange, isolirIpRange]
+                [isolirIpRange]
             );
             logger.info(`Profile isolir menggunakan Framed-IP-Address: ${isolirIpRange}`);
         }
@@ -1083,7 +1103,7 @@ async function enableHotspotUserRadius(username) {
             // Restore password
             await conn.execute(
                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-                [username, oldPassword, oldPassword]
+                [username, oldPassword]
             );
             // Hapus X-Old-Password
             await conn.execute(
@@ -1101,7 +1121,7 @@ async function enableHotspotUserRadius(username) {
                     const defaultPassword = member.hotspot_username;
                     await conn.execute(
                         "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-                        [username, defaultPassword, defaultPassword]
+                        [username, defaultPassword]
                     );
                     logger.info(`[RADIUS] Restored password from billing DB for ${username}`);
                 } else {
@@ -2643,7 +2663,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         // Insert password ke radcheck
         await conn.execute(
             "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-            [username, password, password]
+            [username, password]
         );
         
         // Cek apakah profile exist di radgroupreply dengan case-sensitive
@@ -2697,7 +2717,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
                     // Sync rate limit ke radgroupreply
                     await conn.execute(
                         "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'MikroTik-Rate-Limit', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
-                        [profileToUse, rateLimitStr, rateLimitStr]
+                        [profileToUse, rateLimitStr]
                     );
                     
                     logger.info(`✅ Synced rate limit from metadata to radgroupreply for profile ${profileToUse}: ${rateLimitStr}`);
@@ -2716,7 +2736,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         if (mikrotikProfileName) {
             await conn.execute(
                 "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Group', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
-                [profileToUse, mikrotikProfileName, mikrotikProfileName]
+                [profileToUse, mikrotikProfileName]
             );
             logger.info(`✅ Ensured Mikrotik-Group=${mikrotikProfileName} for RADIUS profile/group ${profileToUse}`);
         }
@@ -2731,7 +2751,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         if (comment) {
             await conn.execute(
                 "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Reply-Message', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-                [username, comment, comment]
+                [username, comment]
             );
         }
         
@@ -2765,18 +2785,18 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
             if (nasPortId) {
                 await conn.execute(
                     "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'NAS-Port-Id', '==', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-                    [username, nasPortId, nasPortId]
+                    [username, nasPortId]
                 );
             }
 
             await conn.execute(
                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Called-Station-Id', '==', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-                [username, sanitizedServer, sanitizedServer]
+                [username, sanitizedServer]
             );
 
             await conn.execute(
                 "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Mikrotik-Server', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-                [username, sanitizedServer, sanitizedServer]
+                [username, sanitizedServer]
             );
 
             logger.info(`Voucher ${username} bound to server ${sanitizedServer} (NAS-Identifier=${nasIdentifier || 'n/a'}, NAS-IP=${nasIp || 'n/a'}, Router=${routerName || 'n/a'}, NAS-Port-Id=${nasPortId || 'n/a'})`);
@@ -2787,13 +2807,13 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         if (uptimeSeconds) {
             await conn.execute(
                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Max-All-Session', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-                [username, uptimeSeconds.toString(), uptimeSeconds.toString()]
+                [username, uptimeSeconds.toString()]
             );
             logger.info(`Voucher ${username} uptime limit set to ${uptimeSeconds} seconds`);
 
             await conn.execute(
                 "INSERT INTO radreply (username, attribute, op, value) VALUES (?, 'Session-Timeout', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-                [username, uptimeSeconds.toString(), uptimeSeconds.toString()]
+                [username, uptimeSeconds.toString()]
             );
             logger.info(`Voucher ${username} session timeout set to ${uptimeSeconds} seconds`);
         } else {
@@ -2806,7 +2826,7 @@ async function addHotspotUserRadius(username, password, profile, comment = null,
         if (validitySeconds) {
             await conn.execute(
                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Expire-After', ':=', ?) ON CONFLICT(username, attribute) DO UPDATE SET value = excluded.value",
-                [username, validitySeconds.toString(), validitySeconds.toString()]
+                [username, validitySeconds.toString()]
             );
             logger.info(`Voucher ${username} validity set to ${validitySeconds} seconds`);
         }
