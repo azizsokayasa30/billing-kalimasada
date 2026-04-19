@@ -3024,21 +3024,39 @@ router.post('/whatsapp-settings/groups', async (req, res) => {
 router.post('/system/restart', async (req, res) => {
     try {
         const repoPath = getSetting('repo_path', process.cwd());
-        const appNameSetting = getSetting('pm2_restart_target', null)
+        const targetApp = getSetting('pm2_restart_target', null)
             || getSetting('pm2_app_name', null)
             || process.env.PM2_APP_NAME
+            || process.env.name
+            || (typeof process.env.pm_id !== 'undefined' ? process.env.pm_id : null)
             || 'cvlmedia';
-        const appResolvedFromFallback = (!getSetting('pm2_restart_target', null) && !getSetting('pm2_app_name', null) && !process.env.PM2_APP_NAME);
         const opts = { cwd: repoPath, windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/bash' };
-        const pm2Cmd = `pm2 restart ${appNameSetting} || pm2 reload ${appNameSetting}`;
-        exec(pm2Cmd, opts, (error, stdout, stderr) => {
-            if (error) {
-                return res.status(500).json({ success: false, message: 'Restart failed', error: stderr || error.message, log: stdout, app: appNameSetting, fallbackUsed: appResolvedFromFallback });
-            }
-            exec('pm2 save', opts, () => {
-                res.json({ success: true, message: 'Billing system restarted', log: stdout, app: appNameSetting, fallbackUsed: appResolvedFromFallback });
+
+        const execAsync = (command) => new Promise((resolve, reject) => {
+            exec(command, opts, (error, stdout, stderr) => {
+                if (error) return reject({ error, stdout, stderr });
+                resolve({ stdout, stderr });
             });
         });
+
+        const restartCmd = `pm2 restart ${targetApp}`;
+        try {
+            const { stdout } = await execAsync(restartCmd);
+            await execAsync('pm2 save');
+            return res.json({ success: true, message: 'Billing system restarted', log: stdout, app: targetApp, usedFallback: false });
+        } catch (restartError) {
+            const stderr = restartError.stderr || (restartError.error && restartError.error.message) || '';
+            const startFallback = /process.*not found|unknown process|no process found|not found/i.test(stderr);
+
+            if (startFallback) {
+                const startCmd = `pm2 start ${path.join(repoPath, 'app.js')} --name "${targetApp}"`;
+                const { stdout } = await execAsync(startCmd);
+                await execAsync('pm2 save');
+                return res.json({ success: true, message: 'Billing system started via PM2 fallback', log: stdout, app: targetApp, usedFallback: true });
+            }
+
+            return res.status(500).json({ success: false, message: 'Restart failed', error: stderr || restartError.error.message, log: restartError.stdout, app: targetApp, fallbackUsed: false });
+        }
     } catch (e) {
         res.status(500).json({ success: false, message: 'Unexpected error', error: e.message });
     }
