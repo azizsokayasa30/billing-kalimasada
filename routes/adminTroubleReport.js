@@ -4,7 +4,9 @@ const { adminAuth } = require('./adminAuth');
 const { 
   getAllTroubleReports, 
   getTroubleReportById, 
-  updateTroubleReportStatus 
+  updateTroubleReportStatus,
+  createTroubleReport,
+  deleteTroubleReport
 } = require('../config/troubleReport');
 
 // Middleware admin auth untuk semua route
@@ -123,6 +125,77 @@ router.post('/add-note/:id', async (req, res) => {
     message: 'Catatan berhasil ditambahkan',
     report: updatedReport
   });
+});
+
+// POST: Hapus laporan gangguan
+router.delete('/delete/:id', async (req, res) => {
+  try {
+    const reportId = req.params.id;
+    const deleted = await deleteTroubleReport(reportId);
+    
+    if (deleted) {
+      res.json({ success: true, message: 'Laporan berhasil dihapus' });
+    } else {
+      res.status(404).json({ success: false, message: 'Laporan tidak ditemukan' });
+    }
+  } catch (error) {
+    console.error('Error delete trouble report:', error);
+    res.status(500).json({ success: false, message: 'Gagal menghapus laporan' });
+  }
+});
+
+// GET: Cari pelanggan (untuk auto fill di form buat tiket)
+router.get('/customers/search', async (req, res) => {
+  try {
+    const q = req.query.q;
+    if (!q || q.length < 3) return res.json({ success: true, data: [] });
+    
+    const dbPath = require('path').join(__dirname, '../data/billing.db');
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(dbPath);
+    
+    db.all("SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? LIMIT 10", ['%'+q+'%', '%'+q+'%'], (err, rows) => {
+      db.close();
+      if (err) return res.status(500).json({ success: false, message: 'Database error' });
+      res.json({ success: true, data: rows });
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// GET: Ambil daftar teknisi
+router.get('/technicians/list', async (req, res) => {
+  try {
+    const dbPath = require('path').join(__dirname, '../data/billing.db');
+    const sqlite3 = require('sqlite3').verbose();
+    const db = new sqlite3.Database(dbPath);
+    
+    db.all("SELECT id, name, role FROM technicians WHERE is_active = 1", [], (err, rows) => {
+      db.close();
+      if (err) return res.status(500).json({ success: false, message: 'Database error' });
+      res.json({ success: true, technicians: rows });
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// POST: Buat tiket laporan gangguan baru dari admin
+router.post('/create', async (req, res) => {
+  try {
+    const { name, phone, location, category, description, assignedTechnicianId, priority } = req.body;
+    
+    // Note: createTroubleReport will automatically send notification when auto_ticket setting is true
+    const newReport = await createTroubleReport({
+      name, phone, location, category, description, assignedTechnicianId, priority
+    });
+    
+    res.json({ success: true, message: 'Tiket berhasil dibuat', report: newReport });
+  } catch (error) {
+    console.error('Error creating ticket:', error);
+    res.status(500).json({ success: false, message: 'Gagal membuat tiket: ' + error.message });
+  }
 });
 
 module.exports = router;

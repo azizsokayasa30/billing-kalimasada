@@ -388,7 +388,6 @@ router.delete('/odp/:id', adminAuth, async (req, res) => {
         });
         
         if (!existingODP) {
-            db.close();
             return res.status(404).json({
                 success: false,
                 message: 'ODP tidak ditemukan'
@@ -404,7 +403,6 @@ router.delete('/odp/:id', adminAuth, async (req, res) => {
         });
         
         if (activeCableRoutes > 0) {
-            db.close();
             return res.status(400).json({
                 success: false,
                 message: `ODP "${existingODP.name}" tidak dapat dihapus karena masih memiliki ${activeCableRoutes} kabel yang terhubung aktif. Silakan putuskan semua kabel terlebih dahulu melalui menu Cable Routes.`
@@ -419,7 +417,6 @@ router.delete('/odp/:id', adminAuth, async (req, res) => {
             });
         });
         
-        db.close();
         
         if (result === 0) {
             return res.status(404).json({

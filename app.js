@@ -1,3 +1,11 @@
+// ==========================================
+// CRITICAL: Set TZ sebelum SEMUA require() lain
+// Node.js membaca TZ SEKALI saat V8 engine start.
+// Jika di-set terlambat, semua new Date() akan pakai UTC.
+// Harus berada di baris PERTAMA untuk efek penuh.
+// ==========================================
+process.env.TZ = 'Asia/Jakarta';
+
 const express = require('express');
 const path = require('path');
 const axios = require('axios');
@@ -6,17 +14,16 @@ console.log('🚀 [BOOTSTRAP] CVLMEDIA Application is starting...');
 console.log(`🚀 [BOOTSTRAP] Current working directory: ${process.cwd()}`);
 console.log(`🚀 [BOOTSTRAP] NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`🚀 [BOOTSTRAP] PORT from ENV: ${process.env.PORT}`);
+console.log(`⏰ [BOOTSTRAP] Timezone locked to: ${process.env.TZ} (WIB UTC+7)`);
 const whatsapp = require('./config/whatsapp');
 const { monitorPPPoEConnections } = require('./config/mikrotik');
 const fs = require('fs');
 const session = require('express-session');
 const { getSetting } = require('./config/settingsManager');
 
-// Set timezone aplikasi sesuai dengan timezone server
+// Konfirmasi timezone telah tersetel dengan benar
 const { getServerTimezone } = require('./config/settingsManager');
-const serverTimezone = getServerTimezone();
-process.env.TZ = serverTimezone;
-logger.info(`⏰ Application timezone set to: ${serverTimezone} (matching server timezone)`);
+logger.info(`⏰ Application timezone confirmed: ${process.env.TZ} (WIB - Waktu Indonesia Barat)`);
 
 // Import invoice scheduler
 const invoiceScheduler = require('./config/scheduler');
@@ -279,7 +286,7 @@ app.use('/public', express.static(path.join(__dirname, 'public'), {
   etag: true
 }));
 app.use(session({
-  secret: 'rahasia-portal-anda', // Ganti dengan string random yang aman
+  secret: process.env.SESSION_SECRET || getSetting('session_secret', 'kalimasada-billing-secret-key-ganti-ini'),
   resave: false,
   saveUninitialized: false, // Optimized: tidak save session kosong
   cookie: { 
@@ -583,7 +590,7 @@ try {
 const apiDashboardRouter = require('./routes/apiDashboard');
 app.use('/api', apiDashboardRouter);
 app.use('/api/auth', apiAuthRouter);
-app.use('/login', unifiedAuthRouter);
+// NOTE: /login sudah di-mount di baris 555, tidak perlu duplikat di sini
 app.use('/api/customers', apiCustomersRouter);
 app.use('/api/routers', apiRoutersRouter);
 app.use('/api/packages', apiPackagesRouter);

@@ -1,0 +1,18 @@
+[+] Installation completed successfully!
+========================================
+
+Database Credentials saved to: /root/.freeradius_credentials
+Credentials:
+  MariaDB Root Password: 9DfRXosPj2ErIO9P5lHGiLvwb
+  Database: radius
+  User: radius
+  Password: 1rBoCPzXs1CA6NBFRBU16AL5Y
+
+Next steps:
+  1. Configure NAS clients in /etc/freeradius/3.0/clients.conf
+  2. Setup firewall rules (see scripts/setup_firewall.sh)
+  3. Import package groups (see sql/groups.sql)
+  4. Test authentication: radtest username password 127.0.0.1 0 testing123
+
+
+✅ Installation completed!

@@ -6,11 +6,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Form Laporan Gangguan Sederhana</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    
+    <link href="/css/theme.css" rel="stylesheet">
     <style>
         body { background: #f8f9fa; padding: 30px; }
         .result-box { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px #0001; padding: 20px; margin-top: 20px; }
         .form-label { font-weight: 600; }
     </style>
+
+    <!-- GLOBAL THEME INJECTION -->
+    <script>
+      (function(){
+        if(window.__theme_init) return; window.__theme_init=true;
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
+    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
+    <link href="/css/theme-system.css?v=2" rel="stylesheet">
+    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
+    <!-- END GLOBAL THEME INJECTION -->
 </head>
 <body>
     <div class="container" style="max-width: 500px;">

@@ -7,6 +7,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    
+    <link href="/css/theme.css" rel="stylesheet">
     <link href="/vendor/boxicons/boxicons.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/responsive/2.5.0/css/dataTables.responsive.min.css" rel="stylesheet">
@@ -201,6 +203,20 @@
             }
         }
     </style>
+
+    <!-- GLOBAL THEME INJECTION -->
+    <script>
+      (function(){
+        if(window.__theme_init) return; window.__theme_init=true;
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
+    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
+    <link href="/css/theme-system.css?v=2" rel="stylesheet">
+    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
+    <!-- END GLOBAL THEME INJECTION -->
 </head>
 <body>
 <div class="container-fluid">
@@ -236,6 +252,9 @@
                         <p class="text-muted">Kelola dan pantau semua laporan gangguan dari pelanggan</p>
                     </div>
                     <div>
+                        <button class="btn btn-success rounded-pill me-2" data-bs-toggle="modal" data-bs-target="#createTicketModal">
+                            <i class="bi bi-plus-circle me-2"></i> Buat Tiket
+                        </button>
                         <button class="btn btn-primary rounded-pill">
                             <i class="bi bi-file-earmark-text me-2"></i> Export Laporan
                         </button>
@@ -426,6 +445,9 @@
                                                 <a href="https://wa.me/<%= report.phone.replace(/^0/, '62') %>" target="_blank" class="btn btn-success btn-action" title="Hubungi via WhatsApp">
                                                     <i class="bi bi-whatsapp"></i>
                                                 </a>
+                                                <button onclick="deleteTroubleReport('<%= report.id %>')" class="btn btn-danger btn-action ms-1" title="Hapus Laporan">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
                                             </td>
                                         </tr>
                                     <% }); %>
@@ -510,8 +532,200 @@
     </div>
 </div>
 
+<!-- Create Ticket Modal -->
+<div class="modal fade" id="createTicketModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Buat Laporan Gangguan Baru</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createTicketForm">
+                    <div class="mb-3 position-relative">
+                        <label class="form-label">Cari Pelanggan</label>
+                        <input type="text" class="form-control" id="searchCustomer" placeholder="Ketik nama atau nomor HP (min 3 huruf)..." autocomplete="off">
+                        <div id="customerSearchResults" class="list-group position-absolute w-100 mt-1 shadow" style="display:none; z-index:1000; max-height: 200px; overflow-y: auto;"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nama Pelapor <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="name" id="ticketName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nomor Telepon <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="phone" id="ticketPhone" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Lokasi / Alamat <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="location" id="ticketLocation" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Kategori <span class="text-danger">*</span></label>
+                        <select class="form-select" name="category" required>
+                            <option value="Internet Mati">Internet Mati</option>
+                            <option value="Koneksi Lambat">Koneksi Lambat</option>
+                            <option value="Kendala Router">Kendala Router</option>
+                            <option value="Kabel Putus">Kabel Putus</option>
+                            <option value="Lainnya">Lainnya</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Deskripsi Masalah</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Pilih Teknisi <small class="text-muted">(Opsional)</small></label>
+                        <select class="form-select" name="assignedTechnicianId" id="technicianSelect">
+                            <option value="">-- Pilih Teknisi --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Prioritas</label>
+                        <select class="form-select" name="priority">
+                            <option value="Normal">Normal</option>
+                            <option value="High">High</option>
+                            <option value="Urgent">Urgent</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreateTicket()">Simpan & Kirim Notif</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInputCustomer = document.getElementById('searchCustomer');
+        const searchResultsCustomer = document.getElementById('customerSearchResults');
+        let searchTimeout;
+
+        if (searchInputCustomer) {
+            searchInputCustomer.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                const q = this.value;
+                if (q.length < 3) {
+                    searchResultsCustomer.style.display = 'none';
+                    return;
+                }
+                searchTimeout = setTimeout(async () => {
+                    try {
+                        const res = await fetch('/admin/trouble/customers/search?q=' + encodeURIComponent(q));
+                        const json = await res.json();
+                        if (json.success && json.data.length > 0) {
+                            searchResultsCustomer.innerHTML = '';
+                            json.data.forEach(c => {
+                                const a = document.createElement('a');
+                                a.href = '#';
+                                a.className = 'list-group-item list-group-item-action';
+                                a.innerHTML = `<strong>${c.name}</strong> - ${c.phone}<br><small>${c.address || ''}</small>`;
+                                a.onclick = (e) => {
+                                    e.preventDefault();
+                                    document.getElementById('ticketName').value = c.name;
+                                    document.getElementById('ticketPhone').value = c.phone;
+                                    document.getElementById('ticketLocation').value = c.address || '';
+                                    searchInputCustomer.value = '';
+                                    searchResultsCustomer.style.display = 'none';
+                                };
+                                searchResultsCustomer.appendChild(a);
+                            });
+                            searchResultsCustomer.style.display = 'block';
+                        } else {
+                            searchResultsCustomer.innerHTML = '<div class="list-group-item text-muted">Tidak ditemukan</div>';
+                            searchResultsCustomer.style.display = 'block';
+                        }
+                    } catch (e) {
+                        console.error('Search error', e);
+                    }
+                }, 300);
+            });
+
+            document.addEventListener('click', function(e) {
+                if(e.target !== searchInputCustomer && e.target !== searchResultsCustomer) {
+                    searchResultsCustomer.style.display = 'none';
+                }
+            });
+        }
+        
+        // Load technicians
+        const techSelect = document.getElementById('technicianSelect');
+        if (techSelect) {
+            fetch('/admin/trouble/technicians/list')
+            .then(res => res.json())
+            .then(json => {
+                if (json.success) {
+                    json.technicians.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.id;
+                        opt.textContent = t.name + ' (' + t.role + ')';
+                        techSelect.appendChild(opt);
+                    });
+                }
+            }).catch(e => console.error('Gagal load teknisi:', e));
+        }
+
+        const isTechnicianView = window.location.pathname.includes('/technician/') || document.body.classList.contains('technician-view');
+        if (isTechnicianView) {
+            const adminNav = document.querySelector('.bottom-nav');
+            const technicianNav = document.getElementById('technicianNav');
+            if (adminNav) adminNav.style.display = 'none';
+            if (technicianNav) {
+                technicianNav.style.display = 'block';
+                technicianNav.style.position = 'fixed';
+                technicianNav.style.bottom = '0';
+                technicianNav.style.left = '0';
+                technicianNav.style.right = '0';
+                technicianNav.style.zIndex = '1030';
+            }
+        }
+    });
+
+    window.submitCreateTicket = async function() {
+        const form = document.getElementById('createTicketForm');
+        if(!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+        const data = Object.fromEntries(new FormData(form).entries());
+        try {
+            const res = await fetch('/admin/trouble/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if(result.success) {
+                alert('Tiket berhasil dibuat!');
+                location.reload();
+            } else {
+                alert(result.message || 'Gagal membuat tiket');
+            }
+        } catch(e) {
+            alert('Terjadi kesalahan pada server');
+        }
+    };
+
+    window.deleteTroubleReport = async function(id) {
+        if(!confirm('Apakah Anda yakin ingin menghapus laporan ini?')) return;
+        try {
+            const res = await fetch('/admin/trouble/delete/' + id, { method: 'DELETE' });
+            const result = await res.json();
+            if(result.success) {
+                alert('Laporan berhasil dihapus');
+                location.reload();
+            } else {
+                alert(result.message || 'Gagal menghapus laporan');
+            }
+        } catch(e) {
+            alert('Terjadi kesalahan pada server');
+        }
+    };
+</script>
 
 <% if (typeof isTechnicianView !== 'undefined' && isTechnicianView) { %>
     <!-- Mobile Bottom Navigation -->

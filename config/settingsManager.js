@@ -100,27 +100,28 @@ function clearSettingsCache() {
 // Helper function untuk mendapatkan timezone server
 function getServerTimezone() {
     try {
-        // Coba ambil dari environment variable TZ jika ada
-        if (process.env.TZ) {
+        // Coba ambil dari environment variable TZ jika sudah di-set
+        // (Hanya percaya jika bukan 'UTC' default kosong)
+        if (process.env.TZ && process.env.TZ !== 'UTC') {
             return process.env.TZ;
         }
         
-        // Coba baca dari /etc/timezone (Linux)
+        // Coba baca dari /etc/timezone (Linux/Docker only)
         try {
             const timezoneFile = fs.readFileSync('/etc/timezone', 'utf8').trim();
-            if (timezoneFile) {
+            if (timezoneFile && timezoneFile !== 'UTC') {
                 return timezoneFile;
             }
         } catch (e) {
-            // File tidak ada, lanjut ke metode lain
+            // File tidak ada (Windows), lanjut ke langkah berikutnya
         }
         
-        // Coba baca dari timedatectl output (Linux only)
+        // Coba baca dari timedatectl output (Linux only - skip di Windows)
         if (process.platform !== 'win32') {
             try {
                 const { execSync } = require('child_process');
-                const output = execSync('timedatectl show -p Timezone --value', { encoding: 'utf8' }).trim();
-                if (output) {
+                const output = execSync('timedatectl show -p Timezone --value', { encoding: 'utf8', timeout: 1000 }).trim();
+                if (output && output !== 'UTC') {
                     return output;
                 }
             } catch (e) {
@@ -128,11 +129,25 @@ function getServerTimezone() {
             }
         }
         
-        // Fallback: gunakan UTC (default server biasanya UTC)
-        return 'UTC';
+        // PENTING: Fallback ke Asia/Jakarta (WIB) bukan UTC
+        // Aplikasi ini beroperasi di Indonesia, UTC menyebabkan offset -7 jam
+        return 'Asia/Jakarta';
     } catch (error) {
-        return 'UTC';
+        return 'Asia/Jakarta';
     }
+}
+
+// Helper function untuk mendapatkan timestamp lokal WIB yang benar
+// Gunakan fungsi ini sebagai pengganti new Date().toISOString() di seluruh aplikasi
+function getLocalTimestamp(date = null) {
+    const d = date ? new Date(date) : new Date();
+    // Konversi ke Asia/Jakarta menggunakan Intl API (tersedia di semua platform)
+    const jakartaOffsetMs = 7 * 60 * 60 * 1000; // UTC+7
+    const utcMs = d.getTime();
+    const jakartaMs = utcMs + jakartaOffsetMs;
+    const jakartaDate = new Date(jakartaMs);
+    // Return dalam format ISO-like yang kompatibel dengan SQLite
+    return jakartaDate.toISOString().replace('Z', '+07:00');
 }
 
 module.exports = { 
@@ -142,6 +157,7 @@ module.exports = {
   clearSettingsCache,
   deleteSetting,
   getServerTimezone,
+  getLocalTimestamp,
   getPerformanceStats: () => performanceMonitor.getStats(),
   getPerformanceReport: () => performanceMonitor.getPerformanceReport(),
   getQuickStats: () => performanceMonitor.getQuickStats()

@@ -14,6 +14,7 @@ const { getSettingsWithCache } = require('../config/settingsManager');
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const { getRadiusConfigValue } = require('../config/radiusConfig');
 const { checkLicenseStatus } = require('../config/licenseManager');
+const billingManager = require('../config/billing');
 
 // GET: Dashboard admin
 router.get('/dashboard', adminAuth, async (req, res) => {
@@ -157,6 +158,25 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     console.error('⚠️ [DASHBOARD] Error checking license status:', error);
   }
 
+  // ─── Billing Stats ────────────────────────────────────────────────────────
+  let billingStats = null;
+  let overdueInvoices = [];
+  let recentInvoices = [];
+  const withBillingTimeout = (promise, ms = 10000) =>
+    Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('billing timeout')), ms))]);
+
+  try {
+    [billingStats, overdueInvoices, recentInvoices] = await Promise.all([
+      withBillingTimeout(billingManager.getBillingStats(), 15000),
+      withBillingTimeout(billingManager.getOverdueInvoices(10), 10000),
+      withBillingTimeout(billingManager.getInvoices(null, 10, 0), 10000)
+    ]);
+    console.log('✅ [DASHBOARD] Billing stats loaded');
+  } catch (billingError) {
+    console.warn('⚠️ [DASHBOARD] Billing stats tidak dapat dimuat:', billingError.message);
+    billingStats = { total_customers: 0, active_customers: 0, total_invoices: 0, paid_invoices: 0, unpaid_invoices: 0, total_revenue: 0, total_unpaid: 0, monthly_revenue: 0, voucher_revenue: 0, monthly_invoices: 0, paid_monthly_invoices: 0, unpaid_monthly_invoices: 0, monthly_unpaid: 0, voucher_invoices: 0, paid_voucher_invoices: 0, unpaid_voucher_invoices: 0, voucher_unpaid: 0 };
+  }
+
   res.render('adminDashboard', {
     title: 'Dashboard Admin',
     page: 'dashboard',
@@ -166,11 +186,15 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     mikrotikTotal,
     mikrotikAktif,
     mikrotikOffline,
-    settings, // Sertakan settings di sini
+    settings,
     versionInfo: getVersionInfo(),
     versionBadge: getVersionBadge(),
-    configValidation: req.session.configValidation || null, // Sertakan hasil validasi konfigurasi
-    licenseStatus: licenseStatus // Sertakan status license
+    configValidation: req.session.configValidation || null,
+    licenseStatus: licenseStatus,
+    // Billing data
+    billingStats: billingStats || {},
+    overdueInvoices: overdueInvoices || [],
+    recentInvoices: recentInvoices || []
   });
 });
 

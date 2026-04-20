@@ -1,14 +1,43 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <!-- Theme Init: Jalankan SEBELUM CSS load untuk mencegah flash -->
+    <script>
+      (function(){
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
     <%- include('partials/hard-reload') %>
     <meta charset="UTF-8">
     <title><% if (typeof isTechnicianView !== 'undefined' && isTechnicianView) { %>Dashboard Teknisi<% } else { %>Dashboard Admin<% } %></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    
+    
     <link href="/css/responsive-admin.css" rel="stylesheet">
     <link href="/css/dashboard-modern.css" rel="stylesheet">
+    
+
+    <!-- GLOBAL THEME INJECTION -->
+    <script>
+      (function(){
+        if(window.__theme_init) return; window.__theme_init=true;
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
+    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
+    <link href="/css/theme-system.css?v=2" rel="stylesheet">
+    <link href="/css/theme-overrides.css?v=2" rel="stylesheet">
+    <link href="/css/card-system.css?v=1" rel="stylesheet">
+    <!-- END GLOBAL THEME INJECTION -->
 </head>
 <body>
 <div class="container-fluid">
@@ -241,6 +270,9 @@
                         <a href="/admin/settings" class="btn btn-sm">
                             <i class="bi bi-sliders me-1"></i>Pengaturan
                         </a>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnHeaderThemeToggle" title="Ganti Tema">
+                            <i id="headerThemeIcon" class="bi bi-moon-fill"></i>
+                        </button>
                         <button type="button" class="btn btn-sm" id="refreshDashboardBtn">
                             <i class="bi bi-arrow-clockwise me-1"></i>Refresh
                         </button>
@@ -736,6 +768,210 @@
             
             <!-- Extracted Dashboard Scripts -->
             <script src="/js/dashboard-charts.js"></script>
+
+            <!-- ======================================================= -->
+            <!-- ===== BILLING & ACCOUNTING SECTION ==================== -->
+            <!-- ======================================================= -->
+            <div class="billing-section-wrap mt-5">
+                <div class="dashboard-header mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1"><i class="bi bi-speedometer2 me-2"></i>Billing &amp; Accounting</h5>
+                            <p class="text-muted small mb-0">Statistik Penagihan &amp; Keuangan Real-time</p>
+                        </div>
+                        <div class="d-none d-lg-flex gap-2">
+                            <a href="/admin/billing/monthly-summary" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-calendar-event me-1"></i>Summary Bulanan
+                            </a>
+                            <a href="/admin/billing/invoices-by-type" class="btn btn-outline-info btn-sm">
+                                <i class="bi bi-receipt-cutoff me-1"></i>Invoice by Type
+                            </a>
+                            <a href="/admin/billing/payment-settings" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-gear me-1"></i>Settings
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BILLING METRIC CARDS -->
+                <% const bs = typeof billingStats !== 'undefined' ? billingStats : {}; %>
+                <div class="row mb-4">
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="metric-card metric-card-secondary">
+                            <div class="metric-card-icon"><i class="bi bi-people"></i></div>
+                            <div class="metric-card-value"><%= bs.total_customers || 0 %></div>
+                            <div class="metric-card-label">Total Pelanggan</div>
+                            <div class="mt-2 small text-muted">
+                                <span class="badge bg-success-subtle text-success"><i class="bi bi-check-circle me-1"></i><%= bs.active_customers || 0 %> Aktif</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="metric-card metric-card-success">
+                            <div class="metric-card-icon"><i class="bi bi-calendar-check"></i></div>
+                            <div class="metric-card-value text-success">Rp <%= (bs.monthly_revenue || 0).toLocaleString('id-ID') %></div>
+                            <div class="metric-card-label">Pendapatan Bulanan</div>
+                            <div class="mt-2 small text-muted">
+                                <span class="badge bg-info-subtle text-info"><i class="bi bi-receipt-check me-1"></i><%= bs.paid_monthly_invoices || 0 %> Lunas</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="metric-card metric-card-info">
+                            <div class="metric-card-icon"><i class="bi bi-ticket-perforated"></i></div>
+                            <div class="metric-card-value text-info">Rp <%= (bs.voucher_revenue || 0).toLocaleString('id-ID') %></div>
+                            <div class="metric-card-label">Pendapatan Voucher</div>
+                            <div class="mt-2 small text-muted">
+                                <span class="badge bg-danger-subtle text-danger"><i class="bi bi-exclamation-circle me-1"></i>Rp <%= (bs.voucher_unpaid || 0).toLocaleString('id-ID') %> Pending</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="metric-card metric-card-pink">
+                            <div class="metric-card-icon"><i class="bi bi-cash-stack"></i></div>
+                            <div class="metric-card-value text-primary">Rp <%= (bs.total_revenue || 0).toLocaleString('id-ID') %></div>
+                            <div class="metric-card-label">Total Pendapatan</div>
+                            <div class="mt-2 small text-muted">
+                                <span class="badge bg-primary-subtle text-primary"><i class="bi bi-graph-up me-1"></i><%= bs.paid_invoices || 0 %>/<%= bs.total_invoices || 0 %> Lunas</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- INVOICE BREAKDOWN + RECENT -->
+                <div class="row">
+                    <!-- Tagihan Bulanan -->
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header section-card-header">
+                                <div class="fw-bold"><i class="bi bi-calendar2-range me-2"></i>Tagihan Bulanan</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center mb-3 mt-2">
+                                    <div class="col-4"><h5 class="fw-bold"><%= bs.monthly_invoices || 0 %></h5><p class="text-muted small mb-0">Total</p></div>
+                                    <div class="col-4 border-start"><h5 class="fw-bold text-success"><%= bs.paid_monthly_invoices || 0 %></h5><p class="text-muted small mb-0">Lunas</p></div>
+                                    <div class="col-4 border-start"><h5 class="fw-bold text-danger"><%= bs.unpaid_monthly_invoices || 0 %></h5><p class="text-muted small mb-0">Unpaid</p></div>
+                                </div>
+                                <div class="p-2 bg-light rounded-3 small">
+                                    <div class="d-flex justify-content-between mb-1"><span class="text-muted">Pendapatan:</span><span class="fw-bold text-success">Rp <%= (bs.monthly_revenue || 0).toLocaleString('id-ID') %></span></div>
+                                    <div class="d-flex justify-content-between"><span class="text-muted">Unpaid:</span><span class="fw-bold text-danger">Rp <%= (bs.monthly_unpaid || 0).toLocaleString('id-ID') %></span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Tagihan Voucher -->
+                    <div class="col-xl-3 col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header section-card-header">
+                                <div class="fw-bold"><i class="bi bi-ticket-detailed me-2"></i>Tagihan Voucher</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center mb-3 mt-2">
+                                    <div class="col-4"><h5 class="fw-bold"><%= bs.voucher_invoices || 0 %></h5><p class="text-muted small mb-0">Total</p></div>
+                                    <div class="col-4 border-start"><h5 class="fw-bold text-success"><%= bs.paid_voucher_invoices || 0 %></h5><p class="text-muted small mb-0">Lunas</p></div>
+                                    <div class="col-4 border-start"><h5 class="fw-bold text-danger"><%= bs.unpaid_voucher_invoices || 0 %></h5><p class="text-muted small mb-0">Unpaid</p></div>
+                                </div>
+                                <div class="p-2 bg-light rounded-3 small">
+                                    <div class="d-flex justify-content-between mb-1"><span class="text-muted">Pendapatan:</span><span class="fw-bold text-success">Rp <%= (bs.voucher_revenue || 0).toLocaleString('id-ID') %></span></div>
+                                    <div class="d-flex justify-content-between"><span class="text-muted">Unpaid:</span><span class="fw-bold text-danger">Rp <%= (bs.voucher_unpaid || 0).toLocaleString('id-ID') %></span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Tagihan Terbaru -->
+                    <div class="col-xl-6 mb-4">
+                        <div class="card">
+                            <div class="card-header section-card-header d-flex justify-content-between align-items-center">
+                                <div class="fw-bold"><i class="bi bi-clock-history me-2"></i>Tagihan Terbaru</div>
+                                <a href="/admin/billing/invoices" class="btn btn-sm btn-light py-0 px-2" style="font-size:0.75rem;">View All</a>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0" style="font-size:0.8rem;">
+                                        <thead><tr>
+                                            <th class="ps-3">No. Tagihan</th>
+                                            <th>Pelanggan</th>
+                                            <th>Jumlah</th>
+                                            <th>Status</th>
+                                            <th class="pe-3">Jatuh Tempo</th>
+                                        </tr></thead>
+                                        <tbody>
+                                        <% if (typeof recentInvoices !== 'undefined' && recentInvoices && recentInvoices.length > 0) { %>
+                                            <% recentInvoices.forEach(function(inv) { %>
+                                            <tr>
+                                                <td class="ps-3"><a href="/admin/billing/invoices/<%= inv.id %>" class="text-primary fw-bold text-decoration-none"><%= inv.invoice_number %></a></td>
+                                                <td><%= inv.display_name || inv.customer_name || inv.member_name || 'N/A' %></td>
+                                                <td class="fw-bold">Rp <%= parseFloat(inv.amount).toLocaleString('id-ID') %></td>
+                                                <td>
+                                                    <% if (inv.status === 'paid') { %><span class="badge bg-success">Lunas</span>
+                                                    <% } else if (new Date(inv.due_date) < new Date()) { %><span class="badge bg-danger">Terlambat</span>
+                                                    <% } else { %><span class="badge bg-warning text-dark">Belum Lunas</span><% } %>
+                                                </td>
+                                                <td class="pe-3"><%= new Date(inv.due_date).toLocaleDateString('id-ID') %></td>
+                                            </tr>
+                                            <% }); %>
+                                        <% } else { %>
+                                            <tr><td colspan="5" class="text-center py-4 text-muted small">Belum ada tagihan terbaru</td></tr>
+                                        <% } %>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAGIHAN TERLAMBAT -->
+                <% if (typeof overdueInvoices !== 'undefined' && overdueInvoices && overdueInvoices.length > 0) { %>
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header section-card-header d-flex justify-content-between align-items-center">
+                                <div class="fw-bold"><i class="bi bi-exclamation-triangle me-2 text-danger"></i>Tagihan Terlambat</div>
+                                <span class="badge bg-danger rounded-pill"><%= overdueInvoices.length %></span>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0" style="font-size:0.8rem;">
+                                        <thead><tr>
+                                            <th class="ps-3">Pelanggan</th>
+                                            <th>Jumlah / Tempo</th>
+                                            <th class="pe-3">Aksi</th>
+                                        </tr></thead>
+                                        <tbody>
+                                        <% overdueInvoices.forEach(function(inv) { %>
+                                        <tr>
+                                            <td class="ps-3">
+                                                <div class="d-flex flex-column">
+                                                    <span class="fw-bold small"><%= inv.customer_name %></span>
+                                                    <small class="text-muted" style="font-size:0.7rem;"><%= inv.customer_phone %></small>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="fw-bold small">Rp <%= parseFloat(inv.amount).toLocaleString('id-ID') %></span><br>
+                                                <span class="text-danger" style="font-size:0.7rem;"><%= new Date(inv.due_date).toLocaleDateString('id-ID') %></span>
+                                            </td>
+                                            <td class="pe-3">
+                                                <button class="btn btn-danger btn-sm py-0" onclick="suspendCustomer('<%= inv.username %>')"><i class="bi bi-slash-circle me-1"></i>Isolir</button>
+                                                <button class="btn btn-success btn-sm py-0 ms-1"
+                                                    data-phone="<%= inv.customer_phone || '' %>"
+                                                    data-name="<%= inv.customer_name || '' %>"
+                                                    data-invoicenumber="<%= inv.invoice_number || '' %>"
+                                                    data-amount="<%= inv.amount || 0 %>"
+                                                    onclick="sendWaReminderFromBtn(this)"><i class="bi bi-whatsapp"></i></button>
+                                            </td>
+                                        </tr>
+                                        <% }); %>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <% } %>
+            </div><!-- /billing-section-wrap -->
+
             </main>
     </div>
 </div>
@@ -968,6 +1204,64 @@ function clearConfigWarning() {
     }
   });
 }
+
+// ===== BILLING ACTION FUNCTIONS =====
+async function suspendCustomer(username) {
+    const reason = prompt('Masukkan alasan isolir (opsional):', 'Telat bayar');
+    if (reason === null) return;
+    try {
+        const res = await fetch(`/admin/billing/service-suspension/suspend/${encodeURIComponent(username)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('success', 'Isolir Berhasil', `Pelanggan ${username} diisolir.${reason ? ' Alasan: ' + reason : ''}`);
+        } else {
+            showToast('error', 'Isolir Gagal', data.message || 'Gagal melakukan isolir');
+        }
+    } catch (e) {
+        showToast('error', 'Error', e.message || 'Terjadi kesalahan');
+    }
+}
+
+async function restoreCustomer(username) {
+    const reason = prompt('Masukkan alasan pemulihan (opsional):', 'Manual restore');
+    if (reason === null) return;
+    try {
+        const res = await fetch(`/admin/billing/service-suspension/restore/${encodeURIComponent(username)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('success', 'Restore Berhasil', `Pelanggan ${username} dipulihkan.`);
+        } else {
+            showToast('error', 'Restore Gagal', data.message || 'Gagal melakukan restore');
+        }
+    } catch (e) {
+        showToast('error', 'Error', e.message || 'Terjadi kesalahan');
+    }
+}
+
+function sendWaReminder(phone, name, invoiceNumber, amount) {
+    if (!phone) { showToast('error', 'Nomor tidak tersedia', 'Nomor WhatsApp pelanggan kosong.'); return; }
+    const rupiah = parseFloat(amount || 0).toLocaleString('id-ID');
+    const text = `Halo ${name}, ini pengingat tagihan Anda${invoiceNumber ? ' #' + invoiceNumber : ''} sebesar Rp ${rupiah}. Mohon segera melakukan pembayaran. Terima kasih.`;
+    window.open(`https://wa.me/${encodeURIComponent(phone)}?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+function sendWaReminderFromBtn(btn) {
+    sendWaReminder(
+        btn.getAttribute('data-phone') || '',
+        btn.getAttribute('data-name') || '',
+        btn.getAttribute('data-invoicenumber') || '',
+        btn.getAttribute('data-amount') || 0
+    );
+}
+
 </script>
 
 </body>

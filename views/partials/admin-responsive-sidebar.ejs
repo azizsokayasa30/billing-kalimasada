@@ -1,3 +1,6 @@
+<!-- Global Card Color System — loads on every page that includes this sidebar -->
+<link href="/css/card-system.css?v=1" rel="stylesheet">
+
 <!-- Mobile Top Navbar -->
 <nav class="sb-mobile-navbar navbar-dark d-md-none">
     <div class="container-fluid">
@@ -44,29 +47,13 @@
     
     <!-- Navigation Links -->
     <div class="sb-nav">
-        <!-- App Switcher -->
+        <!-- Dashboard Quick Links — selalu terlihat di semua halaman -->
         <div class="sb-section">
-            <div class="sb-app-switcher">
-                <button class="sb-app-switcher-btn" id="appSwitcherBtn">
-                    <div class="sb-app-current">
-                        <i class="bi <%= typeof page !== 'undefined' && page === 'billing' ? 'bi-speedometer2' : 'bi-grid-1x2' %>"></i>
-                        <span class="sb-item-text"><%= typeof page !== 'undefined' && page === 'billing' ? 'Billing & Accounting' : 'Dashboard' %></span>
-                    </div>
-                    <i class="bi bi-chevron-expand sb-item-text" style="font-size: 11px; opacity: 0.5;"></i>
-                </button>
-                <div class="sb-app-dropdown" id="appSwitcherDropdown">
-                    <a href="/admin/dashboard" class="sb-app-option <%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
-                        <i class="bi bi-grid-1x2"></i>
-                        <span>Dashboard</span>
-                        <% if (typeof page !== 'undefined' && page === 'dashboard') { %><i class="bi bi-check2 ms-auto"></i><% } %>
-                    </a>
-                    <a href="/admin/billing/dashboard" class="sb-app-option <%= typeof page !== 'undefined' && page === 'billing' ? 'active' : '' %>">
-                        <i class="bi bi-speedometer2"></i>
-                        <span>Billing & Accounting</span>
-                        <% if (typeof page !== 'undefined' && page === 'billing') { %><i class="bi bi-check2 ms-auto"></i><% } %>
-                    </a>
-                </div>
-            </div>
+            <div class="sb-section-title">Dashboard</div>
+            <a href="/admin/dashboard" class="sb-item <%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
+                <i class="bi bi-grid-1x2-fill"></i>
+                <span class="sb-item-text">Dashboard</span>
+            </a>
         </div>
 
         <!-- PPP CONNECTION -->
@@ -276,15 +263,191 @@
                 </a>
             </div>
         </div>
+
+        <!-- ─────────── BILLING & ACCOUNTING ─────────── -->
+        <div class="sb-section-divider"></div>
+
+        <!-- PELANGGAN BILLING -->
+        <% const billingCustomerPages = ['customers', 'packages', 'member-data', 'member-packages']; %>
+        <% const billingCustomerExpanded = typeof page !== 'undefined' && billingCustomerPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="billingCustomerCollapse"
+                 aria-expanded="<%= billingCustomerExpanded ? 'true' : 'false' %>"
+                 aria-controls="billingCustomerCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Pelanggan</span>
+                <i class="bi <%= billingCustomerExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= billingCustomerExpanded ? 'show' : '' %>" id="billingCustomerCollapse">
+                <a href="/admin/billing/customers" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'customers' ? 'active' : '' %>">
+                    <i class="bi bi-person"></i>
+                    <span class="sb-item-text">Pelanggan PPPoE</span>
+                </a>
+                <a href="/admin/billing/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'packages' ? 'active' : '' %>">
+                    <i class="bi bi-box-seam"></i>
+                    <span class="sb-item-text">Paket PPPoE</span>
+                </a>
+                <a href="/admin/member/data" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'member-data' ? 'active' : '' %>">
+                    <i class="bi bi-person-check"></i>
+                    <span class="sb-item-text">Pelanggan Member</span>
+                </a>
+                <a href="/admin/member/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'member-packages' ? 'active' : '' %>">
+                    <i class="bi bi-box-seam"></i>
+                    <span class="sb-item-text">Paket Member</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- INVOICING -->
+        <% const invoicePages = ['invoices', 'auto-invoice', 'invoices-by-type', 'invoice-list']; %>
+        <% const invoiceExpanded = typeof page !== 'undefined' && invoicePages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="billingInvoiceCollapse"
+                 aria-expanded="<%= invoiceExpanded ? 'true' : 'false' %>"
+                 aria-controls="billingInvoiceCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Invoicing</span>
+                <i class="bi <%= invoiceExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= invoiceExpanded ? 'show' : '' %>" id="billingInvoiceCollapse">
+                <a href="/admin/billing/invoices" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'invoices' ? 'active' : '' %>">
+                    <i class="bi bi-file-plus"></i>
+                    <span class="sb-item-text">Buat Invoice</span>
+                </a>
+                <a href="/admin/billing/auto-invoice" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'auto-invoice' ? 'active' : '' %>">
+                    <i class="bi bi-calendar-check"></i>
+                    <span class="sb-item-text">Auto Invoice</span>
+                </a>
+                <a href="/admin/billing/invoices-by-type" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'invoices-by-type' ? 'active' : '' %>">
+                    <i class="bi bi-list-ul"></i>
+                    <span class="sb-item-text">Invoice per Tipe</span>
+                </a>
+                <a href="/admin/billing/invoice-list" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'invoice-list' ? 'active' : '' %>">
+                    <i class="bi bi-receipt"></i>
+                    <span class="sb-item-text">Semua Invoice</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- KEUANGAN -->
+        <% const financePages = ['payments', 'all-payments', 'collectors', 'collector-reports', 'collector-remittance', 'financial-report', 'report-voucher', 'report-pppoe', 'reports', 'expenses', 'income']; %>
+        <% const financeExpanded = typeof page !== 'undefined' && financePages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="billingFinanceCollapse"
+                 aria-expanded="<%= financeExpanded ? 'true' : 'false' %>"
+                 aria-controls="billingFinanceCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Keuangan</span>
+                <i class="bi <%= financeExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= financeExpanded ? 'show' : '' %>" id="billingFinanceCollapse">
+                <a href="/admin/billing/payments" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'payments' ? 'active' : '' %>">
+                    <i class="bi bi-person-check"></i>
+                    <span class="sb-item-text">Transaksi Kolektor</span>
+                </a>
+                <a href="/admin/billing/all-payments" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'all-payments' ? 'active' : '' %>">
+                    <i class="bi bi-credit-card"></i>
+                    <span class="sb-item-text">Riwayat Pembayaran</span>
+                </a>
+                <a href="/admin/collectors" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collectors' ? 'active' : '' %>">
+                    <i class="bi bi-people"></i>
+                    <span class="sb-item-text">Tukang Tagih</span>
+                </a>
+                <a href="/admin/billing/collector-reports" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-reports' ? 'active' : '' %>">
+                    <i class="bi bi-bar-chart"></i>
+                    <span class="sb-item-text">Laporan Kolektor</span>
+                </a>
+                <a href="/admin/billing/collector-remittance" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-remittance' ? 'active' : '' %>">
+                    <i class="bi bi-cash"></i>
+                    <span class="sb-item-text">Terima Setoran</span>
+                </a>
+                <a href="/admin/billing/financial-report" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'financial-report' ? 'active' : '' %>">
+                    <i class="bi bi-graph-up"></i>
+                    <span class="sb-item-text">Laporan Keuangan</span>
+                </a>
+                <a href="/admin/billing/reports/voucher" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'report-voucher' ? 'active' : '' %>">
+                    <i class="bi bi-ticket-perforated"></i>
+                    <span class="sb-item-text">Laporan Voucher</span>
+                </a>
+                <a href="/admin/billing/reports/pppoe" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'report-pppoe' ? 'active' : '' %>">
+                    <i class="bi bi-router"></i>
+                    <span class="sb-item-text">Laporan PPPoE</span>
+                </a>
+                <a href="/admin/billing/reports" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'reports' ? 'active' : '' %>">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <span class="sb-item-text">Laporan Analisis</span>
+                </a>
+                <a href="/admin/billing/expenses" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'expenses' ? 'active' : '' %>">
+                    <i class="bi bi-cash-coin"></i>
+                    <span class="sb-item-text">Manajemen Pengeluaran</span>
+                </a>
+                <a href="/admin/billing/income" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'income' ? 'active' : '' %>">
+                    <i class="bi bi-cash-stack"></i>
+                    <span class="sb-item-text">Manajemen Pemasukan</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- SETTINGAN BILLING -->
+        <% const billingSettingPages = ['payment-settings', 'whatsapp-settings', 'email-settings', 'service-suspension', 'mapping-new', 'genieacs']; %>
+        <% const billingSettingExpanded = typeof page !== 'undefined' && billingSettingPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="billingSettingCollapse"
+                 aria-expanded="<%= billingSettingExpanded ? 'true' : 'false' %>"
+                 aria-controls="billingSettingCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Settingan Billing</span>
+                <i class="bi <%= billingSettingExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= billingSettingExpanded ? 'show' : '' %>" id="billingSettingCollapse">
+                <a href="/admin/billing/payment-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'payment-settings' ? 'active' : '' %>">
+                    <i class="bi bi-gear"></i>
+                    <span class="sb-item-text">Pengaturan Pembayaran</span>
+                </a>
+                <a href="/admin/billing/whatsapp-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'whatsapp-settings' ? 'active' : '' %>">
+                    <i class="bi bi-chat-dots"></i>
+                    <span class="sb-item-text">Pengaturan WhatsApp</span>
+                </a>
+                <a href="/admin/billing/email-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'email-settings' ? 'active' : '' %>">
+                    <i class="bi bi-envelope"></i>
+                    <span class="sb-item-text">Pengaturan Email</span>
+                </a>
+                <a href="/admin/billing/service-suspension" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'service-suspension' ? 'active' : '' %>">
+                    <i class="bi bi-pause-circle"></i>
+                    <span class="sb-item-text">Penangguhan Layanan</span>
+                </a>
+                <a href="/admin/billing/mapping-new" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'mapping-new' ? 'active' : '' %>">
+                    <i class="bi bi-map"></i>
+                    <span class="sb-item-text">Network Mapping</span>
+                </a>
+                <a href="/admin/genieacs" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'genieacs' ? 'active' : '' %>">
+                    <i class="bi bi-wifi"></i>
+                    <span class="sb-item-text">GenieACS</span>
+                </a>
+            </div>
+        </div>
     </div>
 
     <!-- Sidebar Footer -->
     <div class="sb-footer">
+        <%- include('./theme-toggle') %>
         <div class="sb-actions">
-            <a href="#" id="btnRestartBilling" class="sb-action-btn" title="Restart Billing">
+            <button id="btnRestartBilling" class="sb-action-btn" title="Restart System">
                 <i class="bi bi-arrow-repeat"></i>
                 <span class="sb-item-text">Restart</span>
-            </a>
+            </button>
             <a href="/admin/logout" class="sb-action-btn sb-action-logout" title="Logout">
                 <i class="bi bi-box-arrow-right"></i>
                 <span class="sb-item-text">Logout</span>
@@ -361,20 +524,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // App Switcher
-    const appSwitcherBtn = document.getElementById('appSwitcherBtn');
-    const appSwitcherDropdown = document.getElementById('appSwitcherDropdown');
-    if (appSwitcherBtn && appSwitcherDropdown) {
-        appSwitcherBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            appSwitcherDropdown.classList.toggle('show');
-        });
-        document.addEventListener('click', function() {
-            appSwitcherDropdown.classList.remove('show');
-        });
-    }
 
     // Collapse toggle
+
     function setupCollapseToggle(collapseId) {
         var toggler = document.querySelector('[data-target-id="' + collapseId + '"]');
         var collapseEl = document.getElementById(collapseId);
@@ -401,7 +553,7 @@ document.addEventListener('DOMContentLoaded', function () {
             bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
         }
     }
-    ['pppConnectionCollapse','responsiveHotspotCollapse','agentCollapse','teknisiCollapse','toolsCollapse','settingCollapse'].forEach(setupCollapseToggle);
+    ['pppConnectionCollapse','responsiveHotspotCollapse','agentCollapse','teknisiCollapse','toolsCollapse','settingCollapse','billingCustomerCollapse','billingInvoiceCollapse','billingFinanceCollapse','billingSettingCollapse'].forEach(setupCollapseToggle);
 
     window.addEventListener('resize', function() { if (window.innerWidth >= 768) closeSidebar(); });
 
@@ -597,6 +749,9 @@ document.addEventListener('DOMContentLoaded', function () {
 .sb-item.active::before { content: ''; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 3px; height: 18px; background: var(--sb-primary); border-radius: 99px; }
 .sb-item.active i { opacity: 1; color: var(--sb-primary); }
 .sb-item.sb-sub { padding-left: 2.5rem; font-size: 12.5px; }
+
+/* Section Divider */
+.sb-section-divider { height: 1px; background: var(--sb-border); margin: 8px 12px 16px; }
 
 /* Footer */
 .sb-footer { padding: 8px; border-top: 1px solid var(--sb-border); margin-top: auto; }

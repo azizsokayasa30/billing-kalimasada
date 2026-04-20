@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+  <!-- Theme Init: Dijalankan SEBELUM render untuk mencegah flash -->
+  <script>
+    (function(){
+      var t=localStorage.getItem('kalimasada_theme');
+      if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+      document.documentElement.setAttribute('data-theme',t);
+    })();
+  </script>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +17,9 @@
   <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" rel="stylesheet">
   <link href="/css/theme.css?v=1" rel="stylesheet">
+  
+  
+  
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <style>
@@ -24,5 +35,19 @@
     }
 })();
     </script>
+
+    <!-- GLOBAL THEME INJECTION -->
+    <script>
+      (function(){
+        if(window.__theme_init) return; window.__theme_init=true;
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
+    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
+    <link href="/css/theme-system.css?v=2" rel="stylesheet">
+    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
+    <!-- END GLOBAL THEME INJECTION -->
 </head>
 <body>

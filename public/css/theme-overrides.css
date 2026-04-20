@@ -1,0 +1,724 @@
+/**
+ * KALIMASADA — THEME OVERRIDES
+ * File ini adalah lapisan akhir yang memastikan:
+ *  1. Tema Terang   → bersih, kontras tinggi, tidak ada sisa gelap
+ *  2. Tema Gelap    → benar-benar gelap, tidak ada background putih tersisa
+ *  3. Sidebar       → SELALU GELAP di tema apapun
+ *
+ * Load order: dark-theme-global.css → theme-system.css → theme-overrides.css → card-system.css
+ */
+
+@import url('/css/card-system.css');
+
+
+/* ============================================================
+   RESET — Netralkan variabel dark-theme-global.css yang aktif
+   di semua tema (karena file itu define di :root, bukan di
+   [data-theme="dark"])
+   ============================================================ */
+
+/* Light mode: override variabel ke warna terang yang benar */
+:root,
+[data-theme="light"] {
+  /* Body & background */
+  --bg-primary:   #f1f5f9;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary:  #ffffff;
+  --bg-light:     #e2e8f0;
+
+  /* Panel */
+  --panel-bg:     #ffffff;
+  --panel-accent: #f8fafc;
+  --panel-border: #e2e8f0;
+
+  /* Text — harus gelap di tema terang */
+  --text-primary:   #0f172a;
+  --text-secondary: #334155;
+  --text-tertiary:  #64748b;
+
+  /* Accent */
+  --accent-primary:   #2563eb;
+  --accent-success:   #16a34a;
+  --accent-danger:    #dc2626;
+  --accent-warning:   #d97706;
+  --accent-info:      #0284c7;
+
+  /* dashboard-modern.css vars */
+  --bg:         #f1f5f9;
+  --fg:         #0f172a;
+  --fg-muted:   #475569;
+  --fg-subtle:  #94a3b8;
+  --card-bg:    #ffffff;
+  --border:     #e2e8f0;
+  --border-hover: #cbd5e1;
+  --border-active: #94a3b8;
+}
+
+/* Dark mode: override semua ke warna gelap yang pekat */
+[data-theme="dark"] {
+  /* Body & background — BENAR-BENAR GELAP */
+  --bg-primary:   #0a0f1a;
+  --bg-secondary: #0f172a;
+  --bg-tertiary:  #1e293b;
+  --bg-light:     #1e293b;
+
+  /* Panel */
+  --panel-bg:     #1e293b;
+  --panel-accent: #243044;
+  --panel-border: #334155;
+
+  /* Text — harus terang & kontras di tema gelap */
+  --text-primary:   #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-tertiary:  #94a3b8;
+
+  /* Accent */
+  --accent-primary:   #60a5fa;
+  --accent-success:   #4ade80;
+  --accent-danger:    #f87171;
+  --accent-warning:   #fcd34d;
+  --accent-info:      #38bdf8;
+
+  /* dashboard-modern.css vars */
+  --bg:         #0a0f1a;
+  --fg:         #f1f5f9;
+  --fg-muted:   #94a3b8;
+  --fg-subtle:  #64748b;
+  --card-bg:    #1e293b;
+  --border:     #334155;
+  --border-hover: #475569;
+  --border-active: #64748b;
+
+  /* Also map theme-system vars */
+  --body-bg:      #0a0f1a;
+  --surface-1:    #1e293b;
+  --surface-2:    #243044;
+  --surface-3:    #0f172a;
+  --card-border:  #334155;
+}
+
+/* ============================================================
+   LIGHT THEME — Semua elemen harus terang
+   ============================================================ */
+
+[data-theme="light"] body,
+:root body {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* Semua div, span, p harus pakai warna gelap di light mode */
+[data-theme="light"] p,
+[data-theme="light"] span,
+[data-theme="light"] label,
+[data-theme="light"] div:not(.sb):not(.sb *):not(#adminSidebar):not(#adminSidebar *):not(#billingSidebar):not(#billingSidebar *):not(.mobile-navbar):not(.mobile-navbar *) {
+  color: inherit;
+}
+
+/* Card di light mode — clean gradient, tinted blue-white */
+[data-theme="light"] .card,
+:root .card {
+  background: linear-gradient(135deg, #ffffff 0%, #f4f8fc 100%) !important;
+  border-color: #dde6f0 !important;
+  color: #020617 !important;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.06), 0 1px 3px rgba(0,0,0,0.04) !important;
+}
+[data-theme="light"] .card-header,
+:root .card-header {
+  background: linear-gradient(90deg, #f8fafc 0%, #eff6ff 100%) !important;
+  border-color: #dde6f0 !important;
+  color: #020617 !important;
+}
+[data-theme="light"] .card-body,
+:root .card-body { color: #020617 !important; }
+
+
+/* Tables di light mode */
+[data-theme="light"] .table th {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] .table td {
+  color: #0f172a !important;
+  background-color: transparent;
+}
+[data-theme="light"] .table-hover tbody tr:hover td {
+  background-color: #f1f5f9 !important;
+}
+
+/* Inputs di light mode */
+[data-theme="light"] .form-control,
+[data-theme="light"] .form-select,
+[data-theme="light"] textarea,
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]) {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* bg-light di light mode harus memang terang */
+[data-theme="light"] .bg-light,
+:root .bg-light {
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+}
+[data-theme="light"] .bg-white,
+:root .bg-white {
+  background-color: #ffffff !important;
+}
+
+/* ============================================================
+   DARK THEME — Eliminasi semua background putih
+   ============================================================ */
+
+/* Body & html */
+[data-theme="dark"] body,
+[data-theme="dark"] html {
+  background-color: #0a0f1a !important;
+  color: #f1f5f9 !important;
+}
+
+/* Semua konten utama */
+[data-theme="dark"] .main-content {
+  background-color: transparent !important;
+  color: #f1f5f9 !important;
+}
+
+/* Cards dark mode — rich gradient, no plain white */
+[data-theme="dark"] .card,
+[data-theme="dark"] .panel {
+  background: linear-gradient(135deg, #1e293b 0%, #151f30 100%) !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(96,165,250,0.08) !important;
+}
+[data-theme="dark"] .card-header {
+  background: linear-gradient(90deg, #1e293b 0%, #243044 100%) !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+[data-theme="dark"] .card-body {
+  background-color: transparent !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .card-footer {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+/* Metric cards dark — apply the gradient colors from card-system.css */
+[data-theme="dark"] .metric-card-primary { background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%) !important; border-color: #2563eb !important; }
+[data-theme="dark"] .metric-card-success { background: linear-gradient(135deg, #052e16 0%, #14532d 100%) !important; border-color: #166534 !important; }
+[data-theme="dark"] .metric-card-danger  { background: linear-gradient(135deg, #3b0008 0%, #7f1d1d 100%) !important; border-color: #991b1b !important; }
+[data-theme="dark"] .metric-card-warning { background: linear-gradient(135deg, #2f1a00 0%, #78350f 100%) !important; border-color: #92400e !important; }
+[data-theme="dark"] .metric-card-info    { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%) !important; border-color: #3730a3 !important; }
+[data-theme="dark"] .metric-card-pink    { background: linear-gradient(135deg, #3b0032 0%, #831843 100%) !important; border-color: #9d174d !important; }
+[data-theme="dark"] .metric-card-secondary { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important; border-color: #334155 !important; }
+
+
+/* Section card headers di dark */
+[data-theme="dark"] .section-card-header {
+  background-color: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
+/* Tables */
+[data-theme="dark"] .table {
+  color: #f1f5f9 !important;
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: rgba(255,255,255,0.06);
+  --bs-table-border-color: #334155;
+}
+[data-theme="dark"] .table th {
+  background-color: #243044 !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+[data-theme="dark"] .table td {
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+  background-color: transparent !important;
+}
+[data-theme="dark"] .table-hover tbody tr:hover td {
+  background-color: rgba(96,165,250,0.08) !important;
+}
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: rgba(255,255,255,0.03) !important;
+  color: #f1f5f9 !important;
+}
+
+/* Forms */
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select,
+[data-theme="dark"] textarea,
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]) {
+  background-color: #243044 !important;
+  color: #f1f5f9 !important;
+  border-color: #475569 !important;
+}
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus,
+[data-theme="dark"] textarea:focus,
+[data-theme="dark"] input:focus {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 3px rgba(96,165,250,0.2) !important;
+}
+[data-theme="dark"] .form-control::placeholder,
+[data-theme="dark"] textarea::placeholder,
+[data-theme="dark"] input::placeholder {
+  color: #64748b !important;
+}
+[data-theme="dark"] .input-group-text {
+  background-color: #243044 !important;
+  color: #cbd5e1 !important;
+  border-color: #475569 !important;
+}
+[data-theme="dark"] .form-label,
+[data-theme="dark"] label {
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .form-text { color: #94a3b8 !important; }
+[data-theme="dark"] select option {
+  background-color: #1e293b;
+  color: #f1f5f9;
+}
+
+/* Semua bg-light dan bg-white di dark mode harus gelap */
+[data-theme="dark"] .bg-light,
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-secondary {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+[data-theme="dark"] .bg-dark { background-color: #0a0f1a !important; }
+
+/* p-2.bg-light pattern (dipakai di billing cards) */
+[data-theme="dark"] .p-2.bg-light,
+[data-theme="dark"] .p-2.rounded-3,
+[data-theme="dark"] .p-3.bg-light,
+[data-theme="dark"] .rounded-3.bg-light {
+  background-color: #243044 !important;
+  color: #cbd5e1 !important;
+}
+[data-theme="dark"] .p-2.bg-light span,
+[data-theme="dark"] .p-2.bg-light .text-muted {
+  color: #94a3b8 !important;
+}
+
+/* Progress bars */
+[data-theme="dark"] .progress {
+  background-color: #243044 !important;
+}
+
+/* Alerts */
+[data-theme="dark"] .alert-warning {
+  background-color: rgba(252,211,77,0.12) !important;
+  border-color: rgba(252,211,77,0.3) !important;
+  color: #fef08a !important;
+}
+[data-theme="dark"] .alert-danger {
+  background-color: rgba(248,113,113,0.12) !important;
+  border-color: rgba(248,113,113,0.3) !important;
+  color: #fca5a5 !important;
+}
+[data-theme="dark"] .alert-success {
+  background-color: rgba(74,222,128,0.12) !important;
+  border-color: rgba(74,222,128,0.3) !important;
+  color: #86efac !important;
+}
+[data-theme="dark"] .alert-info {
+  background-color: rgba(56,189,248,0.12) !important;
+  border-color: rgba(56,189,248,0.3) !important;
+  color: #7dd3fc !important;
+}
+
+/* Modals */
+[data-theme="dark"] .modal-content {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .modal-header {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .modal-footer {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+}
+[data-theme="dark"] .modal-title { color: #f1f5f9 !important; }
+[data-theme="dark"] .btn-close { filter: invert(1) brightness(0.8) !important; }
+
+/* Dropdown */
+[data-theme="dark"] .dropdown-menu {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .dropdown-item {
+  color: #cbd5e1 !important;
+}
+[data-theme="dark"] .dropdown-item:hover,
+[data-theme="dark"] .dropdown-item:focus {
+  background-color: #243044 !important;
+  color: #60a5fa !important;
+}
+[data-theme="dark"] .dropdown-divider { border-color: #334155 !important; }
+
+/* Badges */
+[data-theme="dark"] .badge.bg-success   { background-color: rgba(74,222,128,0.2) !important; color: #4ade80 !important; }
+[data-theme="dark"] .badge.bg-danger    { background-color: rgba(248,113,113,0.2) !important; color: #f87171 !important; }
+[data-theme="dark"] .badge.bg-warning   { background-color: rgba(252,211,77,0.2) !important; color: #fcd34d !important; }
+[data-theme="dark"] .badge.bg-info      { background-color: rgba(56,189,248,0.2) !important; color: #38bdf8 !important; }
+[data-theme="dark"] .badge.bg-primary   { background-color: rgba(96,165,250,0.2) !important; color: #93c5fd !important; }
+[data-theme="dark"] .badge.bg-secondary { background-color: #243044 !important; color: #94a3b8 !important; }
+[data-theme="dark"] .badge.bg-light     { background-color: #243044 !important; color: #cbd5e1 !important; }
+[data-theme="dark"] .bg-success-subtle  { background-color: rgba(74,222,128,0.15) !important; }
+[data-theme="dark"] .bg-danger-subtle   { background-color: rgba(248,113,113,0.15) !important; }
+[data-theme="dark"] .bg-warning-subtle  { background-color: rgba(252,211,77,0.15) !important; }
+[data-theme="dark"] .bg-info-subtle     { background-color: rgba(56,189,248,0.15) !important; }
+[data-theme="dark"] .bg-primary-subtle  { background-color: rgba(96,165,250,0.15) !important; }
+[data-theme="dark"] .text-success       { color: #4ade80 !important; }
+[data-theme="dark"] .text-danger        { color: #f87171 !important; }
+[data-theme="dark"] .text-warning       { color: #fcd34d !important; }
+[data-theme="dark"] .text-info          { color: #38bdf8 !important; }
+[data-theme="dark"] .text-primary       { color: #60a5fa !important; }
+[data-theme="dark"] .text-muted         { color: #94a3b8 !important; }
+[data-theme="dark"] .text-secondary     { color: #cbd5e1 !important; }
+[data-theme="dark"] .text-dark          { color: #f1f5f9 !important; }
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3,
+[data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6 {
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] p { color: #cbd5e1; }
+[data-theme="dark"] small { color: #94a3b8; }
+[data-theme="dark"] a { color: #60a5fa; }
+[data-theme="dark"] a:hover { color: #93c5fd; }
+
+/* Border lines */
+[data-theme="dark"] .border,
+[data-theme="dark"] .border-start,
+[data-theme="dark"] .border-end,
+[data-theme="dark"] .border-top,
+[data-theme="dark"] .border-bottom {
+  border-color: #334155 !important;
+}
+[data-theme="dark"] hr { border-color: #334155 !important; opacity: 1; }
+
+/* Dashboard header border */
+[data-theme="dark"] .dashboard-header {
+  border-bottom-color: #334155 !important;
+}
+
+/* Buttons di dark mode */
+[data-theme="dark"] .btn-secondary,
+[data-theme="dark"] .btn-light {
+  background-color: #243044 !important;
+  border-color: #475569 !important;
+  color: #e2e8f0 !important;
+}
+[data-theme="dark"] .btn-secondary:hover,
+[data-theme="dark"] .btn-light:hover {
+  background-color: #2d3e57 !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .btn-outline-secondary {
+  border-color: #475569 !important;
+  color: #cbd5e1 !important;
+  background: transparent !important;
+}
+[data-theme="dark"] .btn-outline-secondary:hover {
+  background-color: #243044 !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .btn-outline-primary {
+  border-color: #3b82f6 !important;
+  color: #60a5fa !important;
+  background: transparent !important;
+}
+[data-theme="dark"] .btn-outline-primary:hover {
+  background-color: rgba(96,165,250,0.15) !important;
+  color: #93c5fd !important;
+}
+[data-theme="dark"] .btn-outline-info {
+  border-color: #0ea5e9 !important;
+  color: #38bdf8 !important;
+  background: transparent !important;
+}
+[data-theme="dark"] .btn-outline-info:hover {
+  background-color: rgba(56,189,248,0.15) !important;
+}
+
+/* Nav / Tabs */
+[data-theme="dark"] .nav-tabs { border-color: #334155 !important; }
+[data-theme="dark"] .nav-tabs .nav-link { color: #94a3b8 !important; }
+[data-theme="dark"] .nav-tabs .nav-link.active {
+  background-color: #1e293b !important;
+  border-color: #334155 #334155 #1e293b !important;
+  color: #60a5fa !important;
+}
+[data-theme="dark"] .nav-link { color: #94a3b8 !important; }
+[data-theme="dark"] .nav-link:hover { color: #60a5fa !important; }
+
+/* List group */
+[data-theme="dark"] .list-group-item {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .list-group-item:hover { background-color: #243044 !important; }
+[data-theme="dark"] .list-group-item.active {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+/* Pagination */
+[data-theme="dark"] .page-link {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+[data-theme="dark"] .page-link:hover {
+  background-color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  color: #fff !important;
+}
+[data-theme="dark"] .page-item.active .page-link {
+  background-color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  color: #fff !important;
+}
+[data-theme="dark"] .page-item.disabled .page-link {
+  background-color: #1e293b !important;
+  color: #64748b !important;
+}
+
+/* Code / Pre */
+[data-theme="dark"] code {
+  background-color: #243044 !important;
+  color: #f472b6 !important;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+[data-theme="dark"] pre {
+  background-color: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+
+/* Toast/notifications */
+[data-theme="dark"] .toast {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="dark"] .toast-header {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Stats info box */
+[data-theme="dark"] .stats-info {
+  background-color: #243044 !important;
+  border-left-color: #475569 !important;
+  color: #cbd5e1 !important;
+}
+[data-theme="dark"] .stats-info h6 { color: #f1f5f9 !important; }
+
+/* Row borders in dark mode */
+[data-theme="dark"] .row.mb-3.align-items-center {
+  border-bottom-color: #334155 !important;
+}
+
+/* Scrollbar dark*/
+[data-theme="dark"] ::-webkit-scrollbar-track { background: #0f172a; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #334155; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Chart backgrounds */
+[data-theme="dark"] canvas { filter: none; }
+
+/* ============================================================
+   SIDEBAR — SELALU GELAP, TIDAK BERUBAH DENGAN TEMA
+   Sidebar menggunakan class .sb, #adminSidebar, #billingSidebar
+   Variabel --sb-* sudah hardcode ke warna gelap di :root
+   ============================================================ */
+
+/* Pastikan sidebar tidak terpengaruh theme switch */
+.sb,
+#adminSidebar,
+#billingSidebar,
+.sb *,
+#adminSidebar *,
+#billingSidebar * {
+  color-scheme: dark !important;
+}
+
+.sb,
+#adminSidebar,
+#billingSidebar {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+/* Brand/header sidebar */
+.sb .sb-header { background-color: #0f172a !important; }
+.sb .sb-brand-name { color: #f8fafc !important; font-weight: 700 !important; }
+.sb .sb-brand-tag { color: #64748b !important; }
+
+/* Nav items text — kontras di sidebar gelap */
+.sb .sb-item {
+  color: #94a3b8 !important;
+  background: transparent !important;
+}
+.sb .sb-item i { color: #475569 !important; }
+.sb .sb-item:hover {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+.sb .sb-item:hover i { color: #3b82f6 !important; }
+.sb .sb-item.active {
+  background-color: #1d4ed8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(29,78,216,0.5) !important;
+}
+.sb .sb-item.active i { color: #ffffff !important; }
+
+/* Section titles di sidebar */
+.sb .sb-section-title {
+  color: #475569 !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em;
+}
+.sb .sb-section-title.sb-collapsible:hover {
+  background-color: #1e293b !important;
+  color: #64748b !important;
+}
+.sb .sb-chevron { color: #475569 !important; }
+
+/* Divider di sidebar */
+.sb .sb-section-divider {
+  background-color: #1e293b !important;
+}
+
+/* Footer sidebar */
+.sb .sb-footer {
+  background-color: #0a1120 !important;
+  border-top: 1px solid #1e293b !important;
+}
+.sb .sb-action-btn {
+  background: transparent !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  color: #94a3b8 !important;
+}
+.sb .sb-action-btn:hover {
+  background-color: #1e293b !important;
+  color: #3b82f6 !important;
+  border-color: rgba(59,130,246,0.3) !important;
+}
+.sb .sb-action-logout:hover {
+  color: #f87171 !important;
+  background-color: rgba(239,68,68,0.1) !important;
+  border-color: rgba(239,68,68,0.3) !important;
+}
+.sb .sb-time-label { color: #475569 !important; font-size: 9px !important; }
+.sb .sb-time-value { color: #64748b !important; font-size: 11px !important; }
+.sb .sb-version-tag { color: #475569 !important; }
+.sb .sb-version-build { color: #334155 !important; }
+
+/* Mobile navbar — selalu gelap */
+.mobile-navbar,
+.mobile-navbar * {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+.mobile-navbar .navbar-brand,
+.mobile-navbar .mobile-nav-title { color: #f8fafc !important; }
+.mobile-navbar .btn { color: #f8fafc !important; }
+
+/* Theme toggle button di sidebar */
+#globalThemeToggle {
+  background: rgba(255,255,255,0.05) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  color: #94a3b8 !important;
+}
+#globalThemeToggle:hover {
+  background: rgba(255,255,255,0.1) !important;
+  color: #f1f5f9 !important;
+  border-color: rgba(255,255,255,0.2) !important;
+}
+#globalThemeToggle i { color: inherit !important; }
+
+/* ============================================================
+   LIGHT THEME — extra kontras untuk elemen spesifik
+   ============================================================ */
+
+/* Section card headers di light mode — kontras bagus */
+:root .section-card-header,
+[data-theme="light"] .section-card-header {
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+}
+
+/* Stats info di light mode */
+:root .stats-info,
+[data-theme="light"] .stats-info {
+  background-color: #f1f5f9 !important;
+  border-left-color: #94a3b8 !important;
+  color: #334155 !important;
+}
+
+/* Light mode badge subtle */
+:root .bg-success-subtle { background-color: #dcfce7 !important; }
+:root .bg-danger-subtle  { background-color: #fee2e2 !important; }
+:root .bg-warning-subtle { background-color: #fef9c3 !important; }
+:root .bg-info-subtle    { background-color: #e0f2fe !important; }
+:root .bg-primary-subtle { background-color: #dbeafe !important; }
+:root .text-success      { color: #16a34a !important; }
+:root .text-danger       { color: #dc2626 !important; }
+:root .text-warning      { color: #d97706 !important; }
+:root .text-info         { color: #0284c7 !important; }
+:root .text-primary      { color: #2563eb !important; }
+
+/* Jangan override di dalam sidebar untuk light mode */
+:root .sb .text-success,
+:root .sb .text-danger,
+:root .sb .text-primary,
+[data-theme="light"] .sb .text-success,
+[data-theme="light"] .sb .text-danger,
+[data-theme="light"] .sb .text-primary {
+  /* Biarkan sidebar override yang menang */
+}
+
+/* ============================================================
+   KONTRAS TIPOGRAFI — Menyeluruh
+   ============================================================ */
+
+/* Dark mode: pastikan semua teks dalam card kontras */
+[data-theme="dark"] .card .fw-bold,
+[data-theme="dark"] .card strong,
+[data-theme="dark"] .card b {
+  color: #f1f5f9 !important;
+}
+
+/* Light mode: pastikan teks gelap */
+:root .card .fw-bold,
+[data-theme="light"] .card .fw-bold,
+:root .card strong,
+[data-theme="light"] strong {
+  color: #0f172a !important;
+}
+
+/* Dark mode row border */
+[data-theme="dark"] .border-start { border-color: #334155 !important; }
+
+/* Dark mode — responsive admin sidebar overlay */
+[data-theme="dark"] #sidebarOverlay {
+  background-color: rgba(0,0,0,0.7) !important;
+}

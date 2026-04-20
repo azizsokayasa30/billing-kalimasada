@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <!-- Theme Init: Jalankan SEBELUM CSS load untuk mencegah flash -->
+    <script>
+      (function(){
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
     <!-- Hard Reload for CSS detection -->
     <script>
     (function() {
@@ -12,35 +20,20 @@
 })();
     </script>
     <meta charset="UTF-8">
-    <title><%= title %> - Admin Panel</title>
+    <title><%= typeof title !== 'undefined' ? title : 'Admin Panel' %></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/responsive/2.5.0/css/dataTables.responsive.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css" rel="stylesheet">
-    <link href="/css/responsive-admin.css" rel="stylesheet">
+    
+    
     <link href="/css/theme.css?v=1" rel="stylesheet">
+    <link href="/css/responsive-admin.css" rel="stylesheet">
+    
     <style>
-        /* background handled by theme.css */
         .form-label { font-weight: 600; }
-        .sidebar {
-            min-height: 100vh;
-            background: #222e3c;
-            color: #fff;
-            padding-top: 32px;
-        }
-        .sidebar a {
-            color: #fff;
-            text-decoration: none;
-            display: block;
-            padding: 12px 24px;
-            border-radius: 4px;
-            margin-bottom: 8px;
-        }
-        .sidebar a.active, .sidebar a:hover {
-            background: #3b4a5a;
-        }
         .sidebar .sidebar-header {
             font-size: 1.3rem;
             font-weight: 600;
@@ -56,5 +49,19 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
         }
     </style>
+
+    <!-- GLOBAL THEME INJECTION -->
+    <script>
+      (function(){
+        if(window.__theme_init) return; window.__theme_init=true;
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
+    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
+    <link href="/css/theme-system.css?v=2" rel="stylesheet">
+    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
+    <!-- END GLOBAL THEME INJECTION -->
 </head>
 <body>

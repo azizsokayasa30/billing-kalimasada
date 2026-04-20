@@ -1043,8 +1043,14 @@ router.get('/odp', adminAuth, (req, res) => {
     res.redirect('/admin/cable-network/odp');
 });
 
-// Dashboard Billing
-router.get('/dashboard', getAppSettings, async (req, res) => {
+// Dashboard Billing — Dialihkan ke dashboard terpadu
+router.get('/dashboard', adminAuth, (req, res) => {
+    // Redirect ke dashboard admin terpadu yang sekarang juga menampilkan billing stats
+    return res.redirect('/admin/dashboard');
+});
+
+// [LEGACY] Handler lama disimpan sebagai referensi — tidak aktif
+router.get('/dashboard-legacy', getAppSettings, async (req, res) => {
     // Set timeout untuk mencegah ERR_CONNECTION_TIMED_OUT
     req.setTimeout(30000); // 30 detik timeout
     
@@ -4261,7 +4267,7 @@ router.post('/customers', customerPhotoUpload.fields([
                 // Generate password jika tidak diberikan
                 const passwordToUse = (pppoe_password && String(pppoe_password).trim())
                     ? String(pppoe_password).trim()
-                    : (Math.random().toString(36).slice(-8) + Math.floor(Math.random()*10));
+                    : 'skynet1010';
 
                 const { addPPPoEUser, getUserAuthModeAsync } = require('../config/mikrotik');
                 

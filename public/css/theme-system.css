@@ -1,0 +1,677 @@
+/**
+ * KALIMASADA BILLING - GLOBAL THEME SYSTEM
+ * Supports: Dark Mode (default sidebar) + Light/Dark toggle
+ * Uses CSS custom properties for instant theme switching
+ */
+
+/* ============================================================
+   CSS VARIABLES — LIGHT MODE (default body)
+   ============================================================ */
+:root {
+  /* === SIDEBAR (selalu dark, tidak berubah dengan theme) === */
+  --sb-bg:               #0f172a;
+  --sb-bg-hover:         #1e293b;
+  --sb-bg-active:        #1d4ed8;
+  --sb-border:           #1e293b;
+  --sb-text:             #f8fafc;
+  --sb-muted:            #94a3b8;
+  --sb-subtle:           #475569;
+  --sb-primary:          #3b82f6;
+  --sb-primary-glow:     rgba(59,130,246,0.15);
+  --sb-active-text:      #ffffff;
+  --sb-section-text:     #64748b;
+  --sb-radius:           8px;
+  --sb-footer-bg:        #0a1120;
+
+  /* === CONTENT AREA — LIGHT MODE === */
+  --body-bg:             #f1f5f9;
+  --surface-1:           #ffffff;
+  --surface-2:           #f8fafc;
+  --surface-3:           #f1f5f9;
+  --border-color:        #e2e8f0;
+  --text-primary:        #0f172a;
+  --text-secondary:      #475569;
+  --text-muted:          #94a3b8;
+  --accent:              #3b82f6;
+  --accent-hover:        #2563eb;
+  --accent-glow:         rgba(59,130,246,0.15);
+
+  /* Cards & panels */
+  --card-bg:             #ffffff;
+  --card-border:         #e2e8f0;
+  --card-shadow:         0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --card-shadow-hover:   0 10px 25px rgba(0,0,0,0.12);
+
+  /* Tables */
+  --table-header-bg:     #f8fafc;
+  --table-row-hover:     #f1f5f9;
+  --table-border:        #e2e8f0;
+
+  /* Inputs */
+  --input-bg:            #ffffff;
+  --input-border:        #cbd5e1;
+  --input-focus-border:  #3b82f6;
+  --input-text:          #0f172a;
+  --input-placeholder:   #94a3b8;
+
+  /* Navbar (top bar jika ada) */
+  --navbar-bg:           #ffffff;
+  --navbar-border:       #e2e8f0;
+  --navbar-text:         #0f172a;
+
+  /* Modal */
+  --modal-bg:            #ffffff;
+  --modal-header-bg:     #f8fafc;
+  --modal-border:        #e2e8f0;
+  --modal-overlay:       rgba(0,0,0,0.5);
+
+  /* Dropdown */
+  --dropdown-bg:         #ffffff;
+  --dropdown-border:     #e2e8f0;
+  --dropdown-hover:      #f1f5f9;
+  --dropdown-text:       #0f172a;
+
+  /* Badges */
+  --badge-success-bg:    #dcfce7;
+  --badge-success-text:  #16a34a;
+  --badge-danger-bg:     #fee2e2;
+  --badge-danger-text:   #dc2626;
+  --badge-warning-bg:    #fef9c3;
+  --badge-warning-text:  #ca8a04;
+  --badge-info-bg:       #dbeafe;
+  --badge-info-text:     #2563eb;
+
+  /* Status colors */
+  --color-success:       #16a34a;
+  --color-danger:        #dc2626;
+  --color-warning:       #d97706;
+  --color-info:          #2563eb;
+
+  /* Transition */
+  --theme-transition:    background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* ============================================================
+   CSS VARIABLES — DARK MODE (data-theme="dark" on <html>)
+   ============================================================ */
+[data-theme="dark"] {
+  /* Content area dark mode */
+  --body-bg:             #0f172a;
+  --surface-1:           #1e293b;
+  --surface-2:           #1a2540;
+  --surface-3:           #0f172a;
+  --border-color:        #334155;
+  --text-primary:        #f1f5f9;
+  --text-secondary:      #cbd5e1;
+  --text-muted:          #64748b;
+  --accent:              #60a5fa;
+  --accent-hover:        #93c5fd;
+  --accent-glow:         rgba(96,165,250,0.15);
+
+  /* Cards */
+  --card-bg:             #1e293b;
+  --card-border:         #334155;
+  --card-shadow:         0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --card-shadow-hover:   0 10px 25px rgba(0,0,0,0.5);
+
+  /* Tables */
+  --table-header-bg:     #1a2540;
+  --table-row-hover:     #243044;
+  --table-border:        #334155;
+
+  /* Inputs */
+  --input-bg:            #1e293b;
+  --input-border:        #334155;
+  --input-focus-border:  #60a5fa;
+  --input-text:          #f1f5f9;
+  --input-placeholder:   #64748b;
+
+  /* Navbar */
+  --navbar-bg:           #1e293b;
+  --navbar-border:       #334155;
+  --navbar-text:         #f1f5f9;
+
+  /* Modal */
+  --modal-bg:            #1e293b;
+  --modal-header-bg:     #1a2540;
+  --modal-border:        #334155;
+  --modal-overlay:       rgba(0,0,0,0.75);
+
+  /* Dropdown */
+  --dropdown-bg:         #1e293b;
+  --dropdown-border:     #334155;
+  --dropdown-hover:      #243044;
+  --dropdown-text:       #f1f5f9;
+
+  /* Badges */
+  --badge-success-bg:    rgba(22,163,74,0.2);
+  --badge-success-text:  #4ade80;
+  --badge-danger-bg:     rgba(220,38,38,0.2);
+  --badge-danger-text:   #f87171;
+  --badge-warning-bg:    rgba(217,119,6,0.2);
+  --badge-warning-text:  #fcd34d;
+  --badge-info-bg:       rgba(37,99,235,0.2);
+  --badge-info-text:     #93c5fd;
+
+  /* Status colors */
+  --color-success:       #4ade80;
+  --color-danger:        #f87171;
+  --color-warning:       #fcd34d;
+  --color-info:          #93c5fd;
+}
+
+/* ============================================================
+   BASE HTML/BODY TRANSITIONS
+   ============================================================ */
+html {
+  transition: var(--theme-transition);
+}
+
+body {
+  background-color: var(--body-bg) !important;
+  color: var(--text-primary) !important;
+  transition: var(--theme-transition);
+}
+
+/* ============================================================
+   CARD / PANEL
+   ============================================================ */
+.card {
+  background: var(--card-bg) !important;
+  border-color: var(--card-border) !important;
+  box-shadow: var(--card-shadow) !important;
+  color: var(--text-primary) !important;
+  transition: var(--theme-transition);
+}
+.card:hover {
+  box-shadow: var(--card-shadow-hover) !important;
+}
+.card-header {
+  background: var(--surface-2) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+.card-body { color: var(--text-primary) !important; }
+.card-footer {
+  background: var(--surface-2) !important;
+  border-color: var(--card-border) !important;
+}
+.card-title, .card-subtitle { color: var(--text-primary) !important; }
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+h1, h2, h3, h4, h5, h6 { color: var(--text-primary) !important; }
+p { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted) !important; }
+.text-secondary { color: var(--text-secondary) !important; }
+small { color: var(--text-muted); }
+label { color: var(--text-primary) !important; }
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+.table {
+  color: var(--text-primary) !important;
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: var(--table-row-hover);
+  --bs-table-striped-bg: var(--surface-2);
+  --bs-table-border-color: var(--table-border);
+}
+.table th {
+  background: var(--table-header-bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--table-border) !important;
+  font-weight: 600;
+}
+.table td {
+  color: var(--text-primary) !important;
+  border-color: var(--table-border) !important;
+}
+.table tbody tr:hover td { background-color: var(--table-row-hover) !important; }
+.table-responsive { border-color: var(--card-border); }
+
+/* ============================================================
+   FORMS & INPUTS
+   ============================================================ */
+.form-control, .form-select {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--input-text) !important;
+  transition: var(--theme-transition);
+}
+.form-control:focus, .form-select:focus {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-focus-border) !important;
+  color: var(--input-text) !important;
+  box-shadow: 0 0 0 3px var(--accent-glow) !important;
+}
+.form-control::placeholder { color: var(--input-placeholder) !important; }
+.input-group-text {
+  background-color: var(--surface-2) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-secondary) !important;
+}
+.form-label { color: var(--text-primary) !important; }
+.form-text { color: var(--text-muted) !important; }
+.form-check-label { color: var(--text-primary) !important; }
+.form-check-input {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+}
+.form-check-input:checked {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn-primary {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+}
+.btn-primary:hover {
+  background-color: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.25) !important;
+}
+.btn-secondary {
+  background-color: var(--surface-2) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+.btn-secondary:hover {
+  background-color: var(--surface-3) !important;
+}
+.btn-outline-secondary {
+  border-color: var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+.btn-outline-secondary:hover {
+  background-color: var(--surface-2) !important;
+  color: var(--text-primary) !important;
+}
+.btn-light {
+  background-color: var(--surface-2) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+.btn-close {
+  filter: var(--btn-close-filter, none);
+}
+[data-theme="dark"] .btn-close { filter: invert(1) brightness(0.8); }
+
+/* ============================================================
+   BADGES
+   ============================================================ */
+.badge.bg-success, .badge.text-bg-success { background-color: var(--badge-success-bg) !important; color: var(--badge-success-text) !important; }
+.badge.bg-danger, .badge.text-bg-danger   { background-color: var(--badge-danger-bg) !important;  color: var(--badge-danger-text) !important; }
+.badge.bg-warning, .badge.text-bg-warning { background-color: var(--badge-warning-bg) !important; color: var(--badge-warning-text) !important; }
+.badge.bg-info, .badge.text-bg-info       { background-color: var(--badge-info-bg) !important;    color: var(--badge-info-text) !important; }
+.badge.bg-primary, .badge.text-bg-primary { background-color: var(--accent) !important; color: #fff !important; }
+.badge.bg-secondary { background-color: var(--surface-3) !important; color: var(--text-secondary) !important; }
+.badge.bg-light { background-color: var(--surface-2) !important; color: var(--text-primary) !important; }
+
+/* ============================================================
+   MODALS
+   ============================================================ */
+.modal-content {
+  background-color: var(--modal-bg) !important;
+  border-color: var(--modal-border) !important;
+  color: var(--text-primary) !important;
+}
+.modal-header {
+  background-color: var(--modal-header-bg) !important;
+  border-color: var(--modal-border) !important;
+}
+.modal-footer {
+  background-color: var(--modal-header-bg) !important;
+  border-color: var(--modal-border) !important;
+}
+.modal-title { color: var(--text-primary) !important; }
+.modal-backdrop { opacity: 0.6; }
+
+/* ============================================================
+   DROPDOWNS
+   ============================================================ */
+.dropdown-menu {
+  background-color: var(--dropdown-bg) !important;
+  border-color: var(--dropdown-border) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15) !important;
+}
+.dropdown-item {
+  color: var(--dropdown-text) !important;
+}
+.dropdown-item:hover, .dropdown-item:focus {
+  background-color: var(--dropdown-hover) !important;
+  color: var(--accent) !important;
+}
+.dropdown-divider { border-color: var(--dropdown-border) !important; }
+.dropdown-header { color: var(--text-muted) !important; }
+
+/* ============================================================
+   ALERTS
+   ============================================================ */
+[data-theme="dark"] .alert-success {
+  background-color: rgba(22,163,74,0.15) !important;
+  border-color: rgba(22,163,74,0.3) !important;
+  color: #4ade80 !important;
+}
+[data-theme="dark"] .alert-danger {
+  background-color: rgba(220,38,38,0.15) !important;
+  border-color: rgba(220,38,38,0.3) !important;
+  color: #f87171 !important;
+}
+[data-theme="dark"] .alert-warning {
+  background-color: rgba(217,119,6,0.15) !important;
+  border-color: rgba(217,119,6,0.3) !important;
+  color: #fcd34d !important;
+}
+[data-theme="dark"] .alert-info {
+  background-color: rgba(37,99,235,0.15) !important;
+  border-color: rgba(37,99,235,0.3) !important;
+  color: #93c5fd !important;
+}
+
+/* ============================================================
+   PAGINATION
+   ============================================================ */
+.page-link {
+  background-color: var(--surface-1) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+.page-link:hover {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+.page-item.active .page-link {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+.page-item.disabled .page-link { color: var(--text-muted) !important; }
+
+/* ============================================================
+   NAVBARS (top nav if any)
+   ============================================================ */
+.navbar {
+  background-color: var(--navbar-bg) !important;
+  border-bottom: 1px solid var(--navbar-border) !important;
+}
+.navbar-brand { color: var(--navbar-text) !important; }
+.nav-link { color: var(--text-secondary) !important; }
+.nav-link:hover { color: var(--accent) !important; }
+.nav-link.active { color: var(--accent) !important; }
+
+/* ============================================================
+   LIST GROUPS
+   ============================================================ */
+.list-group-item {
+  background-color: var(--surface-1) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+.list-group-item:hover { background-color: var(--surface-2) !important; }
+.list-group-item.active {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+
+/* ============================================================
+   TABS & PILLS
+   ============================================================ */
+.nav-tabs { border-color: var(--border-color) !important; }
+.nav-tabs .nav-link {
+  color: var(--text-secondary) !important;
+  border-color: transparent !important;
+}
+.nav-tabs .nav-link:hover {
+  color: var(--accent) !important;
+  border-color: var(--border-color) var(--border-color) transparent !important;
+}
+.nav-tabs .nav-link.active {
+  background-color: var(--surface-1) !important;
+  border-color: var(--border-color) var(--border-color) var(--surface-1) !important;
+  color: var(--accent) !important;
+}
+.nav-pills .nav-link.active {
+  background-color: var(--accent) !important;
+  color: #fff !important;
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ============================================================
+   MISC DARK MODE OVERRIDES
+   ============================================================ */
+[data-theme="dark"] .text-dark { color: var(--text-primary) !important; }
+[data-theme="dark"] .bg-white, [data-theme="dark"] .bg-light {
+  background-color: var(--surface-1) !important;
+}
+[data-theme="dark"] .border, [data-theme="dark"] .border-bottom,
+[data-theme="dark"] .border-top, [data-theme="dark"] .border-start,
+[data-theme="dark"] .border-end {
+  border-color: var(--border-color) !important;
+}
+[data-theme="dark"] select option { background: var(--input-bg); color: var(--input-text); }
+[data-theme="dark"] .progress { background: var(--surface-3) !important; }
+[data-theme="dark"] hr { border-color: var(--border-color); }
+[data-theme="dark"] code { background: var(--surface-3); color: #f472b6; }
+[data-theme="dark"] pre { background: var(--surface-2); color: var(--text-primary); border-color: var(--border-color); }
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: rgba(255,255,255,0.04) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ============================================================
+   ===== SIDEBAR — ALWAYS DARK, HIGH CONTRAST =====
+   ============================================================ */
+
+/* Override semua variabel sb-* agar sidebar selalu dark */
+.sb,
+#adminSidebar,
+#billingSidebar {
+  background: var(--sb-bg) !important;
+  border-right: 1px solid var(--sb-border) !important;
+  color: var(--sb-text) !important;
+}
+
+/* Header branding */
+.sb-header {
+  background: var(--sb-bg) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  padding: 18px 16px !important;
+}
+
+.sb-brand-name {
+  color: var(--sb-text) !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+}
+.sb-brand-tag {
+  color: var(--sb-section-text) !important;
+  font-size: 10px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Section titles */
+.sb-section-title {
+  color: var(--sb-section-text) !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.sb-section-title.sb-collapsible:hover {
+  background: var(--sb-bg-hover) !important;
+  color: var(--sb-muted) !important;
+}
+
+/* Nav items */
+.sb .sb-item {
+  color: var(--sb-muted) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  border-radius: var(--sb-radius) !important;
+  transition: all 160ms ease;
+}
+.sb .sb-item i {
+  color: var(--sb-subtle) !important;
+  transition: color 160ms ease;
+}
+.sb .sb-item:hover {
+  background: var(--sb-bg-hover) !important;
+  color: var(--sb-text) !important;
+  text-decoration: none !important;
+}
+.sb .sb-item:hover i { color: var(--sb-primary) !important; }
+
+/* Active item — solid blue accent */
+.sb .sb-item.active {
+  background: var(--sb-primary) !important;
+  color: var(--sb-active-text) !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.4) !important;
+}
+.sb .sb-item.active i { color: #fff !important; }
+.sb .sb-item.active::before {
+  display: none !important; /* hapus indicator lama, pakai bg highlight */
+}
+
+/* App Switcher */
+.sb .sb-app-switcher-btn {
+  background: var(--sb-bg-hover) !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  color: var(--sb-text) !important;
+}
+.sb .sb-app-switcher-btn:hover {
+  border-color: var(--sb-primary) !important;
+  background: rgba(59,130,246,0.1) !important;
+}
+.sb .sb-app-current i { color: var(--sb-primary) !important; }
+.sb .sb-app-dropdown {
+  background: #0a1120 !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+}
+.sb .sb-app-option {
+  color: var(--sb-muted) !important;
+}
+.sb .sb-app-option:hover {
+  background: var(--sb-bg-hover) !important;
+  color: var(--sb-text) !important;
+}
+.sb .sb-app-option.active {
+  color: var(--sb-primary) !important;
+  background: rgba(59,130,246,0.12) !important;
+}
+
+/* Footer */
+.sb .sb-footer {
+  background: var(--sb-footer-bg) !important;
+  border-top: 1px solid rgba(255,255,255,0.06) !important;
+}
+.sb .sb-action-btn {
+  background: transparent !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  color: var(--sb-muted) !important;
+}
+.sb .sb-action-btn:hover {
+  background: var(--sb-bg-hover) !important;
+  color: var(--sb-primary) !important;
+  border-color: rgba(59,130,246,0.3) !important;
+}
+.sb .sb-action-logout:hover {
+  color: #f87171 !important;
+  background: rgba(239,68,68,0.1) !important;
+  border-color: rgba(239,68,68,0.3) !important;
+}
+
+/* Server time */
+.sb .sb-time-label {
+  color: var(--sb-section-text) !important;
+  font-size: 9px !important;
+  letter-spacing: 0.1em;
+}
+.sb .sb-time-value {
+  color: var(--sb-muted) !important;
+  font-size: 11px !important;
+}
+.sb .sb-version-tag { color: var(--sb-section-text) !important; }
+
+/* Scrollbar inside sidebar */
+.sb::-webkit-scrollbar { width: 3px; }
+.sb::-webkit-scrollbar-thumb { background: #1e293b; }
+.sb::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+/* Mobile navbar (bagian atas di mobile) */
+.mobile-navbar {
+  background: #0f172a !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* ============================================================
+   ===== THEME TOGGLE BUTTON =====
+   ============================================================ */
+#globalThemeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 12px;
+  border-radius: var(--sb-radius);
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: var(--sb-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 200ms ease;
+  margin-bottom: 6px;
+}
+#globalThemeToggle:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--sb-text);
+  border-color: rgba(255,255,255,0.2);
+}
+#globalThemeToggle i {
+  font-size: 13px;
+  flex-shrink: 0;
+  transition: transform 0.4s ease;
+}
+#globalThemeToggle:hover i { transform: rotate(20deg); }
+
+/* Collapsed sidebar — only show icon */
+.sb.collapsed #globalThemeToggle span.sb-item-text { display: none; }
+
+/* ============================================================
+   SMOOTH TRANSITIONS ON THEME SWITCH
+   ============================================================ */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 200ms;
+  transition-timing-function: ease;
+}
+
+/* Exceptions — things we don't want to transition */
+.sb, nav.sb, #adminSidebar, #billingSidebar,
+.sb *, nav.sb *, #adminSidebar *, #billingSidebar * {
+  transition-property: background-color, border-color, color, box-shadow, transform, opacity;
+  transition-duration: 160ms;
+}

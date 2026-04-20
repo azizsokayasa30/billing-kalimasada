@@ -1,46 +1,103 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    <!-- Theme Init: Jalankan SEBELUM render untuk mencegah FOUC -->
+    <script>
+      (function(){
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
     <%- include('../partials/hard-reload') %>
     <meta charset="UTF-8">
     <title><%= title || 'Admin Dashboard' %></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    
+    
+    
     <style>
-        body { background: #f5f6fa; }
+        body { 
+            /* background handled by theme overrides */
+        }
         .sidebar {
             min-height: 100vh;
-            background: #222e3c;
-            color: #fff;
-            padding-top: 32px;
+            background: #1a202c;
+            color: #f1f5f9;
+            padding-top: 0;
+            border-right: 1px solid #404854;
         }
         .sidebar a {
-            color: #fff;
+            color: #cbd5e1;
             text-decoration: none;
-            display: block;
-            padding: 12px 24px;
-            border-radius: 4px;
-            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 12px 20px;
+            border-radius: 12px;
+            margin: 4px 12px;
+            transition: all 300ms ease-in-out;
+            font-weight: 500;
         }
         .sidebar a.active, .sidebar a:hover {
-            background: #3b4a5a;
+            background: #3b82f6;
+            color: #ffffff;
         }
         .sidebar .sidebar-header {
-            font-size: 1.3rem;
-            font-weight: 600;
-            letter-spacing: 1px;
-            padding: 0 24px 24px 24px;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0px;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #404854;
+            margin-bottom: 1.5rem;
+        }
+        .sidebar-header img {
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
         .main-content {
             padding: 32px 24px;
+            background: transparent;
+            min-height: 100vh;
         }
         .card {
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #404854;
+            border-radius: 16px;
+            background: #1a202c;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+        .card:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+        }
+        .card-header {
+            background: #2d3748;
+            border-bottom: 1px solid #404854;
+            border-radius: 16px 16px 0 0;
+        }
+        .card-footer {
+            background: #2d3748;
+            border-top: 1px solid #404854;
+            border-radius: 0 0 16px 16px;
         }
     </style>
+
+    <!-- GLOBAL THEME INJECTION -->
+    <script>
+      (function(){
+        if(window.__theme_init) return; window.__theme_init=true;
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
+    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
+    <link href="/css/theme-system.css?v=2" rel="stylesheet">
+    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
+    <!-- END GLOBAL THEME INJECTION -->
 </head>
 <body>
 <div class="container-fluid">

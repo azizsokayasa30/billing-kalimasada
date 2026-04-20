@@ -1,7 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const logger = require('./logger');
-const { getSetting } = require('./settingsManager');
+const { getSetting, getLocalTimestamp } = require('./settingsManager');
 const { sendMessage, setSock } = require('./sendMessage');
 
 // Database helper
@@ -11,13 +11,7 @@ const getDB = () => new sqlite3.Database(dbPath);
 // Helper function untuk format tanggal Indonesia yang benar
 function formatIndonesianDateTime(date = new Date()) {
   try {
-    let targetDate = new Date(date);
-    
-    const currentYear = targetDate.getFullYear();
-    if (currentYear > 2026) {
-      const yearDiff = currentYear - 2026;
-      targetDate = new Date(targetDate.getTime() - (yearDiff * 365 * 24 * 60 * 60 * 1000));
-    }
+    const targetDate = new Date(date);
     
     const options = {
       timeZone: 'Asia/Jakarta',
@@ -42,13 +36,15 @@ function formatIndonesianDateTime(date = new Date()) {
     
     return `${day}/${month}/${year} ${hour}:${minute}:${second}`;
   } catch (error) {
+    // Fallback manual dengan offset WIB +7
     const d = new Date(date);
-    const day = d.getDate().toString().padStart(2, '0');
-    const month = (d.getMonth() + 1).toString().padStart(2, '0');
-    const year = d.getFullYear();
-    const hour = d.getHours().toString().padStart(2, '0');
-    const minute = d.getMinutes().toString().padStart(2, '0');
-    const second = d.getSeconds().toString().padStart(2, '0');
+    const wibDate = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+    const day = wibDate.getUTCDate().toString().padStart(2, '0');
+    const month = (wibDate.getUTCMonth() + 1).toString().padStart(2, '0');
+    const year = wibDate.getUTCFullYear();
+    const hour = wibDate.getUTCHours().toString().padStart(2, '0');
+    const minute = wibDate.getUTCMinutes().toString().padStart(2, '0');
+    const second = wibDate.getUTCSeconds().toString().padStart(2, '0');
     
     return `${day}/${month}/${year} ${hour}:${minute}:${second}`;
   }
@@ -101,7 +97,7 @@ async function createTroubleReport(reportData) {
   return new Promise((resolve, reject) => {
     const db = getDB();
     const id = `TR${Date.now().toString().slice(-6)}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
-    const now = new Date().toISOString();
+    const now = getLocalTimestamp();
     
     const sql = `
       INSERT INTO trouble_reports (
@@ -162,7 +158,7 @@ async function updateTroubleReportStatus(id, status, notes, technicalData = {}, 
 
   return new Promise((resolve, reject) => {
     const db = getDB();
-    const now = new Date().toISOString();
+    const now = getLocalTimestamp();
     let updatedNotes = currentReport.notes || [];
     
     if (notes) {
@@ -205,6 +201,21 @@ async function updateTroubleReportStatus(id, status, notes, technicalData = {}, 
       }
       
       resolve(updatedReport);
+    });
+  });
+}
+
+// Menghapus laporan gangguan
+async function deleteTroubleReport(id) {
+  return new Promise((resolve, reject) => {
+    const db = getDB();
+    db.run("DELETE FROM trouble_reports WHERE id = ?", [id], function(err) {
+      db.close();
+      if (err) {
+        logger.error(`Gagal menghapus laporan gangguan: ${err.message}`);
+        return reject(err);
+      }
+      resolve(this.changes > 0);
     });
   });
 }
@@ -322,6 +333,7 @@ module.exports = {
   getTroubleReportById,
   getTroubleReportsByPhone,
   createTroubleReport,
+  deleteTroubleReport,
   updateTroubleReportStatus,
   sendNotificationToTechnicians,
   sendStatusUpdateToCustomer,

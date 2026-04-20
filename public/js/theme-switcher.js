@@ -1,101 +1,87 @@
 /**
- * Theme Switcher
- * Allows users to toggle between light and dark themes
+ * kalimasada Zero-FOUC Theme Switcher Engine
+ * Automatically blocks screen until theme is evaluated.
  */
 
 (function() {
-  'use strict';
-
-  // Get current theme from localStorage or default to 'light'
-  function getTheme() {
-    return localStorage.getItem('theme') || 'light';
-  }
-
-  // Set theme
-  function setTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    
-    // Update theme icon if exists
-    updateThemeIcon(theme);
-    
-    // Dispatch custom event for theme change
-    window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme } }));
-  }
-
-  // Initialize theme on page load
-  function initTheme() {
-    const theme = getTheme();
-    setTheme(theme);
-  }
-
-  // Toggle between light and dark themes
-  function toggleTheme() {
-    const currentTheme = getTheme();
-    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-  }
-
-  // Update theme icon based on current theme
-  function updateThemeIcon(theme) {
-    const themeIcon = document.getElementById('theme-icon');
-    const themeIconMobile = document.getElementById('theme-icon-mobile');
-    const themeText = document.getElementById('theme-text');
-    
-    if (themeIcon) {
-      themeIcon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+    'use strict';
+  
+    // 1. Initialize Sync - MUST run before body
+    const STORAGE_KEY = 'kalimasada_theme';
+    let currentTheme = localStorage.getItem(STORAGE_KEY);
+  
+    if (!currentTheme) {
+      // Fallback
+      currentTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
-    
-    if (themeIconMobile) {
-      themeIconMobile.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
-    }
-    
-    if (themeText) {
-      themeText.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
-    }
-    
-    // Also update all theme toggle buttons
-    const themeToggles = document.querySelectorAll('[data-theme-toggle]');
-    themeToggles.forEach(btn => {
-      const icon = btn.querySelector('.bi');
-      const text = btn.querySelector('span');
-      
-      if (icon) {
-        icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+  
+    // Enforce HTML attribute instantly
+    document.documentElement.setAttribute('data-theme', currentTheme);
+  
+    // 2. Global Actions
+    window.toggleTheme = function() {
+      currentTheme = (currentTheme === 'light') ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', currentTheme);
+      localStorage.setItem(STORAGE_KEY, currentTheme);
+  
+      // Sync all UI toggles
+      syncToggleUI();
+    };
+  
+    window.getCurrentTheme = function() {
+      return currentTheme;
+    };
+  
+    // 3. UI Synchronization
+    function syncToggleUI() {
+      // Header Icon
+      const headerIcon = document.getElementById('headerThemeIcon');
+      if (headerIcon) {
+        headerIcon.className = currentTheme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
       }
       
-      if (text) {
-        text.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
+      // Sidebar Icon/Label (from theme-toggle.ejs part)
+      const sidebarIcon = document.getElementById('themeToggleIcon');
+      const sidebarLabel = document.getElementById('themeToggleLabel');
+      
+      if (sidebarIcon) {
+        sidebarIcon.className = currentTheme === 'dark' ? 'bi bi-moon-fill' : 'bi bi-sun-fill';
+        sidebarIcon.style.transform = 'rotate(360deg) scale(1.3)';
+        setTimeout(() => { sidebarIcon.style.transform = ''; }, 400);
+      }
+      
+      if (sidebarLabel) {
+        sidebarLabel.textContent = currentTheme === 'dark' ? 'Tema Gelap' : 'Tema Terang';
+      }
+    }
+  
+    // 4. Bind Listeners on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+      syncToggleUI();
+      
+      const headerBtn = document.getElementById('btnHeaderThemeToggle');
+      if (headerBtn) {
+        headerBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.toggleTheme();
+        });
+      }
+  
+      const sidebarBtn = document.getElementById('globalThemeToggle');
+      if (sidebarBtn) {
+        sidebarBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.toggleTheme();
+        });
       }
     });
-  }
-
-  // Add event listeners to theme toggle buttons
-  function attachThemeToggleListeners() {
-    const toggleButtons = document.querySelectorAll('[data-theme-toggle]');
-    
-    toggleButtons.forEach(button => {
-      button.addEventListener('click', function(e) {
-        e.preventDefault();
-        toggleTheme();
-      });
+  
+    // Listen to changes across tabs
+    window.addEventListener('storage', function(e) {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        currentTheme = e.newValue;
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        syncToggleUI();
+      }
     });
-  }
-
-  // Initialize when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-      initTheme();
-      attachThemeToggleListeners();
-    });
-  } else {
-    initTheme();
-    attachThemeToggleListeners();
-  }
-
-  // Expose toggleTheme function globally for manual triggering
-  window.toggleTheme = toggleTheme;
-  window.getCurrentTheme = getTheme;
-
-})();
-
+  })();
