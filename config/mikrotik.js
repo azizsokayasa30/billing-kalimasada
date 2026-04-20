@@ -6478,15 +6478,11 @@ async function ensureHotspotProfilesMetadataTable(conn) {
             { name: 'address_list', definition: 'VARCHAR(64)' }
         ];
 
-        const [columnRows] = await conn.execute(`
-            SELECT COLUMN_NAME
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'hotspot_profiles'
-        `);
+        // Use SQLite PRAGMA (not MySQL information_schema which doesn't exist in SQLite)
+        const [columnRows] = await conn.execute(`PRAGMA table_info(hotspot_profiles)`);
 
         const existingColumns = new Set(
-            (columnRows || []).map(row => String(row.COLUMN_NAME).toLowerCase())
+            (columnRows || []).map(row => String(row.name).toLowerCase())
         );
         hotspotProfilesColumnsCache = existingColumns;
 

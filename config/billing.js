@@ -249,7 +249,7 @@
 
         async updateCustomerById(id, customerData) {
             return new Promise(async (resolve, reject) => {
-                const { name, username, pppoe_username, email, address, area, latitude, longitude, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, renewal_type, fix_date, cable_type, cable_length, port_number, cable_status, cable_notes } = customerData;
+                const { name, username, pppoe_username, email, address, area, area_id, latitude, longitude, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, renewal_type, fix_date, cable_type, cable_length, port_number, cable_status, cable_notes } = customerData;
                 try {
                     const oldCustomer = await this.getCustomerById(id);
                     if (!oldCustomer) return reject(new Error('Customer not found'));
@@ -262,7 +262,7 @@
                         (fix_date !== undefined ? Math.min(Math.max(parseInt(fix_date, 10) || 15, 1), 28) : (oldCustomer.fix_date || 15)) : 
                         null;
 
-                    const sql = `UPDATE customers SET name = ?, username = ?, pppoe_username = ?, email = ?, address = ?, area = ?, latitude = ?, longitude = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ? WHERE id = ?`;
+                    const sql = `UPDATE customers SET name = ?, username = ?, pppoe_username = ?, email = ?, address = ?, area = ?, area_id = ?, latitude = ?, longitude = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ? WHERE id = ?`;
                     this.db.run(sql, [
                         name ?? oldCustomer.name,
                         username ?? oldCustomer.username,
@@ -270,6 +270,7 @@
                         email ?? oldCustomer.email,
                         address ?? oldCustomer.address,
                         area !== undefined ? area : oldCustomer.area,
+                        customerData.area_id !== undefined ? customerData.area_id : oldCustomer.area_id,
                         latitude !== undefined ? parseFloat(latitude) : oldCustomer.latitude,
                         longitude !== undefined ? parseFloat(longitude) : oldCustomer.longitude,
                         package_id ?? oldCustomer.package_id,
@@ -1513,6 +1514,17 @@
                 SELECT DISTINCT c.*, p.name as package_name, p.price as package_price, p.image as package_image, p.tax_rate,
                        c.latitude, c.longitude,
                        r.name as router_name,
+${filters.year && filters.month ? `
+                       CASE 
+                           WHEN EXISTS (
+                               SELECT 1 FROM invoices i 
+                               WHERE i.customer_id = c.id 
+                               AND strftime('%m', i.created_at) = '${String(filters.month).padStart(2, '0')}' 
+                               AND strftime('%Y', i.created_at) = '${String(filters.year)}' 
+                               AND i.status = 'paid'
+                           ) THEN 'paid'
+                           ELSE 'unpaid'
+                       END as payment_status` : `
                        CASE 
                            WHEN EXISTS (
                                SELECT 1 FROM invoices i 
@@ -1531,7 +1543,7 @@
                                AND i.status = 'paid'
                            ) THEN 'paid'
                            ELSE 'no_invoice'
-                       END as payment_status
+                       END as payment_status`}
                 FROM customers c 
                 LEFT JOIN packages p ON c.package_id = p.id
                 LEFT JOIN customer_router_map m ON m.customer_id = c.id
@@ -1602,7 +1614,7 @@
                 SELECT c.*, p.name as package_name, p.price as package_price, p.image as package_image, p.tax_rate,
                        c.latitude, c.longitude,
                         r.name as router_name,
-                       col.name as collector_name,
+                       COALESCE(col_ca.name, col_cra.name) as collector_name,
                        CASE 
                            WHEN EXISTS (
                                SELECT 1 FROM invoices i 
@@ -1627,7 +1639,9 @@
                 LEFT JOIN customer_router_map m ON m.customer_id = c.id
                 LEFT JOIN routers r ON r.id = m.router_id
                 LEFT JOIN collector_assignments ca ON ca.customer_id = c.id
-                LEFT JOIN collectors col ON col.id = ca.collector_id
+                LEFT JOIN collectors col_ca ON col_ca.id = ca.collector_id
+                LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != '' AND c.area = cra.area)
+                LEFT JOIN collectors col_cra ON col_cra.id = cra.collector_id
                 ORDER BY c.name ASC
             `;
             
@@ -1699,7 +1713,98 @@
         });
     }
 
+    
+    async getCustomerStatsByMonth(month, year, filters = {}) {
+        return new Promise((resolve, reject) => {
+            const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+            const nextMonth = month == 12 ? 1 : parseInt(month) + 1;
+            const nextYear = month == 12 ? parseInt(year) + 1 : year;
+            const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+            const monthStr = String(month).padStart(2, '0');
+            const yearStr = String(year);
+
+            let filterJoins = '';
+            let filterWhere = '';
+            let filterParams = [];
+
+            if (filters.search) {
+                filterWhere += ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.pppoe_username LIKE ?)';
+                const searchTerm = `%${filters.search}%`;
+                filterParams.push(searchTerm, searchTerm, searchTerm);
+            }
+            if (filters.package_id) {
+                filterWhere += ' AND c.package_id = ?';
+                filterParams.push(filters.package_id);
+            }
+            if (filters.area) {
+                filterWhere += ' AND c.area = ?';
+                filterParams.push(filters.area);
+            }
+            if (filters.collector_id) {
+                filterJoins += ' LEFT JOIN collector_assignments ca ON ca.customer_id = c.id';
+                filterJoins += ' LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != \"\" AND c.area = cra.area)';
+                filterWhere += ' AND (ca.collector_id = ? OR cra.collector_id = ?)';
+                filterParams.push(filters.collector_id, filters.collector_id);
+            }
+
+            const sql = `
+                SELECT 
+                    COUNT(DISTINCT c.id) as total,
+                    SUM(CASE WHEN c.status = 'active' THEN 1 ELSE 0 END) as aktif,
+                    SUM(CASE WHEN c.status = 'suspended' OR c.status = 'isolir' THEN 1 ELSE 0 END) as nonaktif,
+                    SUM(CASE WHEN date(c.join_date) >= date(?) AND date(c.join_date) < date(?) THEN 1 ELSE 0 END) as baru,
+                    (
+                        SELECT COUNT(DISTINCT i.customer_id) 
+                        FROM invoices i 
+                        JOIN customers c_sub ON c_sub.id = i.customer_id
+                        ${filterJoins.replace(/ ca/g, ' ca_sub').replace(/ cra/g, ' cra_sub').replace(/ c\./g, ' c_sub.')}
+                        WHERE strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ? AND i.status = 'paid'
+                        ${filterWhere.replace(/c\./g, 'c_sub.')}
+                    ) as lunas,
+                    (
+                        SELECT COUNT(DISTINCT c2.id) 
+                        FROM customers c2 
+                        ${filterJoins.replace(/ ca/g, ' ca2').replace(/ cra/g, ' cra2').replace(/ c\./g, ' c2.')}
+                        WHERE date(c2.join_date) < date(?)
+                        AND NOT EXISTS (
+                            SELECT 1 FROM invoices i 
+                            WHERE i.customer_id = c2.id 
+                            AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ? AND i.status = 'paid'
+                        )
+                        ${filterWhere.replace(/c\./g, 'c2.')}
+                    ) as belum_lunas
+                FROM customers c
+                ${filterJoins}
+                WHERE date(c.join_date) < date(?) ${filterWhere}
+            `;
+            
+            const params = [
+                startDate, endDate,
+                monthStr, yearStr, ...filterParams,
+                endDate, monthStr, yearStr, ...filterParams,
+                endDate, ...filterParams
+            ];
+            
+            this.db.get(sql, params, (err, row) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve({
+                        total: (row && row.total) ? row.total : 0,
+                        aktif: (row && row.aktif) ? row.aktif : 0,
+                        nonaktif: (row && row.nonaktif) ? row.nonaktif : 0,
+                        lunas: (row && row.lunas) ? row.lunas : 0,
+                        belum_lunas: (row && row.belum_lunas) ? row.belum_lunas : 0,
+                        baru: (row && row.baru) ? row.baru : 0
+                    });
+                }
+            });
+        });
+    }
+
     // OPTIMASI: Get customers dengan pagination untuk menghindari load semua data sekaligus
+
     async getCustomersPaginated(limit = 50, offset = 0, filters = {}) {
         return new Promise(async (resolve, reject) => {
             // Build WHERE clause dari filters
@@ -1728,34 +1833,84 @@
             }
 
             if (filters.collector_id) {
-                whereClause += ' AND ca.collector_id = ?';
-                params.push(filters.collector_id);
+                whereClause += ' AND (ca.collector_id = ? OR cra.collector_id = ?)';
+                params.push(filters.collector_id, filters.collector_id);
             }
 
-            // Filter status pembayaran (Lunas/Belum Lunas)
-            if (filters.payment_status === 'paid') {
-                whereClause += ` AND NOT EXISTS (
-                    SELECT 1 FROM invoices i 
-                    WHERE i.customer_id = c.id 
-                    AND i.status = 'unpaid'
-                ) AND EXISTS (
-                    SELECT 1 FROM invoices i 
-                    WHERE i.customer_id = c.id 
-                    AND i.status = 'paid'
-                )`;
-            } else if (filters.payment_status === 'unpaid') {
-                whereClause += ` AND EXISTS (
-                    SELECT 1 FROM invoices i 
-                    WHERE i.customer_id = c.id 
-                    AND i.status = 'unpaid'
-                )`;
+            if (filters.year && filters.month) {
+                const year = filters.year;
+                const month = String(filters.month).padStart(2, '0');
+                const nextMonth = month === '12' ? '01' : String(parseInt(month) + 1).padStart(2, '0');
+                const nextYear = month === '12' ? String(parseInt(year) + 1) : year;
+                const startDate = `${year}-${month}-01`;
+                const endDate = `${nextYear}-${nextMonth}-01`;
+
+                whereClause += ' AND date(c.join_date) < date(?)';
+                params.push(endDate);
+
+                if (filters.customer_type === 'baru') {
+                    whereClause += ' AND date(c.join_date) >= date(?)';
+                    params.push(startDate);
+                } else if (filters.customer_type === 'aktif') {
+                    whereClause += " AND c.status = 'active'";
+                } else if (filters.customer_type === 'nonaktif') {
+                    whereClause += " AND (c.status = 'suspended' OR c.status = 'isolir')";
+                }
+
+                if (filters.payment_status === 'paid') {
+                    whereClause += ` AND EXISTS (
+                        SELECT 1 FROM invoices i 
+                        WHERE i.customer_id = c.id 
+                        AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ? AND i.status = 'paid'
+                    )`;
+                    params.push(month, String(year));
+                } else if (filters.payment_status === 'unpaid') {
+                    whereClause += ` AND NOT EXISTS (
+                        SELECT 1 FROM invoices i 
+                        WHERE i.customer_id = c.id 
+                        AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ? AND i.status = 'paid'
+                    )`;
+                    params.push(month, String(year));
+                }
+            } else {
+                if (filters.customer_type === 'aktif') {
+                    whereClause += " AND c.status = 'active'";
+                } else if (filters.customer_type === 'nonaktif') {
+                    whereClause += " AND (c.status = 'suspended' OR c.status = 'isolir')";
+                }
+                
+                // Filter status pembayaran (Lunas/Belum Lunas) Default
+                if (filters.payment_status === 'paid') {
+                    whereClause += ` AND NOT EXISTS (
+                        SELECT 1 FROM invoices i 
+                        WHERE i.customer_id = c.id 
+                        AND i.status = 'unpaid'
+                    ) AND EXISTS (
+                        SELECT 1 FROM invoices i 
+                        WHERE i.customer_id = c.id 
+                        AND i.status = 'paid'
+                    )`;
+                } else if (filters.payment_status === 'unpaid') {
+                    whereClause += ` AND (
+                        EXISTS (
+                            SELECT 1 FROM invoices i 
+                            WHERE i.customer_id = c.id 
+                            AND i.status = 'unpaid'
+                        ) 
+                        OR NOT EXISTS (
+                            SELECT 1 FROM invoices i 
+                            WHERE i.customer_id = c.id 
+                            AND i.status = 'paid'
+                        )
+                    )`;
+                }
             }
 
             const sql = `
                 SELECT c.*, p.name as package_name, p.price as package_price, p.image as package_image, p.tax_rate,
                        c.latitude, c.longitude,
                        r.name as router_name,
-                       col.name as collector_name,
+                       COALESCE(col_ca.name, col_cra.name) as collector_name,
                        CASE 
                            WHEN EXISTS (
                                SELECT 1 FROM invoices i 
@@ -1780,7 +1935,9 @@
                 LEFT JOIN customer_router_map m ON m.customer_id = c.id
                 LEFT JOIN routers r ON r.id = m.router_id
                 LEFT JOIN collector_assignments ca ON ca.customer_id = c.id
-                LEFT JOIN collectors col ON col.id = ca.collector_id
+                LEFT JOIN collectors col_ca ON col_ca.id = ca.collector_id
+                LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != '' AND c.area = cra.area)
+                LEFT JOIN collectors col_cra ON col_cra.id = cra.collector_id
                 WHERE 1=1 ${whereClause}
                 ORDER BY c.id DESC
                 LIMIT ? OFFSET ?
@@ -1794,6 +1951,7 @@
                 FROM customers c
                 LEFT JOIN customer_router_map m ON m.customer_id = c.id
                 LEFT JOIN collector_assignments ca ON ca.customer_id = c.id
+                LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != '' AND c.area = cra.area)
                 WHERE 1=1 ${whereClause}
             `;
             
@@ -2185,7 +2343,7 @@
                     (fix_date !== undefined ? Math.min(Math.max(parseInt(fix_date, 10) || 15, 1), 28) : (oldCustomer.fix_date || 15)) : 
                     null;
                 
-                let sql = `UPDATE customers SET name = ?, username = ?, phone = ?, pppoe_username = ?, email = ?, address = ?, area = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, latitude = ?, longitude = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ?, ktp_photo_path = ?, house_photo_path = ?`;
+                let sql = `UPDATE customers SET name = ?, username = ?, phone = ?, pppoe_username = ?, email = ?, address = ?, area = ?, area_id = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, latitude = ?, longitude = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ?, ktp_photo_path = ?, house_photo_path = ?`;
                 let params = [
                     name !== undefined ? name : oldCustomer.name, 
                     username || oldCustomer.username, 
@@ -2194,6 +2352,7 @@
                     email !== undefined ? email : oldCustomer.email, 
                     address !== undefined ? address : oldCustomer.address, 
                     area !== undefined ? area : oldCustomer.area,
+                    customerData.area_id !== undefined ? customerData.area_id : oldCustomer.area_id,
                     package_id !== undefined ? package_id : oldCustomer.package_id, 
                     odp_id !== undefined ? odp_id : oldCustomer.odp_id,
                     pppoe_profile !== undefined ? pppoe_profile : oldCustomer.pppoe_profile, 
@@ -5595,7 +5754,7 @@ async handlePaymentWebhook(payload, gateway) {
                         
                         SELECT 
                             'income' as type,
-                            inc.created_at as date,
+                            inc.join_date as date,
                             inc.amount as amount,
                             inc.payment_method,
                             CONCAT('Pendapatan - ', inc.category) as gateway_name,
@@ -5704,7 +5863,7 @@ async handlePaymentWebhook(payload, gateway) {
                         
                         SELECT 
                             'income' as type,
-                            inc.created_at as date,
+                            inc.join_date as date,
                             inc.amount as amount,
                             inc.payment_method,
                             CONCAT('Pendapatan - ', inc.category) as gateway_name,

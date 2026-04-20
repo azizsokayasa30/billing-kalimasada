@@ -4247,11 +4247,20 @@ router.get('/customers', getAppSettings, async (req, res) => {
         if (search) filters.search = search;
         if (statusFilter) filters.status = statusFilter;
         
+        // Month and Year defaults to current if not provided
+        const now = new Date();
+        const month = req.query.month ? parseInt(req.query.month) : (now.getMonth() + 1);
+        const year = req.query.year ? parseInt(req.query.year) : now.getFullYear();
+        filters.month = month;
+        filters.year = year;
+        
+
         // Add new filters
         if (req.query.package_id) filters.package_id = req.query.package_id;
         if (req.query.area) filters.area = req.query.area;
         if (req.query.collector_id) filters.collector_id = req.query.collector_id;
         if (req.query.payment_status) filters.payment_status = req.query.payment_status;
+        if (req.query.customer_type) filters.customer_type = req.query.customer_type;
         
         let customersResult;
         if (routerFilter) {
@@ -4364,9 +4373,14 @@ router.get('/customers', getAppSettings, async (req, res) => {
             });
         });
 
+        const customerStats = await billingManager.getCustomerStatsByMonth(month, year, filters);
+        
         res.render('admin/billing/customers', {
             title: 'Kelola Pelanggan',
             customers,
+            customerStats,
+            selectedMonth: month,
+            selectedYear: year,
             packages,
             odps,
             routers,
@@ -4387,6 +4401,7 @@ router.get('/customers', getAppSettings, async (req, res) => {
             search: search,
             statusFilter: statusFilter,
             appSettings: req.appSettings,
+            filters,
             page: 'customers'
         });
     } catch (error) {

@@ -4,18 +4,23 @@ const fs = require('fs');
 const logger = require('./logger');
 
 /**
- * Wrapper for sqlite3 to provide a mysql2-compatible promise API
+ * Singleton RADIUS SQLite connection.
+ * Using a single persistent connection prevents SQLite SQLITE_BUSY / deadlock
+ * issues caused by multiple concurrent connections opening the same database file.
  */
+let _singletonConn = null;
+let _singletonPath = null;
+
 class RADIUSDatabase {
     constructor(dbPath) {
         this.dbPath = dbPath;
         this.db = null;
+        this._isSingleton = false;
     }
 
     async connect() {
         if (this.db) return;
 
-        // Ensure directory exists
         const dir = path.dirname(this.dbPath);
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
@@ -28,7 +33,13 @@ class RADIUSDatabase {
                     reject(err);
                 } else {
                     logger.info(`[RADIUS-SQLITE] Connected to database: ${this.dbPath}`);
-                    this.initSchema().then(resolve).catch(reject);
+                    // Enable WAL mode for better concurrency
+                    this.db.run('PRAGMA journal_mode=WAL', () => {
+                        // 5 second busy timeout so writers wait instead of deadlocking
+                        this.db.run('PRAGMA busy_timeout=5000', () => {
+                            this.initSchema().then(resolve).catch(reject);
+                        });
+                    });
                 }
             });
         });
@@ -129,7 +140,6 @@ class RADIUSDatabase {
             )`
         ];
 
-        // SQLite index doesn't support length like username(32), remove that
         const cleanSchema = schema.map(s => s.replace(/\(\d+\)/g, ''));
 
         for (const statement of cleanSchema) {
@@ -143,37 +153,31 @@ class RADIUSDatabase {
         logger.info('[RADIUS-SQLITE] Schema initialized');
     }
 
-    /**
-     * mysql2-compatible execute (promise based)
-     */
     async execute(sql, params = []) {
         if (!this.db) await this.connect();
 
-        // Convert SQL syntax from MySQL to SQLite
         let sqliteSQL = sql
-            .replace(/ON DUPLICATE KEY UPDATE/gi, 'ON CONFLICT DO UPDATE SET') // Simple replacement, might need more refinement
+            .replace(/ON DUPLICATE KEY UPDATE/gi, 'ON CONFLICT DO UPDATE SET')
             .replace(/NOW\(\)/gi, "datetime('now', 'localtime')")
             .replace(/TIMESTAMPDIFF\(SECOND, ([^,]+), ([^)]+)\)/gi, "(strftime('%s', $2) - strftime('%s', $1))");
 
-        // Special handling for ON DUPLICATE KEY UPDATE which is very different in SQLite
-        // If it's radcheck or radgroupreply, we often know the unique keys
         if (sqliteSQL.includes('radcheck') && sqliteSQL.includes('ON CONFLICT')) {
-            sqliteSQL = sqliteSQL.replace(/INSERT INTO radcheck \((.*?)\) VALUES \((.*?)\) ON CONFLICT DO UPDATE SET (.*)/i, 
+            sqliteSQL = sqliteSQL.replace(/INSERT INTO radcheck \((.*?)\) VALUES \((.*?)\) ON CONFLICT DO UPDATE SET (.*)/i,
                 (match, cols, vals, update) => {
-                    // Check if we have a unique constraint or if we should use INSERT OR REPLACE
                     return `INSERT INTO radcheck (${cols}) VALUES (${vals}) ON CONFLICT(username, attribute) DO UPDATE SET ${update}`;
                 }
             );
         }
 
         return new Promise((resolve, reject) => {
-            if (sqliteSQL.trim().toUpperCase().startsWith('SELECT')) {
+            const sqlUpper = sqliteSQL.trim().toUpperCase();
+            if (sqlUpper.startsWith('SELECT') || sqlUpper.startsWith('PRAGMA') || sqlUpper.startsWith('EXPLAIN')) {
                 this.db.all(sqliteSQL, params, (err, rows) => {
                     if (err) {
                         logger.error(`[RADIUS-SQLITE] Query Error: ${err.message}\nSQL: ${sqliteSQL}`);
                         reject(err);
                     } else {
-                        resolve([rows, []]); // Return [rows, fields] to match mysql2
+                        resolve([rows, []]);
                     }
                 });
             } else {
@@ -182,9 +186,9 @@ class RADIUSDatabase {
                         logger.error(`[RADIUS-SQLITE] Exec Error: ${err.message}\nSQL: ${sqliteSQL}`);
                         reject(err);
                     } else {
-                        resolve([{ 
-                            affectedRows: this.changes, 
-                            insertId: this.lastID 
+                        resolve([{
+                            affectedRows: this.changes,
+                            insertId: this.lastID
                         }, []]);
                     }
                 });
@@ -196,7 +200,15 @@ class RADIUSDatabase {
         return this.execute(sql, params);
     }
 
+    /**
+     * end() is a NO-OP for singleton connections.
+     * The connection stays open permanently to avoid repeated open/close
+     * that caused SQLite SQLITE_BUSY errors and log spam.
+     */
     async end() {
+        if (this._isSingleton) {
+            return; // Do NOT close - singleton is reused across all requests
+        }
         if (this.db) {
             return new Promise((resolve, reject) => {
                 this.db.close((err) => {
@@ -209,16 +221,36 @@ class RADIUSDatabase {
     }
 }
 
+/**
+ * Returns the singleton RADIUS connection.
+ * Creates once, reuses forever to prevent SQLite locking deadlocks.
+ */
 async function getRadiusConnection() {
     const { getRadiusConfig } = require('./radiusConfig');
     const config = await getRadiusConfig();
-    
-    // We use the database name as the SQLite file name
+
     const dbName = config.radius_database || 'radius';
     const dbPath = path.join(process.cwd(), 'data', dbName.endsWith('.db') ? dbName : `${dbName}.db`);
-    
+
+    // Reuse singleton if path matches and connection is still alive
+    if (_singletonConn && _singletonPath === dbPath && _singletonConn.db) {
+        return _singletonConn;
+    }
+
+    // Path changed - close old connection before creating new one
+    if (_singletonConn && _singletonConn.db && _singletonPath !== dbPath) {
+        try {
+            _singletonConn._isSingleton = false;
+            await _singletonConn.end();
+        } catch (_) {}
+        _singletonConn = null;
+    }
+
     const conn = new RADIUSDatabase(dbPath);
+    conn._isSingleton = true;
     await conn.connect();
+    _singletonConn = conn;
+    _singletonPath = dbPath;
     return conn;
 }
 

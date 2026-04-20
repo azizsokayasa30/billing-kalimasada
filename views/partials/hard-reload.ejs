@@ -1,10 +1,23 @@
-<!-- Simple page reload for CSS detection -->
+<!-- Force clear old Service Worker caches on admin pages -->
 <script>
 (function() {
-    var pKey = 'simple_reload_' + location.pathname;
-    if (!sessionStorage.getItem(pKey)) {
-        sessionStorage.setItem(pKey, 'true');
-        window.location.reload();
+    // Unregister ALL old service workers and clear stale caches
+    // This runs once per session to clean up any cached redirects
+    if ('serviceWorker' in navigator) {
+        var swCleanupKey = 'sw_cleanup_v3';
+        if (!sessionStorage.getItem(swCleanupKey)) {
+            sessionStorage.setItem(swCleanupKey, 'true');
+            // Unregister all service workers to force fresh SW install
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                registrations.forEach(function(reg) { reg.unregister(); });
+            });
+            // Clear all caches
+            if (window.caches) {
+                caches.keys().then(function(keys) {
+                    keys.forEach(function(key) { caches.delete(key); });
+                });
+            }
+        }
     }
 })();
 </script>

@@ -819,7 +819,7 @@
 }
 
 /* SOLID TOAST BACKGROUNDS OVERRIDE */
-.toast.bg-success, [data-theme='dark'] .toast.bg-success { background-color: #198754 !important; color: #ffffff !important; opacity: 1 !important; border: none !important; }
+.toast.bg-success, body .toast.bg-success, [data-theme='dark'] .toast.bg-success, [data-theme='light'] .toast.bg-success { background-color: #198754 !important; color: #ffffff !important; opacity: 1 !important; }
 .toast.bg-danger, [data-theme='dark'] .toast.bg-danger { background-color: #dc3545 !important; color: #ffffff !important; opacity: 1 !important; border: none !important; }
 .toast.bg-info, [data-theme='dark'] .toast.bg-info { background-color: #0dcaf0 !important; color: #ffffff !important; opacity: 1 !important; border: none !important; }
 .toast.bg-warning, [data-theme='dark'] .toast.bg-warning { background-color: #ffc107 !important; color: #212529 !important; opacity: 1 !important; border: none !important; }

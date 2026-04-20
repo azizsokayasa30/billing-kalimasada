@@ -268,7 +268,7 @@
         <div class="sb-section-divider"></div>
 
         <!-- PELANGGAN BILLING -->
-        <% const billingCustomerPages = ['customers', 'packages', 'member-data', 'member-packages', 'areas']; %>
+        <% const billingCustomerPages = ['customers', 'packages', 'member-data', 'member-packages', 'areas', 'collector-areas']; %>
         <% const billingCustomerExpanded = typeof page !== 'undefined' && billingCustomerPages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -289,6 +289,10 @@
                 <a href="/admin/billing/areas" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'areas' ? 'active' : '' %>">
                     <i class="bi bi-geo-alt-fill"></i>
                     <span class="sb-item-text">Manajemen Area</span>
+                </a>
+                <a href="/admin/billing/collector-areas" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-areas' ? 'active' : '' %>">
+                    <i class="bi bi-map"></i>
+                    <span class="sb-item-text">Area Kolektor</span>
                 </a>
                 <a href="/admin/billing/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'packages' ? 'active' : '' %>">
                     <i class="bi bi-box-seam"></i>
