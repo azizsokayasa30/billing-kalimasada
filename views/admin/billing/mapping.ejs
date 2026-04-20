@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -933,14 +933,14 @@
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bx bx-map"></i> <%= title || 'Network Mapping' %>
+                        <i class="bi bi-map"></i> <%= title || 'Network Mapping' %>
                     </h1>
                     <div class="d-flex gap-2">
                         <button class="btn btn-outline-primary" onclick="refreshMap()">
-                            <i class="bx bx-refresh"></i> Refresh
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
                         </button>
                         <button class="btn btn-outline-success" onclick="exportMapData()">
-                            <i class="bx bx-download"></i> Export
+                            <i class="bi bi-download"></i> Export
                         </button>
                     </div>
                 </div>
@@ -954,7 +954,7 @@
                                     <div class="stats-number" id="totalCustomers">-</div>
                                     <div>Total Pelanggan</div>
                                 </div>
-                                <i class="bx bx-user bx-lg"></i>
+                                <i class="bi bi-person-fill bx-lg"></i>
                             </div>
                         </div>
                     </div>
@@ -965,7 +965,7 @@
                                     <div class="stats-number" id="totalONU">-</div>
                                     <div>Total ONU</div>
                                 </div>
-                                <i class="bx bx-wifi bx-lg"></i>
+                                <i class="bi bi-wifi bx-lg"></i>
                             </div>
                         </div>
                     </div>
@@ -976,7 +976,7 @@
                                     <div class="stats-number" id="onlineONU">-</div>
                                     <div>ONU Online</div>
                                 </div>
-                                <i class="bx bx-check-circle bx-lg"></i>
+                                <i class="bi bi-check-circle-fill bx-lg"></i>
                             </div>
                         </div>
                     </div>
@@ -987,7 +987,7 @@
                                     <div class="stats-number" id="offlineONU">-</div>
                                     <div>ONU Offline</div>
                                 </div>
-                                <i class="bx bx-x-circle bx-lg"></i>
+                                <i class="bi bi-x-lg-circle bx-lg"></i>
                             </div>
                         </div>
                     </div>
@@ -1017,7 +1017,7 @@
                         <div class="col-md-3">
                             <label class="form-label">&nbsp;</label>
                             <button type="button" class="btn btn-outline-secondary w-100" onclick="clearFilters()">
-                                <i class="bx bx-refresh"></i> Clear Filter
+                                <i class="bi bi-arrow-clockwise"></i> Clear Filter
                             </button>
                         </div>
                     </div>
@@ -1025,13 +1025,13 @@
 
                 <!-- Network Layer Controls -->
                 <div class="network-controls">
-                    <h6><i class="bx bx-network-chart"></i> Network Layers</h6>
+                    <h6><i class="bi bi-diagram-3-fill"></i> Network Layers</h6>
                     <div class="row">
                         <div class="col-md-4">
                             <div class="layer-control">
                                 <input type="checkbox" id="showODPs" checked onchange="toggleODPLayer()">
                                 <label for="showODPs">
-                                    <i class="bx bx-broadcast text-primary"></i> ODP Points
+                                    <i class="bi bi-broadcast text-primary"></i> ODP Points
                                 </label>
                             </div>
                         </div>
@@ -1039,7 +1039,7 @@
                             <div class="layer-control">
                                 <input type="checkbox" id="showCableRoutes" checked onchange="toggleCableLayer()">
                                 <label for="showCableRoutes">
-                                    <i class="bx bx-cable-car text-success"></i> Cable Routes
+                                    <i class="bi bi-ethernet text-success"></i> Cable Routes
                                 </label>
                             </div>
                         </div>
@@ -1047,7 +1047,7 @@
                             <div class="layer-control">
                                 <input type="checkbox" id="showNetworkSegments" onchange="toggleNetworkSegmentLayer()">
                                 <label for="showNetworkSegments">
-                                    <i class="bx bx-network-chart text-info"></i> Network Segments
+                                    <i class="bi bi-diagram-3-fill text-info"></i> Network Segments
                                 </label>
                             </div>
                         </div>
@@ -1073,7 +1073,7 @@
                         <div class="coordinate-stats mb-3">
                             <div id="coordinateStats">
                                 <div class="text-center text-muted">
-                                    <i class="bx bx-loader-alt bx-spin"></i> Loading...
+                                    <i class="bi bi-circle bx-spin"></i> Loading...
                                 </div>
                             </div>
                         </div>
@@ -1089,7 +1089,7 @@
 
                         <!-- Legend -->
                         <div class="legend">
-                            <h6><i class="bx bx-info-circle"></i> Legenda</h6>
+                            <h6><i class="bi bi-info-circle-fill"></i> Legenda</h6>
                             
                             <!-- Customer Legend -->
                             <div class="mb-2">
@@ -1153,7 +1153,7 @@
 
                         <!-- Info Panel -->
                         <div class="info-panel">
-                            <h6><i class="bx bx-info-circle"></i> Informasi</h6>
+                            <h6><i class="bi bi-info-circle-fill"></i> Informasi</h6>
                             <div id="mapInfo">
                                 <p class="text-muted">Klik marker untuk melihat detail</p>
                             </div>
@@ -1193,10 +1193,10 @@
                 </div>
                 <div class="modal-footer d-flex flex-column align-items-stretch gap-2">
                     <div class="alert alert-info" role="alert">
-                        <i class="bx bx-info-circle"></i> <strong>Tips:</strong> Setelah mengubah SSID/Password, restart perangkat untuk menerapkan perubahan dengan cepat.
+                        <i class="bi bi-info-circle-fill"></i> <strong>Tips:</strong> Setelah mengubah SSID/Password, restart perangkat untuk menerapkan perubahan dengan cepat.
                     </div>
                     <button type="button" class="btn btn-warning w-100" id="rebootAfterEditBtn">
-                        <i class="bx bx-arrow-clockwise"></i> Restart Perangkat Setelah Edit
+                        <i class="bi bi-circle"></i> Restart Perangkat Setelah Edit
                     </button>
                     <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Tutup</button>
                 </div>
@@ -1889,11 +1889,11 @@
                             <p class="mb-1"><strong>Source:</strong> <span class="badge bg-info">${device.coordinateSource}</span></p>
                             <div class="mt-2">
                                 <button class="btn btn-sm btn-warning" onclick="editDevice('${device.id}', '${device.ssid || ''}', '${device.password || ''}', '${device.tag || ''}')" title="Edit SSID & Password">
-                                    <i class="bx bx-pencil"></i> Edit
+                                    <i class="bi bi-pencil"></i> Edit
                                 </button>
                                 ${device.customerId ? `
                                 <button class="btn btn-sm btn-primary" onclick="editCustomerCoordinates(${device.customerId}, ${device.latitude}, ${device.longitude})">
-                                    <i class="bx bx-map"></i> Edit Koordinat
+                                    <i class="bi bi-map"></i> Edit Koordinat
                                 </button>
                                 ` : ''}
                             </div>
@@ -2696,13 +2696,13 @@
             
             menu.innerHTML = `
                 <div class="context-menu-item" onclick="addCustomerMarkerAt(${latlng.lat}, ${latlng.lng})">
-                    <i class="bx bx-user-plus"></i> Tambah Customer
+                    <i class="bi bi-person-plus-fill"></i> Tambah Customer
                 </div>
                 <div class="context-menu-item" onclick="getLocationInfo(${latlng.lat}, ${latlng.lng})">
-                    <i class="bx bx-map-pin"></i> Info Lokasi
+                    <i class="bi bi-geo-alt-fill"></i> Info Lokasi
                 </div>
                 <div class="context-menu-item" onclick="copyCoordinates(${latlng.lat}, ${latlng.lng})">
-                    <i class="bx bx-copy"></i> Copy Koordinat
+                    <i class="bi bi-files"></i> Copy Koordinat
                 </div>
             `;
             
@@ -3012,10 +3012,10 @@
                         </div>
                         <div class="d-flex gap-1">
                             <button class="btn btn-sm btn-primary" onclick="viewODPDetails(${odp.id})">
-                                <i class="bx bx-info-circle"></i> Detail
+                                <i class="bi bi-info-circle-fill"></i> Detail
                             </button>
                             <button class="btn btn-sm btn-secondary" onclick="copyCoordinates(${odp.latitude}, ${odp.longitude})">
-                                <i class="bx bx-copy"></i> Koordinat
+                                <i class="bi bi-files"></i> Koordinat
                             </button>
                         </div>
                     </div>
@@ -3059,7 +3059,7 @@
                         // Create popup content
                         const popupContent = `
                             <div class="odp-popup">
-                                <h6><i class="bx bx-broadcast"></i> ${odp.name}</h6>
+                                <h6><i class="bi bi-broadcast"></i> ${odp.name}</h6>
                                 <p><strong>Kode:</strong> ${odp.code}</p>
                                 <p><strong>Alamat:</strong> ${odp.address || 'N/A'}</p>
                                 <p><strong>Kapasitas:</strong> ${odp.used_ports}/${odp.capacity} port</p>
@@ -3145,7 +3145,7 @@
                     // Create popup content
                     const popupContent = `
                         <div class="cable-popup">
-                            <h6><i class="bx bx-cable-car"></i> Cable Route #${cable.id}</h6>
+                            <h6><i class="bi bi-ethernet"></i> Cable Route #${cable.id}</h6>
                             <div class="mb-2">
                                 <strong>Customer:</strong> ${cable.customer_name}<br>
                                 <strong>Phone:</strong> ${cable.customer_phone}<br>
@@ -3160,7 +3160,7 @@
                             ${cable.notes ? `<div class="mb-2"><strong>Notes:</strong><br><small>${cable.notes}</small></div>` : ''}
                             <div class="mt-2">
                                 <small class="text-muted">
-                                    <i class="bx bx-data"></i> Data flowing: ${cable.status === 'connected' ? 'Yes' : 'No'}
+                                    <i class="bi bi-database-fill"></i> Data flowing: ${cable.status === 'connected' ? 'Yes' : 'No'}
                                 </small>
                             </div>
                         </div>
@@ -3279,7 +3279,7 @@
                     // Create popup content
                     const popupContent = `
                         <div class="odp-popup">
-                            <h6><i class="bx bx-broadcast"></i> ${odp.name}</h6>
+                            <h6><i class="bi bi-broadcast"></i> ${odp.name}</h6>
                             <div class="mb-2">
                                 <strong>Code:</strong> ${odp.code}<br>
                                 <strong>Status:</strong> <span class="badge bg-${odp.status === 'active' ? 'success' : 'warning'}">${odp.status}</span>
@@ -3299,7 +3299,7 @@
                             ${odp.notes ? `<div class="mb-2"><strong>Notes:</strong><br><small>${odp.notes}</small></div>` : ''}
                             <div class="mt-2">
                                 <small class="text-muted">
-                                    <i class="bx bx-data"></i> Connected: ${odp.active_connections || 0} customers
+                                    <i class="bi bi-database-fill"></i> Connected: ${odp.active_connections || 0} customers
                                 </small>
                             </div>
                         </div>
@@ -3363,7 +3363,7 @@
                     // Create popup content
                     const popupContent = `
                         <div class="network-segment-popup">
-                            <h6><i class="bx bx-network-chart"></i> Network Segment</h6>
+                            <h6><i class="bi bi-diagram-3-fill"></i> Network Segment</h6>
                             <div class="mb-2">
                                 <strong>From:</strong> ${connection.from_odp_name} (${connection.from_odp_code})<br>
                                 <strong>To:</strong> ${connection.to_odp_name} (${connection.to_odp_code})<br>
@@ -3460,7 +3460,7 @@
                     // Create popup content
                     const popupContent = `
                         <div class="network-popup">
-                            <h6><i class="bx bx-network-chart"></i> ${segment.name}</h6>
+                            <h6><i class="bi bi-diagram-3-fill"></i> ${segment.name}</h6>
                             <div class="mb-2">
                                 <strong>Type:</strong> ${segment.segment_type}<br>
                                 <strong>Status:</strong> <span class="badge bg-${segment.status === 'active' ? 'success' : 'warning'}">${segment.status}</span><br>

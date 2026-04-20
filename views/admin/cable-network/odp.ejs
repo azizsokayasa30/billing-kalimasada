@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -60,20 +60,20 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand" href="/admin">
-                <i class="bx bx-wifi"></i> Admin Portal
+                <i class="bi bi-wifi"></i> Admin Portal
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="/admin">
-                    <i class="bx bx-home"></i> Dashboard
+                    <i class="bi bi-house"></i> Dashboard
                 </a>
                 <a class="nav-link" href="/admin/cable-network">
-                    <i class="bx bx-network-chart"></i> Cable Network
+                    <i class="bi bi-diagram-3-fill"></i> Cable Network
                 </a>
                 <a class="nav-link" href="/admin/cable-network/cables">
-                    <i class="bx bx-cable-car"></i> Cable Routes
+                    <i class="bi bi-ethernet"></i> Cable Routes
                 </a>
                 <a class="nav-link" href="/admin/billing/mapping-new">
-                    <i class="bx bx-map"></i> Map View
+                    <i class="bi bi-map"></i> Map View
                 </a>
             </div>
         </div>
@@ -85,11 +85,11 @@
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h2><i class="bx bx-broadcast"></i> ODP Management</h2>
+                        <h2><i class="bi bi-broadcast"></i> ODP Management</h2>
                         <p class="text-muted">Kelola Optical Distribution Point (ODP) dan kapasitas port</p>
                     </div>
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addODPModal">
-                        <i class="bx bx-plus"></i> Tambah ODP
+                        <i class="bi bi-plus-lg"></i> Tambah ODP
                     </button>
                 </div>
             </div>
@@ -106,7 +106,7 @@
                                 <p class="mb-0">Total ODP</p>
                             </div>
                             <div class="align-self-center">
-                                <i class="bx bx-broadcast fs-1"></i>
+                                <i class="bi bi-broadcast fs-1"></i>
                             </div>
                         </div>
                     </div>
@@ -121,7 +121,7 @@
                                 <p class="mb-0">Active ODP</p>
                             </div>
                             <div class="align-self-center">
-                                <i class="bx bx-check-circle fs-1"></i>
+                                <i class="bi bi-check-circle-fill fs-1"></i>
                             </div>
                         </div>
                     </div>
@@ -136,7 +136,7 @@
                                 <p class="mb-0">Maintenance</p>
                             </div>
                             <div class="align-self-center">
-                                <i class="bx bx-wrench fs-1"></i>
+                                <i class="bi bi-wrench-adjustable fs-1"></i>
                             </div>
                         </div>
                     </div>
@@ -151,7 +151,7 @@
                                 <p class="mb-0">Used Ports</p>
                             </div>
                             <div class="align-self-center">
-                                <i class="bx bx-plug fs-1"></i>
+                                <i class="bi bi-plug-fill fs-1"></i>
                             </div>
                         </div>
                     </div>
@@ -168,7 +168,7 @@
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div class="d-flex align-items-center">
                                 <div class="odp-icon <%= 'odp-' + odp.status %>">
-                                    <i class="bx bx-broadcast"></i>
+                                    <i class="bi bi-broadcast"></i>
                                 </div>
                                 <div class="ms-3">
                                     <h5 class="mb-0" data-field="name"><%= odp.name %></h5>
@@ -185,12 +185,12 @@
                             <p class="mb-1" data-field="address"><%= odp.address || 'No address' %></p>
                             <% if (odp.parent_name) { %>
                                 <small class="text-info d-block">
-                                    <i class="bx bx-sitemap me-1"></i>
+                                    <i class="bi bi-circle me-1"></i>
                                     Sub ODP dari: <strong><%= odp.parent_name %> (<%= odp.parent_code %>)</strong>
                                 </small>
                             <% } else { %>
                                 <small class="text-success d-block">
-                                    <i class="bx bx-home me-1"></i>
+                                    <i class="bi bi-house me-1"></i>
                                     ODP Utama
                                 </small>
                             <% } %>
@@ -232,13 +232,13 @@
 
                         <div class="d-flex justify-content-between">
                             <button class="btn btn-sm btn-outline-primary" onclick="editODP(<%= odp.id %>)">
-                                <i class="bx bx-edit"></i> Edit
+                                <i class="bi bi-pencil-fill"></i> Edit
                             </button>
                             <button class="btn btn-sm btn-outline-info" onclick="viewODPDetails(<%= odp.id %>)">
-                                <i class="bx bx-info-circle"></i> Details
+                                <i class="bi bi-info-circle-fill"></i> Details
                             </button>
                             <button class="btn btn-sm btn-outline-danger" onclick="deleteODP(<%= odp.id %>)">
-                                <i class="bx bx-trash"></i> Delete
+                                <i class="bi bi-trash3-fill"></i> Delete
                             </button>
                         </div>
                     </div>
@@ -290,7 +290,7 @@
                         <!-- ODP Connection Section -->
                         <div class="card border-info mb-3">
                             <div class="card-header bg-info text-white">
-                                <h6 class="mb-0"><i class="bx bx-link me-2"></i>Koneksi Kabel ODP</h6>
+                                <h6 class="mb-0"><i class="bi bi-link me-2"></i>Koneksi Kabel ODP</h6>
                             </div>
                             <div class="card-body">
                                 <div class="form-check mb-3">
@@ -362,11 +362,11 @@
                                         <small class="form-text text-muted">Panjang kabel akan dihitung otomatis berdasarkan jarak antara ODP awal dan ODP baru</small>
                                     </div>
                                     <div class="alert alert-info">
-                                        <i class="bx bx-info-circle me-2"></i>
+                                        <i class="bi bi-info-circle-fill me-2"></i>
                                         <strong>Info:</strong> Panjang kabel akan dihitung otomatis berdasarkan jarak antara ODP awal dan ODP baru yang akan dibuat.
                                     </div>
                                     <div id="connectionPreview" class="alert alert-success" style="display: none;">
-                                        <i class="bx bx-check-circle me-2"></i>
+                                        <i class="bi bi-check-circle-fill me-2"></i>
                                         <strong>Koneksi akan dibuat:</strong> <span id="connectionPreviewText"></span>
                                     </div>
                                 </div>
@@ -527,7 +527,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
-                        <i class="bx bx-broadcast"></i> ODP Details - <span id="detailODPNameTitle"></span>
+                        <i class="bi bi-broadcast"></i> ODP Details - <span id="detailODPNameTitle"></span>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -537,7 +537,7 @@
                         <div class="col-md-6">
                             <div class="card h-100">
                                 <div class="card-header">
-                                    <h6 class="mb-0"><i class="bx bx-info-circle"></i> Basic Information</h6>
+                                    <h6 class="mb-0"><i class="bi bi-info-circle-fill"></i> Basic Information</h6>
                                 </div>
                                 <div class="card-body">
                                     <div class="row mb-3">
@@ -574,7 +574,7 @@
                         <div class="col-md-6">
                             <div class="card h-100">
                                 <div class="card-header">
-                                    <h6 class="mb-0"><i class="bx bx-bar-chart-alt-2"></i> Capacity & Statistics</h6>
+                                    <h6 class="mb-0"><i class="bi bi-bar-chart-fill"></i> Capacity & Statistics</h6>
                                 </div>
                                 <div class="card-body">
                                     <div class="row mb-3">
@@ -628,12 +628,12 @@
                         <div class="col-12">
                             <div class="card">
                                 <div class="card-header">
-                                    <h6 class="mb-0"><i class="bx bx-diagram-3"></i> Connected Cable Routes</h6>
+                                    <h6 class="mb-0"><i class="bi bi-circle"></i> Connected Cable Routes</h6>
                                 </div>
                                 <div class="card-body">
                                     <div id="cableRoutesContainer">
                                         <div class="text-center">
-                                            <i class="bx bx-loader-alt bx-spin fs-1 text-muted"></i>
+                                            <i class="bi bi-circle bx-spin fs-1 text-muted"></i>
                                             <p class="text-muted">Loading cable routes...</p>
                                         </div>
                                     </div>
@@ -645,7 +645,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-primary" onclick="editODPFromDetail()">
-                        <i class="bx bx-edit"></i> Edit ODP
+                        <i class="bi bi-pencil-fill"></i> Edit ODP
                     </button>
                 </div>
             </div>
@@ -1244,12 +1244,12 @@
                     html += '</tbody></table></div>';
                     container.innerHTML = html;
                 } else {
-                    container.innerHTML = '<div class="text-center text-muted"><i class="bx bx-info-circle"></i><br>No cable routes found for this ODP</div>';
+                    container.innerHTML = '<div class="text-center text-muted"><i class="bi bi-info-circle-fill"></i><br>No cable routes found for this ODP</div>';
                 }
             } catch (error) {
                 console.error('Error loading cable routes:', error);
                 document.getElementById('cableRoutesContainer').innerHTML = 
-                    '<div class="text-center text-danger"><i class="bx bx-error"></i><br>Error loading cable routes</div>';
+                    '<div class="text-center text-danger"><i class="bi bi-exclamation-octagon-fill"></i><br>Error loading cable routes</div>';
             }
         }
 

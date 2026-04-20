@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -61,20 +61,20 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand" href="/admin">
-                <i class="bx bx-wifi"></i> Admin Portal
+                <i class="bi bi-wifi"></i> Admin Portal
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="/admin">
-                    <i class="bx bx-home"></i> Dashboard
+                    <i class="bi bi-house"></i> Dashboard
                 </a>
                 <a class="nav-link" href="/admin/cable-network/odp">
-                    <i class="bx bx-broadcast"></i> ODP Management
+                    <i class="bi bi-broadcast"></i> ODP Management
                 </a>
                 <a class="nav-link active" href="/admin/cable-network/cables">
-                    <i class="bx bx-cable-car"></i> Cable Routes
+                    <i class="bi bi-ethernet"></i> Cable Routes
                 </a>
                 <a class="nav-link" href="/admin/billing/mapping-new">
-                    <i class="bx bx-map"></i> Map View
+                    <i class="bi bi-map"></i> Map View
                 </a>
             </div>
         </div>
@@ -86,11 +86,11 @@
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h2><i class="bx bx-cable-car"></i> Cable Route Management</h2>
+                        <h2><i class="bi bi-ethernet"></i> Cable Route Management</h2>
                         <p class="text-muted">Kelola jalur kabel dari ODP ke pelanggan</p>
                     </div>
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCableModal">
-                        <i class="bx bx-plus"></i> Tambah Cable Route
+                        <i class="bi bi-plus-lg"></i> Tambah Cable Route
                     </button>
                 </div>
             </div>
@@ -107,7 +107,7 @@
                                 <p class="mb-0">Total Cables</p>
                             </div>
                             <div class="align-self-center">
-                                <i class="bx bx-cable-car fs-1"></i>
+                                <i class="bi bi-ethernet fs-1"></i>
                             </div>
                         </div>
                     </div>
@@ -122,7 +122,7 @@
                                 <p class="mb-0">Connected</p>
                             </div>
                             <div class="align-self-center">
-                                <i class="bx bx-check-circle fs-1"></i>
+                                <i class="bi bi-check-circle-fill fs-1"></i>
                             </div>
                         </div>
                     </div>
@@ -137,7 +137,7 @@
                                 <p class="mb-0">Disconnected</p>
                             </div>
                             <div class="align-self-center">
-                                <i class="bx bx-x-circle fs-1"></i>
+                                <i class="bi bi-x-lg-circle fs-1"></i>
                             </div>
                         </div>
                     </div>
@@ -152,7 +152,7 @@
                                 <p class="mb-0">Total Length</p>
                             </div>
                             <div class="align-self-center">
-                                <i class="bx bx-ruler fs-1"></i>
+                                <i class="bi bi-circle fs-1"></i>
                             </div>
                         </div>
                     </div>
@@ -192,7 +192,7 @@
                             <div class="col-md-2">
                                 <label class="form-label">&nbsp;</label>
                                 <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
-                                    <i class="bx bx-x"></i> Clear
+                                    <i class="bi bi-x-lg"></i> Clear
                                 </button>
                             </div>
                         </div>
@@ -213,7 +213,7 @@
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div class="d-flex align-items-center">
                                 <div class="cable-icon <%= 'cable-' + cable.status %>">
-                                    <i class="bx bx-wifi"></i>
+                                    <i class="bi bi-wifi"></i>
                                 </div>
                                 <div class="ms-3">
                                     <h6 class="mb-0">Cable Route #<%= cable.id %></h6>
@@ -274,17 +274,17 @@
 
                         <div class="d-flex justify-content-between">
                             <button class="btn btn-sm btn-outline-primary" onclick="editCable(<%= cable.id %>)">
-                                <i class="bx bx-edit"></i> Edit
+                                <i class="bi bi-pencil-fill"></i> Edit
                             </button>
                             <div class="btn-group">
                                 <button class="btn btn-sm btn-outline-success" onclick="updateCableStatus(<%= cable.id %>, 'connected')">
-                                    <i class="bx bx-check"></i>
+                                    <i class="bi bi-check-lg"></i>
                                 </button>
                                 <button class="btn btn-sm btn-outline-danger" onclick="updateCableStatus(<%= cable.id %>, 'disconnected')">
-                                    <i class="bx bx-x"></i>
+                                    <i class="bi bi-x-lg"></i>
                                 </button>
                                 <button class="btn btn-sm btn-outline-warning" onclick="updateCableStatus(<%= cable.id %>, 'maintenance')">
-                                    <i class="bx bx-wrench"></i>
+                                    <i class="bi bi-wrench-adjustable"></i>
                                 </button>
                             </div>
                         </div>
@@ -314,7 +314,7 @@
                                             <small><%= customer.address || 'No address' %></small>
                                         </p>
                                         <button class="btn btn-sm btn-warning" onclick="assignCableToCustomer(<%= customer.id %>)">
-                                            <i class="bx bx-plus"></i> Sambungkan Kabel
+                                            <i class="bi bi-plus-lg"></i> Sambungkan Kabel
                                         </button>
                                     </div>
                                 </div>

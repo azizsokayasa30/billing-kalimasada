@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -67,11 +67,11 @@
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bx bx-receipt"></i> Invoice by Type
+                        <i class="bi bi-receipt"></i> Invoice by Type
                     </h1>
                     <div>
                         <a href="/admin/billing/dashboard" class="btn btn-outline-primary">
-                            <i class="bx bx-arrow-back"></i> Kembali ke Dashboard
+                            <i class="bi bi-circle"></i> Kembali ke Dashboard
                         </a>
                     </div>
                 </div>
@@ -80,17 +80,17 @@
                 <ul class="nav nav-tabs filter-tabs mb-4" id="invoiceTypeTabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="monthly-tab" data-bs-toggle="tab" data-bs-target="#monthly" type="button" role="tab">
-                            <i class="bx bx-calendar"></i> Bulanan (<%= monthlyStats.total_invoices || 0 %>)
+                            <i class="bi bi-calendar3"></i> Bulanan (<%= monthlyStats.total_invoices || 0 %>)
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="voucher-tab" data-bs-toggle="tab" data-bs-target="#voucher" type="button" role="tab">
-                            <i class="bx bx-ticket"></i> Voucher (<%= voucherStats.total_invoices || 0 %>)
+                            <i class="bi bi-circle"></i> Voucher (<%= voucherStats.total_invoices || 0 %>)
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual" type="button" role="tab">
-                            <i class="bx bx-edit"></i> Manual (<%= manualStats.total_invoices || 0 %>)
+                            <i class="bi bi-pencil-fill"></i> Manual (<%= manualStats.total_invoices || 0 %>)
                         </button>
                     </li>
                 </ul>
@@ -177,7 +177,7 @@
                                                         <td><%= new Date(invoice.due_date).toLocaleDateString('id-ID') %></td>
                                                         <td>
                                                             <a href="/admin/billing/invoices/<%= invoice.id %>" class="btn btn-sm btn-outline-primary">
-                                                                <i class="bx bx-show"></i> Lihat
+                                                                <i class="bi bi-eye-fill"></i> Lihat
                                                             </a>
                                                         </td>
                                                     </tr>
@@ -274,7 +274,7 @@
                                                         <td><%= new Date(invoice.due_date).toLocaleDateString('id-ID') %></td>
                                                         <td>
                                                             <a href="/admin/billing/invoices/<%= invoice.id %>" class="btn btn-sm btn-outline-primary">
-                                                                <i class="bx bx-show"></i> Lihat
+                                                                <i class="bi bi-eye-fill"></i> Lihat
                                                             </a>
                                                         </td>
                                                     </tr>
@@ -371,7 +371,7 @@
                                                         <td><%= new Date(invoice.due_date).toLocaleDateString('id-ID') %></td>
                                                         <td>
                                                             <a href="/admin/billing/invoices/<%= invoice.id %>" class="btn btn-sm btn-outline-primary">
-                                                                <i class="bx bx-show"></i> Lihat
+                                                                <i class="bi bi-eye-fill"></i> Lihat
                                                             </a>
                                                         </td>
                                                     </tr>

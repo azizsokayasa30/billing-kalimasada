@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -50,13 +50,13 @@
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bx bx-wifi"></i>
+                        <i class="bi bi-wifi"></i>
                         Network Devices
                     </h1>
                     <div class="btn-toolbar mb-2 mb-md-0">
                         <div class="btn-group me-2">
                             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshDevices()">
-                                <i class="bx bx-refresh"></i> Refresh
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
                             </button>
                         </div>
                     </div>
@@ -73,7 +73,7 @@
                                         <h2 id="totalDevices">-</h2>
                                     </div>
                                     <div class="align-self-center">
-                                        <i class="bx bx-devices device-icon"></i>
+                                        <i class="bi bi-devices device-icon"></i>
                                     </div>
                                 </div>
                             </div>
@@ -88,7 +88,7 @@
                                         <h2 id="onlineDevices">-</h2>
                                     </div>
                                     <div class="align-self-center">
-                                        <i class="bx bx-check-circle device-icon"></i>
+                                        <i class="bi bi-check-circle-fill device-icon"></i>
                                     </div>
                                 </div>
                             </div>
@@ -103,7 +103,7 @@
                                         <h2 id="offlineDevices">-</h2>
                                     </div>
                                     <div class="align-self-center">
-                                        <i class="bx bx-x-circle device-icon"></i>
+                                        <i class="bi bi-x-lg-circle device-icon"></i>
                                     </div>
                                 </div>
                             </div>
@@ -118,7 +118,7 @@
                                         <h2 id="devicesWithCoords">-</h2>
                                     </div>
                                     <div class="align-self-center">
-                                        <i class="bx bx-map device-icon"></i>
+                                        <i class="bi bi-map device-icon"></i>
                                     </div>
                                 </div>
                             </div>
@@ -130,7 +130,7 @@
                 <div class="card">
                     <div class="card-header">
                         <h5 class="card-title mb-0">
-                            <i class="bx bx-list-ul"></i>
+                            <i class="bi bi-list-ul"></i>
                             Device List
                         </h5>
                     </div>
@@ -232,7 +232,7 @@
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="8" class="text-center text-muted">
-                            <i class="bx bx-info-circle"></i>
+                            <i class="bi bi-info-circle-fill"></i>
                             No devices found
                         </td>
                     </tr>
@@ -264,7 +264,7 @@
                     <td>
                         ${device.latitude && device.longitude ? `
                             <span class="text-success">
-                                <i class="bx bx-map"></i>
+                                <i class="bi bi-map"></i>
                                 ${device.latitude.toFixed(6)}, ${device.longitude.toFixed(6)}
                             </span>
                         ` : '<span class="text-muted">No coordinates</span>'}
@@ -274,7 +274,7 @@
                     </td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary" onclick="viewDeviceDetails('${device.id}')">
-                            <i class="bx bx-show"></i> View
+                            <i class="bi bi-eye-fill"></i> View
                         </button>
                     </td>
                 </tr>
@@ -295,7 +295,7 @@
             tbody.innerHTML = `
                 <tr>
                     <td colspan="8" class="text-center text-danger">
-                        <i class="bx bx-error-circle"></i>
+                        <i class="bi bi-exclamation-circle-fill"></i>
                         ${message}
                     </td>
                 </tr>

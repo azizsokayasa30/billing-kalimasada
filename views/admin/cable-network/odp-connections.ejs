@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -100,14 +100,14 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand" href="/admin">
-                <i class="bx bx-wifi"></i> Admin Portal
+                <i class="bi bi-wifi"></i> Admin Portal
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="/admin">
-                    <i class="bx bx-home"></i> Dashboard
+                    <i class="bi bi-house"></i> Dashboard
                 </a>
                 <a class="nav-link" href="/admin/cable-network">
-                    <i class="bx bx-network-chart"></i> Cable Network
+                    <i class="bi bi-diagram-3-fill"></i> Cable Network
                 </a>
             </div>
         </div>
@@ -117,9 +117,9 @@
         <div class="row">
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2><i class="bx bx-network-chart me-2"></i>ODP Backbone Connections</h2>
+                    <h2><i class="bi bi-diagram-3-fill me-2"></i>ODP Backbone Connections</h2>
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addConnectionModal">
-                        <i class="bx bx-plus"></i> Add Connection
+                        <i class="bi bi-plus-lg"></i> Add Connection
                     </button>
                 </div>
 
@@ -148,7 +148,7 @@
                     </div>
                     <div class="col-md-2">
                         <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
-                            <i class="bx bx-x"></i> Clear
+                            <i class="bi bi-x-lg"></i> Clear
                         </button>
                     </div>
                 </div>
@@ -156,7 +156,7 @@
                 <!-- Network Topology Visualization -->
                 <div class="card mb-4">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-network-chart me-2"></i>Network Topology</h5>
+                        <h5 class="mb-0"><i class="bi bi-diagram-3-fill me-2"></i>Network Topology</h5>
                     </div>
                     <div class="card-body">
                         <div class="topology-container" id="topologyContainer">
@@ -168,7 +168,7 @@
                 <!-- Connections List -->
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-list-ul me-2"></i>Backbone Connections</h5>
+                        <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>Backbone Connections</h5>
                     </div>
                     <div class="card-body">
                         <div class="row" id="connectionsList">
@@ -221,10 +221,10 @@
 
                                             <div class="d-flex justify-content-end">
                                                 <button class="btn btn-sm btn-outline-primary me-2" onclick="editConnection(<%= connection.id %>)">
-                                                    <i class="bx bx-edit"></i>
+                                                    <i class="bi bi-pencil-fill"></i>
                                                 </button>
                                                 <button class="btn btn-sm btn-outline-danger" onclick="deleteConnection(<%= connection.id %>)">
-                                                    <i class="bx bx-trash"></i>
+                                                    <i class="bi bi-trash3-fill"></i>
                                                 </button>
                                             </div>
                                         </div>
@@ -233,7 +233,7 @@
                                 <% }); %>
                             <% } else { %>
                                 <div class="col-12 text-center py-5">
-                                    <i class="bx bx-network-chart display-1 text-muted"></i>
+                                    <i class="bi bi-diagram-3-fill display-1 text-muted"></i>
                                     <h5 class="mt-3 text-muted">No Backbone Connections</h5>
                                     <p class="text-muted">Start by adding connections between ODPs</p>
                                 </div>
@@ -346,12 +346,12 @@
 
                             <div class="card mt-3">
                                 <div class="card-header d-flex align-items-center justify-content-between">
-                                    <span><i class="bx bx-map me-1"></i>Pilih Tiang di Peta (klik untuk tambah titik)</span>
+                                    <span><i class="bi bi-map me-1"></i>Pilih Tiang di Peta (klik untuk tambah titik)</span>
                                     <div class="d-flex gap-2">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="fitOdpBtn"><i class="bx bx-target-lock"></i> Fit ODP</button>
-                                        <button type="button" class="btn btn-sm btn-outline-warning" id="undoPointBtn"><i class="bx bx-undo"></i> Undo</button>
-                                        <button type="button" class="btn btn-sm btn-outline-danger" id="clearPointsBtn"><i class="bx bx-trash"></i> Clear</button>
-                                        <button type="button" class="btn btn-sm btn-outline-primary" id="savePolylineBtn"><i class="bx bx-save"></i> Gunakan Jalur</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="fitOdpBtn"><i class="bi bi-bullseye"></i> Fit ODP</button>
+                                        <button type="button" class="btn btn-sm btn-outline-warning" id="undoPointBtn"><i class="bi bi-arrow-counterclockwise"></i> Undo</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" id="clearPointsBtn"><i class="bi bi-trash3-fill"></i> Clear</button>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="savePolylineBtn"><i class="bi bi-floppy-fill"></i> Gunakan Jalur</button>
                                     </div>
                                 </div>
                                 <div class="card-body p-2">

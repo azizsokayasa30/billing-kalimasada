@@ -3029,6 +3029,19 @@ router.post('/whatsapp-settings/groups', async (req, res) => {
 
 router.post('/system/restart', async (req, res) => {
     try {
+        const isDev = process.env.NODE_ENV === 'development';
+
+        // Di mode development (nodemon), tidak perlu restart manual via PM2
+        // nodemon otomatis mengelola proses — jangan exit atau kill process
+        if (isDev) {
+            return res.json({
+                success: true,
+                message: 'Server berjalan dalam mode development (nodemon). Tidak perlu restart manual — simpan file JS/EJS apapun untuk memicu reload otomatis.',
+                mode: 'development',
+                env: process.env.NODE_ENV
+            });
+        }
+
         const repoPath = getSetting('repo_path', process.cwd());
         const targetApp = getSetting('pm2_restart_target', null)
             || getSetting('pm2_app_name', null)
@@ -3945,6 +3958,252 @@ router.delete('/packages/:id', async (req, res) => {
     }
 });
 
+// ============================================================
+// AREA MANAGEMENT — CRUD Lengkap
+// ============================================================
+
+// Helper: Ensure areas table exists + area_id di customers
+async function ensureAreasTable(db) {
+    await new Promise((resolve) => db.run(`
+        CREATE TABLE IF NOT EXISTS areas (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            kode_area   TEXT,
+            nama_area   TEXT    NOT NULL,
+            deskripsi   TEXT,
+            status      TEXT    NOT NULL DEFAULT 'aktif',
+            created_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+            updated_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+            UNIQUE(nama_area)
+        )
+    `, () => resolve()));
+
+    // Migration: tambah kode_area jika tabel areas sudah ada tapi kolom belum ada
+    await new Promise((resolve) => db.run(
+        `ALTER TABLE areas ADD COLUMN kode_area TEXT`,
+        () => resolve() // Abaikan error jika kolom sudah ada
+    ));
+
+    // Tambahkan kolom area_id ke customers jika belum ada
+    await new Promise((resolve) => db.run(
+        `ALTER TABLE customers ADD COLUMN area_id INTEGER REFERENCES areas(id)`,
+        () => resolve() // Abaikan error jika kolom sudah ada
+    ));
+}
+
+// GET /admin/billing/areas — Halaman Manajemen Area
+router.get('/areas', getAppSettings, async (req, res) => {
+    try {
+        const db = require('../config/billing').db;
+        await ensureAreasTable(db);
+
+        const page     = Math.max(1, parseInt(req.query.page)  || 1);
+        const limit    = Math.max(1, parseInt(req.query.limit) || 20);
+        const offset   = (page - 1) * limit;
+        const search   = req.query.search ? String(req.query.search).trim() : '';
+        const filterStatus = req.query.status ? String(req.query.status).trim() : '';
+
+        let whereClauses = [];
+        let params = [];
+        if (search)       { whereClauses.push(`a.nama_area LIKE ?`); params.push(`%${search}%`); }
+        if (filterStatus) { whereClauses.push(`a.status = ?`);        params.push(filterStatus); }
+        const where = whereClauses.length ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
+        const [areas, countRow, stats] = await Promise.all([
+            new Promise((resolve) => db.all(`
+                SELECT a.*,
+                       COUNT(c.id) as total_customers
+                FROM areas a
+                LEFT JOIN customers c ON c.area_id = a.id
+                ${where}
+                GROUP BY a.id
+                ORDER BY a.nama_area ASC
+                LIMIT ? OFFSET ?
+            `, [...params, limit, offset], (err, rows) => resolve(rows || []))),
+
+            new Promise((resolve) => db.get(`
+                SELECT COUNT(*) as total FROM areas a ${where}
+            `, params, (err, row) => resolve(row || { total: 0 }))),
+
+            new Promise((resolve) => db.get(`
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status='aktif'    THEN 1 ELSE 0 END) as aktif,
+                    SUM(CASE WHEN status='nonaktif' THEN 1 ELSE 0 END) as nonaktif
+                FROM areas
+            `, [], (err, row) => resolve(row || { total: 0, aktif: 0, nonaktif: 0 }))),
+        ]);
+
+        const totalCount = countRow.total;
+        const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+        res.render('admin/billing/areas', {
+            title        : 'Manajemen Area',
+            areas,
+            stats: {
+                total   : stats.total    || 0,
+                aktif   : stats.aktif    || 0,
+                nonaktif: stats.nonaktif || 0,
+            },
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalCount,
+                limit,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1,
+            },
+            search,
+            filterStatus,
+            appSettings: req.appSettings,
+            page : 'areas',
+        });
+    } catch (error) {
+        logger.error('Error loading areas:', error);
+        res.status(500).render('error', { message: 'Error loading areas', error: error.message, appSettings: req.appSettings });
+    }
+});
+
+// GET /admin/billing/areas/list — API: daftar area (support filter status=aktif)
+router.get('/areas/list', async (req, res) => {
+    try {
+        const db = require('../config/billing').db;
+        await ensureAreasTable(db);
+        const { status } = req.query;
+        const where  = status ? `WHERE status = ?`  : '';
+        const params = status ? [status]             : [];
+        const areas  = await new Promise((resolve) =>
+            db.all(`SELECT id, kode_area, nama_area, deskripsi, status FROM areas ${where} ORDER BY nama_area ASC`, params,
+                   (err, rows) => resolve(rows || []))
+        );
+        res.json({ success: true, data: areas });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// POST /admin/billing/areas — Tambah area baru
+router.post('/areas', adminAuth, async (req, res) => {
+    try {
+        const { kode_area, nama_area, deskripsi, status } = req.body;
+        if (!nama_area || !String(nama_area).trim()) {
+            return res.status(400).json({ success: false, message: 'Nama area tidak boleh kosong.' });
+        }
+        const db = require('../config/billing').db;
+        await ensureAreasTable(db);
+
+        const trimmed      = String(nama_area).trim();
+        const trimmedKode  = kode_area ? String(kode_area).trim().toUpperCase() : null;
+
+        // Cek duplikat nama
+        const existing = await new Promise((resolve) =>
+            db.get(`SELECT id FROM areas WHERE nama_area = ? COLLATE NOCASE`, [trimmed], (err, row) => resolve(row))
+        );
+        if (existing) return res.status(409).json({ success: false, message: `Area "${trimmed}" sudah ada.` });
+
+        // Cek duplikat kode (jika diisi)
+        if (trimmedKode) {
+            const existingKode = await new Promise((resolve) =>
+                db.get(`SELECT id FROM areas WHERE kode_area = ? COLLATE NOCASE`, [trimmedKode], (err, row) => resolve(row))
+            );
+            if (existingKode) return res.status(409).json({ success: false, message: `Kode area "${trimmedKode}" sudah digunakan.` });
+        }
+
+        const id = await new Promise((resolve, reject) =>
+            db.run(`INSERT INTO areas (kode_area, nama_area, deskripsi, status) VALUES (?, ?, ?, ?)`,
+                   [trimmedKode, trimmed, deskripsi || null, status || 'aktif'],
+                   function(err) { err ? reject(err) : resolve(this.lastID); })
+        );
+        res.json({ success: true, message: 'Area berhasil ditambahkan.', id });
+    } catch (error) {
+        logger.error('Error creating area:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// PUT /admin/billing/areas/:id — Update area
+router.put('/areas/:id', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { kode_area, nama_area, deskripsi, status } = req.body;
+        if (!nama_area || !String(nama_area).trim()) {
+            return res.status(400).json({ success: false, message: 'Nama area tidak boleh kosong.' });
+        }
+        const db = require('../config/billing').db;
+        const trimmed     = String(nama_area).trim();
+        const trimmedKode = kode_area ? String(kode_area).trim().toUpperCase() : null;
+
+        // Cek duplikat nama (kecuali dirinya sendiri)
+        const existing = await new Promise((resolve) =>
+            db.get(`SELECT id FROM areas WHERE nama_area = ? COLLATE NOCASE AND id != ?`, [trimmed, id], (err, row) => resolve(row))
+        );
+        if (existing) return res.status(409).json({ success: false, message: `Area "${trimmed}" sudah ada.` });
+
+        // Cek duplikat kode (kecuali dirinya sendiri, jika diisi)
+        if (trimmedKode) {
+            const existingKode = await new Promise((resolve) =>
+                db.get(`SELECT id FROM areas WHERE kode_area = ? COLLATE NOCASE AND id != ?`, [trimmedKode, id], (err, row) => resolve(row))
+            );
+            if (existingKode) return res.status(409).json({ success: false, message: `Kode area "${trimmedKode}" sudah digunakan.` });
+        }
+
+        await new Promise((resolve, reject) =>
+            db.run(`UPDATE areas SET kode_area=?, nama_area=?, deskripsi=?, status=?, updated_at=datetime('now','localtime') WHERE id=?`,
+                   [trimmedKode, trimmed, deskripsi || null, status || 'aktif', id],
+                   (err) => err ? reject(err) : resolve())
+        );
+        res.json({ success: true, message: 'Area berhasil diperbarui.' });
+    } catch (error) {
+        logger.error('Error updating area:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// PATCH /admin/billing/areas/:id/toggle-status — Toggle aktif/nonaktif
+router.patch('/areas/:id/toggle-status', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+        if (!['aktif', 'nonaktif'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'Status tidak valid.' });
+        }
+        const db = require('../config/billing').db;
+        await new Promise((resolve, reject) =>
+            db.run(`UPDATE areas SET status=?, updated_at=datetime('now','localtime') WHERE id=?`,
+                   [status, id], (err) => err ? reject(err) : resolve())
+        );
+        res.json({ success: true, message: `Area berhasil di${status === 'aktif' ? 'aktifkan' : 'nonaktifkan'}.` });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// DELETE /admin/billing/areas/:id — Hapus area (cek pemakaian oleh pelanggan)
+router.delete('/areas/:id', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const db = require('../config/billing').db;
+
+        // Cek apakah area dipakai pelanggan
+        const usageRow = await new Promise((resolve) =>
+            db.get(`SELECT COUNT(*) as cnt FROM customers WHERE area_id = ?`, [id], (err, row) => resolve(row || { cnt: 0 }))
+        );
+        if (usageRow.cnt > 0) {
+            return res.status(409).json({
+                success: false,
+                message: `Area tidak dapat dihapus karena masih digunakan oleh ${usageRow.cnt} pelanggan.`
+            });
+        }
+
+        await new Promise((resolve, reject) =>
+            db.run(`DELETE FROM areas WHERE id = ?`, [id], (err) => err ? reject(err) : resolve())
+        );
+        res.json({ success: true, message: 'Area berhasil dihapus.' });
+    } catch (error) {
+        logger.error('Error deleting area:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // Customer Management
 router.get('/customers', getAppSettings, async (req, res) => {
     try {
@@ -4091,14 +4350,20 @@ router.get('/customers', getAppSettings, async (req, res) => {
             });
         });
 
-        // Get unique Areas for dropdown selection
+        // Get areas from areas table (status aktif for dropdown, all for filter)
+        await ensureAreasTable(db);
+        const areasForDropdown = await new Promise((resolve) => {
+            db.all('SELECT id, nama_area FROM areas WHERE status = "aktif" ORDER BY nama_area', (err, rows) => {
+                resolve(rows || []);
+            });
+        });
+
         const uniqueAreas = await new Promise((resolve) => {
-            const db = require('../config/billing').db;
             db.all('SELECT DISTINCT area FROM customers WHERE area IS NOT NULL AND area != "" ORDER BY area', (err, rows) => {
                 resolve(rows ? rows.map(r => r.area) : []);
             });
         });
-        
+
         res.render('admin/billing/customers', {
             title: 'Kelola Pelanggan',
             customers,
@@ -4107,6 +4372,7 @@ router.get('/customers', getAppSettings, async (req, res) => {
             routers,
             collectors,
             uniqueAreas,
+            areasForDropdown,   // tabel areas aktif untuk dropdown form
             routerFilter,
             authMode, // Pass auth mode ke view
             radiusRouterId, // Pass radius router ID jika ada
@@ -4138,7 +4404,7 @@ router.post('/customers', customerPhotoUpload.fields([
     { name: 'house_photo', maxCount: 1 }
 ]), async (req, res) => {
     try {
-        const { name, username, password, phone, pppoe_username, email, address, area, package_id, odp_id, pppoe_profile, auto_suspension, billing_day, renewal_type, fix_date, create_pppoe_user, pppoe_password, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, router_id } = req.body;
+        const { name, username, password, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, auto_suspension, billing_day, renewal_type, fix_date, create_pppoe_user, pppoe_password, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, router_id } = req.body;
         
         // Validate required fields
         if (!name || !username || !phone || !package_id) {
@@ -4184,6 +4450,7 @@ router.post('/customers', customerPhotoUpload.fields([
             email,
             address,
             area,
+            area_id: area_id ? parseInt(area_id) : null,
             package_id,
             odp_id: odp_id || null,
             pppoe_profile: profileToUse,

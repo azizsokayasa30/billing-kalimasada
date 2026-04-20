@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -85,7 +85,7 @@
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bx bx-pause-circle"></i> Service Suspension
+                        <i class="bi bi-circle"></i> Service Suspension
                     </h1>
                 </div>
 
@@ -93,7 +93,7 @@
                 <div class="row mb-4">
                     <div class="col-12">
                         <div class="suspension-card p-4">
-                            <h4><i class="bx bx-shield-x me-2"></i>Kelola Service Suspension</h4>
+                            <h4><i class="bi bi-shield-x me-2"></i>Kelola Service Suspension</h4>
                             <p class="mb-0">Sistem otomatis untuk menonaktifkan layanan pelanggan yang telat bayar menggunakan profile isolir Mikrotik dan mengaktifkan kembali setelah pembayaran.</p>
                         </div>
                     </div>
@@ -104,7 +104,7 @@
                     <div class="col-md-3">
                         <div class="card stats-card">
                             <div class="card-body text-center">
-                                <i class="bx bx-user-check text-primary" style="font-size: 2rem;"></i>
+                                <i class="bi bi-person-check-fill text-primary" style="font-size: 2rem;"></i>
                                 <h3 class="text-primary" id="activeCustomers">-</h3>
                                 <p class="text-muted mb-0">Pelanggan Aktif</p>
                             </div>
@@ -113,7 +113,7 @@
                     <div class="col-md-3">
                         <div class="card stats-card">
                             <div class="card-body text-center">
-                                <i class="bx bx-pause-circle text-danger" style="font-size: 2rem;"></i>
+                                <i class="bi bi-circle text-danger" style="font-size: 2rem;"></i>
                                 <h3 class="text-danger" id="suspendedCustomers">-</h3>
                                 <p class="text-muted mb-0">Pelanggan Suspended</p>
                             </div>
@@ -122,7 +122,7 @@
                     <div class="col-md-3">
                         <div class="card stats-card">
                             <div class="card-body text-center">
-                                <i class="bx bx-exclamation-triangle text-warning" style="font-size: 2rem;"></i>
+                                <i class="bi bi-circle text-warning" style="font-size: 2rem;"></i>
                                 <h3 class="text-warning" id="overdueInvoices">-</h3>
                                 <p class="text-muted mb-0">Tagihan Overdue</p>
                             </div>
@@ -131,7 +131,7 @@
                     <div class="col-md-3">
                         <div class="card stats-card">
                             <div class="card-body text-center">
-                                <i class="bx bx-time text-info" style="font-size: 2rem;"></i>
+                                <i class="bi bi-circle text-info" style="font-size: 2rem;"></i>
                                 <h3 class="text-info" id="currentGracePeriod"><%= appSettings.suspension_grace_period_days || '3' %></h3>
                                 <p class="text-muted mb-0">Grace Period (Hari)</p>
                             </div>
@@ -152,11 +152,11 @@
                                 <div>
                                     <% if (typeof authMode !== 'undefined' && authMode !== 'radius') { %>
                                         <button class="btn btn-sm btn-outline-secondary me-2" id="reloadIsolirProfilesBtn">
-                                            <i class="bx bx-refresh me-1"></i>Reload
+                                            <i class="bi bi-arrow-clockwise me-1"></i>Reload
                                         </button>
                                     <% } %>
                                     <button class="btn btn-sm btn-primary" id="saveIsolirProfileBtn">
-                                        <i class="bx bx-save me-1"></i>Simpan
+                                        <i class="bi bi-floppy-fill me-1"></i>Simpan
                                     </button>
                                 </div>
                             </div>
@@ -182,7 +182,7 @@
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <strong>Pengaturan Grace Period</strong>
                                 <button class="btn btn-sm btn-success" id="saveGracePeriodBtn">
-                                    <i class="bx bx-save me-1"></i>Simpan
+                                    <i class="bi bi-floppy-fill me-1"></i>Simpan
                                 </button>
                             </div>
                             <div class="card-body">
@@ -199,11 +199,11 @@
                     <div class="col-md-4">
                         <div class="card">
                             <div class="card-body text-center">
-                                <i class="bx bx-search text-warning" style="font-size: 3rem;"></i>
+                                <i class="bi bi-search text-warning" style="font-size: 3rem;"></i>
                                 <h5>Cek Pelanggan Overdue</h5>
                                 <p class="text-muted">Periksa dan suspend pelanggan yang telat bayar</p>
                                 <button class="btn btn-check w-100" id="checkOverdueBtn">
-                                    <i class="bx bx-search me-2"></i>Cek & Suspend Overdue
+                                    <i class="bi bi-search me-2"></i>Cek & Suspend Overdue
                                 </button>
                             </div>
                         </div>
@@ -211,11 +211,11 @@
                     <div class="col-md-4">
                         <div class="card">
                             <div class="card-body text-center">
-                                <i class="bx bx-check-circle text-success" style="font-size: 3rem;"></i>
+                                <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
                                 <h5>Restore Pelanggan Bayar</h5>
                                 <p class="text-muted">Aktifkan kembali pelanggan yang sudah bayar</p>
                                 <button class="btn btn-restore w-100" id="checkPaidBtn">
-                                    <i class="bx bx-check me-2"></i>Cek & Restore Paid
+                                    <i class="bi bi-check-lg me-2"></i>Cek & Restore Paid
                                 </button>
                             </div>
                         </div>
@@ -223,11 +223,11 @@
                     <div class="col-md-4">
                         <div class="card">
                             <div class="card-body text-center">
-                                <i class="bx bx-refresh text-primary" style="font-size: 3rem;"></i>
+                                <i class="bi bi-arrow-clockwise text-primary" style="font-size: 3rem;"></i>
                                 <h5>Refresh Statistics</h5>
                                 <p class="text-muted">Perbarui statistik terbaru</p>
                                 <button class="btn btn-check w-100" id="refreshStatsBtn">
-                                    <i class="bx bx-refresh me-2"></i>Refresh Stats
+                                    <i class="bi bi-arrow-clockwise me-2"></i>Refresh Stats
                                 </button>
                             </div>
                         </div>
@@ -239,9 +239,9 @@
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0"><i class="bx bx-pause-circle me-2"></i>Pelanggan Suspended</h5>
+                                <h5 class="mb-0"><i class="bi bi-circle me-2"></i>Pelanggan Suspended</h5>
                                 <button class="btn btn-sm btn-outline-primary" id="refreshTableBtn">
-                                    <i class="bx bx-refresh me-1"></i>Refresh
+                                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh
                                 </button>
                             </div>
                             <div class="card-body">
@@ -283,10 +283,10 @@
         function showToast(type, title, message) {
             const toastId = 'toast-' + Date.now();
             const iconMap = {
-                success: 'bx bx-check-circle',
-                error: 'bx bx-x-circle',
-                warning: 'bx bx-exclamation-triangle',
-                info: 'bx bx-info-circle'
+                success: 'bi bi-check-circle-fill',
+                error: 'bi bi-x-lg-circle',
+                warning: 'bi bi-circle',
+                info: 'bi bi-info-circle-fill'
             };
 
             const toastHtml = `
@@ -355,7 +355,7 @@
                             <td><span class="badge bg-danger">Suspended</span></td>
                             <td>
                                 <button class="btn btn-sm btn-restore" onclick="restoreCustomer('${customer.username}')">
-                                    <i class="bx bx-check me-1"></i>Restore
+                                    <i class="bi bi-check-lg me-1"></i>Restore
                                 </button>
                             </td>
                         </tr>
@@ -370,7 +370,7 @@
         // Check overdue customers
         $('#checkOverdueBtn').click(function() {
             const btn = $(this);
-            btn.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin me-2"></i>Checking...');
+            btn.prop('disabled', true).html('<i class="bi bi-circle bx-spin me-2"></i>Checking...');
 
             $.post('/admin/billing/service-suspension/check-overdue', function(response) {
                 if (response.success) {
@@ -385,14 +385,14 @@
                 const response = xhr.responseJSON || {};
                 showToast('error', 'Error', response.message || 'Request failed');
             }).always(function() {
-                btn.prop('disabled', false).html('<i class="bx bx-search me-2"></i>Cek & Suspend Overdue');
+                btn.prop('disabled', false).html('<i class="bi bi-search me-2"></i>Cek & Suspend Overdue');
             });
         });
 
         // Check paid customers
         $('#checkPaidBtn').click(function() {
             const btn = $(this);
-            btn.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin me-2"></i>Checking...');
+            btn.prop('disabled', true).html('<i class="bi bi-circle bx-spin me-2"></i>Checking...');
 
             $.post('/admin/billing/service-suspension/check-paid', function(response) {
                 if (response.success) {
@@ -407,20 +407,20 @@
                 const response = xhr.responseJSON || {};
                 showToast('error', 'Error', response.message || 'Request failed');
             }).always(function() {
-                btn.prop('disabled', false).html('<i class="bx bx-check me-2"></i>Cek & Restore Paid');
+                btn.prop('disabled', false).html('<i class="bi bi-check-lg me-2"></i>Cek & Restore Paid');
             });
         });
 
         // Refresh stats
         $('#refreshStatsBtn').click(function() {
             const btn = $(this);
-            btn.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin me-2"></i>Loading...');
+            btn.prop('disabled', true).html('<i class="bi bi-circle bx-spin me-2"></i>Loading...');
 
             loadStats();
             loadGracePeriod(); // Also reload grace period
 
             setTimeout(() => {
-                btn.prop('disabled', false).html('<i class="bx bx-refresh me-2"></i>Refresh Stats');
+                btn.prop('disabled', false).html('<i class="bi bi-arrow-clockwise me-2"></i>Refresh Stats');
                 showToast('success', 'Refreshed', 'Statistics updated');
             }, 1000);
         });
@@ -609,7 +609,7 @@
             
             const value = sel.value || 'isolir';
             const btn = $(this);
-            btn.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin me-1"></i>Menyimpan...');
+            btn.prop('disabled', true).html('<i class="bi bi-circle bx-spin me-1"></i>Menyimpan...');
             fetch('/admin/billing/service-suspension/isolir-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
@@ -638,7 +638,7 @@
             }).catch(err => {
                 showToast('error', 'Gagal', 'Gagal menyimpan');
             }).finally(() => {
-                btn.prop('disabled', false).html('<i class="bx bx-save me-1"></i>Simpan');
+                btn.prop('disabled', false).html('<i class="bi bi-floppy-fill me-1"></i>Simpan');
             });
         });
 
@@ -739,7 +739,7 @@
             }
 
             const btn = $(this);
-            btn.prop('disabled', true).html('<i class="bx bx-loader-alt bx-spin me-1"></i>Menyimpan...');
+            btn.prop('disabled', true).html('<i class="bi bi-circle bx-spin me-1"></i>Menyimpan...');
 
             fetch('/admin/billing/service-suspension/grace-period', {
                 method: 'POST',
@@ -755,7 +755,7 @@
             }).catch(err => {
                 showToast('error', 'Gagal', 'Gagal menyimpan');
             }).finally(() => {
-                btn.prop('disabled', false).html('<i class="bx bx-save me-1"></i>Simpan');
+                btn.prop('disabled', false).html('<i class="bi bi-floppy-fill me-1"></i>Simpan');
             });
         });
     </script>

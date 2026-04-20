@@ -350,7 +350,7 @@
             wrapper.className = 'mobile-search';
             
             const icon = document.createElement('i');
-            icon.className = 'bx bx-search search-icon';
+            icon.className = 'bi bi-search search-icon';
             
             input.parentElement.insertBefore(wrapper, input);
             wrapper.appendChild(icon);
@@ -655,7 +655,7 @@
             const toast = document.createElement('div');
             toast.className = `mobile-toast mobile-toast-${type}`;
             toast.innerHTML = `
-                <i class="bx bx-${getToastIcon(type)}"></i>
+                <i class="bi bi-${getToastIcon(type)}"></i>
                 <span>${message}</span>
             `;
             
@@ -677,12 +677,12 @@
     // Get toast icon based on type
     function getToastIcon(type) {
         const icons = {
-            success: 'check-circle',
-            error: 'error-circle',
-            warning: 'warning',
-            info: 'info-circle'
+            success: 'check-circle-fill',
+            error: 'exclamation-circle-fill',
+            warning: 'exclamation-triangle-fill',
+            info: 'info-circle-fill'
         };
-        return icons[type] || 'info-circle';
+        return icons[type] || 'info-circle-fill';
     }
 
     // Global mobile utility functions

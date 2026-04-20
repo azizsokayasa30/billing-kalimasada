@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -45,14 +45,14 @@
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bx bx-receipt"></i> Kelola Tagihan
+                        <i class="bi bi-receipt"></i> Kelola Tagihan
                     </h1>
                     <div class="d-flex gap-2">
                         <button id="bulkDeleteBtn" class="btn btn-danger" disabled>
-                            <i class="bx bx-trash"></i> Hapus Terpilih
+                            <i class="bi bi-trash3-fill"></i> Hapus Terpilih
                         </button>
                         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addInvoiceModal">
-                            <i class="bx bx-plus"></i> Buat Tagihan
+                            <i class="bi bi-plus-lg"></i> Buat Tagihan
                         </button>
                     </div>
                 </div>
@@ -62,7 +62,7 @@
                     <div class="card-header">
                         <div class="d-flex justify-content-between align-items-center">
                             <h5 class="card-title mb-0">
-                                <i class="bx bx-list-ul"></i> Daftar Tagihan
+                                <i class="bi bi-list-ul"></i> Daftar Tagihan
                             </h5>
                             <div class="d-flex gap-3 align-items-center">
                                 <div class="d-flex gap-2 align-items-center">
@@ -167,15 +167,15 @@
                                                 <td>
                                                     <% if (invoice.is_member) { %>
                                                         <span class="badge bg-info">
-                                                            <i class="bx bx-user"></i> Member
+                                                            <i class="bi bi-person-fill"></i> Member
                                                         </span>
                                                     <% } else if (invoice.renewal_type === 'fix_date') { %>
                                                         <span class="badge bg-info">
-                                                            <i class="bx bx-calendar"></i> Fix Date (<%= invoice.fix_date || 15 %>)
+                                                            <i class="bi bi-calendar3"></i> Fix Date (<%= invoice.fix_date || 15 %>)
                                                         </span>
                                                     <% } else { %>
                                                         <span class="badge bg-primary">
-                                                            <i class="bx bx-refresh"></i> Renewal
+                                                            <i class="bi bi-arrow-clockwise"></i> Renewal
                                                         </span>
                                                     <% } %>
                                                 </td>
@@ -209,22 +209,22 @@
                                                 <td>
                                                     <div class="btn-group" role="group">
                                                         <a href="/admin/billing/invoices/<%= invoice.id %>" class="btn btn-sm btn-primary" title="Lihat Detail">
-                                                            <i class="bx bx-show"></i>
+                                                            <i class="bi bi-eye-fill"></i>
                                                         </a>
                                                         <% if (invoice.status === 'unpaid') { %>
                                                             <button class="btn btn-sm btn-success" onclick="markAsPaid('<%= invoice.id %>')" title="Tandai Lunas">
-                                                                <i class="bx bx-check"></i>
+                                                                <i class="bi bi-check-lg"></i>
                                                             </button>
                                                         <% } %>
                                                         <!-- WhatsApp Notification Button -->
                                                         <button class="btn btn-sm btn-success" onclick="sendWhatsAppNotification('<%= invoice.id %>', '<%= invoice.is_member ? (invoice.member_phone || invoice.display_phone) : (invoice.customer_phone || invoice.display_phone) %>', '<%= invoice.status %>', '<%= invoice.is_member ? (invoice.member_name || invoice.display_name) : (invoice.customer_name || invoice.display_name) %>', '<%= invoice.amount %>', '<%= invoice.due_date %>', '<%= invoice.invoice_number || "" %>', '<%= invoice.package_name || "" %>')" title="Kirim Notifikasi WA">
-                                                            <i class="bx bxl-whatsapp"></i>
+                                                            <i class="bi bi-whatsapp"></i>
                                                         </button>
                                                         <a href="/admin/billing/invoices/<%= invoice.id %>/print" target="_blank" class="btn btn-sm btn-info" title="Cetak Tagihan">
-                                                            <i class="bx bx-printer"></i>
+                                                            <i class="bi bi-printer-fill"></i>
                                                         </a>
                                                         <button class="btn btn-sm btn-danger" onclick="deleteInvoice('<%= invoice.id %>')" title="Hapus Tagihan">
-                                                            <i class="bx bx-trash"></i>
+                                                            <i class="bi bi-trash3-fill"></i>
                                                         </button>
                                                     </div>
                                                 </td>
@@ -366,17 +366,17 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
-                        <i class="bx bxl-whatsapp text-success"></i> Kirim Notifikasi WhatsApp
+                        <i class="bi bi-whatsapp text-success"></i> Kirim Notifikasi WhatsApp
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info">
-                        <i class="bx bx-info-circle"></i>
+                        <i class="bi bi-info-circle-fill"></i>
                         <strong>Informasi:</strong> Notifikasi akan dikirim ke nomor WhatsApp pelanggan.
                     </div>
                     <div id="whatsappStatus" class="alert alert-warning" style="display: none;">
-                        <i class="bx bx-wifi-off"></i>
+                        <i class="bi bi-wifi-off"></i>
                         <strong>Peringatan:</strong> WhatsApp belum terhubung. Silakan coba lagi nanti.
                     </div>
                     <div id="notificationPreview">
@@ -394,7 +394,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
                     <button type="button" class="btn btn-success" id="confirmSendWA">
-                        <i class="bx bxl-whatsapp"></i> Kirim Notifikasi
+                        <i class="bi bi-whatsapp"></i> Kirim Notifikasi
                     </button>
                 </div>
             </div>
@@ -1006,7 +1006,7 @@ ${footerInfo}`;
             const btn = this;
             const originalText = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i> Mengirim...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin"></i> Mengirim...';
 
             fetch('/admin/billing/invoices/send-whatsapp', {
                 method: 'POST',

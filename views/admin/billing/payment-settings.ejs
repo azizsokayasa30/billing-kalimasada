@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -93,7 +93,7 @@
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bx bx-cog"></i> Pengaturan Payment Gateway
+                        <i class="bi bi-gear-fill"></i> Pengaturan Payment Gateway
                     </h1>
                 </div>
 
@@ -106,7 +106,7 @@
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-target-lock"></i> Gateway Aktif
+                                    <i class="bi bi-bullseye"></i> Gateway Aktif
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -131,7 +131,7 @@
                                     </div>
                                 </div>
                                 <button class="btn btn-primary mt-3" onclick="updateActiveGateway()">
-                                    <i class="bx bx-save"></i> Simpan Gateway Aktif
+                                    <i class="bi bi-floppy-fill"></i> Simpan Gateway Aktif
                                 </button>
                             </div>
                         </div>
@@ -145,7 +145,7 @@
                         <div class="card gateway-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-credit-card"></i> Midtrans
+                                    <i class="bi bi-credit-card-fill"></i> Midtrans
                                     <span class="badge <%= settings.payment_gateway.midtrans.enabled ? 'bg-success' : 'bg-secondary' %> status-badge">
                                         <%= settings.payment_gateway.midtrans.enabled ? 'Enabled' : 'Disabled' %>
                                     </span>
@@ -194,7 +194,7 @@
                                         <div class="form-text">Jika kosong, sistem menggunakan host/port dari settings.json</div>
                                     </div>
                                     <button type="submit" class="btn btn-primary w-100">
-                                        <i class="bx bx-save"></i> Simpan Midtrans
+                                        <i class="bi bi-floppy-fill"></i> Simpan Midtrans
                                     </button>
                                 </form>
                             </div>
@@ -206,7 +206,7 @@
                         <div class="card gateway-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-credit-card"></i> Xendit
+                                    <i class="bi bi-credit-card-fill"></i> Xendit
                                     <span class="badge <%= settings.payment_gateway.xendit.enabled ? 'bg-success' : 'bg-secondary' %> status-badge">
                                         <%= settings.payment_gateway.xendit.enabled ? 'Enabled' : 'Disabled' %>
                                     </span>
@@ -250,7 +250,7 @@
                                         <div class="form-text">Jika kosong, sistem menggunakan host/port dari settings.json</div>
                                     </div>
                                     <button type="submit" class="btn btn-primary w-100">
-                                        <i class="bx bx-save"></i> Simpan Xendit
+                                        <i class="bi bi-floppy-fill"></i> Simpan Xendit
                                     </button>
                                 </form>
                             </div>
@@ -262,7 +262,7 @@
                         <div class="card gateway-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-credit-card"></i> Tripay
+                                    <i class="bi bi-credit-card-fill"></i> Tripay
                                     <span class="badge <%= settings.payment_gateway.tripay.enabled ? 'bg-success' : 'bg-secondary' %> status-badge">
                                         <%= settings.payment_gateway.tripay.enabled ? 'Enabled' : 'Disabled' %>
                                     </span>
@@ -305,7 +305,7 @@
                                     </div>
                                     <div class="mb-3">
                                         <div class="alert alert-info">
-                                            <i class="bx bx-info-circle"></i>
+                                            <i class="bi bi-info-circle-fill"></i>
                                             <strong>Info:</strong> Metode pembayaran Tripay (QRIS, DANA, GoPay, dll) sekarang dipilih langsung oleh pelanggan saat melakukan pembayaran.
                                         </div>
                                     </div>
@@ -317,7 +317,7 @@
                                         <div class="form-text">Harus diawali http:// atau https://</div>
                                     </div>
                                     <button type="submit" class="btn btn-primary w-100">
-                                        <i class="bx bx-save"></i> Simpan Tripay
+                                        <i class="bi bi-floppy-fill"></i> Simpan Tripay
                                     </button>
                                 </form>
                             </div>
@@ -329,7 +329,7 @@
                         <div class="card gateway-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-wallet"></i> Duitku
+                                    <i class="bi bi-circle"></i> Duitku
                                     <span class="badge <%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.enabled) ? 'bg-success' : 'bg-secondary' %> status-badge">
                                         <%= (settings.payment_gateway.duitku && settings.payment_gateway.duitku.enabled) ? 'Enabled' : 'Disabled' %>
                                     </span>
@@ -389,12 +389,12 @@
                                     </div>
                                     <div class="mb-3">
                                         <div class="alert alert-info">
-                                            <i class="bx bx-info-circle"></i>
+                                            <i class="bi bi-info-circle-fill"></i>
                                             <strong>Info:</strong> Metode pembayaran Duitku (VA, QRIS, e-wallet, dll) dipilih langsung oleh pelanggan saat melakukan pembayaran.
                                         </div>
                                     </div>
                                     <button type="submit" class="btn btn-primary w-100">
-                                        <i class="bx bx-save"></i> Simpan Duitku
+                                        <i class="bi bi-floppy-fill"></i> Simpan Duitku
                                     </button>
                                 </form>
                             </div>
@@ -408,29 +408,29 @@
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-test-tube"></i> Test Koneksi Gateway
+                                    <i class="bi bi-circle"></i> Test Koneksi Gateway
                                 </h5>
                             </div>
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col-md-3">
                                         <button class="btn btn-outline-primary w-100" onclick="testGateway('midtrans')">
-                                            <i class="bx bx-test-tube"></i> Test Midtrans
+                                            <i class="bi bi-circle"></i> Test Midtrans
                                         </button>
                                     </div>
                                     <div class="col-md-3">
                                         <button class="btn btn-outline-primary w-100" onclick="testGateway('xendit')">
-                                            <i class="bx bx-test-tube"></i> Test Xendit
+                                            <i class="bi bi-circle"></i> Test Xendit
                                         </button>
                                     </div>
                                     <div class="col-md-3">
                                         <button class="btn btn-outline-primary w-100" onclick="testGateway('tripay')">
-                                            <i class="bx bx-test-tube"></i> Test Tripay
+                                            <i class="bi bi-circle"></i> Test Tripay
                                         </button>
                                     </div>
                                     <div class="col-md-3">
                                         <button class="btn btn-outline-primary w-100" onclick="testGateway('duitku')">
-                                            <i class="bx bx-test-tube"></i> Test Duitku
+                                            <i class="bi bi-circle"></i> Test Duitku
                                         </button>
                                     </div>
                                 </div>

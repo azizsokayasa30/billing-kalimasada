@@ -250,18 +250,15 @@ class ErrorHandler {
 
   /**
    * Handle programmer errors (bugs)
+   * CATATAN: Tidak memanggil process.exit() agar server tetap berjalan
    */
   handleProgrammerError(error) {
-    logger.error('PROGRAMMER ERROR - Application will exit', {
+    logger.error('PROGRAMMER ERROR (server tetap berjalan)', {
       message: error.message,
       stack: error.stack,
       timestamp: new Date().toISOString()
     });
-
-    // In production, gracefully shutdown
-    if (!this.isDevelopment) {
-      process.exit(1);
-    }
+    // TIDAK exit — biarkan server terus berjalan dan layani request lain
   }
 
   /**
@@ -312,40 +309,33 @@ class ErrorHandler {
   }
 
   /**
-   * Unhandled rejection handler
+   * Unhandled rejection / uncaught exception handler
+   * CATATAN: Tidak memanggil process.exit() — server tetap berjalan
    */
   setupGlobalHandlers() {
-    process.on('unhandledRejection', (reason, promise) => {
-      logger.error('Unhandled Promise Rejection', {
-        reason: reason,
-        promise: promise,
-        stack: reason?.stack
+    // Hanya registrasi jika belum ada handler lain (cegah duplikasi)
+    if (process.listenerCount('unhandledRejection') === 0) {
+      process.on('unhandledRejection', (reason, promise) => {
+        const msg = reason?.message || String(reason);
+        logger.error('Unhandled Promise Rejection (ErrorHandler)', {
+          message: msg,
+          stack: reason?.stack
+        });
+        // TIDAK exit — server tetap berjalan
       });
-      
-      // Create an error and handle it
-      const error = new AppError(
-        `Unhandled Promise Rejection: ${reason}`,
-        500,
-        'UNHANDLED_REJECTION'
-      );
-      error.isOperational = false;
-      this.handleError(error);
-    });
+    }
 
-    process.on('uncaughtException', (error) => {
-      logger.error('Uncaught Exception', {
-        message: error.message,
-        stack: error.stack
+    if (process.listenerCount('uncaughtException') === 0) {
+      process.on('uncaughtException', (error) => {
+        logger.error('Uncaught Exception (ErrorHandler)', {
+          message: error.message,
+          stack: error.stack
+        });
+        // Hanya exit untuk SyntaxError yang memang tidak bisa direcovery
+        if (error.name === 'SyntaxError') process.exit(1);
+        // Semua lain: log saja, server tetap berjalan
       });
-      
-      const appError = new AppError(
-        `Uncaught Exception: ${error.message}`,
-        500,
-        'UNCAUGHT_EXCEPTION'
-      );
-      appError.isOperational = false;
-      this.handleError(appError);
-    });
+    }
   }
 }
 

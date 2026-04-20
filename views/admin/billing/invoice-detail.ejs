@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -36,17 +36,17 @@
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bx bx-receipt"></i> Detail Invoice
+                        <i class="bi bi-receipt"></i> Detail Invoice
                     </h1>
                     <div class="btn-group" role="group">
                         <a href="/admin/billing/invoices/<%= invoice.id %>/print" target="_blank" class="btn btn-outline-primary">
-                            <i class="bx bx-printer"></i> Cetak
+                            <i class="bi bi-printer-fill"></i> Cetak
                         </a>
                         <a href="/admin/billing/invoices/<%= invoice.id %>/edit" class="btn btn-outline-secondary">
-                            <i class="bx bx-edit"></i> Edit
+                            <i class="bi bi-pencil-fill"></i> Edit
                         </a>
                         <a href="/admin/billing/invoices" class="btn btn-outline-info">
-                            <i class="bx bx-arrow-back"></i> Kembali
+                            <i class="bi bi-circle"></i> Kembali
                         </a>
                     </div>
                 </div>
@@ -56,7 +56,7 @@
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-info-circle"></i> Informasi Invoice
+                                    <i class="bi bi-info-circle-fill"></i> Informasi Invoice
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -142,7 +142,7 @@
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-credit-card"></i> Pembayaran Online
+                                    <i class="bi bi-credit-card-fill"></i> Pembayaran Online
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -160,13 +160,13 @@
                                         <h6>Buat Payment Link:</h6>
                                         <div class="btn-group" role="group">
                                             <button class="btn btn-primary" onclick="createPayment('midtrans')">
-                                                <i class="bx bx-credit-card"></i> Midtrans
+                                                <i class="bi bi-credit-card-fill"></i> Midtrans
                                             </button>
                                             <button class="btn btn-info" onclick="createPayment('xendit')">
-                                                <i class="bx bx-credit-card"></i> Xendit
+                                                <i class="bi bi-credit-card-fill"></i> Xendit
                                             </button>
                                             <button class="btn btn-warning" onclick="createPayment('tripay')">
-                                                <i class="bx bx-credit-card"></i> Tripay
+                                                <i class="bi bi-credit-card-fill"></i> Tripay
                                             </button>
                                         </div>
                                     </div>
@@ -177,10 +177,10 @@
                                         <h6>Payment Link Berhasil Dibuat:</h6>
                                         <p id="paymentUrl" class="mb-2"></p>
                                         <button class="btn btn-sm btn-primary" onclick="copyPaymentUrl()">
-                                            <i class="bx bx-content-copy"></i> Copy Link
+                                            <i class="bi bi-circle"></i> Copy Link
                                         </button>
                                         <a id="paymentLink" href="#" target="_blank" class="btn btn-sm btn-success">
-                                            <i class="bx bx-open-in-new"></i> Buka Link
+                                            <i class="bi bi-circle"></i> Buka Link
                                         </a>
                                     </div>
                                 </div>
@@ -196,7 +196,7 @@
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-history"></i> Riwayat Transaksi Payment Gateway
+                                    <i class="bi bi-clock-history"></i> Riwayat Transaksi Payment Gateway
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -221,7 +221,7 @@
                             </div>
                             <div class="card-body">
                                 <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#markAsPaidModal">
-                                    <i class="bx bx-cash-check"></i> Tandai Sebagai Lunas
+                                    <i class="bi bi-circle"></i> Tandai Sebagai Lunas
                                 </button>
                             </div>
                         </div>
@@ -235,17 +235,17 @@
                         <div class="card">
                             <div class="card-header d-flex align-items-center justify-content-between">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-shield"></i> Kontrol Layanan (Mikrotik)
+                                    <i class="bi bi-shield-fill"></i> Kontrol Layanan (Mikrotik)
                                 </h5>
                                 <span class="badge bg-light text-dark">Customer: <%= invoice.customer_name %> • Status: <%= invoice.customer_status %></span>
                             </div>
                             <div class="card-body">
                                 <div class="d-flex gap-2 flex-wrap">
                                     <button id="btnIsolir" class="btn btn-outline-danger" onclick="isolirManual()">
-                                        <i class="bx bx-block"></i> Isolir Manual
+                                        <i class="bi bi-slash-circle-fill"></i> Isolir Manual
                                     </button>
                                     <button id="btnRestore" class="btn btn-outline-success" onclick="restoreManual()">
-                                        <i class="bx bx-check-circle"></i> Restore Manual
+                                        <i class="bi bi-check-circle-fill"></i> Restore Manual
                                     </button>
                                 </div>
                                 <small class="text-muted d-block mt-2">Aksi ini akan mengubah profil PPPoE di Mikrotik dan status pelanggan di billing.</small>
@@ -393,7 +393,7 @@
         try {
             const button = event.target;
             const originalText = button.innerHTML;
-            button.innerHTML = '<i class="bx bx-loading bx-spin"></i> Creating...';
+            button.innerHTML = '<i class="bi bi-circle bx-spin"></i> Creating...';
             button.disabled = true;
             
             const response = await fetch('/payment/create', {
@@ -467,7 +467,7 @@
         const submitBtn = this.querySelector('button[type="submit"]');
         const originalText = submitBtn.innerHTML;
         submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="bx bx-loading bx-spin"></i> Memproses...';
+        submitBtn.innerHTML = '<i class="bi bi-circle bx-spin"></i> Memproses...';
         
         // First record the payment
         fetch('/admin/billing/payments', {
@@ -551,7 +551,7 @@
         const reason = prompt('Alasan Isolir (opsional):', 'Isolir manual dari Admin');
         try {
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i> Memproses...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin"></i> Memproses...';
             const resp = await fetch(`/admin/billing/invoices/${INVOICE_ID}/isolir`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -578,7 +578,7 @@
         const reason = prompt('Alasan Restore (opsional):', 'Restore manual dari Admin');
         try {
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i> Memproses...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin"></i> Memproses...';
             const resp = await fetch(`/admin/billing/invoices/${INVOICE_ID}/restore`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

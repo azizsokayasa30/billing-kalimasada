@@ -6,6 +6,53 @@
 // ==========================================
 process.env.TZ = 'Asia/Jakarta';
 
+// ==========================================
+// GLOBAL CRASH GUARD — harus dipasang sedini mungkin
+// Mencegah crash dari error non-fatal di module eksternal
+// (WhatsApp, Mikrotik, DB connection, dll)
+// ==========================================
+process.on('uncaughtException', (err, origin) => {
+    // Daftar error yang BOLEH diabaikan (non-fatal)
+    const ignorable = [
+        'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE',
+        'ERR_STREAM_DESTROYED', 'ERR_SOCKET_CLOSED',
+        'Connection closing', 'Connection already closing',
+        'RosException', 'SocketTimeout',
+    ];
+    const isIgnorable = ignorable.some(k =>
+        err.message?.includes(k) || err.code === k || err.name?.includes(k)
+    );
+
+    if (isIgnorable) {
+        console.warn(`[CRASH-GUARD] Non-fatal uncaughtException (diabaikan): ${err.message}`);
+    } else {
+        console.error(`[CRASH-GUARD] ❌ uncaughtException dari ${origin}:`, err.stack || err);
+        // Hanya exit untuk SyntaxError (program tidak bisa jalan)
+        // Semua error lain: LOG saja, jangan exit — server tetap berjalan
+        if (err.name === 'SyntaxError') {
+            process.exit(1);
+        }
+    }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    const msg = reason?.message || String(reason);
+    const ignorable = [
+        'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE',
+        'Connection closing', 'Connection already closing',
+        'RosException', 'SocketTimeout', 'read ECONNRESET',
+        'write EPIPE', 'socket hang up',
+    ];
+    const isIgnorable = ignorable.some(k => msg.includes(k));
+
+    if (isIgnorable) {
+        console.warn(`[CRASH-GUARD] Non-fatal unhandledRejection (diabaikan): ${msg}`);
+    } else {
+        console.error(`[CRASH-GUARD] ⚠️  unhandledRejection:`, reason);
+        // TIDAK memanggil process.exit() — server tetap berjalan
+    }
+});
+
 const express = require('express');
 const path = require('path');
 const axios = require('axios');
@@ -880,42 +927,105 @@ try {
 // Tambahkan delay yang lebih lama untuk reconnect WhatsApp
 const RECONNECT_DELAY = 30000; // 30 detik
 
-// Fungsi untuk memulai server hanya pada port yang dikonfigurasi di settings.json
+// Fungsi: kill proses yang memakai port tertentu (Windows & Linux)
+function killProcessOnPort(port) {
+    return new Promise((resolve) => {
+        const { exec } = require('child_process');
+        const isWin = process.platform === 'win32';
+
+        if (isWin) {
+            // Windows: netstat → ambil PID → taskkill
+            exec(`netstat -ano | findstr :${port}`, (err, stdout) => {
+                if (err || !stdout) return resolve(false);
+                const lines = stdout.trim().split('\n');
+                const pids = new Set();
+                lines.forEach(line => {
+                    // Hanya ambil baris dengan state LISTENING atau tanpa state (kadang berbeda format)
+                    const parts = line.trim().split(/\s+/);
+                    const pid = parts[parts.length - 1];
+                    if (pid && /^\d+$/.test(pid) && pid !== '0') pids.add(pid);
+                });
+                if (pids.size === 0) return resolve(false);
+                let killed = 0;
+                pids.forEach(pid => {
+                    // Jangan bunuh diri sendiri
+                    if (pid === String(process.pid)) { killed++; if (killed === pids.size) resolve(true); return; }
+                    exec(`taskkill /PID ${pid} /F`, () => {
+                        killed++;
+                        if (killed === pids.size) resolve(true);
+                    });
+                });
+            });
+        } else {
+            // Linux / macOS: fuser
+            exec(`fuser -k ${port}/tcp`, (err) => {
+                resolve(!err);
+            });
+        }
+    });
+}
+
+// Guard: pastikan startServer hanya dipanggil sekali
+let _serverStarted = false;
+
+// Fungsi untuk memulai server — dengan auto-kill & retry saat port bentrok
 function startServer(portToUse) {
-    // Pastikan port adalah number
+    // Singleton guard — cegah double start
+    if (_serverStarted) {
+        logger.warn('[BOOTSTRAP] startServer() dipanggil lebih dari sekali — diabaikan.');
+        return;
+    }
+    _serverStarted = true;
+
     const port = parseInt(portToUse);
     if (isNaN(port) || port < 1 || port > 65535) {
         logger.error(`Port tidak valid: ${portToUse}`);
-        process.exit(1);
+        return; // jangan exit — biarkan nodemon restart
     }
-    
+
     logger.info(`Memulai server pada port yang dikonfigurasi: ${port}`);
-    logger.info(`Port diambil dari settings.json - tidak ada fallback ke port alternatif`);
-    
-    // Hanya gunakan port dari settings.json, tidak ada fallback
-    // Listen di semua interface (0.0.0.0) agar bisa diakses dari network
-    try {
-        const server = app.listen(port, "0.0.0.0", () => {
-            logger.info(`✅ Server berhasil berjalan pada port ${port}`);
-            logger.info(`🌐 Web Portal tersedia di: http://0.0.0.0:${port} (semua interface)`);
-            logger.info(`🌐 Akses lokal: http://localhost:${port}`);
-            logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-            // Update global.appSettings.port dengan port yang berhasil digunakan
-            // global.appSettings.port = port.toString(); // Hapus ini
-        }).on('error', (err) => {
-            if (err.code === 'EADDRINUSE') {
-                logger.error(`❌ ERROR: Port ${port} sudah digunakan oleh aplikasi lain!`);
-                logger.error(`💡 Solusi: Hentikan aplikasi yang menggunakan port ${port} atau ubah port di settings.json`);
-                logger.error(`🔍 Cek aplikasi yang menggunakan port: netstat -ano | findstr :${port}`);
-            } else {
-                logger.error('❌ Error starting server:', err.message);
-            }
-            process.exit(1);
-        });
-    } catch (error) {
-        logger.error(`❌ Terjadi kesalahan saat memulai server:`, error.message);
-        process.exit(1);
+
+    // Coba listen, dengan retry setelah kill proses lama
+    function doListen(isRetry) {
+        try {
+            const server = app.listen(port, '0.0.0.0', () => {
+                logger.info(`✅ Server berhasil berjalan pada port ${port}`);
+                logger.info(`🌐 Akses lokal: http://localhost:${port}`);
+                logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+            }).on('error', async (err) => {
+                if (err.code === 'EADDRINUSE') {
+                    if (!isRetry) {
+                        logger.warn(`⚠️  Port ${port} terpakai — mencoba membersihkan proses lama...`);
+                        const killed = await killProcessOnPort(port);
+                        if (killed) {
+                            logger.info(`🔪 Proses pada port ${port} dihentikan. Mencoba ulang dalam 3 detik...`);
+                        } else {
+                            logger.warn(`⚠️  Tidak ada proses yang bisa dihentikan. Menunggu 3 detik lalu coba ulang...`);
+                        }
+                        // Tunggu lebih lama agar TIME_WAIT dari OS clear
+                        setTimeout(() => doListen(true), 3000);
+                    } else {
+                        // Retry kedua juga gagal — LOG saja, jangan exit
+                        // nodemon akan restart otomatis saat ada perubahan file
+                        logger.error(`❌ Port ${port} masih terpakai setelah 2 percobaan.`);
+                        logger.error(`💡 Jalankan di terminal: Stop-Process -Name node -Force`);
+                        logger.error(`💡 Lalu simpan semua file untuk trigger nodemon restart.`);
+                        // Reset guard agar bisa dicoba lagi jika diperlukan
+                        _serverStarted = false;
+                    }
+                } else {
+                    // Error selain EADDRINUSE — log saja
+                    logger.error('❌ Error starting server:', err.message);
+                    _serverStarted = false;
+                }
+            });
+        } catch (error) {
+            logger.error(`❌ Terjadi kesalahan saat memulai server:`, error.message);
+            _serverStarted = false;
+        }
     }
+
+    doListen(false);
 }
 
 // Mulai server dengan prioritas: Environment Variable > settings.json > Default 4555

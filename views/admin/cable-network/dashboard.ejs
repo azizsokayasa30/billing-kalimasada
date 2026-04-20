@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -71,26 +71,26 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand" href="/admin">
-                <i class="bx bx-wifi"></i> Admin Portal
+                <i class="bi bi-wifi"></i> Admin Portal
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="/admin">
-                    <i class="bx bx-home"></i> Dashboard
+                    <i class="bi bi-house"></i> Dashboard
                 </a>
                 <a class="nav-link active" href="/admin/cable-network">
-                    <i class="bx bx-network-chart"></i> Cable Network
+                    <i class="bi bi-diagram-3-fill"></i> Cable Network
                 </a>
                 <a class="nav-link" href="/admin/cable-network/odp">
-                    <i class="bx bx-broadcast"></i> ODP Management
+                    <i class="bi bi-broadcast"></i> ODP Management
                 </a>
                 <a class="nav-link" href="/admin/cable-network/cables">
-                    <i class="bx bx-cable-car"></i> Cable Routes
+                    <i class="bi bi-ethernet"></i> Cable Routes
                 </a>
                 <a class="nav-link" href="/admin/cable-network/odp-connections">
-                    <i class="bx bx-git-branch"></i> ODP Connections
+                    <i class="bi bi-circle"></i> ODP Connections
                 </a>
                 <a class="nav-link" href="/admin/billing/mapping-new">
-                    <i class="bx bx-map"></i> Map View
+                    <i class="bi bi-map"></i> Map View
                 </a>
             </div>
         </div>
@@ -102,15 +102,15 @@
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h2><i class="bx bx-network-chart"></i> Cable Network Dashboard</h2>
+                        <h2><i class="bi bi-diagram-3-fill"></i> Cable Network Dashboard</h2>
                         <p class="text-muted">Overview jaringan kabel dan infrastruktur ODP</p>
                     </div>
                     <div>
                         <a href="/admin/cable-network/odp" class="btn btn-primary me-2">
-                            <i class="bx bx-plus"></i> Tambah ODP
+                            <i class="bi bi-plus-lg"></i> Tambah ODP
                         </a>
                         <a href="/admin/billing/mapping-new" class="btn btn-outline-primary">
-                            <i class="bx bx-map"></i> Lihat Peta
+                            <i class="bi bi-map"></i> Lihat Peta
                         </a>
                     </div>
                 </div>
@@ -124,13 +124,13 @@
                     <div class="card-body">
                         <div class="d-flex align-items-center">
                             <div class="stat-icon stat-odp me-3">
-                                <i class="bx bx-broadcast"></i>
+                                <i class="bi bi-broadcast"></i>
                             </div>
                             <div>
                                 <h4 class="mb-0 text-primary"><%= stats.total_odps || 0 %></h4>
                                 <p class="text-muted mb-0">Total ODP</p>
                                 <small class="text-success">
-                                    <i class="bx bx-check-circle"></i> 
+                                    <i class="bi bi-check-circle-fill"></i> 
                                     <%= stats.active_odps || 0 %> Active
                                 </small>
                             </div>
@@ -143,13 +143,13 @@
                     <div class="card-body">
                         <div class="d-flex align-items-center">
                             <div class="stat-icon stat-cable me-3">
-                                <i class="bx bx-cable-car"></i>
+                                <i class="bi bi-ethernet"></i>
                             </div>
                             <div>
                                 <h4 class="mb-0 text-primary"><%= stats.total_cables || 0 %></h4>
                                 <p class="text-muted mb-0">Total Cable Routes</p>
                                 <small class="text-success">
-                                    <i class="bx bx-check-circle"></i> 
+                                    <i class="bi bi-check-circle-fill"></i> 
                                     <%= stats.connected_cables || 0 %> Connected
                                 </small>
                             </div>
@@ -162,13 +162,13 @@
                     <div class="card-body">
                         <div class="d-flex align-items-center">
                             <div class="stat-icon stat-customer me-3">
-                                <i class="bx bx-user"></i>
+                                <i class="bi bi-person-fill"></i>
                             </div>
                             <div>
                                 <h4 class="mb-0 text-primary"><%= stats.mapped_customers || 0 %></h4>
                                 <p class="text-muted mb-0">Mapped Customers</p>
                                 <small class="text-info">
-                                    <i class="bx bx-map"></i> 
+                                    <i class="bi bi-map"></i> 
                                     With Coordinates
                                 </small>
                             </div>
@@ -181,13 +181,13 @@
                     <div class="card-body">
                         <div class="d-flex align-items-center">
                             <div class="stat-icon stat-network me-3">
-                                <i class="bx bx-wrench"></i>
+                                <i class="bi bi-wrench-adjustable"></i>
                             </div>
                             <div>
                                 <h4 class="mb-0 text-primary"><%= stats.maintenance_odps || 0 %></h4>
                                 <p class="text-muted mb-0">Maintenance</p>
                                 <small class="text-warning">
-                                    <i class="bx bx-wrench"></i> 
+                                    <i class="bi bi-wrench-adjustable"></i> 
                                     In Progress
                                 </small>
                             </div>
@@ -200,13 +200,13 @@
         <!-- Quick Actions -->
         <div class="row mb-4">
             <div class="col-12">
-                <h5><i class="bx bx-zap"></i> Quick Actions</h5>
+                <h5><i class="bi bi-circle"></i> Quick Actions</h5>
             </div>
             <div class="col-md-3 mb-3">
                 <div class="card quick-action-card h-100" onclick="window.location.href='/admin/cable-network/odp'">
                     <div class="card-body text-center">
                         <div class="stat-icon stat-odp mx-auto mb-3">
-                            <i class="bx bx-broadcast"></i>
+                            <i class="bi bi-broadcast"></i>
                         </div>
                         <h6>Manage ODPs</h6>
                         <p class="text-muted small">Add, edit, and manage Optical Distribution Points</p>
@@ -217,7 +217,7 @@
                 <div class="card quick-action-card h-100" onclick="window.location.href='/admin/cable-network/cables'">
                     <div class="card-body text-center">
                         <div class="stat-icon stat-cable mx-auto mb-3">
-                            <i class="bx bx-cable-car"></i>
+                            <i class="bi bi-ethernet"></i>
                         </div>
                         <h6>Manage Cables</h6>
                         <p class="text-muted small">Configure cable routes and connections</p>
@@ -228,7 +228,7 @@
                 <div class="card quick-action-card h-100" onclick="window.location.href='/admin/cable-network/odp-connections'">
                     <div class="card-body text-center">
                         <div class="stat-icon stat-customer mx-auto mb-3">
-                            <i class="bx bx-git-branch"></i>
+                            <i class="bi bi-circle"></i>
                         </div>
                         <h6>ODP Connections</h6>
                         <p class="text-muted small">Manage backbone connections between ODPs</p>
@@ -239,7 +239,7 @@
                 <div class="card quick-action-card h-100" onclick="window.location.href='/admin/billing/mapping-new'">
                     <div class="card-body text-center">
                         <div class="stat-icon stat-customer mx-auto mb-3">
-                            <i class="bx bx-map"></i>
+                            <i class="bi bi-map"></i>
                         </div>
                         <h6>Network Map</h6>
                         <p class="text-muted small">View interactive network map</p>
@@ -250,7 +250,7 @@
                 <div class="card quick-action-card h-100" onclick="window.location.href='/admin/cable-network/analytics'">
                     <div class="card-body text-center">
                         <div class="stat-icon stat-network mx-auto mb-3">
-                            <i class="bx bx-bar-chart-alt-2"></i>
+                            <i class="bi bi-bar-chart-fill"></i>
                         </div>
                         <h6>Analytics</h6>
                         <p class="text-muted small">View network analytics and reports</p>
@@ -264,7 +264,7 @@
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h6 class="mb-0"><i class="bx bx-time"></i> Recent ODPs</h6>
+                        <h6 class="mb-0"><i class="bi bi-circle"></i> Recent ODPs</h6>
                     </div>
                     <div class="card-body">
                         <% if (recentODPs && recentODPs.length > 0) { %>
@@ -274,7 +274,7 @@
                                     <div>
                                         <h6 class="mb-1"><%= odp.name %></h6>
                                         <small class="text-muted">
-                                            <i class="bx bx-map-pin"></i> <%= odp.address || 'No address' %>
+                                            <i class="bi bi-geo-alt-fill"></i> <%= odp.address || 'No address' %>
                                         </small>
                                     </div>
                                     <div class="text-end">
@@ -291,7 +291,7 @@
                             <% }); %>
                         <% } else { %>
                             <div class="text-center text-muted">
-                                <i class="bx bx-info-circle fs-1"></i>
+                                <i class="bi bi-info-circle-fill fs-1"></i>
                                 <p>No ODPs found</p>
                                 <a href="/admin/cable-network/odp" class="btn btn-sm btn-primary">Add First ODP</a>
                             </div>
@@ -302,7 +302,7 @@
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h6 class="mb-0"><i class="bx bx-cable-car"></i> Recent Cable Routes</h6>
+                        <h6 class="mb-0"><i class="bi bi-ethernet"></i> Recent Cable Routes</h6>
                     </div>
                     <div class="card-body">
                         <% if (recentCables && recentCables.length > 0) { %>
@@ -312,7 +312,7 @@
                                     <div>
                                         <h6 class="mb-1"><%= cable.customer_name || 'Unknown Customer' %></h6>
                                         <small class="text-muted">
-                                            <i class="bx bx-phone"></i> <%= cable.customer_phone || 'No phone' %>
+                                            <i class="bi bi-telephone-fill"></i> <%= cable.customer_phone || 'No phone' %>
                                         </small>
                                     </div>
                                     <div class="text-end">
@@ -329,7 +329,7 @@
                             <% }); %>
                         <% } else { %>
                             <div class="text-center text-muted">
-                                <i class="bx bx-info-circle fs-1"></i>
+                                <i class="bi bi-info-circle-fill fs-1"></i>
                                 <p>No cable routes found</p>
                                 <a href="/admin/cable-network/cables" class="btn btn-sm btn-primary">Add First Cable Route</a>
                             </div>

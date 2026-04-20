@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -112,23 +112,23 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand" href="/admin">
-                <i class="bx bx-wifi"></i> Admin Portal
+                <i class="bi bi-wifi"></i> Admin Portal
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="/admin">
-                    <i class="bx bx-home"></i> Dashboard
+                    <i class="bi bi-house"></i> Dashboard
                 </a>
                 <a class="nav-link" href="/admin/cable-network/odp">
-                    <i class="bx bx-broadcast"></i> ODP Management
+                    <i class="bi bi-broadcast"></i> ODP Management
                 </a>
                 <a class="nav-link" href="/admin/cable-network/cables">
-                    <i class="bx bx-cable-car"></i> Cable Routes
+                    <i class="bi bi-ethernet"></i> Cable Routes
                 </a>
                 <a class="nav-link active" href="/admin/cable-network/analytics">
-                    <i class="bx bx-bar-chart-alt-2"></i> Analytics
+                    <i class="bi bi-bar-chart-fill"></i> Analytics
                 </a>
                 <a class="nav-link" href="/admin/billing/mapping-new">
-                    <i class="bx bx-map"></i> Map View
+                    <i class="bi bi-map"></i> Map View
                 </a>
             </div>
         </div>
@@ -140,15 +140,15 @@
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h2><i class="bx bx-bar-chart-alt-2"></i> Cable Network Analytics</h2>
+                        <h2><i class="bi bi-bar-chart-fill"></i> Cable Network Analytics</h2>
                         <p class="text-muted">Advanced analytics dan insights untuk cable network management</p>
                     </div>
                     <div class="btn-group">
                         <button class="btn btn-outline-primary" onclick="refreshAnalytics()">
-                            <i class="bx bx-refresh"></i> Refresh
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
                         </button>
                         <button class="btn btn-primary" onclick="exportReport()">
-                            <i class="bx bx-download"></i> Export Report
+                            <i class="bi bi-download"></i> Export Report
                         </button>
                     </div>
                 </div>
@@ -165,7 +165,7 @@
                             <p class="mb-0">Total ODPs</p>
                         </div>
                         <div class="align-self-center">
-                            <i class="bx bx-broadcast fs-1"></i>
+                            <i class="bi bi-broadcast fs-1"></i>
                         </div>
                     </div>
                 </div>
@@ -178,7 +178,7 @@
                             <p class="mb-0">Total Cables</p>
                         </div>
                         <div class="align-self-center">
-                            <i class="bx bx-cable-car fs-1"></i>
+                            <i class="bi bi-ethernet fs-1"></i>
                         </div>
                     </div>
                 </div>
@@ -191,7 +191,7 @@
                             <p class="mb-0">Utilization Rate</p>
                         </div>
                         <div class="align-self-center">
-                            <i class="bx bx-trending-up fs-1"></i>
+                            <i class="bi bi-graph-up-arrow fs-1"></i>
                         </div>
                     </div>
                 </div>
@@ -204,7 +204,7 @@
                             <p class="mb-0">Network Health</p>
                         </div>
                         <div class="align-self-center">
-                            <i class="bx bx-heart fs-1"></i>
+                            <i class="bi bi-circle fs-1"></i>
                         </div>
                     </div>
                 </div>
@@ -217,7 +217,7 @@
             <div class="col-md-6">
                 <div class="analytics-card card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-pie-chart-alt-2"></i> ODP Capacity Distribution</h5>
+                        <h5 class="mb-0"><i class="bi bi-pie-chart-fill"></i> ODP Capacity Distribution</h5>
                     </div>
                     <div class="card-body">
                         <div class="chart-container">
@@ -231,7 +231,7 @@
             <div class="col-md-6">
                 <div class="analytics-card card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-bar-chart"></i> Cable Status Distribution</h5>
+                        <h5 class="mb-0"><i class="bi bi-bar-chart-steps"></i> Cable Status Distribution</h5>
                     </div>
                     <div class="card-body">
                         <div class="chart-container">
@@ -248,7 +248,7 @@
             <div class="col-md-8">
                 <div class="analytics-card card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-trending-up"></i> Network Utilization Trend</h5>
+                        <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Network Utilization Trend</h5>
                     </div>
                     <div class="card-body">
                         <div class="chart-container">
@@ -262,12 +262,12 @@
             <div class="col-md-4">
                 <div class="analytics-card card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-trophy"></i> Top ODPs by Usage</h5>
+                        <h5 class="mb-0"><i class="bi bi-circle"></i> Top ODPs by Usage</h5>
                     </div>
                     <div class="card-body">
                         <div id="topODPsList">
                             <div class="text-center">
-                                <i class="bx bx-loader-alt bx-spin fs-1 text-muted"></i>
+                                <i class="bi bi-circle bx-spin fs-1 text-muted"></i>
                                 <p class="text-muted">Loading...</p>
                             </div>
                         </div>
@@ -281,10 +281,10 @@
             <!-- ODP Heatmap -->
             <div class="col-md-8">
                 <div class="heatmap-container">
-                    <h5 class="mb-3"><i class="bx bx-grid-alt"></i> ODP Capacity Heatmap</h5>
+                    <h5 class="mb-3"><i class="bi bi-grid-1x2-fill"></i> ODP Capacity Heatmap</h5>
                     <div id="odpHeatmap" class="mb-3">
                         <div class="text-center">
-                            <i class="bx bx-loader-alt bx-spin fs-1 text-muted"></i>
+                            <i class="bi bi-circle bx-spin fs-1 text-muted"></i>
                             <p class="text-muted">Loading heatmap...</p>
                         </div>
                     </div>
@@ -314,12 +314,12 @@
             <div class="col-md-4">
                 <div class="analytics-card card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-error-circle"></i> Alerts & Recommendations</h5>
+                        <h5 class="mb-0"><i class="bi bi-exclamation-circle-fill"></i> Alerts & Recommendations</h5>
                     </div>
                     <div class="card-body">
                         <div id="alertsList">
                             <div class="text-center">
-                                <i class="bx bx-loader-alt bx-spin fs-1 text-muted"></i>
+                                <i class="bi bi-circle bx-spin fs-1 text-muted"></i>
                                 <p class="text-muted">Loading alerts...</p>
                             </div>
                         </div>
@@ -334,7 +334,7 @@
             <div class="col-md-6">
                 <div class="analytics-card card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-tachometer"></i> Network Performance</h5>
+                        <h5 class="mb-0"><i class="bi bi-speedometer2"></i> Network Performance</h5>
                     </div>
                     <div class="card-body">
                         <div class="row text-center">
@@ -365,7 +365,7 @@
             <div class="col-md-6">
                 <div class="analytics-card card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-money"></i> Cost Analysis</h5>
+                        <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Cost Analysis</h5>
                     </div>
                     <div class="card-body">
                         <div class="row text-center">

@@ -1,4 +1,4 @@
-<!-- Halaman Tab Setting Admin -->
+﻿<!-- Halaman Tab Setting Admin -->
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -881,7 +881,7 @@
                     <div class="card">
                         <div class="card-header">
                             <h4 class="card-title">
-                                <i class="mdi mdi-database-backup me-2"></i>
+                                <i class="bi bi-database-fill"></i>
                                 Backup & Restore Database
                             </h4>
                         </div>
@@ -891,7 +891,7 @@
                                     <div class="card border-primary">
                                         <div class="card-header bg-primary text-white">
                                             <h5 class="card-title mb-0">
-                                                <i class="mdi mdi-download me-2"></i>
+                                                <i class="bi bi-download"></i>
                                                 Backup Database
                                             </h5>
                                         </div>
@@ -900,7 +900,7 @@
                                                 Buat backup database billing untuk keamanan data.
                                             </p>
                                             <button type="button" class="btn btn-primary" id="createBackupBtn">
-                                                <i class="mdi mdi-download me-2"></i>
+                                                <i class="bi bi-download"></i>
                                                 Buat Backup
                                             </button>
                                         </div>
@@ -910,7 +910,7 @@
                                     <div class="card border-warning">
                                         <div class="card-header bg-warning text-white">
                                             <h5 class="card-title mb-0">
-                                                <i class="mdi mdi-upload me-2"></i>
+                                                <i class="bi bi-upload"></i>
                                                 Restore Database
                                             </h5>
                                         </div>
@@ -925,7 +925,7 @@
                                                 </select>
                                             </div>
                                             <button type="button" class="btn btn-warning" id="restoreBackupBtn" disabled>
-                                                <i class="mdi mdi-upload me-2"></i>
+                                                <i class="bi bi-upload"></i>
                                                 Restore Database
                                             </button>
                                         </div>
@@ -938,7 +938,7 @@
                                     <div class="card">
                                         <div class="card-header">
                                             <h5 class="card-title mb-0">
-                                                <i class="mdi mdi-history me-2"></i>
+                                                <i class="bi bi-clock-history"></i>
                                                 Riwayat Backup
                                             </h5>
                                         </div>
@@ -956,7 +956,7 @@
                                                     <tbody>
                                                         <tr>
                                                             <td colspan="4" class="text-center text-muted">
-                                                                <i class="mdi mdi-loading mdi-spin me-2"></i>
+                                                                <i class="bi bi-circle-fill mdi-spin me-2"></i>
                                                                 Memuat data backup...
                                                             </td>
                                                         </tr>
@@ -978,12 +978,12 @@
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h4 class="card-title">
-                                <i class="mdi mdi-history me-2"></i>
+                                <i class="bi bi-clock-history"></i>
                                 Activity Logs
                             </h4>
                             <div>
                                 <button type="button" class="btn btn-warning btn-sm" id="clearLogsBtn">
-                                    <i class="mdi mdi-delete me-2"></i>
+                                    <i class="bi bi-trash3-fill"></i>
                                     Clear Old Logs
                                 </button>
                             </div>
@@ -1004,7 +1004,7 @@
                                     <tbody>
                                         <tr>
                                             <td colspan="6" class="text-center text-muted">
-                                                <i class="mdi mdi-loading mdi-spin me-2"></i>
+                                                <i class="bi bi-circle-fill mdi-spin me-2"></i>
                                                 Memuat activity logs...
                                             </td>
                                         </tr>
@@ -1014,7 +1014,7 @@
                             <div class="d-flex justify-content-between align-items-center mt-3">
                                 <div>
                                     <button type="button" class="btn btn-outline-primary btn-sm" id="loadMoreLogsBtn">
-                                        <i class="mdi mdi-refresh me-2"></i>
+                                        <i class="bi bi-arrow-clockwise"></i>
                                         Load More
                                     </button>
                                     <span class="badge bg-info ms-2" id="logsCount">0</span>
@@ -1860,7 +1860,7 @@ $(document).ready(function() {
         const btn = $(this);
         const originalText = btn.html();
         
-        btn.prop('disabled', true).html('<i class="mdi mdi-loading mdi-spin me-2"></i>Membuat backup...');
+        btn.prop('disabled', true).html('<i class="bi bi-circle-fill mdi-spin me-2"></i>Membuat backup...');
         
         $.ajax({
             url: '/admin/settings/backup',
@@ -1899,7 +1899,7 @@ $(document).ready(function() {
         const btn = $(this);
         const originalText = btn.html();
         
-        btn.prop('disabled', true).html('<i class="mdi mdi-loading mdi-spin me-2"></i>Restoring...');
+        btn.prop('disabled', true).html('<i class="bi bi-circle-fill mdi-spin me-2"></i>Restoring...');
         
         // Create form data for file upload
         const formData = new FormData();
@@ -1962,7 +1962,7 @@ $(document).ready(function() {
             tbody.append(`
                 <tr>
                     <td colspan="4" class="text-center text-muted">
-                        <i class="mdi mdi-database-off me-2"></i>
+                        <i class="bi bi-database-fill"></i>
                         Belum ada file backup
                     </td>
                 </tr>
@@ -1976,12 +1976,12 @@ $(document).ready(function() {
             
             tbody.append(`
                 <tr>
-                    <td><i class="mdi mdi-database me-2"></i>${backup.filename}</td>
+                    <td><i class="bi bi-database-fill"></i>${backup.filename}</td>
                     <td>${size}</td>
                     <td>${date}</td>
                     <td>
                         <button class="btn btn-sm btn-warning restore-file-btn" data-file="${backup.filename}">
-                            <i class="mdi mdi-upload"></i> Restore
+                            <i class="bi bi-upload"></i> Restore
                         </button>
                     </td>
                 </tr>
@@ -2740,7 +2740,7 @@ $(document).ready(function() {
         const btn = $(this);
         const originalText = btn.html();
         
-        btn.prop('disabled', true).html('<i class="mdi mdi-loading mdi-spin me-2"></i>Clearing...');
+        btn.prop('disabled', true).html('<i class="bi bi-circle-fill mdi-spin me-2"></i>Clearing...');
         
         $.ajax({
             url: '/admin/settings/clear-logs',
@@ -2793,7 +2793,7 @@ $(document).ready(function() {
                     tbody.append(`
                         <tr>
                             <td colspan="6" class="text-center text-muted">
-                                <i class="mdi mdi-information-outline me-2"></i>
+                                <i class="bi bi-info-circle-fill"></i>
                                 ${response.message || 'Fitur activity logs sedang tidak tersedia'}
                             </td>
                         </tr>
@@ -2809,7 +2809,7 @@ $(document).ready(function() {
                     tbody.append(`
                         <tr>
                             <td colspan="6" class="text-center text-muted">
-                                <i class="mdi mdi-information-outline me-2"></i>
+                                <i class="bi bi-info-circle-fill"></i>
                                 ${response.message || 'Fitur activity logs sedang tidak tersedia'}
                             </td>
                         </tr>
@@ -2821,7 +2821,7 @@ $(document).ready(function() {
                     tbody.append(`
                         <tr>
                             <td colspan="6" class="text-center text-muted">
-                                <i class="mdi mdi-alert-outline me-2"></i>
+                                <i class="bi bi-exclamation-triangle-fill"></i>
                                 Gagal memuat activity logs
                             </td>
                         </tr>
@@ -2839,7 +2839,7 @@ $(document).ready(function() {
             tbody.append(`
                 <tr>
                     <td colspan="6" class="text-center text-muted">
-                        <i class="mdi mdi-history-off me-2"></i>
+                        <i class="bi bi-clock-history"></i>
                         Belum ada activity logs
                     </td>
                 </tr>

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -118,16 +118,16 @@
     <nav class="navbar navbar-expand-lg navbar-dark navbar-tech">
         <div class="container-fluid">
             <a class="navbar-brand" href="/technician/dashboard">
-                <i class="bx bx-wrench me-2"></i>Portal Teknisi
+                <i class="bi bi-wrench-adjustable me-2"></i>Portal Teknisi
             </a>
             
             <div class="d-flex align-items-center">
                 <span class="text-white me-3">
-                    <i class="bx bx-user-circle me-1"></i>
+                    <i class="bi bi-person-circle me-1"></i>
                     <%= technician.name %>
                 </span>
                 <a href="/technician/logout" class="logout-btn">
-                    <i class="bx bx-log-out me-1"></i>Logout
+                    <i class="bi bi-box-arrow-right me-1"></i>Logout
                 </a>
             </div>
         </div>
@@ -146,15 +146,15 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
                                     <h4 class="mb-1">
-                                        <i class="bx bx-cog me-2"></i>Pengaturan
+                                        <i class="bi bi-gear-fill me-2"></i>Pengaturan
                                     </h4>
                                     <p class="mb-0 opacity-75">
-                                        <i class="bx bx-user-circle me-1"></i>Teknisi: <%= technician.name %> | 
-                                        <i class="bx bx-briefcase me-1"></i>Role: <%= technician.role || 'Technician' %>
+                                        <i class="bi bi-person-circle me-1"></i>Teknisi: <%= technician.name %> | 
+                                        <i class="bi bi-circle me-1"></i>Role: <%= technician.role || 'Technician' %>
                                     </p>
                                 </div>
                                 <a href="/technician/dashboard" class="back-button">
-                                    <i class="bx bx-arrow-back me-1"></i>Kembali
+                                    <i class="bi bi-circle me-1"></i>Kembali
                                 </a>
                             </div>
                         </div>
@@ -166,7 +166,7 @@
                     <div class="col-md-6 mb-4">
                         <div class="profile-info">
                             <h5 class="mb-3">
-                                <i class="bx bx-user me-2"></i>Informasi Profil
+                                <i class="bi bi-person-fill me-2"></i>Informasi Profil
                             </h5>
                             <div class="info-item">
                                 <span class="info-label">Nama:</span>
@@ -196,7 +196,7 @@
                         <div class="card technician-card">
                             <div class="card-header">
                                 <h5 class="mb-0">
-                                    <i class="bx bx-lock me-2"></i>Ubah Password
+                                    <i class="bi bi-lock me-2"></i>Ubah Password
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -214,7 +214,7 @@
                                         <input type="password" class="form-control" id="confirmPassword" required minlength="6">
                                     </div>
                                     <button type="submit" class="btn btn-primary">
-                                        <i class="bx bx-save me-2"></i>Ubah Password
+                                        <i class="bi bi-floppy-fill me-2"></i>Ubah Password
                                     </button>
                                 </form>
                             </div>
@@ -228,7 +228,7 @@
                         <div class="card technician-card">
                             <div class="card-header">
                                 <h5 class="mb-0">
-                                    <i class="bx bx-shield me-2"></i>Pengaturan Akun
+                                    <i class="bi bi-shield-fill me-2"></i>Pengaturan Akun
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -237,9 +237,9 @@
                                         <h6 class="mb-3">Keamanan Akun</h6>
                                         <p class="text-muted">Pastikan akun Anda aman dengan menggunakan password yang kuat dan tidak mudah ditebak.</p>
                                         <ul class="list-unstyled">
-                                            <li><i class="bx bx-check text-success me-2"></i>Password minimal 6 karakter</li>
-                                            <li><i class="bx bx-check text-success me-2"></i>Gunakan kombinasi huruf dan angka</li>
-                                            <li><i class="bx bx-check text-success me-2"></i>Jangan bagikan password dengan orang lain</li>
+                                            <li><i class="bi bi-check-lg text-success me-2"></i>Password minimal 6 karakter</li>
+                                            <li><i class="bi bi-check-lg text-success me-2"></i>Gunakan kombinasi huruf dan angka</li>
+                                            <li><i class="bi bi-check-lg text-success me-2"></i>Jangan bagikan password dengan orang lain</li>
                                         </ul>
                                     </div>
                                     <div class="col-md-6">

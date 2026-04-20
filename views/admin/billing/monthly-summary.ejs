@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -195,27 +195,27 @@
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bx bx-calendar"></i> Summary Bulanan
+                        <i class="bi bi-calendar3"></i> Summary Bulanan
                     </h1>
                     <div>
                         <a href="/admin/billing/export/monthly-summary.xlsx" class="btn btn-warning me-2">
-                            <i class="bx bx-download"></i> Export Excel
+                            <i class="bi bi-download"></i> Export Excel
                         </a>
                         <button id="generateSummaryBtn" class="btn btn-success me-2" onclick="generateSummary()">
-                            <i class="bx bx-plus"></i> Generate Summary Bulan Ini
+                            <i class="bi bi-plus-lg"></i> Generate Summary Bulan Ini
                         </button>
                         <button id="monthlyResetBtn" class="btn btn-danger me-2" onclick="monthlyReset()">
-                            <i class="bx bx-reset"></i> Reset Bulanan
+                            <i class="bi bi-arrow-counterclockwise"></i> Reset Bulanan
                         </button>
                         <a href="/admin/billing/dashboard" class="btn btn-outline-primary">
-                            <i class="bx bx-arrow-back"></i> Kembali ke Dashboard
+                            <i class="bi bi-circle"></i> Kembali ke Dashboard
                         </a>
                     </div>
                 </div>
 
                 <!-- Info Card -->
                 <div class="alert alert-info">
-                    <i class="bx bx-info-circle me-2"></i>
+                    <i class="bi bi-info-circle-fill me-2"></i>
                     <strong>Info:</strong> Summary bulanan akan otomatis di-generate setiap tanggal 1 pukul 23:59. 
                     Data summary ini akan disimpan sebagai catatan keuangan dan tidak akan ter-reset.
                 </div>
@@ -224,7 +224,7 @@
                 <div class="row mb-4" id="kpiOverview">
                     <div class="col-12">
                         <div class="kpi-card">
-                            <h4 class="mb-3"><i class="bx bx-trending-up"></i> Analisis Trend 12 Bulan Terakhir</h4>
+                            <h4 class="mb-3"><i class="bi bi-graph-up-arrow"></i> Analisis Trend 12 Bulan Terakhir</h4>
                             <div class="row kpi-row">
                                 <div class="col-md-3 kpi-col">
                                     <div class="metric-card">
@@ -265,7 +265,7 @@
                         <div class="card chart-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-line-chart"></i> Trend Pendapatan 12 Bulan Terakhir
+                                    <i class="bi bi-graph-up"></i> Trend Pendapatan 12 Bulan Terakhir
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -277,7 +277,7 @@
                         <div class="card chart-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-pie-chart"></i> Distribusi Revenue
+                                    <i class="bi bi-pie-chart"></i> Distribusi Revenue
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -293,7 +293,7 @@
                         <div class="card chart-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-group"></i> Trend Pelanggan
+                                    <i class="bi bi-people-fill"></i> Trend Pelanggan
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -305,7 +305,7 @@
                         <div class="card chart-card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
-                                    <i class="bx bx-receipt"></i> Invoice Performance
+                                    <i class="bi bi-receipt"></i> Invoice Performance
                                 </h5>
                             </div>
                             <div class="card-body">
@@ -323,7 +323,7 @@
                                 <div class="card summary-card h-100">
                                     <div class="card-header">
                                         <h5 class="card-title mb-0">
-                                            <i class="bx bx-calendar"></i> 
+                                            <i class="bi bi-calendar3"></i> 
                                             <%= new Date(summary.year, summary.month - 1).toLocaleDateString('id-ID', { year: 'numeric', month: 'long' }) %>
                                         </h5>
                                         <small class="text-muted">
@@ -404,7 +404,7 @@
                                             <% if (summary.notes) { %>
                                                 <div class="mt-2">
                                                     <small class="text-muted">
-                                                        <i class="bx bx-note"></i> <%= summary.notes %>
+                                                        <i class="bi bi-circle"></i> <%= summary.notes %>
                                                     </small>
                                                 </div>
                                             <% } %>
@@ -416,11 +416,11 @@
                     <% } else { %>
                         <div class="col-12">
                             <div class="text-center py-5">
-                                <i class="bx bx-calendar-x" style="font-size: 4rem; color: #6c757d;"></i>
+                                <i class="bi bi-calendar-x-fill" style="font-size: 4rem; color: #6c757d;"></i>
                                 <h4 class="mt-3 text-muted">Belum Ada Summary Bulanan</h4>
                                 <p class="text-muted">Summary akan otomatis di-generate setiap tanggal 1, atau Anda bisa generate manual.</p>
                                 <button class="btn btn-success" onclick="generateSummary()">
-                                    <i class="bx bx-plus"></i> Generate Summary Pertama
+                                    <i class="bi bi-plus-lg"></i> Generate Summary Pertama
                                 </button>
                             </div>
                         </div>
@@ -728,7 +728,7 @@
             
             // Disable button dan show loading
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Generating...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin me-1"></i>Generating...';
             
             try {
                 const response = await fetch('/admin/billing/api/generate-monthly-summary', {
@@ -771,7 +771,7 @@
             
             // Disable button dan show loading
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Resetting...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin me-1"></i>Resetting...';
             
             try {
                 const response = await fetch('/admin/billing/api/monthly-reset', {
@@ -841,7 +841,7 @@
             
             try {
                 // Show loading state
-                resetBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i> Processing...';
+                resetBtn.innerHTML = '<i class="bi bi-circle bx-spin"></i> Processing...';
                 resetBtn.disabled = true;
 
                 // Call API

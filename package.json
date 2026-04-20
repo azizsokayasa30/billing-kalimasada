@@ -4,8 +4,8 @@
   "description": "Sistem Manajemen ISP Terintegrasi dengan WhatsApp Gateway untuk GenieACS, Mikrotik PPPoE, dan Hotspot Management",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js",
-    "dev": "nodemon app.js",
+    "start": "set NODE_ENV=development && node app.js",
+    "dev": "set NODE_ENV=development && nodemon app.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "echo \"No build process required\"",
     "setup": "npm install && node scripts/init-database.js"

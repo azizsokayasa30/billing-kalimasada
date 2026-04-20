@@ -94,9 +94,9 @@
         document.documentElement.setAttribute('data-theme',t);
       })();
     </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
+    <link href="/css/dark-theme-global.css?v=3" rel="stylesheet">
+    <link href="/css/theme-system.css?v=3" rel="stylesheet">
+    <link href="/css/theme-overrides.css?v=1735" rel="stylesheet">
     <!-- END GLOBAL THEME INJECTION -->
 </head>
 <body>
@@ -185,7 +185,7 @@ $(function() {
     const $btn = $(this);
     const originalText = $btn.html();
     let restartSuccess = false;
-    $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Restarting...');
+    $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Memeriksa...');
 
     // Kirim request ke backend
     $.ajax({
@@ -194,17 +194,27 @@ $(function() {
       success: function(res) {
         let notif = $('#restartNotif');
         if (res.success) {
+          // Mode development: server dimanage nodemon — tampilkan info, jangan redirect
+          if (res.mode === 'development') {
+            notif.removeClass('d-none alert-danger alert-success')
+                 .addClass('alert-info')
+                 .html('<i class="bi bi-info-circle-fill me-2"></i><strong>Mode Development</strong> &mdash; Server berjalan via <strong>nodemon</strong>. Tidak perlu restart manual. Simpan file apapun untuk memicu reload otomatis.');
+            setTimeout(function() { notif.addClass('d-none'); }, 6000);
+            $btn.prop('disabled', false).html(originalText);
+            return; // STOP — jangan mulai countdown atau redirect
+          }
+          // Mode production (PM2): jalankan countdown dan redirect ke login
           restartSuccess = true;
           startBillingRedirectCountdown(notif, 5);
         } else {
-          notif.removeClass('d-none alert-success').addClass('alert-danger').text(res.message || 'Gagal restart billing!');
-          setTimeout(function() { notif.addClass('d-none'); }, 4000);
+          notif.removeClass('d-none alert-success alert-info').addClass('alert-danger').text(res.message || res.error || 'Gagal restart billing!');
+          setTimeout(function() { notif.addClass('d-none'); }, 5000);
         }
       },
       error: function() {
         let notif = $('#restartNotif');
-        notif.removeClass('d-none alert-success').addClass('alert-danger').text('Gagal menghubungi server!');
-        setTimeout(function() { notif.addClass('d-none'); }, 4000);
+        notif.removeClass('d-none alert-success alert-info').addClass('alert-danger').text('Gagal menghubungi server untuk restart!');
+        setTimeout(function() { notif.addClass('d-none'); }, 5000);
       },
       complete: function() {
         if (!restartSuccess) {

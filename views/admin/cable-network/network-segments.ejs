@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -70,26 +70,26 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand" href="/admin">
-                <i class="bx bx-wifi"></i> Admin Portal
+                <i class="bi bi-wifi"></i> Admin Portal
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="/admin">
-                    <i class="bx bx-home"></i> Dashboard
+                    <i class="bi bi-house"></i> Dashboard
                 </a>
                 <a class="nav-link" href="/admin/cable-network">
-                    <i class="bx bx-network-chart"></i> Cable Network
+                    <i class="bi bi-diagram-3-fill"></i> Cable Network
                 </a>
                 <a class="nav-link" href="/admin/cable-network/odp">
-                    <i class="bx bx-broadcast"></i> ODP Management
+                    <i class="bi bi-broadcast"></i> ODP Management
                 </a>
                 <a class="nav-link" href="/admin/cable-network/cables">
-                    <i class="bx bx-cable-car"></i> Cable Routes
+                    <i class="bi bi-ethernet"></i> Cable Routes
                 </a>
                 <a class="nav-link active" href="/admin/cable-network/network-segments">
-                    <i class="bx bx-network-chart"></i> Network Segments
+                    <i class="bi bi-diagram-3-fill"></i> Network Segments
                 </a>
                 <a class="nav-link" href="/admin/billing/mapping-new">
-                    <i class="bx bx-map"></i> Map View
+                    <i class="bi bi-map"></i> Map View
                 </a>
             </div>
         </div>
@@ -110,15 +110,15 @@
                 <!-- Header -->
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div>
-                        <h2><i class="bx bx-network-chart me-2"></i>Network Segments Management</h2>
+                        <h2><i class="bi bi-diagram-3-fill me-2"></i>Network Segments Management</h2>
                         <p class="text-muted mb-0">Kelola jalur kabel antar ODP (Optical Distribution Point)</p>
                     </div>
                     <div class="d-flex gap-2">
                         <a href="/admin/cable-network" class="btn btn-outline-secondary">
-                            <i class="bx bx-arrow-back me-2"></i>Kembali
+                            <i class="bi bi-circle me-2"></i>Kembali
                         </a>
                         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addNetworkSegmentModal">
-                            <i class="bx bx-plus me-2"></i>Tambah Network Segment
+                            <i class="bi bi-plus-lg me-2"></i>Tambah Network Segment
                         </button>
                     </div>
                 </div>
@@ -134,7 +134,7 @@
                                         <p class="mb-0">Total Segments</p>
                                     </div>
                                     <div class="align-self-center">
-                                        <i class="bx bx-network-chart" style="font-size: 2rem; opacity: 0.7;"></i>
+                                        <i class="bi bi-diagram-3-fill" style="font-size: 2rem; opacity: 0.7;"></i>
                                     </div>
                                 </div>
                             </div>
@@ -149,7 +149,7 @@
                                         <p class="mb-0">Active Segments</p>
                                     </div>
                                     <div class="align-self-center">
-                                        <i class="bx bx-check-circle" style="font-size: 2rem; opacity: 0.7;"></i>
+                                        <i class="bi bi-check-circle-fill" style="font-size: 2rem; opacity: 0.7;"></i>
                                     </div>
                                 </div>
                             </div>
@@ -164,7 +164,7 @@
                                         <p class="mb-0">Maintenance</p>
                                     </div>
                                     <div class="align-self-center">
-                                        <i class="bx bx-wrench" style="font-size: 2rem; opacity: 0.7;"></i>
+                                        <i class="bi bi-wrench-adjustable" style="font-size: 2rem; opacity: 0.7;"></i>
                                     </div>
                                 </div>
                             </div>
@@ -179,7 +179,7 @@
                                         <p class="mb-0">Backbone</p>
                                     </div>
                                     <div class="align-self-center">
-                                        <i class="bx bx-pulse" style="font-size: 2rem; opacity: 0.7;"></i>
+                                        <i class="bi bi-activity" style="font-size: 2rem; opacity: 0.7;"></i>
                                     </div>
                                 </div>
                             </div>
@@ -190,16 +190,16 @@
                 <!-- Network Segments List -->
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="bx bx-list-ul me-2"></i>Daftar Network Segments</h5>
+                        <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>Daftar Network Segments</h5>
                     </div>
                     <div class="card-body">
                         <% if (networkSegments.length === 0) { %>
                             <div class="empty-state">
-                                <i class="bx bx-network-chart"></i>
+                                <i class="bi bi-diagram-3-fill"></i>
                                 <h4>Belum ada Network Segments</h4>
                                 <p>Mulai dengan menambahkan network segment pertama untuk menghubungkan ODP-ODP Anda.</p>
                                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addNetworkSegmentModal">
-                                    <i class="bx bx-plus me-2"></i>Tambah Network Segment
+                                    <i class="bi bi-plus-lg me-2"></i>Tambah Network Segment
                                 </button>
                             </div>
                         <% } else { %>
@@ -259,10 +259,10 @@
                                                 
                                                 <div class="d-flex action-buttons">
                                                     <button class="btn btn-outline-primary btn-sm flex-fill" onclick="editNetworkSegment(<%= segment.id %>)">
-                                                        <i class="bx bx-edit me-1"></i>Edit
+                                                        <i class="bi bi-pencil-fill me-1"></i>Edit
                                                     </button>
                                                     <button class="btn btn-outline-danger btn-sm flex-fill" onclick="deleteNetworkSegment(<%= segment.id %>, '<%= segment.name.replace(/'/g, "\\'") %>')">
-                                                        <i class="bx bx-trash me-1"></i>Delete
+                                                        <i class="bi bi-trash3-fill me-1"></i>Delete
                                                     </button>
                                                 </div>
                                             </div>
@@ -282,7 +282,7 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bx bx-plus me-2"></i>Tambah Network Segment</h5>
+                    <h5 class="modal-title"><i class="bi bi-plus-lg me-2"></i>Tambah Network Segment</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form id="addNetworkSegmentForm">
@@ -360,7 +360,7 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
                         <button type="submit" class="btn btn-primary">
-                            <i class="bx bx-plus me-2"></i>Tambah Network Segment
+                            <i class="bi bi-plus-lg me-2"></i>Tambah Network Segment
                         </button>
                     </div>
                 </form>
@@ -373,7 +373,7 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bx bx-edit me-2"></i>Edit Network Segment</h5>
+                    <h5 class="modal-title"><i class="bi bi-pencil-fill me-2"></i>Edit Network Segment</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form id="editNetworkSegmentForm">
@@ -451,7 +451,7 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
                         <button type="submit" class="btn btn-primary">
-                            <i class="bx bx-save me-2"></i>Simpan Perubahan
+                            <i class="bi bi-floppy-fill me-2"></i>Simpan Perubahan
                         </button>
                     </div>
                 </form>

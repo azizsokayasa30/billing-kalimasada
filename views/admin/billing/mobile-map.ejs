@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -349,68 +349,68 @@
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
     <div class="mapping-sidebar" id="mappingSidebar">
         <div class="sidebar-header">
-            <h5><i class="bx bx-network-chart"></i> Network Mapping</h5>
+            <h5><i class="bi bi-diagram-3-fill"></i> Network Mapping</h5>
             <button class="btn btn-sm btn-outline-light d-md-none" onclick="toggleSidebar()">
-                <i class="bx bx-x"></i>
+                <i class="bi bi-x-lg"></i>
             </button>
         </div>
         <div class="sidebar-content">
             <ul class="sidebar-menu">
                 <li>
                     <a href="/admin/billing" class="active">
-                        <i class="bx bx-home"></i> Dashboard
+                        <i class="bi bi-house"></i> Dashboard
                     </a>
                 </li>
                 <li>
                     <a href="/admin/billing/mapping-new">
-                        <i class="bx bx-map"></i> Desktop Mapping
+                        <i class="bi bi-map"></i> Desktop Mapping
                     </a>
                 </li>
                 <li>
                     <a href="/admin/billing/mobile/mapping">
-                        <i class="bx bx-mobile"></i> Mobile Mapping
+                        <i class="bi bi-phone"></i> Mobile Mapping
                     </a>
                 </li>
                 <li>
                     <a href="/admin/billing/customers">
-                        <i class="bx bx-user"></i> Customers
+                        <i class="bi bi-person-fill"></i> Customers
                     </a>
                 </li>
                 <li>
                     <a href="/admin/billing/devices">
-                        <i class="bx bx-router"></i> Devices
+                        <i class="bi bi-circle"></i> Devices
                     </a>
                 </li>
                 <li>
                     <a href="/admin/billing/odps">
-                        <i class="bx bx-cube"></i> ODPs
+                        <i class="bi bi-circle"></i> ODPs
                     </a>
                 </li>
                 <li>
                     <a href="/admin/billing/cables">
-                        <i class="bx bx-cable-car"></i> Cables
+                        <i class="bi bi-ethernet"></i> Cables
                     </a>
                 </li>
                 <li>
                     <a href="/admin/billing/reports">
-                        <i class="bx bx-file"></i> Reports
+                        <i class="bi bi-file-earmark-fill"></i> Reports
                     </a>
                 </li>
                 <li>
                     <a href="/admin/billing/settings">
-                        <i class="bx bx-cog"></i> Settings
+                        <i class="bi bi-gear-fill"></i> Settings
                     </a>
                 </li>
                 <li>
                     <a href="/admin/logout">
-                        <i class="bx bx-log-out"></i> Logout
+                        <i class="bi bi-box-arrow-right"></i> Logout
                     </a>
                 </li>
             </ul>
             
             <!-- Stats Card dalam Sidebar -->
             <div class="mt-4">
-                <h6><i class="bx bx-bar-chart"></i> Quick Stats</h6>
+                <h6><i class="bi bi-bar-chart-steps"></i> Quick Stats</h6>
                 <div class="row text-center">
                     <div class="col-6">
                         <div class="bg-white bg-opacity-10 rounded p-2 mb-2">
@@ -446,7 +446,7 @@
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center">
                 <button class="btn btn-link text-white me-3 d-md-none" onclick="toggleSidebar()">
-                    <i class="bx bx-menu" style="font-size: 24px;"></i>
+                    <i class="bi bi-list" style="font-size: 24px;"></i>
                 </button>
                 <div>
                     <h4><i class="bi bi-geo-alt me-2"></i>Network Mapping</h4>
@@ -900,7 +900,7 @@
                     // ODP marker berbentuk kotak - pasif, tanpa status
                     const customIcon = L.divIcon({
                         className: 'odp-marker odp-marker-simple',
-                        html: `<i class="bx bx-cube" style="font-size: 10px; color: white;"></i>`,
+                        html: `<i class="bi bi-circle" style="font-size: 10px; color: white;"></i>`,
                         iconSize: [24, 24],
                         iconAnchor: [12, 12],
                         popupAnchor: [0, -12]
@@ -910,7 +910,7 @@
                         icon: customIcon
                     }).bindPopup(`
                         <div class="text-center">
-                            <h6><i class="bx bx-cube"></i> ${odp.name}</h6>
+                            <h6><i class="bi bi-circle"></i> ${odp.name}</h6>
                             <p class="mb-1"><strong>Code:</strong> ${odp.code}</p>
                             <p class="mb-1"><strong>Type:</strong> Optical Distribution Point</p>
                             <p class="mb-1"><strong>Kapasitas:</strong> ${odp.used_ports}/${odp.capacity} ports</p>
@@ -918,10 +918,10 @@
                             <hr>
                             <div class="row text-center">
                                 <div class="col-6">
-                                    <small class="text-success"><i class="bx bx-check"></i> ${odp.active_connections || 0} Active</small>
+                                    <small class="text-success"><i class="bi bi-check-lg"></i> ${odp.active_connections || 0} Active</small>
                                 </div>
                                 <div class="col-6">
-                                    <small class="text-info"><i class="bx bx-group"></i> ${odp.connected_customers || 0} Total</small>
+                                    <small class="text-info"><i class="bi bi-people-fill"></i> ${odp.connected_customers || 0} Total</small>
                                 </div>
                             </div>
                             <small class="text-muted">ID: ${odp.id}</small>
@@ -942,7 +942,7 @@
                 // ODP marker berbentuk kotak untuk sample data - pasif, tanpa status
                 const customIcon = L.divIcon({
                     className: 'odp-marker odp-marker-simple',
-                    html: `<i class="bx bx-cube" style="font-size: 10px; color: white;"></i>`,
+                    html: `<i class="bi bi-circle" style="font-size: 10px; color: white;"></i>`,
                     iconSize: [24, 24],
                     iconAnchor: [12, 12],
                     popupAnchor: [0, -12]
@@ -952,7 +952,7 @@
                     icon: customIcon
                 }).bindPopup(`
                     <div class="text-center">
-                        <h6><i class="bx bx-cube"></i> ${odp.name}</h6>
+                        <h6><i class="bi bi-circle"></i> ${odp.name}</h6>
                         <p class="mb-1"><strong>Type:</strong> Optical Distribution Point</p>
                         <p class="mb-1"><strong>Kapasitas:</strong> ${odp.used_ports}/${odp.capacity} ports</p>
                         <p class="mb-1"><strong>Address:</strong> Sample Location</p>
@@ -1015,11 +1015,11 @@
                     
                     if (device.status === 'Online') {
                         markerClass = 'ont-marker';
-                        iconClass = 'bx bx-map';
+                        iconClass = 'bi bi-map';
                         statusBadge = 'success';
                     } else {
                         markerClass = 'ont-marker ont-offline';
-                        iconClass = 'bx bx-map-alt';
+                        iconClass = 'bi bi-map-fill';
                         statusBadge = 'danger';
                     }
                     
@@ -1088,8 +1088,8 @@
                             
                             <hr>
                             <small class="text-muted">
-                                <i class="bx bx-map"></i> ${device.latitude}, ${device.longitude}<br>
-                                <i class="bx bx-time"></i> ${new Date().toLocaleString()}
+                                <i class="bi bi-map"></i> ${device.latitude}, ${device.longitude}<br>
+                                <i class="bi bi-circle"></i> ${new Date().toLocaleString()}
                             </small>
                         </div>
                     `);
@@ -1131,7 +1131,7 @@
                     // Create popup content for ODP connection
                     const popupContent = `
                         <div class="text-center">
-                            <h6><i class="bx bx-link"></i> Backbone Connection</h6>
+                            <h6><i class="bi bi-link"></i> Backbone Connection</h6>
                             <p class="mb-1"><strong>From:</strong> ${connection.from_odp_name}</p>
                             <p class="mb-1"><strong>To:</strong> ${connection.to_odp_name}</p>
                             <p class="mb-1"><strong>Type:</strong> ${connection.connection_type || 'Fiber Backbone'}</p>
@@ -1247,7 +1247,7 @@
                     // Create popup content
                     const popupContent = `
                         <div class="text-center">
-                            <h6><i class="bx bx-cable-car"></i> Cable Route #${cable.id}</h6>
+                            <h6><i class="bi bi-ethernet"></i> Cable Route #${cable.id}</h6>
                             <p class="mb-1"><strong>Customer:</strong> ${cable.customer_name}</p>
                             <p class="mb-1"><strong>Phone:</strong> ${cable.customer_phone}</p>
                             <p class="mb-1"><strong>ODP:</strong> ${cable.odp_name}</p>

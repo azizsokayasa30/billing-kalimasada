@@ -1,0 +1,29 @@
+{
+  "watch": [
+    "app.js",
+    "routes/",
+    "config/",
+    "middleware/",
+    "views/"
+  ],
+  "ext": "js,mjs,cjs,json,ejs",
+  "ignore": [
+    "data/*.db",
+    "data/*.db-shm",
+    "data/*.db-wal",
+    "*.db",
+    "*.db-shm",
+    "*.db-wal",
+    "logs/",
+    "*.log",
+    "whatsapp-session/",
+    "public/",
+    "node_modules/",
+    ".git/",
+    "uploads/",
+    "tmp/"
+  ],
+  "delay": 1000,
+  "verbose": false,
+  "signal": "SIGTERM"
+}

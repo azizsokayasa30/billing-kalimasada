@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manajemen Area | <%= appSettings.companyHeader %></title>
+    <meta name="description" content="Kelola area layanan pelanggan ISP">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- GLOBAL THEME INJECTION -->
+    <script>
+      (function(){
+        if(window.__theme_init) return; window.__theme_init=true;
+        var t=localStorage.getItem('kalimasada_theme');
+        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+        document.documentElement.setAttribute('data-theme',t);
+      })();
+    </script>
+    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
+    <link href="/css/theme-system.css?v=2" rel="stylesheet">
+    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
+    <link href="/css/card-system.css?v=1" rel="stylesheet">
+    <!-- END GLOBAL THEME INJECTION -->
+
+    <style>
+        body { background: var(--bg-primary, #f1f5f9); font-family: 'Inter', system-ui, sans-serif; }
+        .page-wrapper { display: flex; min-height: 100vh; }
+        .main-content { flex: 1; padding: 24px; overflow-x: hidden; }
+        @media (min-width: 768px) { .main-content { margin-left: 16.666667%; } }
+
+        /* Page Header */
+        .page-header {
+            background: linear-gradient(135deg, #1d4ed8 0%, #4f46e5 100%);
+            border-radius: 16px;
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            color: #fff;
+            box-shadow: 0 8px 32px rgba(29,78,216,0.25);
+        }
+        .page-header h1 { font-size: 1.8rem; font-weight: 700; margin: 0; color: #fff; }
+        .page-header p { margin: 6px 0 0; opacity: 0.85; font-size: 0.95rem; color: #fff; }
+
+        /* Stats Cards */
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-chip {
+            background: var(--panel-bg, #fff);
+            border: 1px solid var(--panel-border, #e2e8f0);
+            border-radius: 12px;
+            padding: 16px 20px;
+            display: flex; align-items: center; gap: 14px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .stat-chip:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+        .stat-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+        .stat-icon-blue { background: rgba(37,99,235,0.12); color: #2563eb; }
+        .stat-icon-green { background: rgba(22,163,74,0.12); color: #16a34a; }
+        .stat-icon-amber { background: rgba(245,158,11,0.12); color: #d97706; }
+        .stat-chip-val { font-size: 1.6rem; font-weight: 700; line-height: 1; color: var(--text-primary, #0f172a); }
+        .stat-chip-label { font-size: 0.75rem; color: var(--text-tertiary, #64748b); margin-top: 2px; font-weight: 500; }
+
+        /* Main Card */
+        .content-card {
+            background: var(--panel-bg, #fff);
+            border: 1px solid var(--panel-border, #e2e8f0);
+            border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .content-card-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--panel-border, #e2e8f0);
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+            background: var(--panel-accent, #f8fafc);
+        }
+        .content-card-title { font-size: 1rem; font-weight: 600; color: var(--text-primary, #0f172a); margin: 0; display: flex; align-items: center; gap: 8px; }
+        .content-card-body { padding: 0; }
+
+        /* Toolbar */
+        .toolbar { padding: 14px 24px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--panel-border, #e2e8f0); }
+        .search-box { position: relative; flex: 1; min-width: 200px; max-width: 340px; }
+        .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary, #64748b); font-size: 0.9rem; }
+        .search-box input { padding-left: 36px; border-radius: 8px; border: 1px solid var(--panel-border, #e2e8f0); background: var(--bg-tertiary, #fff); color: var(--text-primary, #0f172a); font-size: 0.875rem; width: 100%; height: 38px; }
+        .search-box input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+
+        /* Status Badge */
+        .badge-aktif { background: rgba(22,163,74,0.12); color: #16a34a; border-radius: 99px; font-size: 0.75rem; font-weight: 600; padding: 3px 10px; }
+        .badge-nonaktif { background: rgba(220,38,38,0.1); color: #dc2626; border-radius: 99px; font-size: 0.75rem; font-weight: 600; padding: 3px 10px; }
+
+        /* Table */
+        .area-table th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary, #64748b); padding: 12px 16px; background: var(--panel-accent, #f8fafc); border-bottom: 1px solid var(--panel-border, #e2e8f0); white-space: nowrap; }
+        .area-table td { padding: 13px 16px; font-size: 0.875rem; color: var(--text-primary, #0f172a); vertical-align: middle; border-bottom: 1px solid var(--panel-border, #e2e8f0); }
+        .area-table tbody tr:last-child td { border-bottom: none; }
+        .area-table tbody tr:hover td { background: rgba(37,99,235,0.03); }
+
+        /* Action Buttons */
+        .btn-icon { width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem; border: 1px solid transparent; transition: all 0.15s; cursor: pointer; }
+        .btn-icon-edit { background: rgba(37,99,235,0.08); color: #2563eb; border-color: rgba(37,99,235,0.15); }
+        .btn-icon-edit:hover { background: #2563eb; color: #fff; }
+        .btn-icon-delete { background: rgba(220,38,38,0.08); color: #dc2626; border-color: rgba(220,38,38,0.15); }
+        .btn-icon-delete:hover { background: #dc2626; color: #fff; }
+        .btn-icon-toggle { background: rgba(245,158,11,0.08); color: #d97706; border-color: rgba(245,158,11,0.15); }
+        .btn-icon-toggle:hover { background: #d97706; color: #fff; }
+
+        /* Empty State */
+        .empty-state { padding: 60px 20px; text-align: center; color: var(--text-tertiary, #64748b); }
+        .empty-state i { font-size: 3rem; margin-bottom: 16px; opacity: 0.4; display: block; }
+        .empty-state h5 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; color: var(--text-secondary, #334155); }
+
+        /* Pagination */
+        .pagination-wrap { padding: 14px 24px; border-top: 1px solid var(--panel-border, #e2e8f0); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+        .pagination-info { font-size: 0.8rem; color: var(--text-tertiary, #64748b); }
+
+        /* Modal Overlay */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1050; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .modal-overlay.show { display: flex; }
+        .modal-box {
+            background: var(--panel-bg, #fff);
+            border-radius: 16px;
+            width: 100%; max-width: 520px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.18);
+            animation: modalIn 0.2s ease;
+            overflow: hidden;
+        }
+        @keyframes modalIn { from { transform: scale(0.95) translateY(10px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+        .modal-box-header { padding: 20px 24px; border-bottom: 1px solid var(--panel-border, #e2e8f0); display: flex; align-items: center; justify-content: space-between; background: var(--panel-accent, #f8fafc); }
+        .modal-box-title { font-weight: 700; font-size: 1.05rem; color: var(--text-primary, #0f172a); margin: 0; }
+        .modal-box-body { padding: 24px; background: var(--panel-bg, #fff); }
+        .modal-box-footer { padding: 16px 24px; border-top: 1px solid var(--panel-border, #e2e8f0); display: flex; justify-content: flex-end; gap: 10px; background: var(--panel-accent, #f8fafc); }
+
+        /* Form */
+        .form-group { margin-bottom: 18px; }
+        .form-group label { font-size: 0.82rem; font-weight: 600; color: var(--text-secondary, #334155); margin-bottom: 6px; display: block; }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%; padding: 10px 14px; border-radius: 8px;
+            border: 1px solid var(--panel-border, #e2e8f0);
+            background: var(--bg-tertiary, #fff) !important;
+            color: var(--text-primary, #0f172a) !important;
+            font-size: 0.875rem;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+        .form-error { font-size: 0.78rem; color: #dc2626; margin-top: 4px; display: none; }
+        .form-error.show { display: block; }
+
+        /* Toast */
+        .toast-container-custom { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+        .toast-item { padding: 12px 18px; border-radius: 10px; font-size: 0.875rem; font-weight: 500; color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 10px; min-width: 260px; animation: toastIn 0.25s ease; }
+        @keyframes toastIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .toast-success { background: #16a34a; }
+        .toast-error { background: #dc2626; }
+        .toast-warning { background: #d97706; }
+    </style>
+</head>
+<body>
+<div class="page-wrapper">
+    <%- include('../../partials/billing-sidebar', { page: 'areas', settings: appSettings, versionInfo: typeof versionInfo !== 'undefined' ? versionInfo : {} }) %>
+
+    <main class="main-content">
+
+        <!-- Page Header -->
+        <div class="page-header">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <div>
+                    <h1><i class="bi bi-geo-alt-fill me-2"></i>Manajemen Area</h1>
+                    <p>Kelola area / wilayah layanan pelanggan ISP Anda</p>
+                </div>
+                <button class="btn btn-light fw-semibold" id="btnTambahArea" style="border-radius: 10px; padding: 10px 20px;">
+                    <i class="bi bi-plus-lg me-1"></i> Tambah Area
+                </button>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+            <div class="stat-chip">
+                <div class="stat-icon stat-icon-blue"><i class="bi bi-geo-alt-fill"></i></div>
+                <div>
+                    <div class="stat-chip-val"><%= stats.total %></div>
+                    <div class="stat-chip-label">Total Area</div>
+                </div>
+            </div>
+            <div class="stat-chip">
+                <div class="stat-icon stat-icon-green"><i class="bi bi-check-circle-fill"></i></div>
+                <div>
+                    <div class="stat-chip-val"><%= stats.aktif %></div>
+                    <div class="stat-chip-label">Area Aktif</div>
+                </div>
+            </div>
+            <div class="stat-chip">
+                <div class="stat-icon stat-icon-amber"><i class="bi bi-pause-circle-fill"></i></div>
+                <div>
+                    <div class="stat-chip-val"><%= stats.nonaktif %></div>
+                    <div class="stat-chip-label">Area Nonaktif</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Table Card -->
+        <div class="content-card">
+            <div class="content-card-header">
+                <h2 class="content-card-title"><i class="bi bi-list-ul text-primary"></i> Daftar Area</h2>
+                <div class="d-flex align-items-center gap-2">
+                    <select class="form-select form-select-sm" id="filterStatus" style="border-radius:8px; min-width:130px;">
+                        <option value="">Semua Status</option>
+                        <option value="aktif" <%= typeof filterStatus !== 'undefined' && filterStatus === 'aktif' ? 'selected' : '' %>>Aktif</option>
+                        <option value="nonaktif" <%= typeof filterStatus !== 'undefined' && filterStatus === 'nonaktif' ? 'selected' : '' %>>Nonaktif</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="searchInput" placeholder="Cari nama area..." value="<%= typeof search !== 'undefined' ? search : '' %>">
+                </div>
+                <div class="ms-auto text-muted" style="font-size:0.8rem;">
+                    <%= areas.length %> dari <%= pagination.totalCount %> area
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="content-card-body">
+                <div class="table-responsive">
+                    <table class="table area-table mb-0" id="areasTable">
+                        <thead>
+                            <tr>
+                                <th style="width:50px">#</th>
+                                <th style="width:110px">Kode Area</th>
+                                <th>Nama Area</th>
+                                <th>Deskripsi</th>
+                                <th>Status</th>
+                                <th>Pelanggan</th>
+                                <th>Dibuat</th>
+                                <th style="width:120px; text-align:center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="areasTableBody">
+                            <% if (areas.length === 0) { %>
+                            <tr>
+                                <td colspan="8">
+                                    <div class="empty-state">
+                                        <i class="bi bi-geo-alt"></i>
+                                        <h5>Belum ada area</h5>
+                                        <p class="mb-3">Klik tombol "Tambah Area" untuk menambahkan area pertama.</p>
+                                        <button class="btn btn-primary btn-sm" onclick="openTambahModal()">
+                                            <i class="bi bi-plus-lg me-1"></i> Tambah Area
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <% } else { %>
+                            <% areas.forEach(function(area, idx) { %>
+                            <tr data-id="<%= area.id %>">
+                                <td class="text-muted" style="font-size:0.8rem;"><%= ((pagination.currentPage - 1) * pagination.limit) + idx + 1 %></td>
+                                <td>
+                                    <% if (area.kode_area) { %>
+                                    <span style="font-family: monospace; font-size: 0.78rem; font-weight: 700; background: rgba(37,99,235,0.1); color: #2563eb; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.05em;"><%= area.kode_area %></span>
+                                    <% } else { %>
+                                    <span class="text-muted" style="font-size:0.8rem; font-style:italic;">—</span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold"><%= area.nama_area %></div>
+                                </td>
+                                <td style="max-width:240px;">
+                                    <span class="text-muted" style="font-size:0.85rem;">
+                                        <%= area.deskripsi ? area.deskripsi : '—' %>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge-<%= area.status %>"><%= area.status === 'aktif' ? 'Aktif' : 'Nonaktif' %></span>
+                                </td>
+                                <td>
+                                    <span class="fw-semibold"><%= area.total_customers %></span>
+                                    <span class="text-muted ms-1" style="font-size:0.8rem;">pelanggan</span>
+                                </td>
+                                <td style="font-size:0.8rem; color: var(--text-tertiary, #64748b)">
+                                    <%= new Date(area.created_at).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' }) %>
+                                </td>
+                                <td style="text-align:center;">
+                                    <div class="d-flex gap-1 justify-content-center">
+                                        <button class="btn-icon btn-icon-edit" title="Edit"
+                                            data-id="<%= area.id %>"
+                                            data-nama="<%= area.nama_area.replace(/"/g, '&quot;') %>"
+                                            data-kode="<%= area.kode_area ? area.kode_area.replace(/"/g, '&quot;') : '' %>"
+                                            data-deskripsi="<%= area.deskripsi ? area.deskripsi.replace(/"/g, '&quot;') : '' %>"
+                                            data-status="<%= area.status %>"
+                                            onclick="openEditModalFromBtn(this)">
+                                            <i class="bi bi-pencil-fill"></i>
+                                        </button>
+                                        <button class="btn-icon btn-icon-toggle"
+                                            title="<%= area.status === 'aktif' ? 'Nonaktifkan' : 'Aktifkan' %>"
+                                            onclick="toggleStatus(<%= area.id %>, '<%= area.status %>')">
+                                            <i class="bi bi-<%= area.status === 'aktif' ? 'pause-fill' : 'play-fill' %>"></i>
+                                        </button>
+                                        <button class="btn-icon btn-icon-delete" title="Hapus"
+                                            data-id="<%= area.id %>"
+                                            data-nama="<%= area.nama_area.replace(/"/g, '&quot;') %>"
+                                            data-customers="<%= area.total_customers %>"
+                                            onclick="hapusAreaFromBtn(this)">
+                                            <i class="bi bi-trash3-fill"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <% }); %>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <% if (pagination.totalPages > 1) { %>
+            <div class="pagination-wrap">
+                <div class="pagination-info">
+                    Halaman <strong><%= pagination.currentPage %></strong> dari <strong><%= pagination.totalPages %></strong>
+                    &nbsp;·&nbsp; Total <strong><%= pagination.totalCount %></strong> area
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0" style="gap:4px;">
+                        <li class="page-item <%= pagination.currentPage <= 1 ? 'disabled' : '' %>">
+                            <a class="page-link" href="?page=<%= pagination.currentPage - 1 %>&limit=<%= pagination.limit %>&search=<%= encodeURIComponent(typeof search !== 'undefined' ? search : '') %>&status=<%= typeof filterStatus !== 'undefined' ? filterStatus : '' %>" style="border-radius:8px;">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                        <% for (var p = Math.max(1, pagination.currentPage - 2); p <= Math.min(pagination.totalPages, pagination.currentPage + 2); p++) { %>
+                        <li class="page-item <%= p === pagination.currentPage ? 'active' : '' %>">
+                            <a class="page-link" href="?page=<%= p %>&limit=<%= pagination.limit %>&search=<%= encodeURIComponent(typeof search !== 'undefined' ? search : '') %>&status=<%= typeof filterStatus !== 'undefined' ? filterStatus : '' %>" style="border-radius:8px;"><%= p %></a>
+                        </li>
+                        <% } %>
+                        <li class="page-item <%= pagination.currentPage >= pagination.totalPages ? 'disabled' : '' %>">
+                            <a class="page-link" href="?page=<%= pagination.currentPage + 1 %>&limit=<%= pagination.limit %>&search=<%= encodeURIComponent(typeof search !== 'undefined' ? search : '') %>&status=<%= typeof filterStatus !== 'undefined' ? filterStatus : '' %>" style="border-radius:8px;">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            <% } %>
+        </div><!-- end content-card -->
+
+    </main>
+</div>
+
+<!-- ===================== MODAL TAMBAH / EDIT ===================== -->
+<div class="modal-overlay" id="modalArea">
+    <div class="modal-box">
+        <div class="modal-box-header">
+            <h5 class="modal-box-title" id="modalAreaTitle"><i class="bi bi-geo-alt-fill me-2 text-primary"></i>Tambah Area</h5>
+            <button type="button" onclick="closeModal()" style="background:transparent;border:none;font-size:1.2rem;color:var(--text-tertiary,#64748b);cursor:pointer;">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="modal-box-body">
+            <input type="hidden" id="areaId">
+            <div class="form-group">
+                <label for="kodeAreaInput">Kode Area <span class="text-muted fst-italic" style="font-weight:400">(opsional, misal: KLM-01)</span></label>
+                <input type="text" id="kodeAreaInput" placeholder="Contoh: KLM-01, BRT-02, TGH-03..." maxlength="20" style="text-transform: uppercase; font-family: monospace; letter-spacing: 0.05em;">
+                <div class="form-error" id="errKodeArea">Kode area sudah digunakan</div>
+            </div>
+            <div class="form-group">
+                <label for="namaNareaInput">Nama Area <span class="text-danger">*</span></label>
+                <input type="text" id="namaNareaInput" placeholder="Contoh: Desa Makmur, RT 05 RW 02..." maxlength="100">
+                <div class="form-error" id="errNamaArea">Nama area tidak boleh kosong</div>
+            </div>
+            <div class="form-group">
+                <label for="deskripsiInput">Deskripsi <span class="text-muted fst-italic" style="font-weight:400">(opsional)</span></label>
+                <textarea id="deskripsiInput" placeholder="Keterangan tambahan tentang area ini..." rows="3" maxlength="500"></textarea>
+            </div>
+            <div class="form-group mb-0">
+                <label for="statusInput">Status</label>
+                <select id="statusInput">
+                    <option value="aktif">Aktif</option>
+                    <option value="nonaktif">Nonaktif</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-box-footer">
+            <button type="button" class="btn btn-light" onclick="closeModal()" style="border-radius:8px;">Batal</button>
+            <button type="button" class="btn btn-primary fw-semibold" id="btnSaveArea" onclick="saveArea()" style="border-radius:8px; min-width:100px;">
+                <i class="bi bi-check-lg me-1"></i> Simpan
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== MODAL KONFIRMASI HAPUS ===================== -->
+<div class="modal-overlay" id="modalHapus">
+    <div class="modal-box" style="max-width:420px;">
+        <div class="modal-box-header">
+            <h5 class="modal-box-title" style="color:#dc2626;"><i class="bi bi-exclamation-triangle-fill me-2"></i>Konfirmasi Hapus</h5>
+            <button type="button" onclick="closeHapusModal()" style="background:transparent;border:none;font-size:1.2rem;color:var(--text-tertiary,#64748b);cursor:pointer;">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="modal-box-body">
+            <p id="hapusText" style="color: var(--text-secondary, #334155)">Yakin ingin menghapus area ini?</p>
+            <div class="alert alert-warning d-none" id="hapusWarning" style="border-radius:10px; font-size:0.875rem;">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                <span id="hapusWarningText"></span>
+            </div>
+        </div>
+        <div class="modal-box-footer">
+            <button type="button" class="btn btn-light" onclick="closeHapusModal()" style="border-radius:8px;">Batal</button>
+            <button type="button" class="btn btn-danger fw-semibold" id="btnKonfirmasiHapus" style="border-radius:8px; min-width:100px;">
+                <i class="bi bi-trash3-fill me-1"></i> Hapus
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container-custom" id="toastContainer"></div>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>
+var currentDeleteId = null;
+
+// ===================== MODAL TAMBAH =====================
+function openTambahModal() {
+    document.getElementById('modalAreaTitle').innerHTML = '<i class="bi bi-geo-alt-fill me-2 text-primary"></i>Tambah Area Baru';
+    document.getElementById('areaId').value = '';
+    document.getElementById('kodeAreaInput').value = '';
+    document.getElementById('namaNareaInput').value = '';
+    document.getElementById('deskripsiInput').value = '';
+    document.getElementById('statusInput').value = 'aktif';
+    document.getElementById('errNamaArea').classList.remove('show');
+    document.getElementById('errKodeArea').classList.remove('show');
+    document.getElementById('modalArea').classList.add('show');
+    setTimeout(function() { document.getElementById('kodeAreaInput').focus(); }, 100);
+}
+
+document.getElementById('btnTambahArea').addEventListener('click', openTambahModal);
+
+// ===================== MODAL EDIT =====================
+function openEditModalFromBtn(btn) {
+    var id        = btn.getAttribute('data-id');
+    var nama      = btn.getAttribute('data-nama');
+    var kode      = btn.getAttribute('data-kode');
+    var deskripsi = btn.getAttribute('data-deskripsi');
+    var status    = btn.getAttribute('data-status');
+
+    document.getElementById('modalAreaTitle').innerHTML = '<i class="bi bi-pencil-fill me-2 text-primary"></i>Edit Area';
+    document.getElementById('areaId').value = id;
+    document.getElementById('kodeAreaInput').value = kode || '';
+    document.getElementById('namaNareaInput').value = nama;
+    document.getElementById('deskripsiInput').value = deskripsi;
+    document.getElementById('statusInput').value = status;
+    document.getElementById('errNamaArea').classList.remove('show');
+    document.getElementById('errKodeArea').classList.remove('show');
+    document.getElementById('modalArea').classList.add('show');
+    setTimeout(function() { document.getElementById('kodeAreaInput').focus(); }, 100);
+}
+
+function closeModal() {
+    document.getElementById('modalArea').classList.remove('show');
+}
+
+// ===================== SAVE AREA =====================
+async function saveArea() {
+    var id          = document.getElementById('areaId').value;
+    var kode_area   = document.getElementById('kodeAreaInput').value.trim().toUpperCase();
+    var nama_area   = document.getElementById('namaNareaInput').value.trim();
+    var deskripsi   = document.getElementById('deskripsiInput').value.trim();
+    var status      = document.getElementById('statusInput').value;
+
+    if (!nama_area) {
+        document.getElementById('errNamaArea').classList.add('show');
+        document.getElementById('namaNareaInput').focus();
+        return;
+    }
+    document.getElementById('errNamaArea').classList.remove('show');
+    document.getElementById('errKodeArea').classList.remove('show');
+
+    var btn = document.getElementById('btnSaveArea');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...';
+
+    try {
+        var apiUrl = id ? ('/admin/billing/areas/' + id) : '/admin/billing/areas';
+        var method  = id ? 'PUT' : 'POST';
+
+        var res  = await fetch(apiUrl, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kode_area: kode_area, nama_area: nama_area, deskripsi: deskripsi, status: status })
+        });
+        var data = await res.json();
+
+        if (data.success) {
+            showToast(id ? 'Area berhasil diperbarui!' : 'Area berhasil ditambahkan!', 'success');
+            closeModal();
+            // Bypass browser cache dengan object URL + random timestamp parameter
+            setTimeout(function() {
+                var url = new URL(window.location.href);
+                url.searchParams.set('_t', Date.now());
+                window.location.href = url.toString();
+            }, 500);
+        } else {
+            // Tampilkan error spesifik jika kode duplikat
+            if (data.message && data.message.toLowerCase().includes('kode area')) {
+                document.getElementById('errKodeArea').textContent = data.message;
+                document.getElementById('errKodeArea').classList.add('show');
+                document.getElementById('kodeAreaInput').focus();
+            } else {
+                showToast(data.message || 'Gagal menyimpan area.', 'error');
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Simpan';
+        }
+    } catch (e) {
+        showToast('Terjadi kesalahan koneksi.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Simpan';
+    }
+}
+
+// ===================== TOGGLE STATUS =====================
+async function toggleStatus(id, currentStatus) {
+    var newStatus = currentStatus === 'aktif' ? 'nonaktif' : 'aktif';
+    try {
+        var res  = await fetch('/admin/billing/areas/' + id + '/toggle-status', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        });
+        var data = await res.json();
+        if (data.success) {
+            showToast('Area berhasil di' + (newStatus === 'aktif' ? 'aktifkan' : 'nonaktifkan') + '!', 'success');
+            setTimeout(function() {
+                var url = new URL(window.location.href);
+                url.searchParams.set('_t', Date.now());
+                window.location.href = url.toString();
+            }, 500);
+        } else {
+            showToast(data.message || 'Gagal mengubah status.', 'error');
+        }
+    } catch (e) {
+        showToast('Terjadi kesalahan koneksi.', 'error');
+    }
+}
+
+// ===================== DELETE AREA =====================
+function hapusAreaFromBtn(btn) {
+    var id             = btn.getAttribute('data-id');
+    var nama           = btn.getAttribute('data-nama');
+    var totalCustomers = parseInt(btn.getAttribute('data-customers')) || 0;
+
+    currentDeleteId = id;
+    document.getElementById('hapusText').textContent = 'Yakin ingin menghapus area "' + nama + '"?';
+
+    var warn    = document.getElementById('hapusWarning');
+    var warnText = document.getElementById('hapusWarningText');
+    var btnHapus = document.getElementById('btnKonfirmasiHapus');
+
+    if (totalCustomers > 0) {
+        warn.classList.remove('d-none');
+        warnText.textContent = 'Area ini memiliki ' + totalCustomers + ' pelanggan. Area tidak dapat dihapus selama masih ada pelanggan terkait.';
+        btnHapus.disabled = true;
+        btnHapus.innerHTML = '<i class="bi bi-slash-circle me-1"></i> Tidak Bisa Dihapus';
+    } else {
+        warn.classList.add('d-none');
+        btnHapus.disabled = false;
+        btnHapus.innerHTML = '<i class="bi bi-trash3-fill me-1"></i> Hapus';
+    }
+
+    document.getElementById('modalHapus').classList.add('show');
+}
+
+document.getElementById('btnKonfirmasiHapus').addEventListener('click', async function() {
+    if (this.disabled || !currentDeleteId) return;
+    this.disabled = true;
+    this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menghapus...';
+
+    try {
+        var res  = await fetch('/admin/billing/areas/' + currentDeleteId, { method: 'DELETE' });
+        var data = await res.json();
+        if (data.success) {
+            showToast('Area berhasil dihapus!', 'success');
+            closeHapusModal();
+            setTimeout(function() {
+                var url = new URL(window.location.href);
+                url.searchParams.set('_t', Date.now());
+                window.location.href = url.toString();
+            }, 500);
+        } else {
+            showToast(data.message || 'Gagal menghapus area.', 'error');
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-trash3-fill me-1"></i> Hapus';
+        }
+    } catch (e) {
+        showToast('Terjadi kesalahan koneksi.', 'error');
+        this.disabled = false;
+        this.innerHTML = '<i class="bi bi-trash3-fill me-1"></i> Hapus';
+    }
+});
+
+function closeHapusModal() {
+    document.getElementById('modalHapus').classList.remove('show');
+    currentDeleteId = null;
+}
+
+// ===================== SEARCH & FILTER =====================
+var searchTimer;
+document.getElementById('searchInput').addEventListener('input', function() {
+    clearTimeout(searchTimer);
+    var q = this.value.trim();
+    searchTimer = setTimeout(function() {
+        var url = new URL(window.location.href);
+        url.searchParams.set('search', q);
+        url.searchParams.set('page', 1);
+        window.location.href = url.toString();
+    }, 500);
+});
+
+document.getElementById('filterStatus').addEventListener('change', function() {
+    var status = this.value;
+    var url = new URL(window.location.href);
+    url.searchParams.set('page', 1);
+    if (status) url.searchParams.set('status', status);
+    else url.searchParams.delete('status');
+    window.location.href = url.toString();
+});
+
+// Auto-uppercase untuk kode area
+document.getElementById('kodeAreaInput').addEventListener('input', function() {
+    var pos = this.selectionStart;
+    this.value = this.value.toUpperCase();
+    this.setSelectionRange(pos, pos);
+});
+
+// Close modals on overlay click
+document.getElementById('modalArea').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+document.getElementById('modalHapus').addEventListener('click', function(e) {
+    if (e.target === this) closeHapusModal();
+});
+
+// Enter key to save
+document.getElementById('namaNareaInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') saveArea();
+});
+
+// ===================== TOAST =====================
+function showToast(msg, type) {
+    type = type || 'success';
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast-item toast-' + type;
+    var icons = { success: 'check-circle-fill', error: 'exclamation-circle-fill', warning: 'exclamation-triangle-fill' };
+    toast.innerHTML = '<i class="bi bi-' + (icons[type] || 'info-circle-fill') + '"></i> ' + msg;
+    container.appendChild(toast);
+    setTimeout(function() {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(20px)';
+        toast.style.transition = '0.3s';
+        setTimeout(function() { toast.remove(); }, 300);
+    }, 3000);
+}
+</script>
+
+<%- include('../../partials/responsive-footer') %>
+</body>
+</html>

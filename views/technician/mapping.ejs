@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -675,7 +675,7 @@
             <%- include('../partials/technician-responsive-sidebar', { page: 'mapping', technician: technician }) %>
             <main class="col-md-10 ms-sm-auto main-content" style="min-height: 100vh;">
     <div class="header-nav">
-        <h1><i class="bx bx-map-marked-alt"></i> Network Mapping - Teknisi</h1>
+        <h1><i class="bi bi-map-marked-alt"></i> Network Mapping - Teknisi</h1>
     </div>
     <div class="map-container">
         <div id="loading" class="loading">
@@ -692,7 +692,7 @@
         <div class="row">
             <div class="col-md-6">
                 <div class="control-panel">
-                    <h5><i class="bx bx-layer-group me-2"></i>Layer Controls</h5>
+                    <h5><i class="bi bi-circle me-2"></i>Layer Controls</h5>
                     
                     <div class="form-check mb-2">
                         <input class="form-check-input" type="checkbox" id="odpLayer" checked>
@@ -735,7 +735,7 @@
             
             <div class="col-md-6">
                 <div class="stats-panel">
-                    <h5><i class="bx bx-bar-chart me-2"></i>Network Statistics</h5>
+                    <h5><i class="bi bi-bar-chart-steps me-2"></i>Network Statistics</h5>
                     
                     <div class="stat-item">
                                     <span class="stat-icon odp" style="font-size: 12px;">⚡</span>
@@ -774,10 +774,10 @@
     </div>
     <%- include('partials/mobile-navbar', { currentPage: 'mapping' }) %>
                 <button class="mobile-toggle" id="mobileToggle">
-                    <i class="bx bx-menu"></i>
+                    <i class="bi bi-list"></i>
                 </button>
                 <button class="mobile-layer-toggle" id="mobileLayerToggle">
-                    <i class="bx bx-layer"></i>
+                    <i class="bi bi-circle"></i>
                 </button>
                 <!-- Leaflet JS, Bootstrap JS, and scripts... -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1166,7 +1166,7 @@
                             className: cableStatus === 'connected' ? 'cable-line-connected' : 'cable-line-disconnected'
                         }).bindPopup(`
                             <div class="cable-popup">
-                                <h6><i class="bx bx-cable me-1"></i>${cable.name || 'Cable Route'}</h6>
+                                <h6><i class="bi bi-circle me-1"></i>${cable.name || 'Cable Route'}</h6>
                                 <p class="mb-1"><strong>Dari ODP:</strong> ${cable.from_odp || 'N/A'}</p>
                                 <p class="mb-1"><strong>Ke Customer:</strong> ${cable.to_customer || 'N/A'}</p>
                                 <p class="mb-1"><strong>Length:</strong> ${cable.length || 'N/A'} m</p>
@@ -1223,7 +1223,7 @@
                             className: backboneStatus === 'active' ? 'backbone-line-active' : 'backbone-line-inactive'
                         }).bindPopup(`
                             <div class="backbone-popup">
-                                <h6><i class="bx bx-network-chart me-1"></i>${backbone.name || 'Backbone Connection'}</h6>
+                                <h6><i class="bi bi-diagram-3-fill me-1"></i>${backbone.name || 'Backbone Connection'}</h6>
                                 <p class="mb-1"><strong>Dari ODP:</strong> ${backbone.from_odp || 'N/A'}</p>
                                 <p class="mb-1"><strong>Ke ODP:</strong> ${backbone.to_odp || 'N/A'}</p>
                                 <p class="mb-1"><strong>Length:</strong> ${backbone.length || 'N/A'} m</p>

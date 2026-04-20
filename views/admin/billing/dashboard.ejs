@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -608,7 +608,7 @@
             
             // Disable button dan show loading
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Memproses...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin me-1"></i>Memproses...';
             
             try {
                 const response = await fetch('/admin/billing/api/create-missing-voucher-invoices', {
@@ -647,7 +647,7 @@
             
             // Disable button dan show loading
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Memproses...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin me-1"></i>Memproses...';
             
             try {
                 const response = await fetch('/admin/billing/api/update-voucher-invoices', {
@@ -691,7 +691,7 @@
             
             // Disable button dan show loading
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Memproses...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin me-1"></i>Memproses...';
             
             try {
                 const response = await fetch('/admin/billing/api/cleanup-orphan-voucher-invoices', {
@@ -737,7 +737,7 @@
             
             // Disable button dan show loading
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Memperbaiki...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin me-1"></i>Memperbaiki...';
             
             try {
                 const response = await fetch('/admin/billing/api/cleanup-data', {
@@ -781,7 +781,7 @@
             
             // Disable button dan show loading
             btn.disabled = true;
-            btn.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Menghapus...';
+            btn.innerHTML = '<i class="bi bi-circle bx-spin me-1"></i>Menghapus...';
             
             try {
                 const response = await fetch('/admin/billing/api/voucher-cleanup', {

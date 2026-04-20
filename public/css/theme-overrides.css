@@ -168,8 +168,96 @@
 }
 
 /* ============================================================
-   DARK THEME — Eliminasi semua background putih
+   LIGHT MODE MODAL FIX — Cegah background transparan
    ============================================================ */
+
+/* Modal utama: background putih solid */
+:root .modal-content,
+[data-theme="light"] .modal-content {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #dee2e6 !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Modal header: background terang */
+:root .modal-header,
+[data-theme="light"] .modal-header {
+  background-color: #f8fafc !important;
+  border-bottom: 1px solid #dee2e6 !important;
+  color: #0f172a !important;
+}
+
+/* Modal body: pastikan putih solid, tidak transparan */
+:root .modal-body,
+[data-theme="light"] .modal-body {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Modal footer: terang */
+:root .modal-footer,
+[data-theme="light"] .modal-footer {
+  background-color: #f8fafc !important;
+  border-top: 1px solid #dee2e6 !important;
+}
+
+/* Tombol close di light mode — tidak perlu invert */
+:root .btn-close,
+[data-theme="light"] .btn-close {
+  filter: none !important;
+}
+
+/* Input di dalam modal di light mode */
+:root .modal-body .form-control,
+:root .modal-body .form-select,
+:root .modal-body textarea,
+:root .modal-body input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="light"] .modal-body .form-control,
+[data-theme="light"] .modal-body .form-select,
+[data-theme="light"] .modal-body textarea,
+[data-theme="light"] .modal-body input:not([type="checkbox"]):not([type="radio"]) {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Input group text di modal light mode */
+:root .modal-body .input-group-text,
+[data-theme="light"] .modal-body .input-group-text {
+  background-color: #f1f5f9 !important;
+  color: #374151 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Label dalam modal light mode */
+:root .modal-body label,
+:root .modal-body .form-label,
+[data-theme="light"] .modal-body label,
+[data-theme="light"] .modal-body .form-label {
+  color: #1e293b !important;
+}
+
+/* Modal title */
+:root .modal-title,
+[data-theme="light"] .modal-title {
+  color: #0f172a !important;
+}
+
+/* Select option di light mode modal */
+:root .modal-body select option,
+[data-theme="light"] .modal-body select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+/* Form text/hint di modal */
+:root .modal-body .form-text,
+[data-theme="light"] .modal-body .form-text {
+  color: #64748b !important;
+}
+
+
 
 /* Body & html */
 [data-theme="dark"] body,
@@ -511,11 +599,18 @@
   border-color: #334155 !important;
 }
 
-/* Toast/notifications */
-[data-theme="dark"] .toast {
+/* Toast/notifications - Preserve bootstrap contextual colors for toast */
+[data-theme="dark"] .toast:not(.bg-success):not(.bg-danger):not(.bg-info):not(.bg-warning) {
   background-color: #1e293b !important;
   border-color: #334155 !important;
   color: #f1f5f9 !important;
+}
+/* Ensure text inside contextual toasts is readable */
+[data-theme="dark"] .toast.bg-success, 
+[data-theme="dark"] .toast.bg-danger, 
+[data-theme="dark"] .toast.bg-info, 
+[data-theme="dark"] .toast.bg-warning {
+  color: #ffffff !important;
 }
 [data-theme="dark"] .toast-header {
   background-color: #243044 !important;
@@ -722,3 +817,9 @@
 [data-theme="dark"] #sidebarOverlay {
   background-color: rgba(0,0,0,0.7) !important;
 }
+
+/* SOLID TOAST BACKGROUNDS OVERRIDE */
+.toast.bg-success, [data-theme='dark'] .toast.bg-success { background-color: #198754 !important; color: #ffffff !important; opacity: 1 !important; border: none !important; }
+.toast.bg-danger, [data-theme='dark'] .toast.bg-danger { background-color: #dc3545 !important; color: #ffffff !important; opacity: 1 !important; border: none !important; }
+.toast.bg-info, [data-theme='dark'] .toast.bg-info { background-color: #0dcaf0 !important; color: #ffffff !important; opacity: 1 !important; border: none !important; }
+.toast.bg-warning, [data-theme='dark'] .toast.bg-warning { background-color: #ffc107 !important; color: #212529 !important; opacity: 1 !important; border: none !important; }
