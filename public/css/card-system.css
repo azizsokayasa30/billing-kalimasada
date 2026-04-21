@@ -8,18 +8,18 @@
 
 /* ─── CARD BASE (applies everywhere) ─────────────────────── */
 .card {
-  border-radius: 14px !important;
-  border: 1px solid var(--border) !important;
-  background: linear-gradient(135deg, var(--card-bg-start, var(--panel)), var(--card-bg-end, var(--panel-2))) !important;
+  border-radius: 12px !important;
+  border: none !important;
+  background: var(--card-bg-start, var(--panel)) !important;
   color: var(--text) !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04) !important;
-  transition: box-shadow 200ms ease, border-color 200ms ease !important;
+  box-shadow: 0 0 10px 0 rgba(100, 100, 100, 0.1) !important;
+  transition: transform 200ms ease, box-shadow 200ms ease !important;
   overflow: hidden;
 }
 
 .card:hover {
-  box-shadow: 0 8px 24px rgba(0,0,0,0.10), 0 4px 8px rgba(37,99,235,0.08) !important;
-  border-color: var(--primary-2, #3b82f6) !important;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.12) !important;
+  transform: translateY(-2px);
 }
 
 .card-header {
@@ -61,100 +61,85 @@
 
 /* ─── METRIC CARDS ────────────────────────────────────────── */
 .metric-card {
-  border-radius: 14px !important;
+  border-radius: 12px !important;
   padding: 16px 18px !important;
-  border: 1px solid var(--border) !important;
+  border: none !important;
   transition: all 200ms ease !important;
   position: relative !important;
   overflow: hidden !important;
-  color: var(--text) !important;
+  color: #ffffff !important;
+  background-size: cover;
 }
 
-/* Primary - Blue */
+/* Primary - Purple/Pink */
 .metric-card-primary {
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
-  border-color: #bfdbfe !important;
+  background: linear-gradient(to right, #da8cff, #9a55ff) !important;
 }
 [data-theme="dark"] .metric-card-primary {
-  background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%) !important;
-  border-color: #1d4ed8 !important;
+  background: linear-gradient(to right, #b46bd9, #7a35d9) !important;
 }
 
 /* Success - Green */
 .metric-card-success {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
-  border-color: #bbf7d0 !important;
+  background: linear-gradient(to right, #84d9d2, #07cdae) !important;
 }
 [data-theme="dark"] .metric-card-success {
-  background: linear-gradient(135deg, #052e16 0%, #14532d 100%) !important;
-  border-color: #166534 !important;
+  background: linear-gradient(to right, #64a9a2, #058d7e) !important;
 }
 
-/* Danger - Red */
+/* Danger - Orange/Red */
 .metric-card-danger {
-  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%) !important;
-  border-color: #fecdd3 !important;
+  background: linear-gradient(to right, #ffbf96, #fe7096) !important;
 }
 [data-theme="dark"] .metric-card-danger {
-  background: linear-gradient(135deg, #3b0008 0%, #7f1d1d 100%) !important;
-  border-color: #991b1b !important;
+  background: linear-gradient(to right, #d98f66, #d95066) !important;
 }
 
-/* Warning - Amber */
+/* Warning - Yellow/Gold */
 .metric-card-warning {
-  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important;
-  border-color: #fde68a !important;
+  background: linear-gradient(to right, #f6e384, #ffd500) !important;
 }
 [data-theme="dark"] .metric-card-warning {
-  background: linear-gradient(135deg, #2f1a00 0%, #78350f 100%) !important;
-  border-color: #92400e !important;
+  background: linear-gradient(to right, #c6b354, #d9ab00) !important;
 }
 
-/* Info - Indigo */
+/* Info - Blue */
 .metric-card-info {
-  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%) !important;
-  border-color: #c7d2fe !important;
+  background: linear-gradient(to right, #90caf9, #047edf) !important;
 }
 [data-theme="dark"] .metric-card-info {
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%) !important;
-  border-color: #3730a3 !important;
+  background: linear-gradient(to right, #609ad9, #025ebf) !important;
 }
 
 /* Pink */
 .metric-card-pink {
-  background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%) !important;
-  border-color: #fbcfe8 !important;
+  background: linear-gradient(to right, #fca5a5, #f43f5e) !important;
 }
 [data-theme="dark"] .metric-card-pink {
-  background: linear-gradient(135deg, #3b0032 0%, #831843 100%) !important;
-  border-color: #9d174d !important;
+  background: linear-gradient(to right, #dc8585, #d41f3e) !important;
 }
 
 /* Secondary - Slate */
 .metric-card-secondary {
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
-  border-color: #e2e8f0 !important;
+  background: linear-gradient(to right, #94a3b8, #64748b) !important;
 }
 [data-theme="dark"] .metric-card-secondary {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
-  border-color: #334155 !important;
+  background: linear-gradient(to right, #64748b, #475569) !important;
 }
 
 /* Icons within metric cards */
-.metric-card-primary .metric-card-icon   { background: rgba(37,99,235,0.15) !important;  color: #1d4ed8 !important; }
-.metric-card-success .metric-card-icon   { background: rgba(16,185,129,0.15) !important; color: #059669 !important; }
-.metric-card-danger .metric-card-icon    { background: rgba(239,68,68,0.15) !important;  color: #dc2626 !important; }
-.metric-card-warning .metric-card-icon   { background: rgba(245,158,11,0.15) !important; color: #d97706 !important; }
-.metric-card-info .metric-card-icon      { background: rgba(99,102,241,0.15) !important; color: #4f46e5 !important; }
-.metric-card-pink .metric-card-icon      { background: rgba(219,39,119,0.15) !important; color: #be185d !important; }
-.metric-card-secondary .metric-card-icon { background: rgba(100,116,139,0.12) !important;color: #475569 !important; }
+.metric-card .metric-card-icon { 
+  background: rgba(255,255,255,0.2) !important;  
+  color: #ffffff !important; 
+}
 
-[data-theme="dark"] .metric-card-primary .metric-card-icon   { background: rgba(96,165,250,0.2) !important;  color: #93c5fd !important; }
-[data-theme="dark"] .metric-card-success .metric-card-icon   { background: rgba(52,211,153,0.2) !important; color: #6ee7b7 !important; }
-[data-theme="dark"] .metric-card-danger .metric-card-icon    { background: rgba(248,113,113,0.2) !important; color: #fca5a5 !important; }
-[data-theme="dark"] .metric-card-warning .metric-card-icon   { background: rgba(251,191,36,0.2) !important; color: #fde68a !important; }
-[data-theme="dark"] .metric-card-info .metric-card-icon      { background: rgba(165,180,252,0.2) !important; color: #c7d2fe !important; }
-[data-theme="dark"] .metric-card-pink .metric-card-icon      { background: rgba(249,168,212,0.2) !important; color: #fbcfe8 !important; }
+/* Force white text everywhere inside vibrant gradient cards */
+.metric-card .metric-card-value, 
+.metric-card .metric-card-label,
+.metric-card h1, .metric-card h2, .metric-card h3, .metric-card h4, .metric-card h5, .metric-card h6,
+.metric-card p, .metric-card strong, .metric-card .text-muted, .metric-card small {
+  color: #ffffff !important;
+}
 
 /* ─── CARD TYPOGRAPHY (global high contrast) ─────────────── */
 .card .card-title,
@@ -293,67 +278,40 @@
   .card-blue  .card-green  .card-red  .card-amber  .card-purple .card-teal
 */
 
-.card-blue {
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
-  border-color: #93c5fd !important;
+.card-purple, .card-primary {
+  background: linear-gradient(to right, #da8cff, #9a55ff) !important;
+  color: #ffffff !important;
+  border: none !important;
 }
-[data-theme="dark"] .card-blue {
-  background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%) !important;
-  border-color: #2563eb !important;
+.card-green, .card-success {
+  background: linear-gradient(to right, #84d9d2, #07cdae) !important;
+  color: #ffffff !important;
+  border: none !important;
 }
-
-.card-green {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
-  border-color: #86efac !important;
+.card-red, .card-danger {
+  background: linear-gradient(to right, #ffbf96, #fe7096) !important;
+  color: #ffffff !important;
+  border: none !important;
 }
-[data-theme="dark"] .card-green {
-  background: linear-gradient(135deg, #052e16 0%, #166534 100%) !important;
-  border-color: #16a34a !important;
+.card-amber, .card-warning {
+  background: linear-gradient(to right, #f6e384, #ffd500) !important;
+  color: #ffffff !important;
+  border: none !important;
 }
-
-.card-red {
-  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%) !important;
-  border-color: #fca5a5 !important;
+.card-blue, .card-info, .card-indigo {
+  background: linear-gradient(to right, #90caf9, #047edf) !important;
+  color: #ffffff !important;
+  border: none !important;
 }
-[data-theme="dark"] .card-red {
-  background: linear-gradient(135deg, #3b0008 0%, #991b1b 100%) !important;
-  border-color: #dc2626 !important;
-}
-
-.card-amber {
-  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important;
-  border-color: #fcd34d !important;
-}
-[data-theme="dark"] .card-amber {
-  background: linear-gradient(135deg, #2f1a00 0%, #92400e 100%) !important;
-  border-color: #b45309 !important;
-}
-
-.card-purple {
-  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%) !important;
-  border-color: #d8b4fe !important;
-}
-[data-theme="dark"] .card-purple {
-  background: linear-gradient(135deg, #2e1065 0%, #4c1d95 100%) !important;
-  border-color: #6d28d9 !important;
-}
-
 .card-teal {
-  background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%) !important;
-  border-color: #5eead4 !important;
-}
-[data-theme="dark"] .card-teal {
-  background: linear-gradient(135deg, #022c22 0%, #134e4a 100%) !important;
-  border-color: #0f766e !important;
+  background: linear-gradient(to right, #4facfe, #00f2fe) !important;
+  color: #ffffff !important;
+  border: none !important;
 }
 
-.card-indigo {
-  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%) !important;
-  border-color: #a5b4fc !important;
-}
-[data-theme="dark"] .card-indigo {
-  background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 100%) !important;
-  border-color: #4338ca !important;
+[class*="card-"] h1, [class*="card-"] h2, [class*="card-"] h3, 
+[class*="card-"] p, [class*="card-"] small, [class*="card-"] span, [class*="card-"] div {
+  color: #ffffff !important;
 }
 
 /* ─── ICON WRAPPERS INSIDE CARDS ─────────────────────────── */

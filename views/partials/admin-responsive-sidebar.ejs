@@ -268,7 +268,7 @@
         <div class="sb-section-divider"></div>
 
         <!-- PELANGGAN BILLING -->
-        <% const billingCustomerPages = ['customers', 'packages', 'member-data', 'member-packages', 'areas', 'collector-areas']; %>
+        <% const billingCustomerPages = ['customers', 'packages', 'member-data', 'member-packages', 'areas', 'collector-areas', 'service-suspension']; %>
         <% const billingCustomerExpanded = typeof page !== 'undefined' && billingCustomerPages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -305,6 +305,10 @@
                 <a href="/admin/member/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'member-packages' ? 'active' : '' %>">
                     <i class="bi bi-box-seam"></i>
                     <span class="sb-item-text">Paket Member</span>
+                </a>
+                <a href="/admin/billing/service-suspension" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'service-suspension' ? 'active' : '' %>">
+                    <i class="bi bi-pause-circle"></i>
+                    <span class="sb-item-text">Penangguhan Layanan</span>
                 </a>
             </div>
         </div>
@@ -344,7 +348,7 @@
         </div>
 
         <!-- KEUANGAN -->
-        <% const financePages = ['payments', 'all-payments', 'collectors', 'collector-reports', 'collector-remittance', 'financial-report', 'report-voucher', 'report-pppoe', 'reports', 'expenses', 'income']; %>
+        <% const financePages = ['all-payments', 'collectors', 'collector-reports', 'collector-remittance', 'financial-report', 'report-voucher', 'report-pppoe', 'reports', 'expenses', 'income']; %>
         <% const financeExpanded = typeof page !== 'undefined' && financePages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -358,17 +362,13 @@
                 <i class="bi <%= financeExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
             </div>
             <div class="collapse <%= financeExpanded ? 'show' : '' %>" id="billingFinanceCollapse">
-                <a href="/admin/billing/payments" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'payments' ? 'active' : '' %>">
-                    <i class="bi bi-person-check"></i>
-                    <span class="sb-item-text">Transaksi Kolektor</span>
-                </a>
                 <a href="/admin/billing/all-payments" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'all-payments' ? 'active' : '' %>">
                     <i class="bi bi-credit-card"></i>
                     <span class="sb-item-text">Riwayat Pembayaran</span>
                 </a>
                 <a href="/admin/collectors" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collectors' ? 'active' : '' %>">
                     <i class="bi bi-people"></i>
-                    <span class="sb-item-text">Tukang Tagih</span>
+                    <span class="sb-item-text">Tim Kolektor</span>
                 </a>
                 <a href="/admin/billing/collector-reports" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-reports' ? 'active' : '' %>">
                     <i class="bi bi-bar-chart"></i>
@@ -406,7 +406,7 @@
         </div>
 
         <!-- SETTINGAN BILLING -->
-        <% const billingSettingPages = ['payment-settings', 'whatsapp-settings', 'email-settings', 'service-suspension', 'mapping-new', 'genieacs']; %>
+        <% const billingSettingPages = ['payment-settings', 'whatsapp-settings', 'email-settings', 'mapping-new', 'genieacs']; %>
         <% const billingSettingExpanded = typeof page !== 'undefined' && billingSettingPages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -431,10 +431,6 @@
                 <a href="/admin/billing/email-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'email-settings' ? 'active' : '' %>">
                     <i class="bi bi-envelope"></i>
                     <span class="sb-item-text">Pengaturan Email</span>
-                </a>
-                <a href="/admin/billing/service-suspension" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'service-suspension' ? 'active' : '' %>">
-                    <i class="bi bi-pause-circle"></i>
-                    <span class="sb-item-text">Penangguhan Layanan</span>
                 </a>
                 <a href="/admin/billing/mapping-new" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'mapping-new' ? 'active' : '' %>">
                     <i class="bi bi-map"></i>

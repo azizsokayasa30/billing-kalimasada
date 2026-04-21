@@ -653,30 +653,24 @@
             <!-- GENIEACS CARDS: Statistik -->
             <div class="row mb-4">
               <div class="col-md-4 mb-3">
-                <div class="card text-bg-primary">
-                  <div class="card-body text-center">
-                    <i class="bi bi-hdd-network fs-2 mb-2"></i>
-                    <div class="fw-bold">Total Device GenieACS</div>
-                    <div class="fs-3" id="genieacs-total"><%= typeof genieacsTotal !== 'undefined' ? genieacsTotal : '-' %></div>
-                  </div>
+                <div class="metric-card metric-card-primary text-center shadow-sm">
+                  <i class="bi bi-hdd-network fs-2 mb-2 metric-card-icon" style="padding: 10px; border-radius: 12px; display: inline-block;"></i>
+                  <div class="metric-card-label mt-2">Total Device GenieACS</div>
+                  <div class="metric-card-value" id="genieacs-total"><%= typeof genieacsTotal !== 'undefined' ? genieacsTotal : '-' %></div>
                 </div>
               </div>
               <div class="col-md-4 mb-3">
-                <div class="card text-bg-success">
-                  <div class="card-body text-center">
-                    <i class="bi bi-wifi fs-2 mb-2"></i>
-                    <div class="fw-bold">Device Online</div>
-                    <div class="fs-3" id="genieacs-online"><%= typeof genieacsOnline !== 'undefined' ? genieacsOnline : '-' %></div>
-                  </div>
+                <div class="metric-card metric-card-success text-center shadow-sm">
+                  <i class="bi bi-wifi fs-2 mb-2 metric-card-icon" style="padding: 10px; border-radius: 12px; display: inline-block;"></i>
+                  <div class="metric-card-label mt-2">Device Online</div>
+                  <div class="metric-card-value" id="genieacs-online"><%= typeof genieacsOnline !== 'undefined' ? genieacsOnline : '-' %></div>
                 </div>
               </div>
               <div class="col-md-4 mb-3">
-                <div class="card text-bg-danger">
-                  <div class="card-body text-center">
-                    <i class="bi bi-wifi-off fs-2 mb-2"></i>
-                    <div class="fw-bold">Device Offline</div>
-                    <div class="fs-3" id="genieacs-offline"><%= typeof genieacsOffline !== 'undefined' ? genieacsOffline : '-' %></div>
-                  </div>
+                <div class="metric-card metric-card-danger text-center shadow-sm">
+                  <i class="bi bi-wifi-off fs-2 mb-2 metric-card-icon" style="padding: 10px; border-radius: 12px; display: inline-block;"></i>
+                  <div class="metric-card-label mt-2">Device Offline</div>
+                  <div class="metric-card-value" id="genieacs-offline"><%= typeof genieacsOffline !== 'undefined' ? genieacsOffline : '-' %></div>
                 </div>
               </div>
             </div>

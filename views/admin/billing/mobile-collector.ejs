@@ -388,7 +388,7 @@
                             </div>
                             <div class="info-item">
                                 <i class="bi bi-percent"></i>
-                                Komisi: <%= collector.commission_rate || 5 %>% 
+                                Komisi: <%= collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5 %>% 
                             </div>
                             <div class="info-item">
                                 <i class="bi bi-calendar"></i>

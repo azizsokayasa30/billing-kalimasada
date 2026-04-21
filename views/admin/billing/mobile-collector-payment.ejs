@@ -145,7 +145,7 @@
                         <% if (collectors && collectors.length > 0) { %>
                             <% collectors.forEach(function(collector) { %>
                                 <option value="<%= collector.id %>" 
-                                        data-commission="<%= collector.commission_rate || 5 %>">
+                                        data-commission="<%= collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5 %>">
                                     <%= collector.name %> - <%= collector.phone %>
                                 </option>
                             <% }); %>
@@ -373,7 +373,8 @@
             const paymentAmount = parseFloat(document.getElementById('paymentAmount').value) || 0;
             
             if (collectorSelect.value) {
-                const commissionRate = parseFloat(collectorSelect.selectedOptions[0].dataset.commission) || 5;
+                let commissionRate = parseFloat(collectorSelect.selectedOptions[0].dataset.commission);
+                if (isNaN(commissionRate)) commissionRate = 5;
                 const commission = (paymentAmount * commissionRate) / 100;
                 
                 document.getElementById('commissionAmount').textContent = 

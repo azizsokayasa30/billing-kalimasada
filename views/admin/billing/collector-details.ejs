@@ -167,7 +167,7 @@
                             </div>
                             <div class="meta-item">
                                 <i class="bi bi-percent"></i>
-                                Komisi: <strong><%= collector.commission_rate || 5 %>%</strong>
+                                Komisi: <strong><%= collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5 %>%</strong>
                             </div>
                         </div>
                     </div>
@@ -177,39 +177,39 @@
                 <div class="f-grid">
                     <div class="f-stat-card">
                         <div class="f-stat-header">
-                            <span class="f-stat-label">Total Transaksi</span>
+                            <span class="f-stat-label">Total Tagihan Area</span>
                             <div class="f-stat-icon-wrapper bg-primary-glow">
                                 <i class="bi bi-receipt"></i>
                             </div>
                         </div>
-                        <div class="f-stat-value f-premium-text"><%= stats.total_payments || 0 %></div>
+                        <div class="f-stat-value f-premium-text">Rp <%= (stats.total_tagihan_area || 0).toLocaleString('id-ID') %></div>
                     </div>
                     <div class="f-stat-card">
                         <div class="f-stat-header">
-                            <span class="f-stat-label">Total Penagihan</span>
+                            <span class="f-stat-label">Total Lunas</span>
                             <div class="f-stat-icon-wrapper bg-success-glow">
-                                <i class="bi bi-cash-stack"></i>
+                                <i class="bi bi-check-circle"></i>
                             </div>
                         </div>
-                        <div class="f-stat-value f-premium-text text-success">Rp <%= (stats.total_payment_amount || 0).toLocaleString('id-ID') %></div>
+                        <div class="f-stat-value f-premium-text text-success">Rp <%= (stats.total_lunas_area || 0).toLocaleString('id-ID') %></div>
+                    </div>
+                    <div class="f-stat-card">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Belum Lunas</span>
+                            <div class="f-stat-icon-wrapper bg-warning-glow">
+                                <i class="bi bi-clock-history"></i>
+                            </div>
+                        </div>
+                        <div class="f-stat-value f-premium-text text-warning" style="font-size: 1.5rem;">Rp <%= (stats.total_belum_lunas_amount || 0).toLocaleString('id-ID') %> <small style="font-size: 0.8rem;">(<%= stats.total_belum_lunas_count || 0 %> tgihn)</small></div>
                     </div>
                     <div class="f-stat-card">
                         <div class="f-stat-header">
                             <span class="f-stat-label">Total Komisi</span>
-                            <div class="f-stat-icon-wrapper bg-warning-glow">
-                                <i class="bi bi-piggy-bank"></i>
-                            </div>
-                        </div>
-                        <div class="f-stat-value f-premium-text text-warning">Rp <%= (stats.total_commission || 0).toLocaleString('id-ID') %></div>
-                    </div>
-                    <div class="f-stat-card">
-                        <div class="f-stat-header">
-                            <span class="f-stat-label">Bersih ke Kantor</span>
                             <div class="f-stat-icon-wrapper bg-info-glow">
-                                <i class="bi bi-wallet2"></i>
+                                <i class="bi bi-cash-stack"></i>
                             </div>
                         </div>
-                        <div class="f-stat-value f-premium-text text-info">Rp <%= (stats.total_setoran || 0).toLocaleString('id-ID') %></div>
+                        <div class="f-stat-value f-premium-text text-info">Rp <%= (stats.total_komisi || 0).toLocaleString('id-ID') %></div>
                     </div>
                 </div>
 
@@ -222,12 +222,22 @@
                             </div>
                             <div class="f-card-body">
                                 <div class="mb-3">
-                                    <label class="f-label">Dari Tanggal</label>
-                                    <input type="date" class="f-control" id="dateFrom" value="<%= filters.dateFrom %>">
+                                    <label class="f-label">Bulan</label>
+                                    <select class="f-select" id="monthFilter">
+                                        <% const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']; %>
+                                        <% for(let m=1; m<=12; m++) { %>
+                                            <option value="<%= m %>" <%= filters.month == m ? 'selected' : '' %>><%= months[m-1] %></option>
+                                        <% } %>
+                                    </select>
                                 </div>
                                 <div class="mb-4">
-                                    <label class="f-label">Sampai Tanggal</label>
-                                    <input type="date" class="f-control" id="dateTo" value="<%= filters.dateTo %>">
+                                    <label class="f-label">Tahun</label>
+                                    <select class="f-select" id="yearFilter">
+                                        <% const currY = new Date().getFullYear(); %>
+                                        <% for(let y=currY-3; y<=currY+1; y++) { %>
+                                            <option value="<%= y %>" <%= filters.year == y ? 'selected' : '' %>><%= y %></option>
+                                        <% } %>
+                                    </select>
                                 </div>
                                 <button class="f-btn f-btn-primary w-100" onclick="applyFilters()">
                                     <i class="bi bi-search me-2"></i>Terapkan
@@ -306,12 +316,12 @@
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
         function applyFilters() {
-            const dateFrom = document.getElementById('dateFrom').value;
-            const dateTo = document.getElementById('dateTo').value;
+            const month = document.getElementById('monthFilter').value;
+            const year = document.getElementById('yearFilter').value;
             
             const params = new URLSearchParams();
-            if (dateFrom) params.append('dateFrom', dateFrom);
-            if (dateTo) params.append('dateTo', dateTo);
+            if (month) params.append('month', month);
+            if (year) params.append('year', year);
             
             window.location.href = `/admin/billing/collector-details/<%= collector.id %>?${params.toString()}`;
         }
@@ -321,12 +331,12 @@
         }
         
         function exportCollectorDetails() {
-            const dateFrom = document.getElementById('dateFrom').value;
-            const dateTo = document.getElementById('dateTo').value;
+            const month = document.getElementById('monthFilter').value;
+            const year = document.getElementById('yearFilter').value;
             
             const params = new URLSearchParams();
-            if (dateFrom) params.append('dateFrom', dateFrom);
-            if (dateTo) params.append('dateTo', dateTo);
+            if (month) params.append('month', month);
+            if (year) params.append('year', year);
             
             window.location.href = `/admin/billing/collector-details/<%= collector.id %>/export?${params.toString()}`;
         }

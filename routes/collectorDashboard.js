@@ -13,6 +13,30 @@ const { collectorAuth } = require('./collectorAuth');
 const billingManager = require('../config/billing');
 const serviceSuspension = require('../config/serviceSuspension');
 const whatsappNotifications = require('../config/whatsapp-notifications');
+const fs = require('fs');
+const multer = require('multer');
+
+// Pastikan direktori upload ada
+const uploadDir = path.join(__dirname, '../public/uploads/payments');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname) || '.jpg';
+        cb(null, 'proof-' + uniqueSuffix + ext);
+    }
+});
+
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 2.5 * 1024 * 1024 } // Batas server 2.5 MB, kompresi di-handle client-side
+});
 
 // Dashboard
 router.get('/dashboard', collectorAuth, async (req, res) => {
@@ -32,29 +56,20 @@ router.get('/dashboard', collectorAuth, async (req, res) => {
         // Validasi dan format data collector
         const validCollector = {
             ...collector,
-            commission_rate: Math.max(0, Math.min(100, parseFloat(collector.commission_rate || 5))), // Pastikan 0-100%
+            commission_rate: Math.max(0, Math.min(100, parseFloat(collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5))), // Pastikan 0-100%
             name: collector.name || 'Unknown Collector',
             phone: collector.phone || '',
             status: collector.status || 'active'
         };
+        // Tangkap filter bulan dan tahun dari query
+        const month = req.query.month || '';
+        const year = req.query.year || '';
+
+        // Dapatkan semua 6 statistik dalam satu langkah (sudah mendukung filter waktu)
+        const dashboardStats = await billingManager.getCollectorDashboardStats(collectorId, month, year);
         
-        // Get statistics menggunakan BillingManager
-        const today = new Date();
-        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-        
-        const [todayPayments, totalCommission, totalPayments, recentPayments, totalAssignedCustomers] = await Promise.all([
-            // Today's payments - menggunakan data real dari database
-            billingManager.getCollectorTodayPayments(collectorId, startOfDay, endOfDay),
-            // Total commission - menggunakan data real dari database
-            billingManager.getCollectorTotalCommission(collectorId),
-            // Total payments count - menggunakan data real dari database
-            billingManager.getCollectorTotalPayments(collectorId),
-            // Recent payments - menggunakan data real dari database
-            billingManager.getCollectorRecentPayments(collectorId, 5),
-            // Total assigned customers
-            billingManager.getCollectorAssignedCustomerCount(collectorId)
-        ]);
+        // Panggil payment terbaru
+        const recentPayments = await billingManager.getCollectorRecentPayments(collectorId, 5);
         
         const appSettings = await getAppSettings();
         
@@ -62,13 +77,9 @@ router.get('/dashboard', collectorAuth, async (req, res) => {
             title: 'Dashboard Tukang Tagih',
             appSettings: appSettings,
             collector: collector,
-            statistics: {
-                todayPayments: todayPayments,
-                totalCommission: totalCommission,
-                totalPayments: totalPayments,
-                totalAssignedCustomers: totalAssignedCustomers
-            },
-            recentPayments: recentPayments
+            statistics: dashboardStats,
+            recentPayments: recentPayments,
+            filters: { month, year }
         });
         
     } catch (error) {
@@ -96,12 +107,12 @@ router.get('/payment', collectorAuth, async (req, res) => {
         const appSettings = await getAppSettings();
         const collector = req.collector;
         
-        // Get active assigned customers
+        // Get active assigned customers using collector_areas
         const customers = await new Promise((resolve, reject) => {
             const sql = `
                 SELECT c.* 
                 FROM customers c 
-                INNER JOIN collector_assignments ca ON ca.customer_id = c.id 
+                INNER JOIN collector_areas ca ON c.area = ca.area 
                 WHERE ca.collector_id = ? AND c.status = 'active' 
                 ORDER BY c.name
             `;
@@ -427,10 +438,14 @@ router.post('/api/profile/update-password', collectorAuth, async (req, res) => {
 });
 
 // Submit payment
-router.post('/api/payment', collectorAuth, async (req, res) => {
+router.post('/api/payment', collectorAuth, upload.single('payment_proof'), async (req, res) => {
     try {
         const collectorId = req.collector.id;
         const { customer_id, payment_amount, payment_method, notes, invoice_ids } = req.body;
+        
+        // Simpan path foto bukti transfer jika ada upload
+        const paymentProof = req.file ? '/uploads/payments/' + req.file.filename : null;
+
 
         // Normalize values
         const paymentAmountNum = Number(payment_amount);
@@ -481,7 +496,7 @@ router.post('/api/payment', collectorAuth, async (req, res) => {
             });
         }
         
-        const commissionRate = collector.commission_rate || 5;
+        const commissionRate = collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5;
         
         // Validasi commission rate
         if (commissionRate < 0 || commissionRate > 100) {
@@ -504,6 +519,20 @@ router.post('/api/payment', collectorAuth, async (req, res) => {
             notes: notes,
             status: 'completed'
         });
+        
+        // Update the payment record with the image path manually 
+        // since recordCollectorPaymentRecord might not support payment_proof field out of the box
+        if (paymentId && paymentProof) {
+            const dbPath = path.join(__dirname, '../data/billing.db');
+            const db = new sqlite3.Database(dbPath);
+            await new Promise((resolve, reject) => {
+                db.run('UPDATE payments SET payment_proof = ? WHERE id = ?', [paymentProof, paymentId], (err) => {
+                    db.close();
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+        }
         
         let lastPaymentId = null;
 

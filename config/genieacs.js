@@ -13,7 +13,7 @@ async function getGenieacsServerForCustomer(customer) {
         try {
             const dbPath = path.join(__dirname, '../data/billing.db');
             const db = new sqlite3.Database(dbPath);
-            
+
             // Customer harus punya id untuk lookup mapping
             if (!customer || !customer.id) {
                 db.close();
@@ -21,10 +21,10 @@ async function getGenieacsServerForCustomer(customer) {
                 resolve(null);
                 return;
             }
-            
+
             // Cek router_id langsung di customer (jika ada) atau dari customer_router_map
             let routerId = customer.router_id;
-            
+
             // Jika tidak ada router_id langsung, ambil dari customer_router_map
             if (!routerId) {
                 db.get(`SELECT router_id FROM customer_router_map WHERE customer_id = ?`, [customer.id], (err, mapRow) => {
@@ -34,16 +34,16 @@ async function getGenieacsServerForCustomer(customer) {
                         resolve(null);
                         return;
                     }
-                    
+
                     routerId = mapRow ? mapRow.router_id : null;
-                    
+
                     if (!routerId) {
                         db.close();
                         console.log(`⚠️ Customer ${customer.id} tidak memiliki router mapping`);
                         resolve(null);
                         return;
                     }
-                    
+
                     // Ambil GenieACS server dari router
                     db.get(`
                         SELECT g.* FROM genieacs_servers g
@@ -91,7 +91,7 @@ async function getGenieacsServerForCustomer(customer) {
 // Helper untuk membuat axios instance dinamis dengan server tertentu
 function getAxiosInstance(genieacsServer = null) {
     let GENIEACS_URL, GENIEACS_USERNAME, GENIEACS_PASSWORD;
-    
+
     if (genieacsServer) {
         // Gunakan server yang spesifik
         GENIEACS_URL = genieacsServer.url;
@@ -103,19 +103,19 @@ function getAxiosInstance(genieacsServer = null) {
         GENIEACS_USERNAME = getSetting('genieacs_username', 'acs');
         GENIEACS_PASSWORD = getSetting('genieacs_password', '');
     }
-    
+
     // Validasi URL
     if (!GENIEACS_URL || typeof GENIEACS_URL !== 'string' || GENIEACS_URL.trim() === '') {
         throw new Error('GenieACS URL tidak dikonfigurasi atau tidak valid. Silakan konfigurasi GenieACS URL di Settings atau tambahkan GenieACS Server di /admin/genieacs-setting');
     }
-    
+
     // Validasi format URL
     try {
         new URL(GENIEACS_URL);
     } catch (e) {
         throw new Error(`Format GenieACS URL tidak valid: ${GENIEACS_URL}. URL harus lengkap dengan protocol (http:// atau https://)`);
     }
-    
+
     return axios.create({
         baseURL: GENIEACS_URL,
         auth: {
@@ -137,24 +137,24 @@ const genieacsApi = {
             // Check cache first
             const cacheKey = 'genieacs:devices';
             const cachedData = cacheManager.get(cacheKey);
-            
+
             if (cachedData) {
                 console.log(`✅ Using cached devices data (${cachedData.length} devices)`);
                 return cachedData;
             }
 
             console.log('🔍 Fetching devices from GenieACS API...');
-            
+
             try {
                 const axiosInstance = getAxiosInstance();
                 const response = await axiosInstance.get('/devices');
                 const devices = response.data || [];
-                
+
                 console.log(`✅ Found ${devices.length} devices from API`);
-                
+
                 // Cache the response for 2 minutes
                 cacheManager.set(cacheKey, devices, 2 * 60 * 1000);
-                
+
                 return devices;
             } catch (urlError) {
                 // Jika error karena URL tidak valid atau tidak dikonfigurasi
@@ -175,12 +175,12 @@ const genieacsApi = {
     async findDeviceByPhoneNumber(phoneNumber) {
         try {
             console.log(`🔍 [FIND_DEVICE] Searching for device with phone number: ${phoneNumber}`);
-            
+
             // Cari customer untuk mendapatkan GenieACS server yang tepat
             let genieacsServer = null;
             let customer = null;
             try {
-                const { billingManager } = require('./billing');
+                const billingManager = require('./billing');
                 customer = await billingManager.getCustomerByPhone(phoneNumber);
                 if (customer) {
                     console.log(`✅ Customer found: ${customer.name} (ID: ${customer.id})`);
@@ -189,28 +189,28 @@ const genieacsApi = {
             } catch (billingError) {
                 console.error(`Error finding customer for phone ${phoneNumber}:`, billingError.message);
             }
-            
+
             const axiosInstance = getAxiosInstance(genieacsServer);
-            
+
             // Bersihkan nomor dari karakter non-digit
             let cleanNumber = phoneNumber.replace(/\D/g, '');
-            
+
             // Format nomor dalam beberapa variasi yang mungkin digunakan sebagai tag
             const possibleFormats = [];
-            
+
             // Format 1: Nomor asli yang dibersihkan
             possibleFormats.push(cleanNumber);
-            
+
             // Format 2: Jika diawali 0, coba versi dengan 62 di depan (ganti 0 dengan 62)
             if (cleanNumber.startsWith('0')) {
                 possibleFormats.push('62' + cleanNumber.substring(1));
             }
-            
+
             // Format 3: Jika diawali 62, coba versi dengan 0 di depan (ganti 62 dengan 0)
             if (cleanNumber.startsWith('62')) {
                 possibleFormats.push('0' + cleanNumber.substring(2));
             }
-            
+
             // Format 4: Tanpa awalan, jika ada awalan
             if (cleanNumber.startsWith('0') || cleanNumber.startsWith('62')) {
                 if (cleanNumber.startsWith('0')) {
@@ -219,15 +219,15 @@ const genieacsApi = {
                     possibleFormats.push(cleanNumber.substring(2));
                 }
             }
-            
+
             // Format 5: Dengan prefix +62
             if (!cleanNumber.startsWith('62') && !cleanNumber.startsWith('0')) {
                 possibleFormats.push('62' + cleanNumber);
                 possibleFormats.push('0' + cleanNumber);
             }
-            
+
             console.log(`📋 [FIND_DEVICE] Trying formats: ${possibleFormats.join(', ')}`);
-            
+
             // Coba cari dengan semua format yang mungkin
             for (const format of possibleFormats) {
                 try {
@@ -249,12 +249,12 @@ const genieacsApi = {
                     console.log(`⚠️ Query failed for format ${format}: ${queryError.message}`);
                 }
             }
-            
+
             // Jika tidak ditemukan dengan exact match, coba cari semua device dan cek tags secara manual
             console.log(`🔍 [FIND_DEVICE] Exact match failed, trying partial match...`);
             try {
                 const allDevicesResponse = await axiosInstance.get('/devices', { timeout: 10000 });
-                
+
                 if (allDevicesResponse.data && allDevicesResponse.data.length > 0) {
                     for (const device of allDevicesResponse.data) {
                         if (device._tags && Array.isArray(device._tags)) {
@@ -307,11 +307,11 @@ const genieacsApi = {
     async findDeviceByPPPoE(pppoeUsername, customer = null) {
         try {
             console.log(`🔍 [FIND_PPPOE] Searching for device with PPPoE Username: ${pppoeUsername}`);
-            
+
             // Jika customer tidak diberikan, cari dari billing
             if (!customer) {
                 try {
-                    const { billingManager } = require('./billing');
+                    const billingManager = require('./billing');
                     customer = await billingManager.getCustomerByPPPoE(pppoeUsername);
                     if (customer) {
                         console.log(`✅ Customer found: ${customer.name} (ID: ${customer.id})`);
@@ -320,46 +320,46 @@ const genieacsApi = {
                     console.log(`⚠️ Customer not found for PPPoE ${pppoeUsername}, will search all servers`);
                 }
             }
-            
+
             // Dapatkan GenieACS server dari customer router
             let genieacsServer = null;
             if (customer) {
                 genieacsServer = await getGenieacsServerForCustomer(customer);
             }
-            
+
             // Jika tidak ada router mapping, coba semua servers atau default
             if (!genieacsServer) {
                 console.log(`⚠️ No router mapping for customer, trying all GenieACS servers...`);
                 try {
                     // Coba ambil semua devices dari semua servers dan filter berdasarkan PPPoE
                     const allDevices = await getAllDevicesFromAllServers();
-                    
+
                     // Filter device berdasarkan PPPoE username
                     for (const device of allDevices) {
                         // Cek berbagai path untuk PPPoE Username
                         const devicePPPoE = device?.VirtualParameters?.pppoeUsername?._value ||
-                                          device?.VirtualParameters?.pppoeUsername ||
-                                          device?.VirtualParameters?.pppUsername?._value ||
-                                          device?.VirtualParameters?.pppUsername ||
-                                          device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username?._value ||
-                                          device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username;
-                        
+                            device?.VirtualParameters?.pppoeUsername ||
+                            device?.VirtualParameters?.pppUsername?._value ||
+                            device?.VirtualParameters?.pppUsername ||
+                            device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username?._value ||
+                            device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username;
+
                         if (devicePPPoE && devicePPPoE === pppoeUsername) {
                             console.log(`✅ Device found with PPPoE Username: ${pppoeUsername} (Device ID: ${device._id}) from server: ${device._genieacs_server_name || 'Default'}`);
                             return device;
                         }
                     }
-                    
+
                     console.log(`⚠️ No device found with PPPoE Username: ${pppoeUsername} in all servers`);
                 } catch (allServersError) {
                     console.log(`⚠️ Error searching all servers, falling back to default server:`, allServersError.message);
                     // Fallback ke default server dari settings.json
                 }
             }
-            
+
             // Gunakan server spesifik atau default
             const axiosInstance = getAxiosInstance(genieacsServer);
-            
+
             // Method 1: Coba dengan query langsung (jika GenieACS support)
             try {
                 const queryObj = {
@@ -367,11 +367,11 @@ const genieacsApi = {
                 };
                 const queryJson = JSON.stringify(queryObj);
                 const encodedQuery = encodeURIComponent(queryJson);
-                
-                const response = await axiosInstance.get(`/devices/?query=${encodedQuery}`, { 
+
+                const response = await axiosInstance.get(`/devices/?query=${encodedQuery}`, {
                     timeout: 10000
                 });
-                
+
                 if (response.data && response.data.length > 0) {
                     console.log(`✅ Device found with PPPoE Username query: ${pppoeUsername} (Device ID: ${response.data[0]._id})`);
                     return response.data[0];
@@ -379,21 +379,21 @@ const genieacsApi = {
             } catch (queryError) {
                 console.log(`⚠️ Query method failed, trying manual search: ${queryError.message}`);
             }
-            
+
             // Method 2: Ambil semua device dan filter secara manual
             try {
                 const allDevicesResponse = await axiosInstance.get('/devices', { timeout: 10000 });
-                
+
                 if (allDevicesResponse.data && allDevicesResponse.data.length > 0) {
                     for (const device of allDevicesResponse.data) {
                         // Cek berbagai path untuk PPPoE Username
                         const devicePPPoE = device?.VirtualParameters?.pppoeUsername?._value ||
-                                          device?.VirtualParameters?.pppoeUsername ||
-                                          device?.VirtualParameters?.pppUsername?._value ||
-                                          device?.VirtualParameters?.pppUsername ||
-                                          device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username?._value ||
-                                          device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username;
-                        
+                            device?.VirtualParameters?.pppoeUsername ||
+                            device?.VirtualParameters?.pppUsername?._value ||
+                            device?.VirtualParameters?.pppUsername ||
+                            device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username?._value ||
+                            device?.InternetGatewayDevice?.WANDevice?.['1']?.WANConnectionDevice?.['1']?.WANPPPConnection?.['1']?.Username;
+
                         if (devicePPPoE && devicePPPoE === pppoeUsername) {
                             console.log(`✅ Device found with PPPoE Username (manual search): ${pppoeUsername} (Device ID: ${device._id})`);
                             return device;
@@ -403,7 +403,7 @@ const genieacsApi = {
             } catch (manualError) {
                 console.error(`❌ Error in manual search: ${manualError.message}`);
             }
-            
+
             console.log(`❌ No device found with PPPoE Username: ${pppoeUsername}`);
             return null; // Return null instead of throwing untuk error handling yang lebih baik
         } catch (error) {
@@ -543,20 +543,20 @@ const genieacsApi = {
         try {
             console.log(`Adding tag "${tag}" to device: ${deviceId}`);
             const axiosInstance = getAxiosInstance();
-            
+
             // Dapatkan device terlebih dahulu untuk melihat tag yang sudah ada
             const device = await this.getDevice(deviceId);
             const existingTags = device._tags || [];
-            
+
             // Cek apakah tag sudah ada
             if (existingTags.includes(tag)) {
                 console.log(`Tag "${tag}" already exists on device ${deviceId}`);
                 return { success: true, message: 'Tag already exists' };
             }
-            
+
             // Tambahkan tag baru
             const newTags = [...existingTags, tag];
-            
+
             // Update device dengan tag baru
             const response = await axiosInstance.put(
                 `/devices/${encodeURIComponent(deviceId)}`,
@@ -564,7 +564,7 @@ const genieacsApi = {
                     _tags: newTags
                 }
             );
-            
+
             console.log(`Successfully added tag "${tag}" to device ${deviceId}`);
             return { success: true, message: 'Tag added successfully' };
         } catch (error) {
@@ -577,20 +577,20 @@ const genieacsApi = {
         try {
             console.log(`Removing tag "${tag}" from device: ${deviceId}`);
             const axiosInstance = getAxiosInstance();
-            
+
             // Dapatkan device terlebih dahulu untuk melihat tag yang sudah ada
             const device = await this.getDevice(deviceId);
             const existingTags = device._tags || [];
-            
+
             // Cek apakah tag ada
             if (!existingTags.includes(tag)) {
                 console.log(`Tag "${tag}" does not exist on device ${deviceId}`);
                 return { success: true, message: 'Tag does not exist' };
             }
-            
+
             // Hapus tag
             const newTags = existingTags.filter(t => t !== tag);
-            
+
             // Update device dengan tag yang sudah difilter
             const response = await axiosInstance.put(
                 `/devices/${encodeURIComponent(deviceId)}`,
@@ -598,7 +598,7 @@ const genieacsApi = {
                     _tags: newTags
                 }
             );
-            
+
             console.log(`Successfully removed tag "${tag}" from device ${deviceId}`);
             return { success: true, message: 'Tag removed successfully' };
         } catch (error) {
@@ -655,23 +655,23 @@ const genieacsApi = {
 async function monitorRXPower(threshold = -27) {
     try {
         console.log(`Memulai pemantauan RXPower dengan threshold ${threshold} dBm`);
-        
+
         // Ambil semua perangkat
         const devices = await genieacsApi.getDevices();
-        
+
         if (!devices || devices.length === 0) {
             console.warn('⚠️ Tidak ada perangkat ditemukan atau GenieACS tidak dikonfigurasi. Monitoring RXPower dilewati.');
             console.warn('⚠️ Silakan konfigurasi GenieACS di /admin/genieacs-setting atau Settings');
             return;
         }
-        
+
         console.log(`Memeriksa RXPower untuk ${devices.length} perangkat...`);
-        
+
         // Ambil data PPPoE dari Mikrotik
         console.log('Mengambil data PPPoE dari Mikrotik...');
         const conn = await getMikrotikConnection();
         let pppoeSecrets = [];
-        
+
         if (conn) {
             try {
                 // Dapatkan semua PPPoE secret dari Mikrotik
@@ -681,9 +681,9 @@ async function monitorRXPower(threshold = -27) {
                 console.error('Error mendapatkan PPPoE secret:', error.message);
             }
         }
-        
+
         const criticalDevices = [];
-        
+
         // Periksa setiap perangkat
         for (const device of devices) {
             try {
@@ -694,9 +694,9 @@ async function monitorRXPower(threshold = -27) {
                     'InternetGatewayDevice.WANDevice.1.WANPONInterfaceConfig.RXPower',
                     'Device.XPON.Interface.1.Stats.RXPower'
                 ];
-                
+
                 let rxPower = null;
-                
+
                 // Periksa setiap jalur yang mungkin berisi nilai RXPower
                 for (const path of rxPowerPaths) {
                     // Ekstrak nilai menggunakan path yang ada di device
@@ -705,7 +705,7 @@ async function monitorRXPower(threshold = -27) {
                         break;
                     }
                 }
-                
+
                 // Jika rxPower ditemukan dan di bawah threshold
                 if (rxPower !== null && parseFloat(rxPower) < threshold) {
                     // Cari PPPoE username dari parameter perangkat (seperti di handleAdminCheckONU)
@@ -713,27 +713,27 @@ async function monitorRXPower(threshold = -27) {
                     const serialNumber = getDeviceSerialNumber(device);
                     const deviceId = device._id;
                     const shortDeviceId = deviceId.split('-')[2] || deviceId;
-                    
+
                     // Ambil PPPoE username dari parameter perangkat
-                    pppoeUsername = 
+                    pppoeUsername =
                         device.InternetGatewayDevice?.WANDevice?.[1]?.WANConnectionDevice?.[1]?.WANPPPConnection?.[1]?.Username?._value ||
                         device.InternetGatewayDevice?.WANDevice?.[0]?.WANConnectionDevice?.[0]?.WANPPPConnection?.[0]?.Username?._value ||
                         device.VirtualParameters?.pppoeUsername?._value ||
                         "Unknown";
-                    
+
                     // Jika tidak ditemukan dari parameter perangkat, coba cari dari PPPoE secret di Mikrotik
                     if (pppoeUsername === "Unknown") {
                         // Coba cari PPPoE secret yang terkait dengan perangkat ini berdasarkan comment
                         const matchingSecret = pppoeSecrets.find(secret => {
                             if (!secret.comment) return false;
-                            
+
                             // Cek apakah serial number atau device ID ada di kolom comment
                             return (
-                                secret.comment.includes(serialNumber) || 
+                                secret.comment.includes(serialNumber) ||
                                 secret.comment.includes(shortDeviceId)
                             );
                         });
-                        
+
                         if (matchingSecret) {
                             // Jika ditemukan secret yang cocok, gunakan nama secret sebagai username
                             pppoeUsername = matchingSecret.name;
@@ -742,7 +742,7 @@ async function monitorRXPower(threshold = -27) {
                     } else {
                         console.log(`Menemukan PPPoE username ${pppoeUsername} untuk perangkat ${shortDeviceId} dari parameter perangkat`);
                     }
-                    
+
                     // Jika masih tidak ditemukan, coba cari dari tag perangkat
                     if (pppoeUsername === "Unknown" && device._tags && Array.isArray(device._tags)) {
                         // Cek apakah ada tag yang dimulai dengan "pppoe:" yang berisi username
@@ -754,7 +754,7 @@ async function monitorRXPower(threshold = -27) {
                             console.log(`Tidak menemukan PPPoE username untuk perangkat ${shortDeviceId}, tags: ${JSON.stringify(device._tags)}`);
                         }
                     }
-                    
+
                     const deviceInfo = {
                         id: device._id,
                         rxPower,
@@ -762,7 +762,7 @@ async function monitorRXPower(threshold = -27) {
                         lastInform: device._lastInform,
                         pppoeUsername: pppoeUsername
                     };
-                    
+
                     criticalDevices.push(deviceInfo);
                     console.log(`Perangkat dengan RXPower rendah: ${deviceInfo.id}, RXPower: ${rxPower} dBm, PPPoE: ${pppoeUsername}`);
                 }
@@ -770,13 +770,13 @@ async function monitorRXPower(threshold = -27) {
                 console.error(`Error memeriksa RXPower untuk perangkat ${device._id}:`, deviceError);
             }
         }
-        
+
         // Jika ada perangkat dengan RXPower di bawah threshold
         if (criticalDevices.length > 0) {
             // Buat pesan peringatan
             let message = `⚠️ *PERINGATAN: REDAMAN TINGGI* ⚠️\n\n`;
             message += `${criticalDevices.length} perangkat memiliki nilai RXPower di atas ${threshold} dBm:\n\n`;
-            
+
             criticalDevices.forEach((device, index) => {
                 message += `${index + 1}. ID: ${device.id.split('-')[2] || device.id}\n`;
                 message += `   S/N: ${device.serialNumber}\n`;
@@ -784,16 +784,16 @@ async function monitorRXPower(threshold = -27) {
                 message += `   RXPower: ${device.rxPower} dBm\n`;
                 message += `   Last Inform: ${new Date(device.lastInform).toLocaleString()}\n\n`;
             });
-            
+
             message += `Mohon segera dicek untuk menghindari koneksi terputus.`;
-            
+
             // Kirim pesan ke grup teknisi dengan prioritas tinggi
             await sendTechnicianMessage(message, 'high');
             console.log(`Pesan peringatan RXPower terkirim untuk ${criticalDevices.length} perangkat`);
         } else {
             console.log('Tidak ada perangkat dengan nilai RXPower di bawah threshold');
         }
-        
+
         return {
             success: true,
             criticalDevices,
@@ -815,18 +815,18 @@ function getRXPowerValue(device, path) {
         // Split path menjadi parts
         const parts = path.split('.');
         let current = device;
-        
+
         // Navigate through nested properties
         for (const part of parts) {
             if (!current) return null;
             current = current[part];
         }
-        
+
         // Check if it's a GenieACS parameter object
         if (current && current._value !== undefined) {
             return current._value;
         }
-        
+
         return null;
     } catch (error) {
         console.error(`Error getting RXPower from path ${path}:`, error);
@@ -842,21 +842,21 @@ function getDeviceSerialNumber(device) {
             'InternetGatewayDevice.DeviceInfo.SerialNumber',
             'Device.DeviceInfo.SerialNumber'
         ];
-        
+
         for (const path of serialPaths) {
             const parts = path.split('.');
             let current = device;
-            
+
             for (const part of parts) {
                 if (!current) break;
                 current = current[part];
             }
-            
+
             if (current && current._value !== undefined) {
                 return current._value;
             }
         }
-        
+
         // Fallback ke ID perangkat jika serial number tidak ditemukan
         if (device._id) {
             const parts = device._id.split('-');
@@ -865,7 +865,7 @@ function getDeviceSerialNumber(device) {
             }
             return device._id;
         }
-        
+
         return 'Unknown';
     } catch (error) {
         console.error('Error getting device serial number:', error);
@@ -881,15 +881,15 @@ async function monitorOfflineDevices(thresholdHours = null) {
             thresholdHours = parseInt(getSetting('offline_device_threshold_hours', '24'));
         }
         console.log(`Memulai pemantauan perangkat offline dengan threshold ${thresholdHours} jam`);
-        
+
         // Ambil semua perangkat
         const devices = await genieacsApi.getDevices();
         console.log(`Memeriksa status untuk ${devices.length} perangkat...`);
-        
+
         const offlineDevices = [];
         const now = new Date();
         const thresholdMs = thresholdHours * 60 * 60 * 1000; // Convert jam ke ms
-        
+
         // Periksa setiap perangkat
         for (const device of devices) {
             try {
@@ -897,25 +897,25 @@ async function monitorOfflineDevices(thresholdHours = null) {
                     console.log(`Perangkat ${device._id} tidak memiliki lastInform`);
                     continue;
                 }
-                
+
                 const lastInformTime = new Date(device._lastInform).getTime();
                 const timeDiff = now.getTime() - lastInformTime;
-                
+
                 // Jika perangkat belum melakukan inform dalam waktu yang melebihi threshold
                 if (timeDiff > thresholdMs) {
                     const pppoeUsername = device?.VirtualParameters?.pppoeUsername?._value ||
-    device?.InternetGatewayDevice?.WANDevice?.[1]?.WANConnectionDevice?.[1]?.WANPPPConnection?.[1]?.Username?._value ||
-    device?.InternetGatewayDevice?.WANDevice?.[0]?.WANConnectionDevice?.[0]?.WANPPPConnection?.[0]?.Username?._value ||
-    (Array.isArray(device?._tags) ? (device._tags.find(tag => tag.startsWith('pppoe:'))?.replace('pppoe:', '')) : undefined) ||
-    '-';
-const deviceInfo = {
-    id: device._id,
-    serialNumber: getDeviceSerialNumber(device),
-    pppoeUsername,
-    lastInform: device._lastInform,
-    offlineHours: Math.round(timeDiff / (60 * 60 * 1000) * 10) / 10 // Jam dengan 1 desimal
-};
-                    
+                        device?.InternetGatewayDevice?.WANDevice?.[1]?.WANConnectionDevice?.[1]?.WANPPPConnection?.[1]?.Username?._value ||
+                        device?.InternetGatewayDevice?.WANDevice?.[0]?.WANConnectionDevice?.[0]?.WANPPPConnection?.[0]?.Username?._value ||
+                        (Array.isArray(device?._tags) ? (device._tags.find(tag => tag.startsWith('pppoe:'))?.replace('pppoe:', '')) : undefined) ||
+                        '-';
+                    const deviceInfo = {
+                        id: device._id,
+                        serialNumber: getDeviceSerialNumber(device),
+                        pppoeUsername,
+                        lastInform: device._lastInform,
+                        offlineHours: Math.round(timeDiff / (60 * 60 * 1000) * 10) / 10 // Jam dengan 1 desimal
+                    };
+
                     offlineDevices.push(deviceInfo);
                     console.log(`Perangkat offline: ${deviceInfo.id}, Offline selama: ${deviceInfo.offlineHours} jam`);
                 }
@@ -923,30 +923,30 @@ const deviceInfo = {
                 console.error(`Error memeriksa status untuk perangkat ${device._id}:`, deviceError);
             }
         }
-        
+
         // Jika ada perangkat yang offline
         if (offlineDevices.length > 0) {
             // Buat pesan peringatan
             let message = `⚠️ *PERINGATAN: PERANGKAT OFFLINE* ⚠️\n\n`;
             message += `${offlineDevices.length} perangkat offline lebih dari ${thresholdHours} jam:\n\n`;
-            
+
             offlineDevices.forEach((device, index) => {
-    message += `${index + 1}. ID: ${device.id.split('-')[2] || device.id}\n`;
-    message += `   S/N: ${device.serialNumber}\n`;
-    message += `   PPPoE: ${device.pppoeUsername || '-'}\n`;
-    message += `   Offline selama: ${device.offlineHours} jam\n`;
-    message += `   Last Inform: ${new Date(device.lastInform).toLocaleString()}\n\n`;
-});
-            
+                message += `${index + 1}. ID: ${device.id.split('-')[2] || device.id}\n`;
+                message += `   S/N: ${device.serialNumber}\n`;
+                message += `   PPPoE: ${device.pppoeUsername || '-'}\n`;
+                message += `   Offline selama: ${device.offlineHours} jam\n`;
+                message += `   Last Inform: ${new Date(device.lastInform).toLocaleString()}\n\n`;
+            });
+
             message += `Mohon segera ditindaklanjuti.`;
-            
+
             // Kirim pesan ke grup teknisi dengan prioritas medium
             await sendTechnicianMessage(message, 'medium');
             console.log(`Pesan peringatan perangkat offline terkirim untuk ${offlineDevices.length} perangkat`);
         } else {
             console.log('Tidak ada perangkat yang offline lebih dari threshold');
         }
-        
+
         return {
             success: true,
             offlineDevices,
@@ -1008,15 +1008,15 @@ async function getDevicesCached() {
     // Use the same cache key as getDevices method
     const cacheKey = 'genieacs:devices';
     const cached = cacheManager.get(cacheKey);
-    
+
     if (cached) {
         console.log(`📦 Using cached devices data (${cached.length} devices)`);
         return cached;
     }
-    
+
     console.log('🔄 Fetching fresh devices data from GenieACS');
     const devices = await genieacsApi.getDevices();
-    
+
     return devices; // getDevices already handles caching
 }
 
@@ -1027,18 +1027,18 @@ async function getDevicesCached() {
 async function getDeviceInfoCached(deviceId) {
     const cacheKey = `genieacs_device_${deviceId}`;
     const cached = cacheManager.get(cacheKey);
-    
+
     if (cached) {
         console.log(`📦 Using cached device info for ${deviceId}`);
         return cached;
     }
-    
+
     console.log(`🔄 Fetching fresh device info for ${deviceId}`);
     const deviceInfo = await genieacsApi.getDeviceInfo(deviceId);
-    
+
     // Cache untuk 2 menit
     cacheManager.set(cacheKey, deviceInfo, 2 * 60 * 1000);
-    
+
     return deviceInfo;
 }
 
@@ -1113,7 +1113,7 @@ async function getAllDevicesFromAllServers() {
             const defaultDevices = await genieacsApi.getDevices();
             return defaultDevices.map(device => ({ ...device, _genieacs_server_id: null, _genieacs_server_name: 'Default' }));
         }
-        
+
         const allDevices = [];
         for (const server of servers) {
             try {
@@ -1132,7 +1132,7 @@ async function getAllDevicesFromAllServers() {
                 // Continue to next server
             }
         }
-        
+
         console.log(`✅ Total devices from all servers: ${allDevices.length}`);
         return allDevices;
     } catch (error) {
@@ -1167,7 +1167,7 @@ module.exports = {
     getVirtualParameters: genieacsApi.getVirtualParameters,
     monitorRXPower,
     monitorOfflineDevices,
-    
+
     // Enhanced functions dengan caching
     getDevicesCached,
     getDeviceInfoCached,

@@ -4,7 +4,7 @@
     <%- include('../partials/hard-reload') %>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= action === 'add' ? 'Tambah' : 'Edit' %> Tukang Tagih - <%= appSettings.companyHeader %></title>
+    <title><%= action === 'add' ? 'Tambah' : 'Edit' %> Tim Kolektor - <%= appSettings.companyHeader %></title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     
@@ -139,7 +139,7 @@
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bi bi-person-check me-2"></i><%= action === 'add' ? 'Tambah' : 'Edit' %> Tukang Tagih
+                        <i class="bi bi-person-check me-2"></i><%= action === 'add' ? 'Tambah' : 'Edit' %> Tim Kolektor
                     </h1>
                     <div>
                         <a href="/admin/collectors" class="btn btn-outline-secondary">
@@ -263,9 +263,18 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="mb-3">
+                                        <label class="form-label d-block">Status Komisi</label>
+                                        <div class="form-check form-switch mt-2">
+                                            <input class="form-check-input" type="checkbox" role="switch" id="commission_active" style="cursor:pointer;" <%= !collector || collector.commission_rate > 0 ? 'checked' : '' %>>
+                                            <label class="form-check-label ms-1 fw-bold" id="commission_active_label" style="cursor:pointer;" for="commission_active">Komisi Aktif</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6" id="commission_rate_container">
+                                    <div class="mb-3">
                                         <label for="commission_rate" class="form-label">Rate Komisi (%)</label>
                                         <input type="number" class="form-control" id="commission_rate" name="commission_rate" 
-                                               value="<%= collector ? collector.commission_rate : 5 %>" 
+                                               value="<%= collector && collector.commission_rate > 0 ? collector.commission_rate : 5 %>" 
                                                min="0" max="100" step="0.01">
                                         <div class="form-text">Persentase komisi dari setiap pembayaran</div>
                                     </div>
@@ -333,7 +342,7 @@
                     phone: formData.get('phone'),
                     email: formData.get('email'),
                     address: formData.get('address'),
-                    commission_rate: parseFloat(formData.get('commission_rate')) || 5,
+                    commission_rate: document.getElementById('commission_active').checked ? (parseFloat(formData.get('commission_rate')) || 5) : 0,
                     status: formData.get('status'),
                     password: password || undefined // Only include if provided
                 };
@@ -406,6 +415,28 @@
             }
             e.target.value = value;
         });
+        
+        // Commission toggle functionality
+        const commissionSwitch = document.getElementById('commission_active');
+        const commissionContainer = document.getElementById('commission_rate_container');
+        const commissionLabel = document.getElementById('commission_active_label');
+        if (commissionSwitch) {
+            const toggleCommissionUI = () => {
+                if (commissionSwitch.checked) {
+                    commissionContainer.style.display = 'block';
+                    commissionLabel.textContent = 'Komisi Aktif';
+                    commissionLabel.classList.add('text-success');
+                    commissionLabel.classList.remove('text-muted');
+                } else {
+                    commissionContainer.style.display = 'none';
+                    commissionLabel.textContent = 'Komisi Nonaktif';
+                    commissionLabel.classList.remove('text-success');
+                    commissionLabel.classList.add('text-muted');
+                }
+            };
+            commissionSwitch.addEventListener('change', toggleCommissionUI);
+            toggleCommissionUI(); // initialize
+        }
         
         // Password toggle functionality
         document.getElementById('togglePassword').addEventListener('click', function() {

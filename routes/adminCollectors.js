@@ -162,7 +162,7 @@ router.post('/', adminAuth, async (req, res) => {
             db.run(`
                 INSERT INTO collectors (name, phone, email, address, commission_rate, status, password)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            `, [name, phone, email, address, commission_rate || 5, status || 'active', hashedPassword], function(err) {
+            `, [name, phone, email, address, commission_rate !== undefined && commission_rate !== null && commission_rate !== '' ? commission_rate : 5, status || 'active', hashedPassword], function(err) {
                 if (err) reject(err);
                 else resolve(this.lastID);
             });

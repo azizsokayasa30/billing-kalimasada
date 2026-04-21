@@ -355,46 +355,109 @@
     </div>
 
     <div class="container">
+        <!-- WAKTU FILTER -->
+        <form class="row g-2 mb-4">
+            <div class="col-5">
+                <select name="month" class="form-select border-0 shadow-sm" style="border-radius: 10px;">
+                    <% const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']; %>
+                    <% const currentMonth = (typeof filters !== 'undefined' && filters.month) ? filters.month : new Date().getMonth() + 1; %>
+                    <% for(let m=1; m<=12; m++) { %>
+                        <option value="<%= m %>" <%= currentMonth == m ? 'selected' : '' %>><%= months[m-1] %></option>
+                    <% } %>
+                </select>
+            </div>
+            <div class="col-4">
+                <select name="year" class="form-select border-0 shadow-sm" style="border-radius: 10px;">
+                    <% const currentYearObj = new Date().getFullYear(); %>
+                    <% const selectedYear = (typeof filters !== 'undefined' && filters.year) ? filters.year : currentYearObj; %>
+                    <% for(let y=currentYearObj-2; y<=currentYearObj+1; y++) { %>
+                        <option value="<%= y %>" <%= selectedYear == y ? 'selected' : '' %>><%= y %></option>
+                    <% } %>
+                </select>
+            </div>
+            <div class="col-3">
+                <button type="submit" class="btn btn-primary w-100 shadow-sm" style="border-radius: 10px; background: linear-gradient(135deg, #28a745, #1e7e34); border:none;"><i class="bi bi-search"></i></button>
+            </div>
+        </form>
+
         <!-- Statistics Cards -->
         <div class="row mb-4">
+            <!-- 1. Total Tagihan -->
             <div class="col-md-6 col-6 mb-3">
-                <div class="stat-card">
-                    <div class="stat-icon success">
-                        <i class="bi bi-credit-card"></i>
+                <a href="/collector/customers" class="text-decoration-none">
+                    <div class="stat-card h-100">
+                        <div class="stat-icon info" style="width: 45px; height: 45px; font-size: 1.25rem;">
+                            <i class="bi bi-receipt"></i>
+                        </div>
+                        <div class="stat-value text-dark" style="font-size: 1.15rem;">Rp <%= statistics.tagihan?.total ? Math.round(statistics.tagihan.total).toLocaleString('id-ID') : '0' %></div>
+                        <div class="stat-label">Total Tagihan (<%= statistics.tagihan?.count || 0 %> Inv)</div>
                     </div>
-                    <div class="stat-value">Rp <%= statistics.todayPayments ? Math.round(statistics.todayPayments).toLocaleString('id-ID') : '0' %></div>
-                    <div class="stat-label">Pembayaran Hari Ini</div>
-                </div>
+                </a>
             </div>
             
+            <!-- 2. Total Lunas -->
             <div class="col-md-6 col-6 mb-3">
-                <div class="stat-card">
-                    <div class="stat-icon primary">
-                        <i class="bi bi-graph-up"></i>
+                <a href="/collector/payments" class="text-decoration-none">
+                    <div class="stat-card h-100">
+                        <div class="stat-icon success" style="width: 45px; height: 45px; font-size: 1.25rem;">
+                            <i class="bi bi-check-circle"></i>
+                        </div>
+                        <div class="stat-value text-dark" style="font-size: 1.15rem;">Rp <%= statistics.lunas?.total ? Math.round(statistics.lunas.total).toLocaleString('id-ID') : '0' %></div>
+                        <div class="stat-label">Total Lunas (<%= statistics.lunas?.count || 0 %> Plg)</div>
                     </div>
-                    <div class="stat-value">Rp <%= statistics.totalCommission ? Math.round(statistics.totalCommission).toLocaleString('id-ID') : '0' %></div>
-                    <div class="stat-label">Total Komisi</div>
-                </div>
+                </a>
             </div>
             
+            <!-- 3. Belum Lunas -->
             <div class="col-md-6 col-6 mb-3">
-                <div class="stat-card">
-                    <div class="stat-icon warning">
-                        <i class="bi bi-list-check"></i>
+                <a href="/collector/customers?status=unpaid" class="text-decoration-none">
+                    <div class="stat-card h-100" style="border-left: 4px solid #dc3545;">
+                        <div class="stat-icon" style="width: 45px; height: 45px; font-size: 1.25rem; background: linear-gradient(135deg, #dc3545, #c82333); color: white;">
+                            <i class="bi bi-x-circle"></i>
+                        </div>
+                        <div class="stat-value text-dark" style="font-size: 1.15rem;">Rp <%= statistics.belumLunas?.total ? Math.round(statistics.belumLunas.total).toLocaleString('id-ID') : '0' %></div>
+                        <div class="stat-label text-danger font-weight-bold">Belum Lunas (<%= statistics.belumLunas?.count || 0 %> Plg)</div>
                     </div>
-                    <div class="stat-value"><%= statistics.totalPayments || 0 %></div>
-                    <div class="stat-label">Total Pembayaran</div>
-                </div>
+                </a>
             </div>
             
+            <!-- 4. Lunas Hari Ini -->
             <div class="col-md-6 col-6 mb-3">
-                <div class="stat-card">
-                    <div class="stat-icon info">
-                        <i class="bi bi-people"></i>
+                <a href="/collector/payments?filter=today" class="text-decoration-none">
+                    <div class="stat-card h-100">
+                        <div class="stat-icon" style="width: 45px; height: 45px; font-size: 1.25rem; background: linear-gradient(135deg, #20c997, #17a2b8); color: white;">
+                            <i class="bi bi-calendar-check"></i>
+                        </div>
+                        <div class="stat-value text-dark" style="font-size: 1.15rem;">Rp <%= statistics.hariIni?.total ? Math.round(statistics.hariIni.total).toLocaleString('id-ID') : '0' %></div>
+                        <div class="stat-label">Lunas Hari Ini (<%= statistics.hariIni?.count || 0 %> Trans)</div>
                     </div>
-                    <div class="stat-value"><%= statistics.totalAssignedCustomers || 0 %></div>
-                    <div class="stat-label">Pelanggan Anda</div>
-                </div>
+                </a>
+            </div>
+            
+            <!-- 5. Sudah Setoran -->
+            <div class="col-md-6 col-6 mb-3">
+                <a href="javascript:void(0)" onclick="alert('Data Setoran Anda tercatat aman di sistem kasir. Anda telah menyetor senilai Rp ' + '<%= statistics.setoran?.sudah_setor ? Math.round(statistics.setoran.sudah_setor).toLocaleString('id-ID') : '0' %>')" class="text-decoration-none">
+                    <div class="stat-card h-100">
+                        <div class="stat-icon" style="width: 45px; height: 45px; font-size: 1.25rem; background: linear-gradient(135deg, #6f42c1, #593196); color: white;">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                        </div>
+                        <div class="stat-value text-dark" style="font-size: 1.15rem;">Rp <%= statistics.setoran?.sudah_setor ? Math.round(statistics.setoran.sudah_setor).toLocaleString('id-ID') : '0' %></div>
+                        <div class="stat-label">Sudah Setoran (Netto)</div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- 6. Belum Setor -->
+            <div class="col-md-6 col-6 mb-3">
+                <a href="javascript:void(0)" onclick="alert('Peringatan: Anda masih memiliki saldo Kas Tagihan senilai Rp ' + '<%= statistics.setoran?.belum_setor ? Math.round(statistics.setoran.belum_setor).toLocaleString('id-ID') : '0' %>' + ' yang belum disetorkan! Segera serahkan fisik uangnya ke Kasir.')" class="text-decoration-none">
+                    <div class="stat-card h-100" style="border-left: 4px solid #ffc107; background-color: #fffdf5;">
+                        <div class="stat-icon warning" style="width: 45px; height: 45px; font-size: 1.25rem;">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                        </div>
+                        <div class="stat-value text-dark" style="font-size: 1.15rem;">Rp <%= statistics.setoran?.belum_setor ? Math.round(statistics.setoran.belum_setor).toLocaleString('id-ID') : '0' %></div>
+                        <div class="stat-label" style="color: #b78a05; font-weight: 700;">Belum Setor (Netto)</div>
+                    </div>
+                </a>
             </div>
         </div>
 

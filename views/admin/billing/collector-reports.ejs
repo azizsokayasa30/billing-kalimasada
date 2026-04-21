@@ -65,22 +65,22 @@
         <%- include('../../partials/billing-sidebar') %>
         
         <main class="f-main-area main-content">
-            <!-- PAGE HEADER (Glass) -->
-            <header class="f-header-glass">
-                <div>
+            <!-- PAGE HEADER -->
+            <header class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-3 border-bottom" style="padding-top: 1rem;">
+                <div class="mb-3 mb-md-0">
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb mb-1" style="background: transparent; padding: 0;">
                             <li class="breadcrumb-item"><a href="/admin/dashboard" class="text-muted text-decoration-none small">Dashboard</a></li>
                             <li class="breadcrumb-item active small" aria-current="page">Laporan Kolektor</li>
                         </ol>
                     </nav>
-                    <h1 class="f-page-title f-premium-text">Laporan Kolektor</h1>
+                    <h1 class="f-page-title f-premium-text m-0">Laporan Kolektor</h1>
                 </div>
-                <div class="f-actions">
-                    <button class="f-btn f-btn-outline" onclick="window.location.reload()" title="Refresh Content">
+                <div class="f-actions d-flex gap-2">
+                    <button class="f-btn f-btn-outline d-flex align-items-center gap-1" onclick="window.location.reload()" title="Refresh Content">
                         <i class="bi bi-arrow-clockwise"></i>Refresh
                     </button>
-                    <button class="f-btn f-btn-primary" onclick="exportReport()">
+                    <button class="f-btn f-btn-primary d-flex align-items-center gap-1" onclick="exportReport()">
                         <i class="bi bi-file-earmark-excel"></i>Export .xlsx
                     </button>
                 </div>
@@ -99,45 +99,45 @@
 
                 <!-- STAT CARDS -->
                  <div class="f-grid f-grid-4 mb-5">
-                    <div class="f-stat-card">
+                    <div class="f-stat-card animate-in" style="animation-delay: 0.1s;">
                         <div class="f-stat-header">
-                            <span class="f-stat-label">Total Kolektor</span>
+                            <span class="f-stat-label">Total Tagihan Area</span>
                             <div class="f-stat-icon-wrapper bg-primary-glow">
-                                <i class="bi bi-people"></i>
+                                <i class="bi bi-receipt"></i>
                             </div>
                         </div>
-                        <div class="f-stat-value f-premium-text"><%= summary.total_collectors || 0 %></div>
-                        <div class="f-stat-desc">Personil aktif</div>
+                        <div class="f-stat-value f-premium-text">Rp <%= (summary.total_tagihan || 0).toLocaleString('id-ID') %></div>
+                        <div class="f-stat-desc">Seluruh target area</div>
                     </div>
-                    <div class="f-stat-card">
+                    <div class="f-stat-card animate-in" style="animation-delay: 0.2s;">
                         <div class="f-stat-header">
-                            <span class="f-stat-label">Total Pembayaran</span>
+                            <span class="f-stat-label">Total Lunas</span>
                             <div class="f-stat-icon-wrapper bg-success-glow">
-                                <i class="bi bi-wallet2"></i>
+                                <i class="bi bi-check-circle"></i>
                             </div>
                         </div>
-                        <div class="f-stat-value f-premium-text text-success">Rp <%= (summary.total_payments || 0).toLocaleString('id-ID') %></div>
-                        <div class="f-stat-desc">Akumulasi bruto</div>
+                        <div class="f-stat-value f-premium-text text-success">Rp <%= (summary.total_lunas || 0).toLocaleString('id-ID') %></div>
+                        <div class="f-stat-desc">Pembayaran sah masuk</div>
                     </div>
-                    <div class="f-stat-card">
+                    <div class="f-stat-card animate-in" style="animation-delay: 0.3s;">
                         <div class="f-stat-header">
-                            <span class="f-stat-label">Total Komisi</span>
-                            <div class="f-stat-icon-wrapper bg-info-glow">
-                                <i class="bi bi-pie-chart"></i>
-                            </div>
-                        </div>
-                        <div class="f-stat-value f-premium-text text-info">Rp <%= (summary.total_commissions || 0).toLocaleString('id-ID') %></div>
-                        <div class="f-stat-desc">Bagi hasil</div>
-                    </div>
-                    <div class="f-stat-card">
-                        <div class="f-stat-header">
-                            <span class="f-stat-label">Neto Setoran</span>
+                            <span class="f-stat-label">Belum Lunas</span>
                             <div class="f-stat-icon-wrapper bg-warning-glow">
+                                <i class="bi bi-clock-history"></i>
+                            </div>
+                        </div>
+                        <div class="f-stat-value f-premium-text text-warning">Rp <%= (summary.total_belum_lunas || 0).toLocaleString('id-ID') %></div>
+                        <div class="f-stat-desc">Ngutang di area kolektor</div>
+                    </div>
+                    <div class="f-stat-card animate-in" style="animation-delay: 0.4s;">
+                        <div class="f-stat-header">
+                            <span class="f-stat-label">Komisi Kolektor</span>
+                            <div class="f-stat-icon-wrapper bg-info-glow">
                                 <i class="bi bi-cash-stack"></i>
                             </div>
                         </div>
-                        <div class="f-stat-value f-premium-text text-warning">Rp <%= (summary.total_setoran || 0).toLocaleString('id-ID') %></div>
-                        <div class="f-stat-desc">Total harus diterima</div>
+                        <div class="f-stat-value f-premium-text text-info">Rp <%= (summary.total_komisi || 0).toLocaleString('id-ID') %></div>
+                        <div class="f-stat-desc">Total bruto yang dicapai</div>
                     </div>
                 </div>
 
@@ -146,12 +146,22 @@
                     <div class="f-card-body">
                         <div class="row g-3 align-items-end">
                             <div class="col-md-3">
-                                <label class="f-label">DARI TANGGAL</label>
-                                <input type="date" class="f-input" id="dateFrom" value="<%= filters.dateFrom %>">
+                                <label class="f-label">BULAN</label>
+                                <select class="f-select" id="monthFilter">
+                                    <% const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']; %>
+                                    <% for(let m=1; m<=12; m++) { %>
+                                        <option value="<%= m %>" <%= filters.month == m ? 'selected' : '' %>><%= months[m-1] %></option>
+                                    <% } %>
+                                </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="f-label">SAMPAI TANGGAL</label>
-                                <input type="date" class="f-input" id="dateTo" value="<%= filters.dateTo %>">
+                                <label class="f-label">TAHUN</label>
+                                <select class="f-select" id="yearFilter">
+                                    <% const currY = new Date().getFullYear(); %>
+                                    <% for(let y=currY-3; y<=currY+1; y++) { %>
+                                        <option value="<%= y %>" <%= filters.year == y ? 'selected' : '' %>><%= y %></option>
+                                    <% } %>
+                                </select>
                             </div>
                             <div class="col-md-3">
                                 <label class="f-label">KOLEKTOR</label>
@@ -197,20 +207,24 @@
                                         </div>
                                         <div>
                                             <span class="f-stat-label" style="font-size: 0.65rem;">Rate Komisi</span>
-                                            <div class="f-mono text-info font-weight-bold" style="font-size: 0.875rem;"><%= collector.commission_rate || 5 %>%</div>
+                                            <div class="f-mono text-info font-weight-bold" style="font-size: 0.875rem;"><%= collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5 %>%</div>
                                         </div>
-                                        <div class="col-span-2 mt-1 pt-1 border-top" style="grid-column: span 2;">
+                                        <div class="col-span-2 pt-1 border-top" style="grid-column: span 2;">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <span class="f-stat-label" style="font-size: 0.65rem;">Omzet Bruto</span>
-                                                <span class="f-mono font-weight-bold" style="font-size: 0.875rem;">Rp <%= (collector.total_payment_amount || 0).toLocaleString('id-ID') %></span>
+                                                <span class="f-stat-label" style="font-size: 0.65rem;">Tagihan Area</span>
+                                                <span class="f-mono font-weight-bold" style="font-size: 0.875rem;">Rp <%= (collector.total_tagihan_area || 0).toLocaleString('id-ID') %></span>
                                             </div>
                                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <span class="f-stat-label" style="font-size: 0.65rem;">Komisi</span>
-                                                <span class="f-mono text-error font-weight-bold" style="font-size: 0.875rem;">-Rp <%= (collector.total_commission || 0).toLocaleString('id-ID') %></span>
+                                                <span class="f-stat-label" style="font-size: 0.65rem;">Belum Lunas</span>
+                                                <span class="f-mono text-warning font-weight-bold" style="font-size: 0.875rem;">Rp <%= (collector.total_belum_lunas_amount || 0).toLocaleString('id-ID') %> (<%= collector.total_belum_lunas_count || 0 %> org)</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="f-stat-label" style="font-size: 0.65rem;">Total Lunas</span>
+                                                <span class="f-mono text-success font-weight-bold" style="font-size: 0.875rem;">Rp <%= (collector.total_lunas_area || 0).toLocaleString('id-ID') %></span>
                                             </div>
                                             <div class="d-flex justify-content-between align-items-center pt-1 mt-1 border-top" style="border-top-style: dashed !important;">
-                                                <span class="f-stat-label" style="font-weight: 600; color: var(--f-foreground);">Neto Setoran</span>
-                                                <span class="f-mono text-success font-weight-bold" style="font-size: 1rem;">Rp <%= (collector.total_setoran || 0).toLocaleString('id-ID') %></span>
+                                                <span class="f-stat-label" style="font-weight: 600; color: var(--f-info);">Komisi</span>
+                                                <span class="f-mono text-info font-weight-bold" style="font-size: 1rem;">Rp <%= (collector.total_commission || 0).toLocaleString('id-ID') %></span>
                                             </div>
                                         </div>
                                     </div>
@@ -244,13 +258,13 @@
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
         function applyFilters() {
-            const dateFrom = document.getElementById('dateFrom').value;
-            const dateTo = document.getElementById('dateTo').value;
+            const month = document.getElementById('monthFilter').value;
+            const year = document.getElementById('yearFilter').value;
             const collectorFilter = document.getElementById('collectorFilter').value;
             
             const params = new URLSearchParams();
-            if (dateFrom) params.append('dateFrom', dateFrom);
-            if (dateTo) params.append('dateTo', dateTo);
+            if (month) params.append('month', month);
+            if (year) params.append('year', year);
             if (collectorFilter) params.append('collector', collectorFilter);
             
             window.location.href = `/admin/billing/collector-reports?${params.toString()}`;
@@ -261,15 +275,14 @@
         }
         
         function exportReport() {
-            const dateFrom = document.getElementById('dateFrom').value;
-            const dateTo = document.getElementById('dateTo').value;
+            const month = document.getElementById('monthFilter').value;
+            const year = document.getElementById('yearFilter').value;
             const collectorFilter = document.getElementById('collectorFilter').value;
             
             const params = new URLSearchParams();
-            if (dateFrom) params.append('dateFrom', dateFrom);
-            if (dateTo) params.append('dateTo', dateTo);
+            if (month) params.append('month', month);
+            if (year) params.append('year', year);
             if (collectorFilter) params.append('collector', collectorFilter);
-            params.append('export', 'excel');
             
             window.location.href = `/admin/billing/collector-reports/export?${params.toString()}`;
         }

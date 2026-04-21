@@ -112,7 +112,7 @@ router.post('/payment', verifyToken, async (req, res) => {
         const collector = await billingManager.getCollectorById(collectorId);
         if (!collector) return res.status(404).json({ success: false, message: 'Collector not found' });
 
-        const commissionRate = collector.commission_rate || 5;
+        const commissionRate = collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5;
         const commissionAmount = Math.round((payment_amount * commissionRate) / 100);
 
         // Record the payment entry

@@ -4,7 +4,7 @@
     <%- include('../partials/hard-reload') %>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kelola Tukang Tagih - <%= appSettings.companyHeader %></title>
+    <title>Kelola Tim Kolektor - <%= appSettings.companyHeader %></title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     
@@ -109,9 +109,9 @@
 
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="page-header d-flex justify-content-between align-items-center">
-                    <h1 class="h4 m-0">Kelola Tukang Tagih</h1>
+                    <h1 class="h4 m-0">Kelola Tim Kolektor</h1>
                     <button class="btn btn-primary" onclick="addCollector()">
-                        Tambah Tukang Tagih
+                        Tambah Kolektor
                     </button>
                 </div>
 
@@ -172,7 +172,7 @@
                                             </td>
                                             <td class="text-end">
                                                 <div>
-                                                    <span class="stats-label">Siswa/Pelanggan:</span>
+                                                    <span class="stats-label">Pelanggan:</span>
                                                     <span class="stats-value text-primary"><%= collector.total_payments || 0 %></span>
                                                 </div>
                                                 <div class="mt-1">
@@ -181,7 +181,7 @@
                                                 </div>
                                                 <div class="mt-1">
                                                     <span class="stats-label">Rate:</span>
-                                                    <span class="stats-value text-dark"><%= collector.commission_rate || 5 %>%</span>
+                                                    <span class="stats-value text-dark"><%= collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5 %>%</span>
                                                 </div>
                                             </td>
                                             <td class="text-center">
@@ -203,7 +203,7 @@
                                 <% } else { %>
                                     <tr>
                                         <td colspan="5" class="text-center py-5 text-muted">
-                                            Belum ada data tukang tagih.
+                                            Belum ada data tim kolektor.
                                         </td>
                                     </tr>
                                 <% } %>
@@ -249,7 +249,7 @@
         function addCollector() { window.location.href = '/admin/collectors/add'; }
         function editCollector(id) { window.location.href = `/admin/collectors/${id}/edit`; }
         function deleteCollector(id) {
-            if (confirm('Hapus tukang tagih ini?')) {
+            if (confirm('Hapus kolektor ini?')) {
                 fetch(`/admin/collectors/${id}`, { method: 'DELETE' })
                 .then(r => r.json())
                 .then(data => { if(data.success) location.reload(); else alert(data.message); });

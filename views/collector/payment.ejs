@@ -310,11 +310,11 @@
                             <label for="customerId" class="form-label">
                                 <i class="bi bi-person me-2"></i>Pilih Pelanggan
                             </label>
-                            <div class="mb-2">
-                                <input type="text" class="form-control" id="customerSearch" placeholder="Cari pelanggan (nama/telepon/username)">
-                                <div id="customerSuggestions" class="list-group mt-1" style="max-height: 220px; overflow-y: auto;"></div>
+                            <div class="mb-2 position-relative">
+                                <input type="text" class="form-control" id="customerSearch" placeholder="Cari pelanggan (nama/telepon/username)" autocomplete="off">
+                                <div id="customerSuggestions" class="list-group position-absolute w-100 shadow" style="display: none; max-height: 250px; overflow-y: auto; z-index: 1000; top: 100%;"></div>
                             </div>
-                            <select class="form-select" id="customerId" name="customer_id" required>
+                            <select class="form-select d-none" id="customerId" name="customer_id">
                                 <option value="">Pilih Pelanggan</option>
                                 <% if (customers && customers.length > 0) { %>
                                     <% customers.forEach(function(customer) { %>
@@ -365,11 +365,20 @@
                             <label for="paymentMethod" class="form-label">
                                 <i class="bi bi-credit-card me-2"></i>Metode Pembayaran
                             </label>
-                            <select class="form-select" id="paymentMethod" name="payment_method" required>
+                            <select class="form-select" id="paymentMethod" name="payment_method" required onchange="toggleProofInput()">
                                 <option value="cash">Tunai</option>
                                 <option value="transfer">Transfer Bank</option>
                                 <option value="other">Lainnya</option>
                             </select>
+                        </div>
+
+                        <!-- Bukti Transfer -->
+                        <div class="mb-3 p-3 bg-light rounded shadow-sm border-start border-4 border-primary" id="paymentProofContainer" style="display: none;">
+                            <label for="paymentProof" class="form-label fw-bold">
+                                <i class="bi bi-image me-2 text-primary"></i>Unggah Bukti Transfer <span class="text-danger">*</span>
+                            </label>
+                            <input type="file" class="form-control" id="paymentProof" name="payment_proof" accept="image/*">
+                            <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Sistem otomatis mengecilkan foto jika lebih dari 2MB.</small>
                         </div>
 
                         <!-- Notes -->
@@ -491,8 +500,17 @@
                 }
             });
 
-            // Customer selection handler
-            document.getElementById('customerId').addEventListener('change', function() {
+            if (document.getElementById('customerId').value) {
+                const initId = document.getElementById('customerId').value;
+                const customer = customers.find(c => c.id == initId);
+                if (customer) {
+                    showCustomerInfo(customer);
+                    loadCustomerInvoices(initId);
+                    customerSearch.value = `${customer.name} - ${customer.phone ? customer.phone : ''}`;
+                }
+            }
+
+            customerSelect.addEventListener('change', function() {
                 const customerId = this.value;
                 if (customerId) {
                     const customer = customers.find(c => c.id == customerId);
@@ -515,6 +533,17 @@
                 e.preventDefault();
                 submitPayment();
             });
+        }
+        
+        function toggleProofInput() {
+            const method = document.getElementById('paymentMethod').value;
+            const container = document.getElementById('paymentProofContainer');
+            if (method === 'transfer') {
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+                document.getElementById('paymentProof').value = '';
+            }
         }
 
         function showCustomerInfo(customer) {
@@ -606,48 +635,80 @@
             document.getElementById('commissionInfo').style.display = 'block';
         }
 
+        function compressImage(file, maxSizeMB = 2) {
+            if (!file || file.size <= maxSizeMB * 1024 * 1024) return Promise.resolve(file);
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        const maxWidth = 1200;
+                        const scale = Math.min(1, maxWidth / img.width);
+                        canvas.width = img.width * scale;
+                        canvas.height = img.height * scale;
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        canvas.toBlob((blob) => {
+                            resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+                        }, 'image/jpeg', 0.85);
+                    };
+                };
+            });
+        }
+
         async function submitPayment() {
             const form = document.getElementById('paymentForm');
-            const formData = new FormData(form);
+            const customerId = document.getElementById('customerId').value;
+            const paymentMethod = document.getElementById('paymentMethod').value;
+            const proofInput = document.getElementById('paymentProof');
             
-            // Get selected invoices
-            const selectedInvoices = Array.from(document.querySelectorAll('.invoice-checkbox:checked'))
-                .map(cb => cb.value);
+            if (!customerId) {
+                showAlert('danger', 'Error!', 'Silakan cari dan pilih pelanggan terlebih dahulu!');
+                return;
+            }
+            if (paymentMethod === 'transfer' && (!proofInput.files || proofInput.files.length === 0)) {
+                showAlert('danger', 'Error!', 'Foto bukti transfer wajib diunggah!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('customer_id', customerId);
+            formData.append('payment_amount', document.getElementById('paymentAmount').value);
+            formData.append('payment_method', paymentMethod);
+            formData.append('notes', document.getElementById('notes').value);
             
-            const paymentData = {
-                customer_id: formData.get('customer_id'),
-                payment_amount: parseFloat(formData.get('payment_amount')),
-                payment_method: formData.get('payment_method'),
-                notes: formData.get('notes'),
-                invoice_ids: selectedInvoices
-            };
+            const selectedInvoices = Array.from(document.querySelectorAll('.invoice-checkbox:checked')).map(cb => cb.value);
+            formData.append('invoice_ids', JSON.stringify(selectedInvoices));
 
             const submitBtn = document.getElementById('submitBtn');
             const btnText = submitBtn.querySelector('.btn-text');
             const loading = submitBtn.querySelector('.loading');
 
-            // Show loading state
             btnText.style.display = 'none';
             loading.classList.add('show');
             submitBtn.disabled = true;
 
             try {
+                if (paymentMethod === 'transfer' && proofInput.files.length > 0) {
+                    const compressedFile = await compressImage(proofInput.files[0], 2);
+                    formData.append('payment_proof', compressedFile);
+                }
+
                 const response = await fetch('/collector/api/payment', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-                    },
-                    body: JSON.stringify(paymentData)
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+                    body: formData // Fetch will automatically set content type
                 });
 
                 const result = await response.json();
 
                 if (result.success) {
                     showAlert('success', 'Pembayaran berhasil disimpan!', 'Mengalihkan ke dashboard...');
-                    setTimeout(() => {
-                        window.location.href = '/collector/dashboard';
-                    }, 1500);
+                    setTimeout(() => window.location.href = '/collector/dashboard', 1500);
+
                 } else {
                     showAlert('danger', 'Error!', result.message || 'Gagal menyimpan pembayaran');
                 }

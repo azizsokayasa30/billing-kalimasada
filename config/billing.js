@@ -11,8 +11,12 @@
             this.dbPath = path.join(__dirname, '../data/billing.db');
             this.paymentGateway = new PaymentGatewayManager();
             this.initDatabase();
+            
+            // Inisialisasi scheduler otomatis hapus foto usang (Umur > 60 Hari)
+            this.autoCleanTwoMonthsOldPaymentProofs();
         }
 
+        // Hot-reload payment gateway configuration
         // Hot-reload payment gateway configuration
         async reloadPaymentGateway() {
             try {
@@ -22,6 +26,40 @@
                 try { logger.error('[BILLING] Failed to reload payment gateways:', e.message); } catch (_) {}
                 return { error: true, message: e.message };
             }
+        }
+
+        autoCleanTwoMonthsOldPaymentProofs() {
+            // Cek secara sinkron 1 kali di awal, lalu jadwalkan tiap 24 jam
+            const cleanUpTask = () => {
+                try {
+                    const sql = "SELECT id, payment_proof FROM payments WHERE payment_proof IS NOT NULL AND payment_date <= datetime('now', '-60 days')";
+                    
+                    this.db.all(sql, [], (err, rows) => {
+                        if (err || !rows) return;
+                        
+                        rows.forEach(row => {
+                            const proofPath = row.payment_proof; 
+                            const fullPath = path.join(__dirname, '..', 'public', proofPath);
+                            
+                            if (fs.existsSync(fullPath)) {
+                                fs.unlink(fullPath, (error) => {
+                                    if (!error) {
+                                        this.db.run("UPDATE payments SET payment_proof = NULL WHERE id = ?", [row.id]);
+                                    }
+                                });
+                            } else {
+                                this.db.run("UPDATE payments SET payment_proof = NULL WHERE id = ?", [row.id]);
+                            }
+                        });
+                    });
+                } catch (e) {
+                    console.error("Payment proof cleanup worker err:", e);
+                }
+            };
+
+            // Jalankan setelah sistem siap, lalu rutinkan tiap 24 Jam
+            setTimeout(cleanUpTask, 15000); 
+            setInterval(cleanUpTask, 24 * 60 * 60 * 1000); 
         }
 
         /**
@@ -1507,20 +1545,20 @@
         });
     }
 
-    async getCollectorCustomers(collectorId) {
+    async getCollectorCustomers(collectorId, month = null, year = null) {
         return new Promise(async (resolve, reject) => {
             // Kita gabungkan customer yang di-mapping area-nya DAN yang di-mapping manual
             const sql = `
                 SELECT DISTINCT c.*, p.name as package_name, p.price as package_price, p.image as package_image, p.tax_rate,
                        c.latitude, c.longitude,
                        r.name as router_name,
-${filters.year && filters.month ? `
+${year && month ? `
                        CASE 
                            WHEN EXISTS (
                                SELECT 1 FROM invoices i 
                                WHERE i.customer_id = c.id 
-                               AND strftime('%m', i.created_at) = '${String(filters.month).padStart(2, '0')}' 
-                               AND strftime('%Y', i.created_at) = '${String(filters.year)}' 
+                               AND strftime('%m', i.created_at) = '${String(month).padStart(2, '0')}' 
+                               AND strftime('%Y', i.created_at) = '${String(year)}' 
                                AND i.status = 'paid'
                            ) THEN 'paid'
                            ELSE 'unpaid'
@@ -3685,6 +3723,87 @@ ${filters.year && filters.month ? `
     // Get current month's total commission (reset every month)
     async getCollectorTotalCommission(collectorId) {
         return new Promise((resolve, reject) => {
+            const sql = "SELECT COALESCE(SUM(commission_amount), 0) as total FROM payments WHERE collector_id = ? AND status = 'completed'";
+            this.db.get(sql, [collectorId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row ? row.total : 0);
+            });
+        });
+    }
+
+    async getCollectorDashboardStats(collectorId, month = null, year = null) {
+        const dateObj = new Date();
+        const filterMonth = (month || (dateObj.getMonth() + 1)).toString().padStart(2, '0');
+        const filterYear = (year || dateObj.getFullYear()).toString();
+        
+        const todayStr = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+
+        try {
+            const qTagihan = `
+                SELECT COUNT(i.id) as count, COALESCE(SUM(i.amount), 0) as total
+                FROM invoices i
+                INNER JOIN customers c ON i.customer_id = c.id
+                INNER JOIN collector_areas ca ON c.area = ca.area
+                WHERE ca.collector_id = ? 
+                AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ?
+            `;
+            
+            const qLunas = `
+                SELECT COUNT(DISTINCT i.customer_id) as count, COALESCE(SUM(p.amount), 0) as total
+                FROM payments p
+                INNER JOIN invoices i ON p.invoice_id = i.id
+                WHERE p.collector_id = ?
+                AND strftime('%m', p.payment_date) = ? AND strftime('%Y', p.payment_date) = ?
+            `;
+            
+            const qBelumLunas = `
+                SELECT COUNT(DISTINCT i.customer_id) as count, COALESCE(SUM(i.amount), 0) as total
+                FROM invoices i
+                INNER JOIN customers c ON i.customer_id = c.id
+                INNER JOIN collector_areas ca ON c.area = ca.area
+                WHERE ca.collector_id = ? AND i.status = 'unpaid'
+                AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ?
+            `;
+            
+            const qLunasHariIni = `
+                SELECT COUNT(DISTINCT i.customer_id) as count, COALESCE(SUM(p.amount), 0) as total
+                FROM payments p
+                INNER JOIN invoices i ON p.invoice_id = i.id
+                WHERE p.collector_id = ?
+                AND strftime('%Y-%m-%d', p.payment_date) = ?
+            `;
+            
+            const qSetoran = `
+                SELECT 
+                    COALESCE(SUM(CASE WHEN remittance_status = 'remitted' THEN (amount - commission_amount) ELSE 0 END), 0) as sudah_setor,
+                    COALESCE(SUM(CASE WHEN remittance_status IS NULL THEN (amount - commission_amount) ELSE 0 END), 0) as belum_setor
+                FROM payments
+                WHERE collector_id = ? AND payment_type = 'collector'
+                AND strftime('%m', payment_date) = ? AND strftime('%Y', payment_date) = ?
+            `;
+
+            const runGet = (sql, params) => new Promise((resolve, reject) => {
+                this.db.get(sql, params, (err, row) => err ? reject(err) : resolve(row || {}));
+            });
+
+            const [tagihan, lunas, belumLunas, hariIni, setoran] = await Promise.all([
+                runGet(qTagihan, [collectorId, filterMonth, filterYear]),
+                runGet(qLunas, [collectorId, filterMonth, filterYear]),
+                runGet(qBelumLunas, [collectorId, filterMonth, filterYear]),
+                runGet(qLunasHariIni, [collectorId, todayStr]),
+                runGet(qSetoran, [collectorId, filterMonth, filterYear])
+            ]);
+
+            return { tagihan, lunas, belumLunas, hariIni, setoran };
+        } catch (error) {
+            console.error("Error getCollectorDashboardStats:", error);
+            throw error;
+        }
+    }
+
+    // Get current month's total commission (reset every month)
+    async getCollectorTotalCommission(collectorId) {
+        return new Promise((resolve, reject) => {
             const now = new Date();
             const year = now.getFullYear();
             const month = now.getMonth() + 1;
@@ -5754,7 +5873,7 @@ async handlePaymentWebhook(payload, gateway) {
                         
                         SELECT 
                             'income' as type,
-                            inc.join_date as date,
+                            inc.income_date as date,
                             inc.amount as amount,
                             inc.payment_method,
                             CONCAT('Pendapatan - ', inc.category) as gateway_name,
@@ -5863,7 +5982,7 @@ async handlePaymentWebhook(payload, gateway) {
                         
                         SELECT 
                             'income' as type,
-                            inc.join_date as date,
+                            inc.income_date as date,
                             inc.amount as amount,
                             inc.payment_method,
                             CONCAT('Pendapatan - ', inc.category) as gateway_name,
@@ -6343,27 +6462,60 @@ async handlePaymentWebhook(payload, gateway) {
         });
     }
 
-    // Method untuk mendapatkan kolektor dengan pending amounts (untuk remittance)
-    async getCollectorsWithPendingAmounts() {
+    // Method untuk mendapatkan kolektor dengan pending amounts dan statistik (untuk remittance)
+    async getCollectorsWithPendingAmounts(month = null, year = null) {
         return new Promise((resolve, reject) => {
+            let dateFilter = "";
+            let params = [];
+            
+            if (month && year) {
+                const startMonth = String(month).padStart(2, '0');
+                dateFilter = " AND strftime('%m', payment_date) = ? AND strftime('%Y', payment_date) = ?";
+                params.push(startMonth, String(year));
+            }
+
             const sql = `
                 SELECT 
                     c.id,
                     c.name,
                     c.phone,
                     c.commission_rate,
-                    COALESCE(SUM(p.amount - p.commission_amount), 0) as pending_amount,
-                    COUNT(p.id) as pending_payments_count
+                    -- Total Lunas (Gross)
+                    (
+                        SELECT COALESCE(SUM(amount), 0)
+                        FROM payments
+                        WHERE collector_id = c.id AND payment_type = 'collector'
+                        ${dateFilter.replace(/payment_date/g, 'payments.payment_date')}
+                    ) as total_lunas_gross,
+                    -- Sudah Setor (Netto)
+                    (
+                        SELECT COALESCE(SUM(amount - commission_amount), 0)
+                        FROM payments
+                        WHERE collector_id = c.id AND payment_type = 'collector' AND remittance_status = 'remitted'
+                        ${dateFilter.replace(/payment_date/g, 'payments.payment_date')}
+                    ) as sudah_setor,
+                    -- Belum Setor (Netto)
+                    (
+                        SELECT COALESCE(SUM(amount - commission_amount), 0)
+                        FROM payments
+                        WHERE collector_id = c.id AND payment_type = 'collector' AND remittance_status IS NULL
+                        ${dateFilter.replace(/payment_date/g, 'payments.payment_date')}
+                    ) as pending_amount,
+                    (
+                        SELECT COUNT(id)
+                        FROM payments
+                        WHERE collector_id = c.id AND payment_type = 'collector' AND remittance_status IS NULL
+                        ${dateFilter.replace(/payment_date/g, 'payments.payment_date')}
+                    ) as pending_payments_count
                 FROM collectors c
-                LEFT JOIN payments p ON c.id = p.collector_id 
-                    AND p.payment_type = 'collector'
-                    AND p.remittance_status IS NULL
                 WHERE c.status = 'active'
                 GROUP BY c.id, c.name, c.phone, c.commission_rate
                 ORDER BY c.name
             `;
             
-            this.db.all(sql, [], (err, rows) => {
+            const fullParams = [...params, ...params, ...params, ...params];
+            
+            this.db.all(sql, fullParams, (err, rows) => {
                 if (err) {
                     reject(err);
                 } else {

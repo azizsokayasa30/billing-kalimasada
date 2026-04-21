@@ -265,7 +265,7 @@ router.get('/mobile/collector', getAppSettings, async (req, res) => {
                     // Validasi dan format data collectors
                     const validCollectors = (rows || []).map(row => ({
                         ...row,
-                        commission_rate: Math.max(0, Math.min(100, parseFloat(row.commission_rate || 5))),
+                        commission_rate: Math.max(0, Math.min(100, parseFloat(row.commission_rate !== null && row.commission_rate !== undefined ? row.commission_rate : 5))),
                         total_payments: parseInt(row.total_payments || 0),
                         total_collected: Math.round(parseFloat(row.total_collected || 0)),
                         total_commission: Math.round(parseFloat(row.total_commission || 0)),
@@ -399,7 +399,7 @@ router.post('/api/collector-payment', adminAuth, async (req, res) => {
             });
         }
         
-        const commissionRate = collector.commission_rate || 5;
+        const commissionRate = collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5;
         
         // Validasi commission rate
         if (commissionRate < 0 || commissionRate > 100) {
@@ -554,7 +554,7 @@ router.get('/mobile/collector/payment', getAppSettings, async (req, res) => {
 // Collector Reports
 router.get('/collector-reports', getAppSettings, async (req, res) => {
     try {
-        const { dateFrom, dateTo, collector } = req.query;
+        const { collector, month, year } = req.query;
         const dbPath = path.join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
         
@@ -569,6 +569,14 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
             });
         });
         
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+        const filterYear = parseInt(year) || currentYear;
+        const filterMonth = parseInt(month) || currentMonth;
+        
+        const startDate = `${filterYear}-${String(filterMonth).padStart(2, '0')}-01`;
+        const endDate = new Date(filterYear, filterMonth, 0).toISOString().split('T')[0];
+        
         if (!tableExists) {
             db.close();
             return res.render('admin/billing/collector-reports', {
@@ -576,27 +584,19 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
                 appSettings: req.appSettings,
                 collectors: [],
                 summary: {
-                    total_collectors: 0,
-                    total_payments: 0,
-                    total_commissions: 0,
-                    total_setoran: 0
+                    total_tagihan: 0,
+                    total_lunas: 0,
+                    total_belum_lunas: 0,
+                    total_komisi: 0
                 },
                 filters: {
-                    dateFrom: dateFrom || '',
-                    dateTo: dateTo || '',
+                    month: filterMonth,
+                    year: filterYear,
                     collector: collector || ''
                 },
                 error: 'Tabel kolektor belum tersedia. Silakan tambahkan kolektor terlebih dahulu.'
             });
         }
-        
-        // Set default date range (last 30 days)
-        const defaultDateTo = new Date();
-        const defaultDateFrom = new Date();
-        defaultDateFrom.setDate(defaultDateFrom.getDate() - 30);
-        
-        const startDate = dateFrom || defaultDateFrom.toISOString().split('T')[0];
-        const endDate = dateTo || defaultDateTo.toISOString().split('T')[0];
         
         // Build date filter
         const dateFilter = `AND cp.collected_at >= '${startDate}' AND cp.collected_at <= '${endDate} 23:59:59'`;
@@ -604,14 +604,47 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
         // Build collector filter
         const collectorFilter = collector ? `AND c.id = ${collector}` : '';
         
-        // Get collectors with statistics
+        // Get collectors with statistics based on mapped areas
         const collectors = await new Promise((resolve, reject) => {
-            db.all(`
+            const sql = `
                 SELECT c.*, 
-                       COUNT(cp.id) as total_payments,
+                       (
+                           SELECT COALESCE(SUM(i.amount), 0)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id 
+                           AND DATE(i.created_at) >= '${startDate}' AND DATE(i.created_at) <= '${endDate}'
+                       ) as total_tagihan_area,
+                       (
+                           SELECT COALESCE(SUM(i.amount), 0)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id 
+                           AND i.status = 'paid'
+                           AND DATE(i.created_at) >= '${startDate}' AND DATE(i.created_at) <= '${endDate}'
+                       ) as total_lunas_area,
+                       (
+                           SELECT COALESCE(SUM(i.amount), 0)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id 
+                           AND i.status = 'unpaid'
+                           AND DATE(i.created_at) >= '${startDate}' AND DATE(i.created_at) <= '${endDate}'
+                       ) as total_belum_lunas_amount,
+                       (
+                           SELECT COUNT(i.id)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id 
+                           AND i.status = 'unpaid'
+                           AND DATE(i.created_at) >= '${startDate}' AND DATE(i.created_at) <= '${endDate}'
+                       ) as total_belum_lunas_count,
                        COALESCE(SUM(cp.payment_amount), 0) as total_payment_amount,
-                       COALESCE(SUM(cp.commission_amount), 0) as total_commission,
-                       COALESCE(SUM(cp.payment_amount - cp.commission_amount), 0) as total_setoran
+                       COALESCE(SUM(cp.commission_amount), 0) as total_commission
                 FROM collectors c
                 LEFT JOIN collector_payments cp ON c.id = cp.collector_id 
                     AND cp.status = 'completed'
@@ -619,7 +652,8 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
                 WHERE c.status = 'active' ${collectorFilter}
                 GROUP BY c.id
                 ORDER BY c.name
-            `, (err, rows) => {
+            `;
+            db.all(sql, (err, rows) => {
                 if (err) {
                     console.error('Error in collectors query:', err);
                     reject(err);
@@ -629,32 +663,19 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
             });
         });
         
-        // Get summary statistics
-        const summary = await new Promise((resolve, reject) => {
-            db.get(`
-                SELECT 
-                    COUNT(DISTINCT c.id) as total_collectors,
-                    COALESCE(SUM(cp.payment_amount), 0) as total_payments,
-                    COALESCE(SUM(cp.commission_amount), 0) as total_commissions,
-                    COALESCE(SUM(cp.payment_amount - cp.commission_amount), 0) as total_setoran
-                FROM collectors c
-                LEFT JOIN collector_payments cp ON c.id = cp.collector_id 
-                    AND cp.status = 'completed'
-                    ${dateFilter}
-                WHERE c.status = 'active' ${collectorFilter}
-            `, (err, row) => {
-                if (err) {
-                    console.error('Error in summary query:', err);
-                    reject(err);
-                } else {
-                    resolve(row || {
-                        total_collectors: 0,
-                        total_payments: 0,
-                        total_commissions: 0,
-                        total_setoran: 0
-                    });
-                }
-            });
+        // Compute summary manually from the returned rows to perfectly match the cards
+        let summary = {
+            total_tagihan: 0,
+            total_lunas: 0,
+            total_belum_lunas: 0,
+            total_komisi: 0
+        };
+        
+        collectors.forEach(c => {
+            summary.total_tagihan += (c.total_tagihan_area || 0);
+            summary.total_lunas += (c.total_lunas_area || 0);
+            summary.total_belum_lunas += (c.total_belum_lunas_amount || 0);
+            summary.total_komisi += (c.total_commission || 0);
         });
         
         db.close();
@@ -666,8 +687,8 @@ router.get('/collector-reports', getAppSettings, async (req, res) => {
             collectors: collectors,
             summary: summary,
             filters: {
-                dateFrom: startDate,
-                dateTo: endDate,
+                month: filterMonth,
+                year: filterYear,
                 collector: collector || ''
             },
             settings: settings,
@@ -776,17 +797,17 @@ router.get('/collector-reports/export', getAppSettings, async (req, res) => {
 router.get('/collector-details/:id', getAppSettings, async (req, res) => {
     try {
         const { id } = req.params;
-        const { dateFrom, dateTo } = req.query;
+        const { month, year } = req.query;
         const dbPath = path.join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
         
-        // Set default date range (last 30 days)
-        const defaultDateTo = new Date();
-        const defaultDateFrom = new Date();
-        defaultDateFrom.setDate(defaultDateFrom.getDate() - 30);
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+        const filterYear = parseInt(year) || currentYear;
+        const filterMonth = parseInt(month) || currentMonth;
         
-        const startDate = dateFrom || defaultDateFrom.toISOString().split('T')[0];
-        const endDate = dateTo || defaultDateTo.toISOString().split('T')[0];
+        const startDate = `${filterYear}-${String(filterMonth).padStart(2, '0')}-01`;
+        const endDate = new Date(filterYear, filterMonth, 0).toISOString().split('T')[0];
         
         // Get collector details
         const collector = await new Promise((resolve, reject) => {
@@ -820,26 +841,66 @@ router.get('/collector-details/:id', getAppSettings, async (req, res) => {
             });
         });
         
-        // Get collector statistics
+        // Get collector statistics based on mapped areas
         const stats = await new Promise((resolve, reject) => {
             db.get(`
                 SELECT 
-                    COUNT(*) as total_payments,
-                    COALESCE(SUM(payment_amount), 0) as total_payment_amount,
-                    COALESCE(SUM(commission_amount), 0) as total_commission,
-                    COALESCE(SUM(payment_amount - commission_amount), 0) as total_setoran
-                FROM collector_payments 
-                WHERE collector_id = ? 
-                AND collected_at >= ? 
-                AND collected_at <= ?
-                AND status = 'completed'
-            `, [id, startDate, endDate + ' 23:59:59'], (err, row) => {
+                       (
+                           SELECT COALESCE(SUM(i.amount), 0)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = ? 
+                           AND DATE(i.created_at) >= ? AND DATE(i.created_at) <= ?
+                       ) as total_tagihan_area,
+                       (
+                           SELECT COALESCE(SUM(i.amount), 0)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = ? 
+                           AND i.status = 'paid'
+                           AND DATE(i.created_at) >= ? AND DATE(i.created_at) <= ?
+                       ) as total_lunas_area,
+                       (
+                           SELECT COALESCE(SUM(i.amount), 0)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = ? 
+                           AND i.status = 'unpaid'
+                           AND DATE(i.created_at) >= ? AND DATE(i.created_at) <= ?
+                       ) as total_belum_lunas_amount,
+                       (
+                           SELECT COUNT(i.id)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = ? 
+                           AND i.status = 'unpaid'
+                           AND DATE(i.created_at) >= ? AND DATE(i.created_at) <= ?
+                       ) as total_belum_lunas_count,
+                       (
+                           SELECT COALESCE(SUM(commission_amount), 0) 
+                           FROM collector_payments 
+                           WHERE collector_id = ? 
+                           AND collected_at >= ? AND collected_at <= ? 
+                           AND status = 'completed'
+                       ) as total_komisi
+            `, [
+                id, startDate, endDate, 
+                id, startDate, endDate,
+                id, startDate, endDate,
+                id, startDate, endDate,
+                id, startDate, endDate + ' 23:59:59'
+            ], (err, row) => {
                 if (err) reject(err);
                 else resolve(row || {
-                    total_payments: 0,
-                    total_payment_amount: 0,
-                    total_commission: 0,
-                    total_setoran: 0
+                    total_tagihan_area: 0,
+                    total_lunas_area: 0,
+                    total_belum_lunas_amount: 0,
+                    total_belum_lunas_count: 0,
+                    total_komisi: 0
                 });
             });
         });
@@ -854,8 +915,8 @@ router.get('/collector-details/:id', getAppSettings, async (req, res) => {
             payments: payments,
             stats: stats,
             filters: {
-                dateFrom: startDate,
-                dateTo: endDate
+                month: filterMonth,
+                year: filterYear
             },
             settings: settings,
             page: 'collector-reports'
@@ -958,8 +1019,15 @@ router.get('/collector-details/:id/export', getAppSettings, async (req, res) => 
 // Collector Remittance
 router.get('/collector-remittance', getAppSettings, async (req, res) => {
     try {
+        const today = new Date();
+        const month = req.query.month !== undefined ? req.query.month : (today.getMonth() + 1).toString();
+        const year = req.query.year !== undefined ? req.query.year : today.getFullYear().toString();
+        
+        const filterMonth = month === 'all' ? null : month;
+        const filterYear = year === 'all' ? null : year;
+        
         // Get collectors with pending amounts from payments table
-        const collectors = await billingManager.getCollectorsWithPendingAmounts();
+        const collectors = await billingManager.getCollectorsWithPendingAmounts(filterMonth, filterYear);
         
         // Get recent remittances from expenses table (commission expenses)
         const remittances = await billingManager.getCommissionExpenses();
@@ -971,6 +1039,7 @@ router.get('/collector-remittance', getAppSettings, async (req, res) => {
             collectors: collectors,
             remittances: remittances,
             settings: settings,
+            filters: { month, year },
             page: 'collector-remittance'
         });
         

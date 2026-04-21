@@ -100,6 +100,35 @@
                     </div>
                 </div>
 
+                <!-- FILTER SELECTION -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <label class="f-label">Bulan</label>
+                        <select class="f-select" id="monthFilter">
+                            <option value="all" <%= typeof filters !== 'undefined' && filters.month === 'all' ? 'selected' : '' %>>Semua Waktu</option>
+                            <% const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']; %>
+                            <% for(let m=1; m<=12; m++) { %>
+                                <option value="<%= m %>" <%= typeof filters !== 'undefined' && filters.month == m ? 'selected' : '' %>><%= months[m-1] %></option>
+                            <% } %>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="f-label">Tahun</label>
+                        <select class="f-select" id="yearFilter">
+                            <option value="all" <%= typeof filters !== 'undefined' && filters.year === 'all' ? 'selected' : '' %>>Semua Waktu</option>
+                            <% const currY = new Date().getFullYear(); %>
+                            <% for(let y=currY-3; y<=currY+1; y++) { %>
+                                <option value="<%= y %>" <%= typeof filters !== 'undefined' && filters.year == y ? 'selected' : '' %>><%= y %></option>
+                            <% } %>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="f-btn f-btn-primary w-100" onclick="applyRemittanceFilters()">
+                            <i class="bi bi-search me-2"></i>Filter Data
+                        </button>
+                    </div>
+                </div>
+
                 <!-- COLLECTORS SELECTION -->
                 <section class="mb-5">
                     <div class="d-flex align-items-center justify-content-between mb-3">
@@ -123,15 +152,29 @@
                                         </div>
                                     </div>
                                     
-                                    <div class="p-3 rounded-3 bg-light border mb-2">
-                                        <span class="f-label mb-1" style="font-size: 0.65rem;">SETORAN PENDING</span>
-                                        <div class="font-weight-bold text-success" style="font-size: 1.25rem;">
-                                            Rp <%= (collector.pending_amount || 0).toLocaleString('id-ID') %>
+                                    <div class="row g-2 mb-3 mt-1">
+                                        <div class="col-12 col-md-6 border-end px-2 text-center" style="border-right-style: dashed !important;">
+                                            <span class="f-label mb-1 d-block" style="font-size: 0.65rem;">TOTAL LUNAS</span>
+                                            <div class="font-weight-bold text-dark" style="font-size: 0.95rem;">
+                                                Rp <%= (collector.total_lunas_gross || 0).toLocaleString('id-ID') %>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 col-md-6 px-2 text-center">
+                                            <span class="f-label mb-1 d-block text-success" style="font-size: 0.65rem;">SUDAH SETOR</span>
+                                            <div class="font-weight-bold text-success" style="font-size: 0.95rem;">
+                                                Rp <%= (collector.sudah_setor || 0).toLocaleString('id-ID') %>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 mt-3 pt-3 border-top px-2 text-center" style="background: rgba(220, 38, 38, 0.04); border-radius: 8px;">
+                                            <span class="f-label mb-1 d-block text-danger font-weight-bold" style="font-size: 0.75rem;">BELUM SETOR</span>
+                                            <div class="font-weight-bold text-danger pb-1" style="font-size: 1.5rem; text-shadow: 0px 1px 1px rgba(220, 38, 38, 0.1);">
+                                                Rp <%= (collector.pending_amount || 0).toLocaleString('id-ID') %>
+                                            </div>
                                         </div>
                                     </div>
                                     
                                     <div class="d-flex justify-content-between align-items-center small text-muted">
-                                        <span><i class="bi bi-percent me-1"></i>Komisi <%= collector.commission_rate || 5 %>%</span>
+                                        <span><i class="bi bi-percent me-1"></i>Komisi <%= collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5 %>%</span>
                                         <span><i class="bi bi-check2-circle me-1"></i>Klik untuk pilih</span>
                                     </div>
                                 </div>
@@ -290,6 +333,17 @@
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
         let selectedCollector = null;
+        
+        function applyRemittanceFilters() {
+            const month = document.getElementById('monthFilter').value;
+            const year = document.getElementById('yearFilter').value;
+            
+            const params = new URLSearchParams();
+            if (month) params.append('month', month);
+            if (year) params.append('year', year);
+            
+            window.location.href = `/admin/billing/collector-remittance?${params.toString()}`;
+        }
         
         function selectCollector(element, id, name, pendingAmount) {
             // Remove previous selection
