@@ -56,15 +56,21 @@
   --dropdown-hover:      #f1f5f9;
   --dropdown-text:       #0f172a;
 
-  /* Badges */
+  /* Badges — Light Mode Semantic Colors */
   --badge-success-bg:    #dcfce7;
-  --badge-success-text:  #16a34a;
+  --badge-success-text:  #166534;
   --badge-danger-bg:     #fee2e2;
-  --badge-danger-text:   #dc2626;
+  --badge-danger-text:   #991b1b;
   --badge-warning-bg:    #fef9c3;
-  --badge-warning-text:  #ca8a04;
-  --badge-info-bg:       #dbeafe;
-  --badge-info-text:     #2563eb;
+  --badge-warning-text:  #713f12;
+  --badge-info-bg:       #cffafe;
+  --badge-info-text:     #155e75;
+  --badge-primary-bg:    #dbeafe;
+  --badge-primary-text:  #1e40af;
+  --badge-secondary-bg:  #f1f5f9;
+  --badge-secondary-text:#475569;
+  --badge-brown-bg:      #fef3c7;
+  --badge-brown-text:    #78350f;
 
   /* Status colors */
   --color-success:       #16a34a;
@@ -128,15 +134,21 @@
   --dropdown-hover:      #243044;
   --dropdown-text:       #f1f5f9;
 
-  /* Badges */
-  --badge-success-bg:    rgba(22,163,74,0.2);
+  /* Badges — Dark Mode Semantic Colors */
+  --badge-success-bg:    rgba(22,163,74,0.25);
   --badge-success-text:  #4ade80;
-  --badge-danger-bg:     rgba(220,38,38,0.2);
-  --badge-danger-text:   #f87171;
-  --badge-warning-bg:    rgba(217,119,6,0.2);
-  --badge-warning-text:  #fcd34d;
-  --badge-info-bg:       rgba(37,99,235,0.2);
-  --badge-info-text:     #93c5fd;
+  --badge-danger-bg:     rgba(220,38,38,0.25);
+  --badge-danger-text:   #fca5a5;
+  --badge-warning-bg:    rgba(217,119,6,0.25);
+  --badge-warning-text:  #fde68a;
+  --badge-info-bg:       rgba(6,182,212,0.25);
+  --badge-info-text:     #67e8f9;
+  --badge-primary-bg:    rgba(37,99,235,0.25);
+  --badge-primary-text:  #93c5fd;
+  --badge-secondary-bg:  rgba(71,85,105,0.4);
+  --badge-secondary-text:#cbd5e1;
+  --badge-brown-bg:      rgba(146,64,14,0.35);
+  --badge-brown-text:    #fde68a;
 
   /* Status colors */
   --color-success:       #4ade80;
@@ -312,15 +324,93 @@ a:hover { color: var(--accent-hover); }
 [data-theme="dark"] .btn-close { filter: invert(1) brightness(0.8); }
 
 /* ============================================================
-   BADGES
+   BADGES — SEMANTIC COLOR SYSTEM
+   Berlaku untuk semua halaman, light & dark mode otomatis
    ============================================================ */
-.badge.bg-success, .badge.text-bg-success { background-color: var(--badge-success-bg) !important; color: var(--badge-success-text) !important; }
-.badge.bg-danger, .badge.text-bg-danger   { background-color: var(--badge-danger-bg) !important;  color: var(--badge-danger-text) !important; }
-.badge.bg-warning, .badge.text-bg-warning { background-color: var(--badge-warning-bg) !important; color: var(--badge-warning-text) !important; }
-.badge.bg-info, .badge.text-bg-info       { background-color: var(--badge-info-bg) !important;    color: var(--badge-info-text) !important; }
-.badge.bg-primary, .badge.text-bg-primary { background-color: var(--accent) !important; color: #fff !important; }
-.badge.bg-secondary { background-color: var(--surface-3) !important; color: var(--text-secondary) !important; }
-.badge.bg-light { background-color: var(--surface-2) !important; color: var(--text-primary) !important; }
+
+/* Base badge styling */
+.badge {
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+  padding: 0.35em 0.7em !important;
+  border-radius: 0.4em !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Semua badge menggunakan CSS variables (theme-aware) */
+.badge.bg-success, .badge.text-bg-success {
+  background-color: var(--badge-success-bg) !important;
+  color: var(--badge-success-text) !important;
+  border: 1px solid color-mix(in srgb, var(--badge-success-text) 20%, transparent);
+}
+.badge.bg-danger, .badge.text-bg-danger {
+  background-color: var(--badge-danger-bg) !important;
+  color: var(--badge-danger-text) !important;
+  border: 1px solid color-mix(in srgb, var(--badge-danger-text) 20%, transparent);
+}
+.badge.bg-warning, .badge.text-bg-warning {
+  background-color: var(--badge-warning-bg) !important;
+  color: var(--badge-warning-text) !important;
+  border: 1px solid color-mix(in srgb, var(--badge-warning-text) 20%, transparent);
+}
+.badge.bg-info, .badge.text-bg-info {
+  background-color: var(--badge-info-bg) !important;
+  color: var(--badge-info-text) !important;
+  border: 1px solid color-mix(in srgb, var(--badge-info-text) 20%, transparent);
+}
+.badge.bg-primary, .badge.text-bg-primary {
+  background-color: var(--badge-primary-bg) !important;
+  color: var(--badge-primary-text) !important;
+  border: 1px solid color-mix(in srgb, var(--badge-primary-text) 20%, transparent);
+}
+.badge.bg-secondary, .badge.text-bg-secondary {
+  background-color: var(--badge-secondary-bg) !important;
+  color: var(--badge-secondary-text) !important;
+}
+.badge.bg-light {
+  background-color: var(--surface-2) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color);
+}
+
+/* Custom: Brown/Cokelat = Nonaktif */
+.badge.bg-brown {
+  background-color: var(--badge-brown-bg) !important;
+  color: var(--badge-brown-text) !important;
+  border: 1px solid color-mix(in srgb, var(--badge-brown-text) 20%, transparent);
+}
+
+/* Custom: Area Badge — selalu biru, font putih, kontras di semua tema */
+.badge.badge-area,
+.badge-area,
+.area-badge {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(37, 99, 235, 0.4) !important;
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 0.3em 0.7em;
+  border-radius: 0.4em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 2px;
+  white-space: nowrap;
+}
+.badge.badge-area:hover,
+.badge-area:hover,
+.area-badge:hover {
+  background-color: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
+/* Pastikan text-dark tidak mengubah warna di dark mode */
+[data-theme='dark'] .badge.text-dark {
+  color: var(--badge-warning-text) !important;
+}
 
 /* ============================================================
    MODALS
@@ -529,4 +619,5 @@ a:hover { color: var(--accent-hover); }
   transition-timing-function: ease;
 }
 
-/* Exceptions — things we don't want to transition */
+
+/* Badge colors fully defined in BADGES section and :root variables above */

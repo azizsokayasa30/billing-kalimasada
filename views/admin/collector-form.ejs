@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -152,8 +152,9 @@
                                 <div class="col-md-6">
                                     <div class="mb-3">
                                         <label for="name" class="form-label">Nama Lengkap *</label>
-                                        <input type="text" class="form-control" id="name" name="name" 
-                                               value="<%= collector ? collector.name : '' %>" required>
+                                        <select class="form-select" id="name" name="name" required>
+                                            <option value="">-- Pilih dari Karyawan --</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -295,6 +296,59 @@
     <script>
         const action = '<%= action %>';
         const collectorId = '<%= collector ? collector.id : "" %>';
+
+        const currentCollectorName = '<%= collector ? collector.name : "" %>';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/admin/employees/api/data');
+                const json = await res.json();
+                if (json.success && json.data) {
+                    const sel = document.getElementById('name');
+                    
+                    // Jika edit tapi nama tidak ada di list karyawan, tambahkan opsi tersebut
+                    let nameFound = false;
+                    if (action === 'edit' && currentCollectorName) {
+                        nameFound = json.data.some(emp => emp.nama_lengkap === currentCollectorName);
+                        if (!nameFound) {
+                            const opt = document.createElement('option');
+                            opt.value = currentCollectorName;
+                            opt.textContent = currentCollectorName + ' (Data Lama)';
+                            sel.appendChild(opt);
+                        }
+                    }
+
+                    json.data.forEach(emp => {
+                        if (emp.status !== 'nonaktif') {
+                            const opt = document.createElement('option');
+                            opt.value = emp.nama_lengkap;
+                            opt.textContent = emp.nama_lengkap + ' (' + emp.jabatan + ')';
+                            opt.dataset.phone = emp.no_hp || '';
+                            opt.dataset.email = emp.email || '';
+                            opt.dataset.address = emp.alamat || '';
+                            sel.appendChild(opt);
+                        }
+                    });
+
+                    // Set selected value untuk mode edit
+                    if (action === 'edit' && currentCollectorName) {
+                        sel.value = currentCollectorName;
+                    }
+                }
+            } catch(e) { console.error('Gagal memuat data karyawan', e); }
+        });
+
+        document.getElementById('name').addEventListener('change', function() {
+            const opt = this.options[this.selectedIndex];
+            if (opt) {
+                if (opt.dataset.phone) {
+                    document.getElementById('phone').value = opt.dataset.phone;
+                    document.getElementById('phone').dispatchEvent(new Event('input'));
+                }
+                if (opt.dataset.email) document.getElementById('email').value = opt.dataset.email;
+                if (opt.dataset.address) document.getElementById('address').value = opt.dataset.address;
+            }
+        });
         
         // Form submission
         document.getElementById('collectorForm').addEventListener('submit', async function(e) {

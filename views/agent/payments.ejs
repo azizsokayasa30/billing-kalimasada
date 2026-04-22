@@ -620,10 +620,10 @@ data.customers.forEach(cust => {
     let paymentStatusBadge = '';
     let paymentStatusText = '';
     if (cust.payment_status === 'paid') {
-        paymentStatusBadge = `<span class='badge bg-success ms-1'>LUNAS</span>`;
+        paymentStatusBadge = `<span class="badge ms-1 bg-success">LUNAS</span>`;
         paymentStatusText = 'Tagihan sudah lunas';
     } else if (cust.payment_status === 'unpaid') {
-        paymentStatusBadge = `<span class='badge bg-warning ms-1'>BELUM LUNAS</span>`;
+        paymentStatusBadge = `<span class="badge ms-1 bg-warning text-dark">BELUM LUNAS</span>`;
         paymentStatusText = `Tagihan belum lunas (Rp ${parseFloat(cust.last_invoice_amount || 0).toLocaleString()})`;
     } else {
         paymentStatusBadge = `<span class='badge bg-info ms-1'>TIDAK ADA TAGIHAN</span>`;

@@ -537,8 +537,8 @@
             // Determine status and class
             const isOnline = device.isOnline || device.status === 'Online';
             const statusBadge = isOnline ? 
-                '<span class="status-badge status-online">Online</span>' : 
-                '<span class="status-badge status-offline">Offline</span>';
+                '<span class="status-badge status-online bg-success">Online</span>' : 
+                '<span class="status-badge status-offline bg-danger">Offline</span>';
             
             // Format last inform
             const lastInform = device.lastInformFormatted || (device.lastInform ? 

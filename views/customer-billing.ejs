@@ -97,11 +97,11 @@
           <div class="mb-2">
             <strong>Status Pembayaran:</strong>
             <% if (customer.payment_status === 'paid') { %>
-              <span class="badge badge-paid">Lunas</span>
+              <span class="badge badge-paid bg-success">Lunas</span>
             <% } else if (customer.payment_status === 'unpaid') { %>
-              <span class="badge badge-unpaid">Belum Lunas</span>
+              <span class="badge badge-unpaid bg-warning text-dark">Belum Lunas</span>
             <% } else if (customer.payment_status === 'overdue') { %>
-              <span class="badge badge-overdue">Terlambat</span>
+              <span class="badge badge-overdue bg-warning text-dark">Terlambat</span>
             <% } else { %>
               <span class="badge bg-secondary">Belum Ada Tagihan</span>
             <% } %>
@@ -165,7 +165,7 @@
                             <span class="badge bg-success">Lunas</span>
                           <% } else if (invoice.status === 'unpaid') { %>
                             <% if (new Date(invoice.due_date) < new Date()) { %>
-                              <span class="badge bg-danger">Terlambat</span>
+                              <span class="badge bg-warning text-dark">Terlambat</span>
                             <% } else { %>
                               <span class="badge bg-warning text-dark">Belum Lunas</span>
                             <% } %>
@@ -229,7 +229,7 @@
                             <span class="badge bg-success">Lunas</span>
                           <% } else if (invoice.status === 'unpaid') { %>
                             <% if (new Date(invoice.due_date) < new Date()) { %>
-                              <span class="badge bg-danger">Terlambat</span>
+                              <span class="badge bg-warning text-dark">Terlambat</span>
                             <% } else { %>
                               <span class="badge bg-warning text-dark">Belum Lunas</span>
                             <% } %>
@@ -312,7 +312,7 @@
                       <div class="fw-semibold">DANA</div>
                       <div class="text-muted small" id="wallet-number-dana"><%= settings.payment_dana %></div>
                     </div>
-                    <span class="badge bg-info">Aktif</span>
+                    <span class="badge bg-success">Aktif</span>
                   </div>
                   <div class="mt-2 d-flex gap-2">
                     <button class="btn btn-sm btn-outline-primary copy-wallet-btn" data-number="<%= settings.payment_dana %>">
@@ -340,7 +340,7 @@
                       <div class="fw-semibold">OVO</div>
                       <div class="text-muted small" id="wallet-number-ovo"><%= settings.payment_ovo %></div>
                     </div>
-                    <span class="badge bg-info">Aktif</span>
+                    <span class="badge bg-success">Aktif</span>
                   </div>
                   <div class="mt-2 d-flex gap-2">
                     <button class="btn btn-sm btn-outline-primary copy-wallet-btn" data-number="<%= settings.payment_ovo %>">
@@ -368,7 +368,7 @@
                       <div class="fw-semibold">GoPay</div>
                       <div class="text-muted small" id="wallet-number-gopay"><%= settings.payment_gopay %></div>
                     </div>
-                    <span class="badge bg-info">Aktif</span>
+                    <span class="badge bg-success">Aktif</span>
                   </div>
                   <div class="mt-2 d-flex gap-2">
                     <button class="btn btn-sm btn-outline-primary copy-wallet-btn" data-number="<%= settings.payment_gopay %>">
@@ -641,7 +641,7 @@
                             ${isActive ? 'data-active="true"' : ''}>
                       <i class="bi bi-credit-card me-2"></i>
                       Bayar dengan ${gatewayName}
-                      ${isActive ? '<span class="badge bg-success ms-2">Aktif</span>' : ''}
+                      ${isActive ? '<span class="badge ms-2 bg-success">Aktif</span>' : ''}
                     </button>
                   `;
                 });
@@ -703,7 +703,7 @@
             $(this).html(`
               <i class="bi bi-credit-card me-2"></i>
               Bayar dengan ${gatewayName}
-              ${isActive ? '<span class="badge bg-success ms-2">Aktif</span>' : ''}
+              ${isActive ? '<span class="badge ms-2 bg-success">Aktif</span>' : ''}
             `);
           });
         });

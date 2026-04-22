@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -136,7 +136,7 @@
                                                 <td><strong><%= member.name || '-' %></strong></td>
                                                 <td><%= member.phone || '-' %></td>
                                                 <td><%= member.username || '-' %></td>
-                                                <td><span class="badge bg-secondary"><%= member.area || '-' %></span></td>
+                                                <td><span class="badge badge-area"><i class="bi bi-geo-alt-fill me-1"></i><%= member.area || '-' %></span></td>
                                                 <td>
                                                     <% if (member.package_name) { %>
                                                         <span class="badge bg-primary"><%= member.package_name %></span>
@@ -152,7 +152,7 @@
                                                     <% } else if (member.status === 'isolir') { %>
                                                         <span class="badge bg-danger">Isolir</span>
                                                     <% } else { %>
-                                                        <span class="badge bg-secondary">Nonaktif</span>
+                                                        <span class="badge bg-brown">Nonaktif</span>
                                                     <% } %>
                                                 </td>
                                                 <td>
@@ -526,7 +526,7 @@
                                 ? '<span class="badge bg-warning">Suspend</span>'
                                 : member.status === 'isolir'
                                 ? '<span class="badge bg-danger">Isolir</span>'
-                                : '<span class="badge bg-secondary">Nonaktif</span>'}
+                                : '<span class="badge bg-brown">Nonaktif</span>'}
                         </p>
                     </div>
                 </div>
@@ -547,7 +547,7 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <h6 class="text-muted mb-1">Area / Desa</h6>
-                        <p class="mb-3"><span class="badge bg-secondary">${member.area || '-'}</span></p>
+                        <p class="mb-3"><span class="badge badge-area"><i class="bi bi-geo-alt-fill me-1"></i>${member.area || '-'}</span></p>
                     </div>
                     <div class="col-md-6 mb-3">
                         <h6 class="text-muted mb-1">Alamat</h6>

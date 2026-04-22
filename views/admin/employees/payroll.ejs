@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Penggajian Karyawan - <%= typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Admin Panel' %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/theme.css" rel="stylesheet">
+    <link href="/css/responsive-admin.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <style>
+        .main-content { min-height: 100vh; }
+        .page-header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--sb-border, #dee2e6); }
+        .table-container { background: var(--panel-bg, #ffffff); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 0; overflow: hidden; }
+        .table th { background-color: var(--table-head-bg, #f1f3f5); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; border-top: none; padding: 12px 15px; }
+        .table td { vertical-align: middle; padding: 12px 15px; font-size: 0.9rem; }
+    </style>
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <%- include('../../partials/admin-responsive-sidebar') %>
+            
+            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="page-header d-flex justify-content-between align-items-center mt-4">
+                    <h1 class="h4 m-0">Sistem Penggajian</h1>
+                    <div>
+                        <button class="btn btn-outline-success me-2" onclick="printAllSlips()">
+                            <i class="bi bi-printer me-1"></i> Cetak Semua Slip
+                        </button>
+                        <button class="btn btn-primary" onclick="generatePayroll()" id="btnGenerate">
+                            <i class="bi bi-gear-fill me-1"></i> Generate Gaji Bulan Ini
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card mb-4 border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-3">
+                                <label class="form-label mb-1">Bulan</label>
+                                <select id="filterBulan" class="form-select" onchange="loadData()">
+                                    <option value="1">Januari</option>
+                                    <option value="2">Februari</option>
+                                    <option value="3">Maret</option>
+                                    <option value="4">April</option>
+                                    <option value="5">Mei</option>
+                                    <option value="6">Juni</option>
+                                    <option value="7">Juli</option>
+                                    <option value="8">Agustus</option>
+                                    <option value="9">September</option>
+                                    <option value="10">Oktober</option>
+                                    <option value="11">November</option>
+                                    <option value="12">Desember</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label mb-1">Tahun</label>
+                                <select id="filterTahun" class="form-select" onchange="loadData()"></select>
+                            </div>
+                            <div class="col-md-3 ms-auto text-end">
+                                <div class="text-muted small">Total Estimasi Gaji</div>
+                                <h4 class="m-0 text-primary fw-bold" id="totalGajiBulan">Rp 0</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container shadow-sm">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Karyawan</th>
+                                    <th class="text-end">Gaji Pokok</th>
+                                    <th class="text-end">Tunj. & Bonus</th>
+                                    <th class="text-end">Potongan</th>
+                                    <th class="text-end">Total Gaji</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-end">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dataTableBody">
+                                <tr><td colspan="7" class="text-center py-4">Memuat data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal Rincian Gaji -->
+    <div class="modal fade" id="payrollModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 shadow">
+                <form id="payrollForm" onsubmit="saveData(event)">
+                    <div class="modal-header border-bottom-0 pb-0">
+                        <h5 class="modal-title fw-bold">Rincian Gaji</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body pt-3">
+                        <input type="hidden" id="payroll_id">
+                        <h6 class="fw-bold mb-3 text-primary" id="empNameLabel">-</h6>
+                        
+                        <div class="row">
+                            <div class="col-12 mb-3">
+                                <label class="form-label text-muted small">Gaji Pokok (Otomatis dari Master)</label>
+                                <input type="text" class="form-control bg-light" id="gaji_pokok" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Tunjangan</label>
+                                <input type="number" class="form-control" id="tunjangan" oninput="calculateTotal()">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Bonus</label>
+                                <input type="number" class="form-control" id="bonus" oninput="calculateTotal()">
+                            </div>
+                            <div class="col-12 mb-3">
+                                <label class="form-label text-danger">Potongan (Absen, Kasbon, dll)</label>
+                                <input type="number" class="form-control border-danger" id="potongan" oninput="calculateTotal()">
+                            </div>
+                            <div class="col-12 mb-3 p-3 bg-light rounded border">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold">Total Diterima:</span>
+                                    <span class="fw-bold fs-5 text-success" id="totalGajiLabel">Rp 0</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Status Pembayaran</label>
+                                <select class="form-select" id="status">
+                                    <option value="pending">Pending</option>
+                                    <option value="paid">Lunas (Paid)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Tanggal Bayar</label>
+                                <input type="date" class="form-control" id="payment_date">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top-0 pt-0">
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-sm btn-primary px-4" id="btnSave">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Printable Slip -->
+    <div id="printArea" style="display:none;"></div>
+
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let modalInstance;
+        let allData = [];
+        let baseGajiPokok = 0;
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            modalInstance = new bootstrap.Modal(document.getElementById('payrollModal'));
+            
+            const now = new Date();
+            document.getElementById('filterBulan').value = now.getMonth() + 1;
+            
+            const yearSelect = document.getElementById('filterTahun');
+            const startYear = 2024;
+            const curYear = now.getFullYear();
+            for(let y = startYear; y <= curYear + 1; y++) {
+                yearSelect.innerHTML += `<option value="${y}" ${y === curYear ? 'selected' : ''}>${y}</option>`;
+            }
+            
+            loadData();
+        });
+
+        async function loadData() {
+            const m = document.getElementById('filterBulan').value;
+            const y = document.getElementById('filterTahun').value;
+            try {
+                const res = await fetch(`/admin/employees/api/payroll?month=${m}&year=${y}`);
+                const json = await res.json();
+                allData = json.data || [];
+                renderTable();
+            } catch (e) { console.error(e); }
+        }
+
+        async function generatePayroll() {
+            if(!confirm('Generate data penggajian untuk bulan ini? (Data yang sudah ada tidak akan di-overwrite)')) return;
+            
+            const btn = document.getElementById('btnGenerate');
+            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+            
+            const m = document.getElementById('filterBulan').value;
+            const y = document.getElementById('filterTahun').value;
+            
+            try {
+                const res = await fetch('/admin/employees/api/payroll/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ month: m, year: y })
+                });
+                const json = await res.json();
+                alert(json.message || 'Selesai');
+                loadData();
+            } catch(e) { alert('Terjadi kesalahan'); }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Generate Gaji Bulan Ini'; }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('dataTableBody');
+            
+            if (allData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted">Data penggajian kosong. Silakan klik Generate.</td></tr>`;
+                document.getElementById('totalGajiBulan').textContent = 'Rp 0';
+                return;
+            }
+            
+            let totalBulan = 0;
+            
+            tbody.innerHTML = allData.map(p => {
+                totalBulan += Number(p.total_gaji);
+                const tb = Number(p.tunjangan||0) + Number(p.bonus||0);
+                return `
+                <tr>
+                    <td>
+                        <div class="fw-bold">${p.nama_lengkap}</div>
+                        <div class="small text-muted">${p.jabatan}</div>
+                    </td>
+                    <td class="text-end">Rp ${Number(p.gaji_pokok).toLocaleString('id-ID')}</td>
+                    <td class="text-end text-success">+ Rp ${tb.toLocaleString('id-ID')}</td>
+                    <td class="text-end text-danger">- Rp ${Number(p.potongan||0).toLocaleString('id-ID')}</td>
+                    <td class="text-end fw-bold">Rp ${Number(p.total_gaji).toLocaleString('id-ID')}</td>
+                    <td class="text-center">
+                        <span class="badge ${p.status === 'paid' ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'} border">
+                            ${p.status.toUpperCase()}
+                        </span>
+                    </td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary" onclick='printSlip(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Cetak</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick='editData(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Rincian</button>
+                    </td>
+                </tr>
+            `}).join('');
+            
+            document.getElementById('totalGajiBulan').textContent = 'Rp ' + totalBulan.toLocaleString('id-ID');
+        }
+
+        function editData(p) {
+            document.getElementById('payrollForm').reset();
+            document.getElementById('payroll_id').value = p.id;
+            document.getElementById('empNameLabel').textContent = p.nama_lengkap + ' (' + p.nik + ')';
+            
+            baseGajiPokok = Number(p.gaji_pokok);
+            document.getElementById('gaji_pokok').value = 'Rp ' + baseGajiPokok.toLocaleString('id-ID');
+            document.getElementById('tunjangan').value = p.tunjangan || 0;
+            document.getElementById('bonus').value = p.bonus || 0;
+            document.getElementById('potongan').value = p.potongan || 0;
+            document.getElementById('status').value = p.status;
+            if(p.payment_date) document.getElementById('payment_date').value = p.payment_date.split('T')[0];
+            
+            calculateTotal();
+            modalInstance.show();
+        }
+        
+        function calculateTotal() {
+            const t = Number(document.getElementById('tunjangan').value) || 0;
+            const b = Number(document.getElementById('bonus').value) || 0;
+            const p = Number(document.getElementById('potongan').value) || 0;
+            const total = baseGajiPokok + t + b - p;
+            document.getElementById('totalGajiLabel').textContent = 'Rp ' + total.toLocaleString('id-ID');
+        }
+
+        async function saveData(ev) {
+            ev.preventDefault();
+            const btn = document.getElementById('btnSave');
+            btn.disabled = true; btn.textContent = 'Menyimpan...';
+            
+            const id = document.getElementById('payroll_id').value;
+            const payload = {
+                tunjangan: document.getElementById('tunjangan').value,
+                bonus: document.getElementById('bonus').value,
+                potongan: document.getElementById('potongan').value,
+                status: document.getElementById('status').value,
+                payment_date: document.getElementById('payment_date').value
+            };
+            
+            try {
+                const res = await fetch('/admin/employees/api/payroll/' + id, { 
+                    method: 'PUT', 
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const json = await res.json();
+                if (json.success) {
+                    modalInstance.hide();
+                    loadData();
+                } else alert('Error: ' + json.error);
+            } catch (e) { alert('Terjadi kesalahan'); }
+            finally { btn.disabled = false; btn.textContent = 'Simpan'; }
+        }
+
+        function getSlipTemplate(p, m, y, tb) {
+            const logoFilename = `<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>`;
+            const logoPath = `/img/${logoFilename}`;
+            const companyName = `<%= typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Perusahaan Anda' %>`;
+            const companyAddr = `<%= typeof settings !== 'undefined' && settings.company_address ? settings.company_address.replace(/\r?\n/g, '<br>') : 'Alamat perusahaan belum diatur' %>`;
+            
+            return `
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 30px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fff; page-break-after: always; position: relative;">
+                    <!-- Header -->
+                    <table style="width: 100%; border-bottom: 2px solid #2c3e50; padding-bottom: 15px; margin-bottom: 20px;">
+                        <tr>
+                            <td style="width: 80px; vertical-align: middle;">
+                                <img src="${logoPath}" alt="Logo" style="max-width: 70px; max-height: 70px; border-radius: 4px;" onerror="this.style.display='none'">
+                            </td>
+                            <td style="vertical-align: middle;">
+                                <h2 style="margin: 0; color: #2c3e50; font-size: 24px; font-weight: 800; letter-spacing: 0.5px;">${companyName}</h2>
+                                <p style="margin: 5px 0 0 0; color: #7f8c8d; font-size: 13px; line-height: 1.4;">${companyAddr}</p>
+                            </td>
+                            <td style="text-align: right; vertical-align: bottom;">
+                                <h3 style="margin: 0; color: #34495e; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">Slip Gaji</h3>
+                                <p style="margin: 5px 0 0 0; color: #7f8c8d; font-size: 14px; font-weight: bold;">Periode: ${m} ${y}</p>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!-- Info Karyawan -->
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 25px;">
+                        <table style="width: 100%; font-size: 14px;">
+                            <tr>
+                                <td style="width: 15%; color: #7f8c8d;">Nama</td>
+                                <td style="width: 35%; font-weight: bold; color: #2c3e50;">: ${p.nama_lengkap}</td>
+                                <td style="width: 15%; color: #7f8c8d;">Jabatan</td>
+                                <td style="width: 35%; color: #2c3e50;">: ${p.jabatan}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: #7f8c8d; padding-top: 8px;">NIK</td>
+                                <td style="padding-top: 8px; color: #2c3e50;">: ${p.nik}</td>
+                                <td style="color: #7f8c8d; padding-top: 8px;">Periode</td>
+                                <td style="padding-top: 8px; color: #2c3e50;">: ${m} ${y}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Rincian Gaji -->
+                    <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 30px;">
+                        <thead>
+                            <tr>
+                                <th colspan="2" style="background: #2c3e50; color: #fff; padding: 10px 15px; text-align: left; border-radius: 6px 6px 0 0;">RINCIAN PENGHASILAN</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style="padding: 12px 15px; border-bottom: 1px solid #ecf0f1; border-left: 1px solid #ecf0f1;">Gaji Pokok</td>
+                                <td style="padding: 12px 15px; border-bottom: 1px solid #ecf0f1; border-right: 1px solid #ecf0f1; text-align: right; font-weight: 500;">Rp ${Number(p.gaji_pokok).toLocaleString('id-ID')}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 12px 15px; border-bottom: 1px solid #ecf0f1; border-left: 1px solid #ecf0f1;">Tunjangan & Bonus</td>
+                                <td style="padding: 12px 15px; border-bottom: 1px solid #ecf0f1; border-right: 1px solid #ecf0f1; text-align: right; font-weight: 500;">Rp ${tb.toLocaleString('id-ID')}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 12px 15px; border-bottom: 1px solid #ecf0f1; border-left: 1px solid #ecf0f1; color: #e74c3c;">Potongan / Kasbon</td>
+                                <td style="padding: 12px 15px; border-bottom: 1px solid #ecf0f1; border-right: 1px solid #ecf0f1; text-align: right; font-weight: 500; color: #e74c3c;">- Rp ${Number(p.potongan||0).toLocaleString('id-ID')}</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td style="padding: 15px; background: #f8f9fa; font-weight: bold; font-size: 16px; border-radius: 0 0 0 6px; border: 1px solid #ecf0f1; border-right: none;">TOTAL DITERIMA</td>
+                                <td style="padding: 15px; background: #f8f9fa; font-weight: bold; font-size: 18px; text-align: right; color: #27ae60; border-radius: 0 0 6px 0; border: 1px solid #ecf0f1; border-left: none;">Rp ${Number(p.total_gaji).toLocaleString('id-ID')}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    <!-- Tanda Tangan -->
+                    <table style="width: 100%; text-align: center; font-size: 14px; margin-top: 40px;">
+                        <tr>
+                            <td style="width: 50%; color: #7f8c8d;">
+                                Mengetahui,<br><br><br><br><br>
+                                <span style="font-weight: bold; color: #2c3e50; text-decoration: underline;">( Manajemen )</span>
+                            </td>
+                            <td style="width: 50%; color: #7f8c8d;">
+                                Penerima,<br><br><br><br><br>
+                                <span style="font-weight: bold; color: #2c3e50; text-decoration: underline;">( ${p.nama_lengkap} )</span>
+                            </td>
+                        </tr>
+                    </table>
+                    
+                    <div style="margin-top: 30px; text-align: center; font-size: 11px; color: #bdc3c7; border-top: 1px dashed #ecf0f1; padding-top: 15px;">
+                        Dokumen ini dihasilkan secara otomatis oleh sistem. Harap simpan sebagai bukti penerimaan gaji.
+                    </div>
+                </div>
+            `;
+        }
+
+        function printSlip(p) {
+            const m = document.getElementById('filterBulan').options[document.getElementById('filterBulan').selectedIndex].text;
+            const y = document.getElementById('filterTahun').value;
+            const tb = Number(p.tunjangan||0) + Number(p.bonus||0);
+            
+            const html = getSlipTemplate(p, m, y, tb);
+            
+            const printWindow = window.open('', '', 'height=700,width=900');
+            printWindow.document.write('<html><head><title>Print Slip Gaji</title></head><body style="background:#f4f6f9; padding:20px;">');
+            printWindow.document.write(html);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            setTimeout(() => { printWindow.print(); }, 500);
+        }
+        
+        function printAllSlips() {
+            if(allData.length === 0) return alert('Tidak ada data untuk dicetak');
+            let fullHtml = '<html><head><title>Print Semua Slip</title></head><body style="background:#f4f6f9; padding:20px;">';
+            allData.forEach((p, idx) => {
+                const m = document.getElementById('filterBulan').options[document.getElementById('filterBulan').selectedIndex].text;
+                const y = document.getElementById('filterTahun').value;
+                const tb = Number(p.tunjangan||0) + Number(p.bonus||0);
+                fullHtml += getSlipTemplate(p, m, y, tb);
+            });
+            fullHtml += '</body></html>';
+            const printWindow = window.open('', '', 'height=700,width=900');
+            printWindow.document.write(fullHtml);
+            printWindow.document.close();
+            setTimeout(() => { printWindow.print(); }, 1000);
+        }
+    </script>
+</body>
+</html>

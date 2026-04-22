@@ -315,7 +315,7 @@
                                                 <%= customer.status === 'active' ? 'Aktif' : 'Tidak Aktif' %>
                                             </span>
                                             <% if (customer.payment_status === 'paid') { %>
-                                                <span class="status-badge" style="background:#d4edda;color:#155724">Lunas</span>
+                                                <span class="status-badge bg-success" style="background:#d4edda;color:#155724">Lunas</span>
                                             <% } else if (customer.payment_status === 'unpaid') { %>
                                                 <span class="status-badge" style="background:#fff3cd;color:#856404">Belum Bayar</span>
                                             <% } else if (customer.payment_status === 'overdue') { %>

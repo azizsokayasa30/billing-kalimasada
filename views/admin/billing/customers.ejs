@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
@@ -712,7 +712,7 @@
                                                     <% } %>
                                                 </td>
                                                 <td><%= customer.package_name || '-' %></td>
-                                                <td><span class="badge bg-light text-dark border"><%= customer.area || '-' %></span></td>
+                                                <td><span class="badge badge-area"><i class="bi bi-geo-alt-fill me-1"></i><%= customer.area || '-' %></span></td>
                                                 <td><span class="badge bg-soft-info text-info"><%= customer.collector_name || '-' %></span></td>
                                                 <td class="cust-status">
                                                     <% if (customer.status === 'active') { %>
@@ -722,7 +722,7 @@
                                                     <% } else if (customer.status === 'register') { %>
                                                         <span class="badge" style="background-color: #9900CC; color: white;">Register</span>
                                                     <% } else { %>
-                                                        <span class="badge bg-secondary">Nonaktif</span>
+                                                        <span class="badge bg-brown">Nonaktif</span>
                                                     <% } %>
                                                 </td>
                                                 <td>
@@ -731,7 +731,7 @@
                                                     <% } else if (customer.payment_status === 'unpaid') { %>
                                                         <span class="badge bg-warning text-dark">Belum Lunas</span>
                                                     <% } else if (customer.payment_status === 'overdue') { %>
-                                                        <span class="badge bg-danger">Terlambat</span>
+                                                        <span class="badge bg-warning text-dark">Terlambat</span>
                                                     <% } else if (customer.payment_status === 'no_invoice') { %>
                                                         <span class="badge bg-warning text-dark">Belum Lunas</span>
                                                     <% } else { %>
@@ -891,7 +891,7 @@
                         <div class="card border-info mb-3">
                             <div class="card-header bg-light">
                                 <h6 class="mb-0"><i class="bi bi-ethernet me-2"></i>Konfigurasi IP Statik (Opsional)</h6>
-                                <small class="text-white">Untuk pelanggan yang menggunakan IP statik atau DHCP dengan MAC tetap</small>
+                                <small class="text-muted">Untuk pelanggan yang menggunakan IP statik atau DHCP dengan MAC tetap</small>
                             </div>
                             <div class="card-body">
                                 <div class="row">
@@ -1180,7 +1180,7 @@
                         <div class="card border-info mb-3">
                             <div class="card-header bg-light">
                                 <h6 class="mb-0"><i class="bi bi-ethernet me-2"></i>Konfigurasi IP Statik (Opsional)</h6>
-                                <small class="text-white">Untuk pelanggan yang menggunakan IP statik atau DHCP dengan MAC tetap</small>
+                                <small class="text-muted">Untuk pelanggan yang menggunakan IP statik atau DHCP dengan MAC tetap</small>
                             </div>
                             <div class="card-body">
                                 <div class="row">

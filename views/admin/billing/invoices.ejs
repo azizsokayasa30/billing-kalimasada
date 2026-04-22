@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -54,7 +54,7 @@
                             </h5>
                             <div class="d-flex gap-3 align-items-center">
                                 <div class="d-flex gap-2 align-items-center">
-                                    <label for="monthFilter" class="form-label mb-0 me-2 text-white">BULAN:</label>
+                                    <label for="monthFilter" class="form-label mb-0 me-2 fw-bold">BULAN:</label>
                                     <select id="monthFilter" class="form-select form-select-sm" style="width: auto;">
                                         <option value="">Semua Bulan</option>
                                         <option value="current" selected>Bulan Berjalan</option>
@@ -73,7 +73,7 @@
                                     </select>
                                 </div>
                                 <div class="d-flex gap-2 align-items-center">
-                                    <label for="statusFilter" class="form-label mb-0 me-2 text-white">STATUS TAGIHAN</label>
+                                    <label for="statusFilter" class="form-label mb-0 me-2 fw-bold">STATUS TAGIHAN</label>
                                     <select id="statusFilter" class="form-select form-select-sm" style="width: auto;">
                                         <option value="">Semua Status</option>
                                         <option value="paid">Lunas</option>
@@ -175,9 +175,9 @@
                                                         <span class="badge bg-success">Lunas</span>
                                                     <% } else if (invoice.status === 'unpaid') { %>
                                                         <% if (new Date(invoice.due_date) < new Date()) { %>
-                                                            <span class="badge bg-danger">Terlambat</span>
+                                                            <span class="badge bg-warning text-dark">Terlambat</span>
                                                         <% } else { %>
-                                                            <span class="badge bg-warning">Belum Lunas</span>
+                                                            <span class="badge bg-warning text-dark">Belum Lunas</span>
                                                         <% } %>
                                                     <% } %>
                                                 </td>

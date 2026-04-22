@@ -120,21 +120,7 @@ const technicianSync = {
                         }
                     });
                 });
-                try {
-                    const settings = getSettingsWithCache();
-                    Object.keys(settings).filter(k => k.startsWith('technician_numbers.')).forEach(k => {
-                        const phone = settings[k];
-                        if (phone) {
-                            db.run('INSERT OR IGNORE INTO technicians (phone, name, role, is_active, created_at) VALUES (?, ?, "technician", 1, datetime("now"))', 
-                                [phone, `Teknisi ${phone.slice(-4)}`], (instErr) => {
-                                    if (instErr) console.error('Error inserting technician:', instErr.message);
-                                });
-                        }
-                    });
-                    console.log('📱 Technician numbers synced from settings.json');
-                } catch (e) {
-                    console.error('Sync error:', e.message);
-                }
+                // Legacy settings.json technician sync removed
             });
         };
         
@@ -289,6 +275,78 @@ const voucherSync = {
 
 // Start voucher sync service
 voucherSync.start();
+
+// Import employee sync service
+const employeeSync = {
+    start() {
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database('./data/billing.db');
+        
+        const sync = () => {
+            const tables = [
+                `CREATE TABLE IF NOT EXISTS employees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nama_lengkap TEXT NOT NULL,
+                    nik TEXT UNIQUE NOT NULL,
+                    alamat TEXT,
+                    no_hp TEXT,
+                    email TEXT,
+                    jabatan TEXT,
+                    area_id INTEGER,
+                    tanggal_masuk DATE,
+                    status TEXT DEFAULT 'aktif' CHECK(status IN ('aktif', 'nonaktif')),
+                    gaji_pokok DECIMAL(15,2) DEFAULT 0,
+                    foto_path TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (area_id) REFERENCES areas(id)
+                )`,
+                `CREATE TABLE IF NOT EXISTS employee_attendance (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id INTEGER NOT NULL,
+                    date DATE NOT NULL,
+                    check_in DATETIME,
+                    check_out DATETIME,
+                    status TEXT CHECK(status IN ('hadir', 'izin', 'sakit', 'alpha')),
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(employee_id, date),
+                    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+                )`,
+                `CREATE TABLE IF NOT EXISTS employee_payroll (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id INTEGER NOT NULL,
+                    period_month INTEGER NOT NULL,
+                    period_year INTEGER NOT NULL,
+                    gaji_pokok DECIMAL(15,2) DEFAULT 0,
+                    tunjangan DECIMAL(15,2) DEFAULT 0,
+                    bonus DECIMAL(15,2) DEFAULT 0,
+                    potongan DECIMAL(15,2) DEFAULT 0,
+                    total_gaji DECIMAL(15,2) DEFAULT 0,
+                    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'paid')),
+                    payment_date DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(employee_id, period_month, period_year),
+                    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+                )`
+            ];
+
+            tables.forEach(sql => {
+                db.run(sql, (err) => {
+                    if (err) console.error('Failed to ensure employee table:', err.message);
+                });
+            });
+        };
+        
+        sync();
+        console.log('🔄 Employee system sync enabled');
+    }
+};
+
+// Start employee sync service
+employeeSync.start();
 
 // Inisialisasi aplikasi Express
 const app = express();
@@ -520,6 +578,10 @@ app.use('/agent', agentRouter);
 // Import dan gunakan route adminAgents
 const adminAgentsRouter = require('./routes/adminAgents');
 app.use('/admin', blockTechnicianAccess, adminAuth, adminAgentsRouter);
+
+// Import dan gunakan route adminEmployees
+const adminEmployeesRouter = require('./routes/adminEmployees');
+app.use('/admin/employees', blockTechnicianAccess, adminAuth, adminEmployeesRouter);
 
 // Import dan gunakan route adminVoucherPricing
 const adminVoucherPricingRouter = require('./routes/adminVoucherPricing');
@@ -1062,3 +1124,4 @@ const { addCustomerTag } = require('./config/customerTag');
 
 // Export app untuk testing
 module.exports = app;
+

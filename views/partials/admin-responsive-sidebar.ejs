@@ -303,6 +303,40 @@
             </div>
         </div>
         
+        <!-- KARYAWAN -->
+        <% const karyawanPages = ['employees', 'employee-attendance', 'employee-payroll', 'employee-reports']; %>
+        <% const karyawanExpanded = typeof page !== 'undefined' && karyawanPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="karyawanCollapse"
+                 aria-expanded="<%= karyawanExpanded ? 'true' : 'false' %>"
+                 aria-controls="karyawanCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Karyawan</span>
+                <i class="bi <%= karyawanExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= karyawanExpanded ? 'show' : '' %>" id="karyawanCollapse">
+                <a href="/admin/employees" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'employees' ? 'active' : '' %>">
+                    <i class="bi bi-person-lines-fill"></i>
+                    <span class="sb-item-text">Master Data</span>
+                </a>
+                <a href="/admin/employees/attendance" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'employee-attendance' ? 'active' : '' %>">
+                    <i class="bi bi-calendar2-check"></i>
+                    <span class="sb-item-text">Absensi</span>
+                </a>
+                <a href="/admin/employees/payroll" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'employee-payroll' ? 'active' : '' %>">
+                    <i class="bi bi-cash-coin"></i>
+                    <span class="sb-item-text">Penggajian</span>
+                </a>
+                <a href="/admin/employees/reports" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'employee-reports' ? 'active' : '' %>">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span class="sb-item-text">Laporan</span>
+                </a>
+            </div>
+        </div>
+
         <!-- TEKNISI -->
         <% const teknisiPages = ['technicians', 'installations', 'trouble']; %>
         <% const teknisiExpanded = typeof page !== 'undefined' && teknisiPages.includes(page); %>
@@ -366,7 +400,7 @@
                 </a>
             </div>
         </div>
-        
+
         <!-- SETTINGAN -->
         <% const settingPages = ['setting', 'whatsapp-settings', 'email-settings', 'setting-radius', 'setting-radius-clients', 'connection-settings', 'genieacs-setting', 'cache']; %>
         <% const settingExpanded = typeof page !== 'undefined' && settingPages.includes(page); %>
@@ -389,6 +423,14 @@
                 <a href="/admin/radius" class="sb-item sb-sub <%= typeof page !== 'undefined' && (page === 'setting-radius' || page === 'setting-radius-clients') ? 'active' : '' %>">
                     <i class="bi bi-shield-check"></i>
                     <span class="sb-item-text">Setting RADIUS</span>
+                </a>
+                <a href="/admin/billing/whatsapp-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'whatsapp-settings' ? 'active' : '' %>">
+                    <i class="bi bi-whatsapp"></i>
+                    <span class="sb-item-text">Pengaturan WhatsApp</span>
+                </a>
+                <a href="/admin/billing/email-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'email-settings' ? 'active' : '' %>">
+                    <i class="bi bi-envelope-at-fill"></i>
+                    <span class="sb-item-text">Pengaturan Email</span>
                 </a>
                 <a href="/admin/connection-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'connection-settings' ? 'active' : '' %>">
                     <i class="bi bi-plug"></i>
@@ -520,7 +562,7 @@ document.addEventListener('DOMContentLoaded', function () {
             bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
         }
     }
-    ['pppConnectionCollapse','responsiveHotspotCollapse','agentCollapse','teknisiCollapse','toolsCollapse','settingCollapse','billingCustomerCollapse','billingInvoiceCollapse','billingFinanceCollapse'].forEach(setupCollapseToggle);
+    ['pppConnectionCollapse','responsiveHotspotCollapse','agentCollapse','teknisiCollapse','toolsCollapse','settingCollapse','billingCustomerCollapse','billingInvoiceCollapse','billingFinanceCollapse','karyawanCollapse'].forEach(setupCollapseToggle);
 
     window.addEventListener('resize', function() { if (window.innerWidth >= 768) closeSidebar(); });
 

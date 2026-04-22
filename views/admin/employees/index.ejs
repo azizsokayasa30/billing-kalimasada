@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Data Karyawan - <%= typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Admin Panel' %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/theme.css" rel="stylesheet">
+    <link href="/css/responsive-admin.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <style>
+        .main-content { min-height: 100vh; }
+        .page-header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--sb-border, #dee2e6); }
+        .table-container { background: var(--panel-bg, #ffffff); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 0; overflow: hidden; }
+        .table th { background-color: var(--table-head-bg, #f1f3f5); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; border-top: none; padding: 12px 15px; }
+        .table td { vertical-align: middle; padding: 12px 15px; font-size: 0.9rem; }
+        .foto-preview { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1px solid #ddd; }
+        .foto-modal { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid var(--sb-primary); margin-bottom: 10px; display: none; }
+    </style>
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <%- include('../../partials/admin-responsive-sidebar') %>
+            
+            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="page-header d-flex justify-content-between align-items-center mt-4">
+                    <h1 class="h4 m-0">Data Master Karyawan</h1>
+                    <button class="btn btn-primary" onclick="openModal()">
+                        <i class="bi bi-person-plus-fill me-1"></i> Tambah Karyawan
+                    </button>
+                </div>
+
+                <div class="card mb-4 border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-auto"><label for="searchInput" class="col-form-label">Cari:</label></div>
+                            <div class="col-md-4">
+                                <input type="text" id="searchInput" class="form-control" placeholder="Nama, NIK, atau Jabatan...">
+                            </div>
+                            <div class="col-auto ms-md-auto"><label for="statusFilter" class="col-form-label">Status:</label></div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="statusFilter" onchange="loadData()">
+                                    <option value="">Semua Status</option>
+                                    <option value="aktif">Aktif</option>
+                                    <option value="nonaktif">Nonaktif</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container shadow-sm">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Karyawan</th>
+                                    <th>Jabatan</th>
+                                    <th>Kontak</th>
+                                    <th>Tgl Masuk</th>
+                                    <th class="text-end">Gaji Pokok</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-end">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dataTableBody">
+                                <tr><td colspan="7" class="text-center py-4">Memuat data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal Form -->
+    <div class="modal fade" id="employeeModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow">
+                <form id="employeeForm" onsubmit="saveData(event)">
+                    <div class="modal-header border-bottom-0 pb-0">
+                        <h5 class="modal-title fw-bold" id="modalTitle">Tambah Karyawan</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body pt-3">
+                        <input type="hidden" id="empId" name="id">
+                        <div class="row">
+                            <div class="col-md-4 text-center">
+                                <img id="previewFoto" src="/img/placeholder-user.png" class="foto-modal" style="display:block; margin: 0 auto 15px;">
+                                <div class="mb-3">
+                                    <label class="form-label small">Foto Profil</label>
+                                    <input class="form-control form-control-sm" type="file" id="foto" name="foto" accept="image/*" onchange="previewImage(this)">
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Nama Lengkap *</label>
+                                        <input type="text" class="form-control" id="nama_lengkap" name="nama_lengkap" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">NIK / No. KTP *</label>
+                                        <input type="text" class="form-control" id="nik" name="nik" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">No. HP *</label>
+                                        <input type="text" class="form-control" id="no_hp" name="no_hp" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Email</label>
+                                        <input type="email" class="form-control" id="email" name="email">
+                                    </div>
+                                    <div class="col-md-12">
+                                        <label class="form-label">Alamat</label>
+                                        <textarea class="form-control" id="alamat" name="alamat" rows="2"></textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Jabatan *</label>
+                                        <select class="form-select" id="jabatan" name="jabatan" required>
+                                            <option value="Staff">Staff</option>
+                                            <option value="Teknisi">Teknisi</option>
+                                            <option value="Kolektor">Kolektor</option>
+                                            <option value="Admin">Admin</option>
+                                            <option value="Manajer">Manajer</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Tanggal Masuk</label>
+                                        <input type="date" class="form-control" id="tanggal_masuk" name="tanggal_masuk">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Gaji Pokok</label>
+                                        <input type="number" class="form-control" id="gaji_pokok" name="gaji_pokok" value="0">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Status</label>
+                                        <select class="form-select" id="status" name="status">
+                                            <option value="aktif">Aktif</option>
+                                            <option value="nonaktif">Nonaktif</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top-0 pt-0">
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-sm btn-primary px-4" id="btnSave">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let modalInstance;
+        let allData = [];
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            modalInstance = new bootstrap.Modal(document.getElementById('employeeModal'));
+            loadData();
+            
+            document.getElementById('searchInput').addEventListener('input', renderTable);
+        });
+
+        async function loadData() {
+            try {
+                const res = await fetch('/admin/employees/api/data');
+                const json = await res.json();
+                allData = json.data || [];
+                renderTable();
+            } catch (e) { console.error(e); }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('dataTableBody');
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+            
+            const filtered = allData.filter(e => {
+                const matchTerm = e.nama_lengkap.toLowerCase().includes(term) || e.nik.toLowerCase().includes(term) || e.jabatan.toLowerCase().includes(term);
+                const matchStatus = statusFilter === '' || e.status === statusFilter;
+                return matchTerm && matchStatus;
+            });
+            
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted">Belum ada data / tidak ditemukan.</td></tr>`;
+                return;
+            }
+            
+            tbody.innerHTML = filtered.map(e => `
+                <tr>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <img src="${e.foto_path || '/img/placeholder-user.png'}" class="foto-preview me-3" onerror="this.src='/img/placeholder-user.png'">
+                            <div>
+                                <div class="fw-bold text-dark">${e.nama_lengkap}</div>
+                                <div class="small text-muted">NIK: ${e.nik}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="fw-bold">${e.jabatan}</div>
+                    </td>
+                    <td>
+                        <div class="small">${e.no_hp}</div>
+                        <div class="small text-muted">${e.email || '-'}</div>
+                    </td>
+                    <td><div class="small">${e.tanggal_masuk ? new Date(e.tanggal_masuk).toLocaleDateString('id-ID') : '-'}</div></td>
+                    <td class="text-end fw-bold">Rp ${Number(e.gaji_pokok).toLocaleString('id-ID')}</td>
+                    <td class="text-center">
+                        <span class="badge ${e.status === 'aktif' ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'} border">
+                            ${e.status.toUpperCase()}
+                        </span>
+                    </td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-secondary" onclick='editData(${JSON.stringify(e).replace(/'/g, "&apos;")})'>Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteData(${e.id})">Hapus</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openModal() {
+            document.getElementById('employeeForm').reset();
+            document.getElementById('empId').value = '';
+            document.getElementById('modalTitle').textContent = 'Tambah Karyawan';
+            document.getElementById('previewFoto').src = '/img/placeholder-user.png';
+            modalInstance.show();
+        }
+
+        function editData(e) {
+            document.getElementById('employeeForm').reset();
+            document.getElementById('modalTitle').textContent = 'Edit Karyawan';
+            
+            document.getElementById('empId').value = e.id;
+            document.getElementById('nama_lengkap').value = e.nama_lengkap;
+            document.getElementById('nik').value = e.nik;
+            document.getElementById('no_hp').value = e.no_hp;
+            document.getElementById('email').value = e.email;
+            document.getElementById('alamat').value = e.alamat;
+            document.getElementById('jabatan').value = e.jabatan;
+            document.getElementById('tanggal_masuk').value = e.tanggal_masuk || '';
+            document.getElementById('gaji_pokok').value = e.gaji_pokok;
+            document.getElementById('status').value = e.status;
+            
+            document.getElementById('previewFoto').src = e.foto_path || '/img/placeholder-user.png';
+            
+            modalInstance.show();
+        }
+
+        async function saveData(ev) {
+            ev.preventDefault();
+            const btn = document.getElementById('btnSave');
+            btn.disabled = true;
+            btn.textContent = 'Menyimpan...';
+            
+            const form = document.getElementById('employeeForm');
+            const id = document.getElementById('empId').value;
+            const formData = new FormData(form);
+            
+            const url = id ? '/admin/employees/api/data/' + id : '/admin/employees/api/data';
+            const method = id ? 'PUT' : 'POST';
+            
+            try {
+                const res = await fetch(url, { method, body: formData });
+                const json = await res.json();
+                if (json.success) {
+                    modalInstance.hide();
+                    loadData();
+                } else {
+                    alert('Error: ' + json.error);
+                }
+            } catch (e) { alert('Terjadi kesalahan'); }
+            finally {
+                btn.disabled = false;
+                btn.textContent = 'Simpan';
+            }
+        }
+
+        async function deleteData(id) {
+            if (!confirm('Hapus data karyawan ini secara permanen?')) return;
+            try {
+                const res = await fetch('/admin/employees/api/data/' + id, { method: 'DELETE' });
+                const json = await res.json();
+                if (json.success) loadData();
+                else alert('Error: ' + json.error);
+            } catch (e) { alert('Terjadi kesalahan'); }
+        }
+
+        function previewImage(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) { document.getElementById('previewFoto').src = e.target.result; }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -84,11 +84,11 @@
             <div class="k">Status</div>
             <div class="v">
               <% if (billingData.customer.payment_status === 'paid') { %>
-                <span class="badge-soft" style="background:rgba(25,135,84,.12);color:#198754">Lunas</span>
+                <span class="badge-soft bg-success" style="background:rgba(25,135,84,.12);color:#198754">Lunas</span>
               <% } else if (billingData.customer.payment_status === 'unpaid') { %>
-                <span class="badge-soft" style="background:rgba(255,193,7,.15);color:#b58100">Belum Lunas</span>
+                <span class="badge-soft bg-warning text-dark" style="background:rgba(255,193,7,.15);color:#b58100">Belum Lunas</span>
               <% } else if (billingData.customer.payment_status === 'overdue') { %>
-                <span class="badge-soft" style="background:rgba(220,53,69,.12);color:#dc3545">Terlambat</span>
+                <span class="badge-soft bg-warning text-dark" style="background:rgba(220,53,69,.12);color:#dc3545">Terlambat</span>
               <% } else { %>
                 <span class="badge-soft" style="background:rgba(108,117,125,.15);color:#6c757d">Belum Ada Tagihan</span>
               <% } %>

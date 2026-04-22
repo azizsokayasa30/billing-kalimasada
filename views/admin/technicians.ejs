@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -110,7 +110,9 @@
                     <div class="modal-body">
                         <div class="mb-3">
                             <label class="form-label">Nama Lengkap *</label>
-                            <input type="text" class="form-control" name="name" required>
+                            <select class="form-select" name="name" id="addTechNameSelect" required>
+                                <option value="">-- Pilih dari Karyawan --</option>
+                            </select>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Nomor Telepon *</label>
@@ -202,6 +204,32 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/sweetalert-helper.js"></script>
     <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/admin/employees/api/data');
+                const json = await res.json();
+                if (json.success && json.data) {
+                    const sel = document.getElementById('addTechNameSelect');
+                    json.data.forEach(emp => {
+                        if (emp.status !== 'nonaktif') {
+                            const opt = document.createElement('option');
+                            opt.value = emp.nama_lengkap;
+                            opt.textContent = emp.nama_lengkap + ' (' + emp.jabatan + ')';
+                            opt.dataset.phone = emp.no_hp || '';
+                            sel.appendChild(opt);
+                        }
+                    });
+                }
+            } catch(e) { console.error('Gagal memuat data karyawan', e); }
+        });
+
+        document.getElementById('addTechNameSelect').addEventListener('change', function() {
+            const opt = this.options[this.selectedIndex];
+            if (opt && opt.dataset.phone) {
+                document.querySelector('#addTechnicianForm input[name="phone"]').value = opt.dataset.phone;
+            }
+        });
+
         document.getElementById('addTechnicianForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const formData = new FormData(this);

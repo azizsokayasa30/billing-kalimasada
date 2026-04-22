@@ -305,9 +305,9 @@
                                                                 <span class="badge bg-success">Lunas</span>
                                                             <% } else if (invoice && invoice.status === 'unpaid') { %>
                                                                 <% if (invoice.due_date && new Date(invoice.due_date) < new Date()) { %>
-                                                                    <span class="badge bg-danger">Terlambat</span>
+                                                                    <span class="badge bg-warning text-dark">Terlambat</span>
                                                                 <% } else { %>
-                                                                    <span class="badge bg-warning">Belum Lunas</span>
+                                                                    <span class="badge bg-warning text-dark">Belum Lunas</span>
                                                                 <% } %>
                                                             <% } else { %>
                                                                 <span class="badge bg-secondary">Tidak Diketahui</span>

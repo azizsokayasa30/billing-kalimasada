@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Karyawan - <%= typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Admin Panel' %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/theme.css" rel="stylesheet">
+    <link href="/css/responsive-admin.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <style>
+        .main-content { min-height: 100vh; }
+        .page-header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--sb-border, #dee2e6); }
+        .table-container { background: var(--panel-bg, #ffffff); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 0; overflow: hidden; }
+        .table th { background-color: var(--table-head-bg, #f1f3f5); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; border-top: none; padding: 12px 15px; }
+        .table td { vertical-align: middle; padding: 12px 15px; font-size: 0.9rem; }
+    </style>
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <%- include('../../partials/admin-responsive-sidebar') %>
+            
+            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="page-header d-flex justify-content-between align-items-center mt-4">
+                    <h1 class="h4 m-0">Laporan Karyawan</h1>
+                </div>
+
+                <div class="row mb-4">
+                    <!-- Laporan Gaji -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-header bg-white border-bottom-0 pt-3">
+                                <h5 class="card-title fw-bold m-0"><i class="bi bi-cash-coin text-success me-2"></i> Rekap Gaji Bulanan</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2">
+                                    <div class="col-md-5">
+                                        <label class="form-label small">Bulan</label>
+                                        <select id="lapGajiBulan" class="form-select">
+                                            <option value="1">Januari</option>
+                                            <option value="2">Februari</option>
+                                            <option value="3">Maret</option>
+                                            <option value="4">April</option>
+                                            <option value="5">Mei</option>
+                                            <option value="6">Juni</option>
+                                            <option value="7">Juli</option>
+                                            <option value="8">Agustus</option>
+                                            <option value="9">September</option>
+                                            <option value="10">Oktober</option>
+                                            <option value="11">November</option>
+                                            <option value="12">Desember</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small">Tahun</label>
+                                        <select id="lapGajiTahun" class="form-select"></select>
+                                    </div>
+                                    <div class="col-md-2 d-flex align-items-end">
+                                        <button class="btn btn-primary w-100" onclick="exportGaji()">Export</button>
+                                    </div>
+                                </div>
+                                <div class="mt-3 text-muted small">
+                                    Mengekspor data total gaji seluruh karyawan di bulan yang dipilih menjadi format CSV yang dapat dibuka di Excel.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Laporan Absensi -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-header bg-white border-bottom-0 pt-3">
+                                <h5 class="card-title fw-bold m-0"><i class="bi bi-calendar2-check text-primary me-2"></i> Rekap Absensi</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2">
+                                    <div class="col-md-5">
+                                        <label class="form-label small">Bulan</label>
+                                        <select id="lapAbsenBulan" class="form-select">
+                                            <option value="1">Januari</option>
+                                            <option value="2">Februari</option>
+                                            <option value="3">Maret</option>
+                                            <option value="4">April</option>
+                                            <option value="5">Mei</option>
+                                            <option value="6">Juni</option>
+                                            <option value="7">Juli</option>
+                                            <option value="8">Agustus</option>
+                                            <option value="9">September</option>
+                                            <option value="10">Oktober</option>
+                                            <option value="11">November</option>
+                                            <option value="12">Desember</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small">Tahun</label>
+                                        <select id="lapAbsenTahun" class="form-select"></select>
+                                    </div>
+                                    <div class="col-md-2 d-flex align-items-end">
+                                        <button class="btn btn-primary w-100" onclick="exportAbsensi()">Export</button>
+                                    </div>
+                                </div>
+                                <div class="mt-3 text-muted small">
+                                    Mengekspor rekap seluruh absensi karyawan (Hadir, Izin, Sakit, Alpha) dalam bulan yang dipilih ke format CSV.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm mt-4">
+                    <div class="card-body text-center py-5 text-muted">
+                        <i class="bi bi-file-earmark-spreadsheet" style="font-size: 3rem; color:#ccc;"></i>
+                        <p class="mt-3 mb-0">Pilih laporan yang ingin di-export pada panel di atas.</p>
+                        <small>File akan otomatis terunduh dalam format .CSV</small>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const now = new Date();
+            const currM = now.getMonth() + 1;
+            const currY = now.getFullYear();
+            
+            document.getElementById('lapGajiBulan').value = currM;
+            document.getElementById('lapAbsenBulan').value = currM;
+            
+            const selGajiY = document.getElementById('lapGajiTahun');
+            const selAbsenY = document.getElementById('lapAbsenTahun');
+            
+            for(let y = 2024; y <= currY + 1; y++) {
+                selGajiY.innerHTML += `<option value="${y}" ${y === currY ? 'selected' : ''}>${y}</option>`;
+                selAbsenY.innerHTML += `<option value="${y}" ${y === currY ? 'selected' : ''}>${y}</option>`;
+            }
+        });
+
+        async function exportGaji() {
+            const m = document.getElementById('lapGajiBulan').value;
+            const y = document.getElementById('lapGajiTahun').value;
+            
+            try {
+                const res = await fetch(`/admin/employees/api/payroll?month=${m}&year=${y}`);
+                const json = await res.json();
+                if(!json.success || !json.data || json.data.length === 0) return alert('Tidak ada data gaji untuk periode ini.');
+                
+                let csv = 'Nama Lengkap,NIK,Jabatan,Gaji Pokok,Tunjangan,Bonus,Potongan,Total Gaji,Status Pembayaran,Tanggal Bayar\n';
+                json.data.forEach(p => {
+                    csv += `"${p.nama_lengkap}","${p.nik}","${p.jabatan}","${p.gaji_pokok}","${p.tunjangan||0}","${p.bonus||0}","${p.potongan||0}","${p.total_gaji}","${p.status}","${p.payment_date||'-'}"\n`;
+                });
+                
+                downloadCSV(csv, `Laporan_Gaji_${y}_${m}.csv`);
+            } catch(e) { alert('Gagal memuat data'); }
+        }
+
+        async function exportAbsensi() {
+            const m = document.getElementById('lapAbsenBulan').value;
+            const y = document.getElementById('lapAbsenTahun').value;
+            
+            try {
+                const res = await fetch(`/admin/employees/api/attendance?month=${m}&year=${y}`);
+                const json = await res.json();
+                if(!json.success || !json.data || json.data.length === 0) return alert('Tidak ada data absensi untuk periode ini.');
+                
+                let csv = 'Tanggal,Nama Lengkap,NIK,Check-In,Check-Out,Status,Catatan\n';
+                json.data.forEach(a => {
+                    const dt = a.date.split('T')[0];
+                    csv += `"${dt}","${a.nama_lengkap}","${a.nik}","${a.check_in||'-'}","${a.check_out||'-'}","${a.status}","${(a.notes||'').replace(/"/g,'""')}"\n`;
+                });
+                
+                downloadCSV(csv, `Laporan_Absensi_${y}_${m}.csv`);
+            } catch(e) { alert('Gagal memuat data'); }
+        }
+
+        function downloadCSV(csv, filename) {
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>

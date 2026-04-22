@@ -15,6 +15,7 @@ const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const { getRadiusConfigValue } = require('../config/radiusConfig');
 const { checkLicenseStatus } = require('../config/licenseManager');
 const billingManager = require('../config/billing');
+const sqlite3 = require('sqlite3').verbose();
 
 // GET: Dashboard admin
 router.get('/dashboard', adminAuth, async (req, res) => {
@@ -177,6 +178,60 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     billingStats = { total_customers: 0, active_customers: 0, total_invoices: 0, paid_invoices: 0, unpaid_invoices: 0, total_revenue: 0, total_unpaid: 0, monthly_revenue: 0, voucher_revenue: 0, monthly_invoices: 0, paid_monthly_invoices: 0, unpaid_monthly_invoices: 0, monthly_unpaid: 0, voucher_invoices: 0, paid_voucher_invoices: 0, unpaid_voucher_invoices: 0, voucher_unpaid: 0 };
   }
 
+  // ─── Recent Data Queries ──────────────────────────────────────────────────
+  let recentCustomers = [];
+  let recentPaidInvoices = [];
+  let recentTickets = [];
+  let newCustomersThisMonth = 0;
+
+  try {
+    const dbPath = path.join(__dirname, '../data/billing.db');
+    const db = new sqlite3.Database(dbPath);
+    const now = new Date();
+    const monthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+    await Promise.all([
+      // 5 pelanggan terbaru
+      new Promise((resolve) => {
+        db.all(`SELECT id, name, phone, area, status, created_at FROM customers ORDER BY created_at DESC LIMIT 5`, [], (err, rows) => {
+          recentCustomers = rows || [];
+          resolve();
+        });
+      }),
+      // 5 tagihan lunas terbaru
+      new Promise((resolve) => {
+        db.all(`SELECT i.id, i.invoice_number, i.amount, i.paid_at, i.updated_at,
+                  COALESCE(c.name, i.customer_username) as customer_name
+                FROM invoices i
+                LEFT JOIN customers c ON i.customer_id = c.id
+                WHERE i.status = 'paid'
+                ORDER BY COALESCE(i.paid_at, i.updated_at) DESC LIMIT 5`, [], (err, rows) => {
+          recentPaidInvoices = rows || [];
+          resolve();
+        });
+      }),
+      // Pelanggan baru bulan ini
+      new Promise((resolve) => {
+        db.get(`SELECT COUNT(*) as cnt FROM customers WHERE strftime('%Y-%m', created_at) = ?`, [monthStr], (err, row) => {
+          newCustomersThisMonth = (row && row.cnt) || 0;
+          resolve();
+        });
+      }),
+    ]);
+    db.close();
+
+    // Tiket gangguan terbaru (5) dari config troubleReport
+    try {
+      const { getAllTroubleReports } = require('../config/troubleReport');
+      const allTickets = await getAllTroubleReports();
+      recentTickets = (allTickets || []).slice(0, 5);
+    } catch(e) {
+      recentTickets = [];
+    }
+  } catch(dbErr) {
+    console.warn('⚠️ [DASHBOARD] Recent data queries failed:', dbErr.message);
+  }
+
   res.render('adminDashboard', {
     title: 'Dashboard Admin',
     page: 'dashboard',
@@ -194,7 +249,12 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     // Billing data
     billingStats: billingStats || {},
     overdueInvoices: overdueInvoices || [],
-    recentInvoices: recentInvoices || []
+    recentInvoices: recentInvoices || [],
+    // Recent data
+    recentCustomers,
+    recentPaidInvoices,
+    recentTickets,
+    newCustomersThisMonth
   });
 });
 

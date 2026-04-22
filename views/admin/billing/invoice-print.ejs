@@ -286,12 +286,12 @@
                             <td class="fw-bold">Status:</td>
                             <td>
                                 <% if (invoice.status === 'paid') { %>
-                                    <span class="badge bg-success status-badge">Lunas</span>
+                                    <span class="badge status-badge bg-success">Lunas</span>
                                 <% } else if (invoice.status === 'unpaid') { %>
                                     <% if (new Date(invoice.due_date) < new Date()) { %>
-                                        <span class="badge bg-danger status-badge">Terlambat</span>
+                                        <span class="badge status-badge bg-warning text-dark">Terlambat</span>
                                     <% } else { %>
-                                        <span class="badge bg-warning status-badge">Belum Lunas</span>
+                                        <span class="badge status-badge bg-warning text-dark">Belum Lunas</span>
                                     <% } %>
                                 <% } %>
                             </td>

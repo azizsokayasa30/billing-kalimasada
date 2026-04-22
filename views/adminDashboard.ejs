@@ -229,145 +229,101 @@
             </div>
             <% } %>
 
-            <!-- DASHBOARD HEADER -->
-            <div class="dashboard-header">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h5>Dashboard Sistem</h5>
-                        <p class="page-desc">Overview monitoring perangkat, koneksi, dan performa sistem.</p>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <!-- LICENSE STATUS -->
-                        <% if (typeof licenseStatus !== 'undefined' && licenseStatus && licenseStatus.status === 'active') { %>
-                        <div class="license-badge-gold d-flex align-items-center px-3 py-2">
-                            <i class="bi bi-shield-check fs-5 me-2"></i>
-                            <strong>License Aktif</strong>
-                        </div>
-                        <% } %>
-                        <button type="button" class="btn btn-sm" id="validateConfigBtn">
-                            <i class="bi bi-gear me-1"></i>Validasi
-                        </button>
-                        <a href="/admin/settings" class="btn btn-sm">
-                            <i class="bi bi-sliders me-1"></i>Pengaturan
-                        </a>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnHeaderThemeToggle" title="Ganti Tema">
-                            <i id="headerThemeIcon" class="bi bi-moon-fill"></i>
-                        </button>
-                        <button type="button" class="btn btn-sm" id="refreshDashboardBtn">
-                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-                        </button>
-                    </div>
-                </div>
+            <!-- ====== QUICK ACTION ====== -->
+            <% const bs = typeof billingStats !== 'undefined' ? billingStats : {}; %>
+            <div class="db-section-label"><i class="bi bi-lightning-charge-fill me-2"></i>Akses Cepat Operasional</div>
+            <div class="quick-action-grid mb-4">
+                <a href="/admin/billing/customers/new" class="qa-card qa-blue" id="qa-add-customer">
+                    <div class="qa-icon"><i class="bi bi-person-plus-fill"></i></div>
+                    <div class="qa-label">Tambah Pelanggan</div>
+                </a>
+                <a href="/admin/installation-jobs/new" class="qa-card qa-purple" id="qa-add-job">
+                    <div class="qa-icon"><i class="bi bi-tools"></i></div>
+                    <div class="qa-label">Tambah Job Teknisi</div>
+                </a>
+                <a href="/admin/trouble" class="qa-card qa-red" id="qa-add-ticket">
+                    <div class="qa-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                    <div class="qa-label">Tambah Tiket Gangguan</div>
+                </a>
+                <a href="/admin/billing/payments" class="qa-card qa-green" id="qa-payment">
+                    <div class="qa-icon"><i class="bi bi-cash-coin"></i></div>
+                    <div class="qa-label">Input Pembayaran</div>
+                </a>
+                <a href="/admin/billing/collector-remittance" class="qa-card qa-orange" id="qa-setoran">
+                    <div class="qa-icon"><i class="bi bi-bag-check-fill"></i></div>
+                    <div class="qa-label">Terima Setoran</div>
+                </a>
+                <a href="/admin/billing/expenses" class="qa-card qa-pink" id="qa-expense">
+                    <div class="qa-icon"><i class="bi bi-wallet2"></i></div>
+                    <div class="qa-label">Tambah Pengeluaran</div>
+                </a>
             </div>
 
-            <!-- GENIEACS CARDS -->
-            <div class="row mb-2">
-              <div class="col-md-4 mb-2">
-                <div class="metric-card metric-card-primary">
-                  <div class="metric-card-icon">
-                    <i class="bi bi-hdd-network"></i>
-                  </div>
-                  <div class="metric-card-value" id="genieacs-total">
-                    <% if (typeof genieacsTotal !== 'undefined' && genieacsTotal !== null) { %>
-                      <%= genieacsTotal %>
-                    <% } else { %>
-                      <i class="bi bi-hourglass-split"></i>
-                    <% } %>
-                  </div>
-                  <div class="metric-card-label">Total Device GenieACS</div>
-                </div>
-              </div>
-              <div class="col-md-4 mb-2">
-                <div class="metric-card metric-card-success">
-                  <div class="metric-card-icon">
-                    <i class="bi bi-wifi"></i>
-                  </div>
-                  <div class="metric-card-value" id="genieacs-online">
-                    <% if (typeof genieacsOnline !== 'undefined' && genieacsOnline !== null) { %>
-                      <%= genieacsOnline %>
-                    <% } else { %>
-                      <i class="bi bi-hourglass-split"></i>
-                    <% } %>
-                  </div>
-                  <div class="metric-card-label">Device Online</div>
-                </div>
-              </div>
-              <div class="col-md-4 mb-2">
-                <div class="metric-card metric-card-danger">
-                  <div class="metric-card-icon">
-                    <i class="bi bi-wifi-off"></i>
-                  </div>
-                  <div class="metric-card-value" id="genieacs-offline">
-                    <% if (typeof genieacsOffline !== 'undefined' && genieacsOffline !== null) { %>
-                      <%= genieacsOffline %>
-                    <% } else { %>
-                      <i class="bi bi-hourglass-split"></i>
-                    <% } %>
-                  </div>
-                  <div class="metric-card-label">Device Offline</div>
-                </div>
-              </div>
+            <!-- ====== STAT CARDS ====== -->
+            <div class="db-section-label"><i class="bi bi-bar-chart-fill me-2"></i>Statistik Pelanggan & Tagihan</div>
+            <div class="stat-grid-6 mb-4">
+                <a href="/admin/billing/customers" class="stat-card-big stat-indigo" id="sc-total-customer">
+                    <div class="sc-icon"><i class="bi bi-people-fill"></i></div>
+                    <div class="sc-value"><%= bs.total_customers || 0 %></div>
+                    <div class="sc-label">Total Pelanggan</div>
+                    <div class="sc-sub">Keseluruhan Database</div>
+                </a>
+                <a href="/admin/billing/customers?status=active" class="stat-card-big stat-green" id="sc-active">
+                    <div class="sc-icon"><i class="bi bi-person-check-fill"></i></div>
+                    <div class="sc-value"><%= bs.active_customers || 0 %></div>
+                    <div class="sc-label">Pelanggan Aktif</div>
+                    <div class="sc-sub"><span class="sc-badge green">Lancar</span></div>
+                </a>
+                <a href="/admin/billing/customers?status=inactive" class="stat-card-big stat-brown" id="sc-inactive">
+                    <div class="sc-icon"><i class="bi bi-person-x-fill"></i></div>
+                    <div class="sc-value"><%= (bs.total_customers || 0) - (bs.active_customers || 0) %></div>
+                    <div class="sc-label">Pelanggan Non-Aktif</div>
+                    <div class="sc-sub"><span class="sc-badge brown">Isolir / Suspend</span></div>
+                </a>
+                <a href="/admin/billing/invoices" class="stat-card-big stat-blue" id="sc-total-invoice">
+                    <div class="sc-icon"><i class="bi bi-receipt-cutoff"></i></div>
+                    <div class="sc-value">Rp <%= (bs.monthly_revenue || 0).toLocaleString('id-ID') %></div>
+                    <div class="sc-label">Total Tagihan Bulan Ini</div>
+                    <div class="sc-sub">Sudah Berjalan</div>
+                </a>
+                <a href="/admin/billing/invoices?status=unpaid" class="stat-card-big stat-red" id="sc-unpaid">
+                    <div class="sc-icon"><i class="bi bi-exclamation-circle-fill"></i></div>
+                    <div class="sc-value">Rp <%= (bs.monthly_unpaid || 0).toLocaleString('id-ID') %></div>
+                    <div class="sc-label">Belum Bayar</div>
+                    <div class="sc-sub"><span class="sc-badge red"><%= bs.unpaid_monthly_invoices || 0 %> Tertunggak</span></div>
+                </a>
+                <a href="/admin/billing/customers" class="stat-card-big stat-teal" id="sc-new-customer">
+                    <div class="sc-icon"><i class="bi bi-person-fill-add"></i></div>
+                    <div class="sc-value"><%= typeof newCustomersThisMonth !== 'undefined' ? newCustomersThisMonth : 0 %></div>
+                    <div class="sc-label">Pelanggan Baru</div>
+                    <div class="sc-sub">Bulan Ini</div>
+                </a>
             </div>
-            <!-- MIKROTIK CARDS -->
-            <div class="row mb-2">
-              <div class="col-md-4 mb-2">
-                <div class="metric-card metric-card-pink">
-                  <div class="metric-card-icon">
-                    <i class="bi bi-people"></i>
-                  </div>
-                  <div class="metric-card-value" id="mikrotik-total"><%= typeof mikrotikTotal !== 'undefined' ? mikrotikTotal : '-' %></div>
-                  <div class="metric-card-label">Total User PPPoE</div>
-                </div>
-              </div>
-              <div class="col-md-4 mb-2">
-                <div class="metric-card metric-card-info">
-                  <div class="metric-card-icon">
-                    <i class="bi bi-person-check"></i>
-                  </div>
-                  <div class="metric-card-value" id="mikrotik-aktif"><%= typeof mikrotikAktif !== 'undefined' ? mikrotikAktif : '-' %></div>
-                  <div class="metric-card-label">PPPoE Aktif</div>
-                </div>
-              </div>
-              <div class="col-md-4 mb-2">
-                <div class="metric-card metric-card-danger">
-                  <div class="metric-card-icon">
-                    <i class="bi bi-person-x"></i>
-                  </div>
-                  <div class="metric-card-value" id="mikrotik-offline"><%= typeof mikrotikOffline !== 'undefined' ? mikrotikOffline : '-' %></div>
-                  <div class="metric-card-label">PPPoE Offline</div>
-                </div>
-              </div>
-            </div>
-            <!-- GRAFIK INTERNET -->
-            <!-- NAS Monitoring Dashboard -->
+
+            <!-- ====== NAS MONITORING (tanpa gauge) ====== -->
+            <div class="db-section-label"><i class="bi bi-router-fill me-2"></i>Monitoring NAS & Traffic</div>
             <div class="row mb-4">
               <div class="col-md-12">
-                <div class="card">
+                <div class="card nas-monitor-card">
                   <div class="card-header section-card-header">
                     <div class="d-flex justify-content-between align-items-center">
-                      <div class="fw-bold" style="font-size: 0.95rem;"><i class="bi bi-cpu me-1"></i>Monitoring NAS</div>
+                      <div class="fw-bold"><i class="bi bi-cpu me-1"></i>Monitoring NAS</div>
                       <div class="d-flex align-items-center gap-2">
-                        <div id="nasSelect1Container">
-                          <label for="nasSelect1" class="form-label mb-0" style="font-size: 0.9rem;">NAS 1:</label>
-                          <select id="nasSelect1" class="form-select form-select-sm" style="width: 200px; font-size: 0.9rem;">
-                            <option value="">-- Pilih NAS --</option>
-                          </select>
-                        </div>
-                        <div id="nasSelect2Container">
-                          <label for="nasSelect2" class="form-label mb-0" style="font-size: 0.9rem;">NAS 2:</label>
-                          <select id="nasSelect2" class="form-select form-select-sm" style="width: 200px; font-size: 0.9rem;">
-                            <option value="">-- Pilih NAS --</option>
-                          </select>
-                        </div>
+                        <select id="nasSelect1" class="form-select form-select-sm" style="width:180px;font-size:0.85rem;">
+                          <option value="">-- Pilih NAS 1 --</option>
+                        </select>
+                        <select id="nasSelect2" class="form-select form-select-sm" style="width:180px;font-size:0.85rem;">
+                          <option value="">-- Pilih NAS 2 --</option>
+                        </select>
                         <button id="refreshMonitoring" class="btn btn-sm btn-light"><i class="bi bi-arrow-clockwise"></i></button>
-                        <span id="lastUpdate" style="font-size: 0.75rem; opacity: 0.7;"></span>
+                        <span id="lastUpdate" style="font-size:0.75rem;opacity:0.6;"></span>
                       </div>
                     </div>
                   </div>
                   <div class="card-body">
                     <div id="monitoringContainer" class="row">
                       <div class="col-12 text-center text-muted py-5">
-                        <i class="bi bi-router" style="font-size: 3rem;"></i>
+                        <i class="bi bi-router" style="font-size:3rem;opacity:0.3;"></i>
                         <p class="mt-3">Pilih NAS untuk memulai monitoring</p>
                       </div>
                     </div>
@@ -375,582 +331,108 @@
                 </div>
               </div>
             </div>
-            
-            <!-- System Information Dashboard -->
-            <div class="row mb-4">
-              <div class="col-md-12">
-                <div class="card">
-                  <div class="card-header section-card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                      <div class="fw-bold" style="font-size: 0.95rem;"><i class="bi bi-info-circle me-1"></i>System Information</div>
-                      <button id="refreshSystemInfo" class="btn btn-sm btn-light"><i class="bi bi-arrow-clockwise"></i></button>
-                    </div>
-                  </div>
-                  <div class="card-body">
-                    <!-- Circular Gauges -->
-                    <div class="row mb-4">
-                      <div class="col-md-3 text-center">
-                        <div class="system-gauge">
-                          <canvas id="cpuGauge" width="150" height="150"></canvas>
-                          <div class="gauge-label">CPU</div>
-                          <div class="gauge-value" id="cpuValue">0%</div>
-                        </div>
-                      </div>
-                      <div class="col-md-3 text-center">
-                        <div class="system-gauge">
-                          <canvas id="memoryGauge" width="150" height="150"></canvas>
-                          <div class="gauge-label">REAL MEMORY</div>
-                          <div class="gauge-value" id="memoryValue">0%</div>
-                        </div>
-                      </div>
-                      <div class="col-md-3 text-center">
-                        <div class="system-gauge">
-                          <canvas id="virtualMemoryGauge" width="150" height="150"></canvas>
-                          <div class="gauge-label">VIRTUAL MEMORY</div>
-                          <div class="gauge-value" id="virtualMemoryValue">0%</div>
-                        </div>
-                      </div>
-                      <div class="col-md-3 text-center">
-                        <div class="system-gauge">
-                          <canvas id="diskGauge" width="150" height="150"></canvas>
-                          <div class="gauge-label">LOCAL DISK SPACE</div>
-                          <div class="gauge-value" id="diskValue">0%</div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <!-- Detailed System Information -->
-                    <div class="row mb-4">
-                      <div class="col-md-6">
-                        <h6 class="fw-bold mb-3">System Information</h6>
-                        <table class="table table-sm table-borderless">
-                          <tr>
-                            <td class="text-muted" style="width: 40%;">System hostname:</td>
-                            <td id="sysHostname">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">Application version:</td>
-                            <td id="sysVersion">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">Time on system:</td>
-                            <td id="sysTime">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">Processor information:</td>
-                            <td id="sysProcessor">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">Running processes:</td>
-                            <td id="sysProcesses">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">Real memory:</td>
-                            <td id="sysRealMemory">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">Local disk space:</td>
-                            <td id="sysDiskSpace">-</td>
-                          </tr>
-                        </table>
-                      </div>
-                      <div class="col-md-6">
-                        <h6 class="fw-bold mb-3">System Details</h6>
-                        <table class="table table-sm table-borderless">
-                          <tr>
-                            <td class="text-muted" style="width: 40%;">Operating system:</td>
-                            <td id="sysOS">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">Kernel and CPU:</td>
-                            <td id="sysKernel">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">System uptime:</td>
-                            <td id="sysUptime">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">CPU load averages:</td>
-                            <td id="sysLoadAvg">-</td>
-                          </tr>
-                          <tr>
-                            <td class="text-muted">Virtual memory:</td>
-                            <td id="sysVirtualMemory">-</td>
-                          </tr>
-                        </table>
-                      </div>
-                    </div>
-                    
-                    <!-- Stats History Charts -->
-                    <div class="row mb-4">
-                      <div class="col-md-12">
-                        <h6 class="fw-bold mb-3">Stats History</h6>
-                        
-                        <!-- CPU Chart -->
-                        <div class="row mb-3 align-items-center">
-                          <div class="col-md-2">
-                            <div class="stats-info">
-                              <h6 class="mb-2 fw-bold">CPU</h6>
-                              <div class="small text-muted mb-1">Current: <span id="cpuCurrent" class="fw-bold text-primary">0%</span></div>
-                              <div class="small text-muted mb-1">Min: <span id="cpuMin" class="text-success">0%</span></div>
-                              <div class="small text-muted mb-1">Max: <span id="cpuMax" class="text-danger">0%</span></div>
-                              <div class="small text-muted">Avg: <span id="cpuAvg" class="text-info">0%</span></div>
-                            </div>
-                          </div>
-                          <div class="col-md-10">
-                            <canvas id="cpuChart" height="100"></canvas>
-                          </div>
-                        </div>
-                        
-                        <!-- Real Memory Chart -->
-                        <div class="row mb-3 align-items-center">
-                          <div class="col-md-2">
-                            <div class="stats-info">
-                              <h6 class="mb-2 fw-bold">Real Memory</h6>
-                              <div class="small text-muted mb-1">Current: <span id="memoryCurrent" class="fw-bold text-primary">0%</span></div>
-                              <div class="small text-muted mb-1">Min: <span id="memoryMin" class="text-success">0%</span></div>
-                              <div class="small text-muted mb-1">Max: <span id="memoryMax" class="text-danger">0%</span></div>
-                              <div class="small text-muted">Avg: <span id="memoryAvg" class="text-info">0%</span></div>
-                            </div>
-                          </div>
-                          <div class="col-md-10">
-                            <canvas id="memoryChart" height="100"></canvas>
-                          </div>
-                        </div>
-                        
-                        <!-- Virtual Memory Chart -->
-                        <div class="row mb-3 align-items-center">
-                          <div class="col-md-2">
-                            <div class="stats-info">
-                              <h6 class="mb-2 fw-bold">Virtual Memory</h6>
-                              <div class="small text-muted mb-1">Current: <span id="virtualMemoryCurrent" class="fw-bold text-primary">0%</span></div>
-                              <div class="small text-muted mb-1">Min: <span id="virtualMemoryMin" class="text-success">0%</span></div>
-                              <div class="small text-muted mb-1">Max: <span id="virtualMemoryMax" class="text-danger">0%</span></div>
-                              <div class="small text-muted">Avg: <span id="virtualMemoryAvg" class="text-info">0%</span></div>
-                            </div>
-                          </div>
-                          <div class="col-md-10">
-                            <canvas id="virtualMemoryChart" height="100"></canvas>
-                          </div>
-                        </div>
-                        
-                        <!-- Process Chart -->
-                        <div class="row mb-3 align-items-center">
-                          <div class="col-md-2">
-                            <div class="stats-info">
-                              <h6 class="mb-2 fw-bold">Process</h6>
-                              <div class="small text-muted mb-1">Current: <span id="processCurrent" class="fw-bold text-primary">0</span></div>
-                              <div class="small text-muted mb-1">Min: <span id="processMin" class="text-success">0</span></div>
-                              <div class="small text-muted mb-1">Max: <span id="processMax" class="text-danger">0</span></div>
-                              <div class="small text-muted">Avg: <span id="processAvg" class="text-info">0</span></div>
-                            </div>
-                          </div>
-                          <div class="col-md-10">
-                            <canvas id="processChart" height="100"></canvas>
-                          </div>
-                        </div>
-                        
-                        <!-- Disk I/O Chart -->
-                        <div class="row mb-3 align-items-center">
-                          <div class="col-md-2">
-                            <div class="stats-info">
-                              <h6 class="mb-2 fw-bold">Disk I/O</h6>
-                              <div class="small text-muted mb-1">Current: <span id="diskIOCurrent" class="fw-bold text-primary">0 MiB</span></div>
-                              <div class="small text-muted mb-1">Min: <span id="diskIOMin" class="text-success">0 MiB</span></div>
-                              <div class="small text-muted mb-1">Max: <span id="diskIOMax" class="text-danger">0 MiB</span></div>
-                              <div class="small text-muted">Avg: <span id="diskIOAvg" class="text-info">0 MiB</span></div>
-                            </div>
-                          </div>
-                          <div class="col-md-10">
-                            <canvas id="diskIOChart" height="100"></canvas>
-                          </div>
-                        </div>
-                        
-                        <!-- Network I/O Chart -->
-                        <div class="row mb-3 align-items-center">
-                          <div class="col-md-2">
-                            <div class="stats-info">
-                              <h6 class="mb-2 fw-bold">Network I/O</h6>
-                              <div class="small text-muted mb-1">Current: <span id="networkIOCurrent" class="fw-bold text-primary">0 Mbps</span></div>
-                              <div class="small text-muted mb-1">Min: <span id="networkIOMin" class="text-success">0 Mbps</span></div>
-                              <div class="small text-muted mb-1">Max: <span id="networkIOMax" class="text-danger">0 Mbps</span></div>
-                              <div class="small text-muted">Avg: <span id="networkIOAvg" class="text-info">0 Mbps</span></div>
-                            </div>
-                          </div>
-                          <div class="col-md-10">
-                            <canvas id="networkIOChart" height="100"></canvas>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <!-- Network Interfaces -->
-                    <div class="row mb-4">
-                      <div class="col-md-12">
-                        <h6 class="fw-bold mb-3">Network Interfaces</h6>
-                        <div class="table-responsive">
-                          <table class="table table-sm table-bordered" id="networkInterfacesTable">
-                            <thead>
-                              <tr>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Interface Speed</th>
-                                <th>IPv4 Address</th>
-                                <th>IPv6 Addresses</th>
-                                <th>Netmask</th>
-                                <th>Broadcast</th>
-                                <th>Active</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td colspan="7" class="text-center text-muted">Loading...</td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <!-- Disk Usage -->
-                    <div class="row">
-                      <div class="col-md-12">
-                        <h6 class="fw-bold mb-3">Disk Usage</h6>
-                        <div class="table-responsive">
-                          <table class="table table-sm table-bordered" id="diskUsageTable">
-                            <thead>
-                              <tr>
-                                <th>Mounted As</th>
-                                <th>Type</th>
-                                <th>Free</th>
-                                <th>Used</th>
-                                <th>Total</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td colspan="5" class="text-center text-muted">Loading...</td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- OLD TRAFFIC CHART SECTION - HIDDEN FOR NOW -->
-            <div class="row mb-4 d-none">
-              <div class="col-md-12">
-                <div class="card text-bg-info">
-                  <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                      <div class="fw-bold" style="font-size: 1.1rem;"><i class="bi bi-graph-up-arrow"></i> Grafik Traffic Internet - <span id="currentInterface">Ether1</span></div>
-                      <div class="d-flex align-items-center">
-                        <label for="interfaceSelect" class="form-label me-2 mb-0" style="font-size: 0.9rem;">Interface:</label>
-                        <select id="interfaceSelect" class="form-select form-select-sm" style="width: auto; font-size: 0.9rem;">
-                          <option value="ether1-ISP">Ether1-ISP (ISP)</option>
-                          <!-- Interface akan di-load secara dinamis -->
-                        </select>
-                      </div>
-                    </div>
-                    
-                    <!-- Real-time bandwidth info -->
-                    <div class="row mb-2">
-                      <div class="col-md-3">
-                        <div class="card bg-primary text-white bandwidth-card">
-                          <div class="card-body text-center py-1">
-                            <small class="d-block" style="font-size: 0.75rem;">Download</small>
-                            <strong id="currentRx" style="font-size: 1.1rem;">0 Mbps</strong>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="col-md-3">
-                        <div class="card bg-success text-white bandwidth-card">
-                          <div class="card-body text-center py-1">
-                            <small class="d-block" style="font-size: 0.75rem;">Upload</small>
-                            <strong id="currentTx" style="font-size: 1.1rem;">0 Mbps</strong>
-                            </div>
-                        </div>
-                      </div>
-                      <div class="col-md-3">
-                        <div class="card bg-info text-white bandwidth-card">
-                          <div class="card-body text-center py-1">
-                            <small class="d-block" style="font-size: 0.75rem;">Total</small>
-                            <strong id="currentTotal" style="font-size: 1.1rem;">0 Mbps</strong>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="col-md-3">
-                        <div class="card bg-warning text-white bandwidth-card">
-                          <div class="card-body text-center py-1">
-                            <small class="d-block" style="font-size: 0.75rem;">Status</small>
-                            <strong id="currentStatus" style="font-size: 1.1rem;">Idle</strong>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <!-- Grafik Traffic Terpisah -->
-                    <div class="row">
-                      <!-- Grafik Download (RX) -->
-                      <div class="col-md-6">
-                        <div class="card bg-primary text-white traffic-chart-card">
-                          <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-download"></i> Download Traffic (RX)</h6>
-                          </div>
-                          <div class="card-body">
-                            <div style="height: 250px;">
-                              <canvas id="rxChart"></canvas>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <!-- Grafik Upload (TX) -->
-                      <div class="col-md-6">
-                        <div class="card bg-success text-white traffic-chart-card">
-                          <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-upload"></i> Upload Traffic (TX)</h6>
-                          </div>
-                          <div class="card-body">
-                            <div style="height: 250px;">
-                              <canvas id="txChart"></canvas>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <!-- Grafik Combined (Opsional) -->
-                    <div class="row mt-3">
-                      <div class="col-md-12">
-                        <div class="card traffic-chart-card">
-                          <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-graph-up"></i> Combined Traffic Overview</h6>
-                          </div>
-                          <div class="card-body">
-                            <div style="height: 200px;">
-                              <canvas id="combinedChart"></canvas>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-            <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
-            
-            <!-- Extracted Dashboard Scripts -->
-            <script src="/js/dashboard-charts.js"></script>
 
-            <!-- ======================================================= -->
-            <!-- ===== BILLING & ACCOUNTING SECTION ==================== -->
-            <!-- ======================================================= -->
-            <div class="billing-section-wrap mt-5">
-                <div class="dashboard-header mb-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 class="mb-1"><i class="bi bi-speedometer2 me-2"></i>Billing &amp; Accounting</h5>
-                            <p class="text-muted small mb-0">Statistik Penagihan &amp; Keuangan Real-time</p>
+            <!-- ====== 3 RECENT CARDS ====== -->
+            <div class="db-section-label"><i class="bi bi-clock-history me-2"></i>Aktivitas Terbaru</div>
+            <div class="row mb-5">
+                <!-- Pelanggan Terbaru -->
+                <div class="col-lg-4 mb-3">
+                    <div class="card recent-card h-100">
+                        <div class="card-header recent-card-header d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-person-lines-fill me-2"></i>Pelanggan Terbaru</span>
+                            <a href="/admin/billing/customers" class="btn btn-xs btn-outline-primary">Lihat Semua</a>
                         </div>
-                        <div class="d-none d-lg-flex gap-2">
-                            <a href="/admin/billing/monthly-summary" class="btn btn-outline-secondary btn-sm">
-                                <i class="bi bi-calendar-event me-1"></i>Summary Bulanan
-                            </a>
-                            <a href="/admin/billing/invoices-by-type" class="btn btn-outline-info btn-sm">
-                                <i class="bi bi-receipt-cutoff me-1"></i>Invoice by Type
-                            </a>
-                            <a href="/admin/billing/payment-settings" class="btn btn-outline-primary btn-sm">
-                                <i class="bi bi-gear me-1"></i>Settings
-                            </a>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- BILLING METRIC CARDS -->
-                <% const bs = typeof billingStats !== 'undefined' ? billingStats : {}; %>
-                <div class="row mb-4">
-                    <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="metric-card metric-card-secondary">
-                            <div class="metric-card-icon"><i class="bi bi-people"></i></div>
-                            <div class="metric-card-value"><%= bs.total_customers || 0 %></div>
-                            <div class="metric-card-label">Total Pelanggan</div>
-                            <div class="mt-2 small text-muted">
-                                <span class="badge bg-success-subtle text-success"><i class="bi bi-check-circle me-1"></i><%= bs.active_customers || 0 %> Aktif</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="metric-card metric-card-success">
-                            <div class="metric-card-icon"><i class="bi bi-calendar-check"></i></div>
-                            <div class="metric-card-value text-success">Rp <%= (bs.monthly_revenue || 0).toLocaleString('id-ID') %></div>
-                            <div class="metric-card-label">Pendapatan Bulanan</div>
-                            <div class="mt-2 small text-muted">
-                                <span class="badge bg-info-subtle text-info"><i class="bi bi-receipt-check me-1"></i><%= bs.paid_monthly_invoices || 0 %> Lunas</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="metric-card metric-card-info">
-                            <div class="metric-card-icon"><i class="bi bi-ticket-perforated"></i></div>
-                            <div class="metric-card-value text-info">Rp <%= (bs.voucher_revenue || 0).toLocaleString('id-ID') %></div>
-                            <div class="metric-card-label">Pendapatan Voucher</div>
-                            <div class="mt-2 small text-muted">
-                                <span class="badge bg-danger-subtle text-danger"><i class="bi bi-exclamation-circle me-1"></i>Rp <%= (bs.voucher_unpaid || 0).toLocaleString('id-ID') %> Pending</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="metric-card metric-card-pink">
-                            <div class="metric-card-icon"><i class="bi bi-cash-stack"></i></div>
-                            <div class="metric-card-value text-primary">Rp <%= (bs.total_revenue || 0).toLocaleString('id-ID') %></div>
-                            <div class="metric-card-label">Total Pendapatan</div>
-                            <div class="mt-2 small text-muted">
-                                <span class="badge bg-primary-subtle text-primary"><i class="bi bi-graph-up me-1"></i><%= bs.paid_invoices || 0 %>/<%= bs.total_invoices || 0 %> Lunas</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- INVOICE BREAKDOWN + RECENT -->
-                <div class="row">
-                    <!-- Tagihan Bulanan -->
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card h-100">
-                            <div class="card-header section-card-header">
-                                <div class="fw-bold"><i class="bi bi-calendar2-range me-2"></i>Tagihan Bulanan</div>
-                            </div>
-                            <div class="card-body">
-                                <div class="row text-center mb-3 mt-2">
-                                    <div class="col-4"><h5 class="fw-bold"><%= bs.monthly_invoices || 0 %></h5><p class="text-muted small mb-0">Total</p></div>
-                                    <div class="col-4 border-start"><h5 class="fw-bold text-success"><%= bs.paid_monthly_invoices || 0 %></h5><p class="text-muted small mb-0">Lunas</p></div>
-                                    <div class="col-4 border-start"><h5 class="fw-bold text-danger"><%= bs.unpaid_monthly_invoices || 0 %></h5><p class="text-muted small mb-0">Unpaid</p></div>
-                                </div>
-                                <div class="p-2 bg-light rounded-3 small">
-                                    <div class="d-flex justify-content-between mb-1"><span class="text-muted">Pendapatan:</span><span class="fw-bold text-success">Rp <%= (bs.monthly_revenue || 0).toLocaleString('id-ID') %></span></div>
-                                    <div class="d-flex justify-content-between"><span class="text-muted">Unpaid:</span><span class="fw-bold text-danger">Rp <%= (bs.monthly_unpaid || 0).toLocaleString('id-ID') %></span></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Tagihan Voucher -->
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card h-100">
-                            <div class="card-header section-card-header">
-                                <div class="fw-bold"><i class="bi bi-ticket-detailed me-2"></i>Tagihan Voucher</div>
-                            </div>
-                            <div class="card-body">
-                                <div class="row text-center mb-3 mt-2">
-                                    <div class="col-4"><h5 class="fw-bold"><%= bs.voucher_invoices || 0 %></h5><p class="text-muted small mb-0">Total</p></div>
-                                    <div class="col-4 border-start"><h5 class="fw-bold text-success"><%= bs.paid_voucher_invoices || 0 %></h5><p class="text-muted small mb-0">Lunas</p></div>
-                                    <div class="col-4 border-start"><h5 class="fw-bold text-danger"><%= bs.unpaid_voucher_invoices || 0 %></h5><p class="text-muted small mb-0">Unpaid</p></div>
-                                </div>
-                                <div class="p-2 bg-light rounded-3 small">
-                                    <div class="d-flex justify-content-between mb-1"><span class="text-muted">Pendapatan:</span><span class="fw-bold text-success">Rp <%= (bs.voucher_revenue || 0).toLocaleString('id-ID') %></span></div>
-                                    <div class="d-flex justify-content-between"><span class="text-muted">Unpaid:</span><span class="fw-bold text-danger">Rp <%= (bs.voucher_unpaid || 0).toLocaleString('id-ID') %></span></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Tagihan Terbaru -->
-                    <div class="col-xl-6 mb-4">
-                        <div class="card">
-                            <div class="card-header section-card-header d-flex justify-content-between align-items-center">
-                                <div class="fw-bold"><i class="bi bi-clock-history me-2"></i>Tagihan Terbaru</div>
-                                <a href="/admin/billing/invoices" class="btn btn-sm btn-light py-0 px-2" style="font-size:0.75rem;">View All</a>
-                            </div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive">
-                                    <table class="table table-hover mb-0" style="font-size:0.8rem;">
-                                        <thead><tr>
-                                            <th class="ps-3">No. Tagihan</th>
-                                            <th>Pelanggan</th>
-                                            <th>Jumlah</th>
-                                            <th>Status</th>
-                                            <th class="pe-3">Jatuh Tempo</th>
-                                        </tr></thead>
-                                        <tbody>
-                                        <% if (typeof recentInvoices !== 'undefined' && recentInvoices && recentInvoices.length > 0) { %>
-                                            <% recentInvoices.forEach(function(inv) { %>
-                                            <tr>
-                                                <td class="ps-3"><a href="/admin/billing/invoices/<%= inv.id %>" class="text-primary fw-bold text-decoration-none"><%= inv.invoice_number %></a></td>
-                                                <td><%= inv.display_name || inv.customer_name || inv.member_name || 'N/A' %></td>
-                                                <td class="fw-bold">Rp <%= parseFloat(inv.amount).toLocaleString('id-ID') %></td>
-                                                <td>
-                                                    <% if (inv.status === 'paid') { %><span class="badge bg-success">Lunas</span>
-                                                    <% } else if (new Date(inv.due_date) < new Date()) { %><span class="badge bg-danger">Terlambat</span>
-                                                    <% } else { %><span class="badge bg-warning text-dark">Belum Lunas</span><% } %>
-                                                </td>
-                                                <td class="pe-3"><%= new Date(inv.due_date).toLocaleDateString('id-ID') %></td>
-                                            </tr>
-                                            <% }); %>
+                        <div class="card-body p-0">
+                            <% if (typeof recentCustomers !== 'undefined' && recentCustomers && recentCustomers.length > 0) { %>
+                            <ul class="recent-list">
+                                <% recentCustomers.forEach(function(c) { %>
+                                <li class="recent-item">
+                                    <div class="ri-avatar ri-avatar-blue"><i class="bi bi-person-fill"></i></div>
+                                    <div class="ri-info">
+                                        <div class="ri-name"><%= c.name %></div>
+                                        <div class="ri-sub"><%= c.area || 'Tanpa Area' %></div>
+                                    </div>
+                                    <div class="ri-right">
+                                        <% if (c.status === 'aktif' || c.status === 'active') { %>
+                                        <span class="badge-status green">Aktif</span>
                                         <% } else { %>
-                                            <tr><td colspan="5" class="text-center py-4 text-muted small">Belum ada tagihan terbaru</td></tr>
+                                        <span class="badge-status brown">Non-Aktif</span>
                                         <% } %>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                                    </div>
+                                </li>
+                                <% }); %>
+                            </ul>
+                            <% } else { %>
+                            <div class="text-center py-4 text-muted small"><i class="bi bi-inbox d-block fs-3 mb-2 opacity-25"></i>Belum ada data</div>
+                            <% } %>
                         </div>
                     </div>
                 </div>
-
-                <!-- TAGIHAN TERLAMBAT -->
-                <% if (typeof overdueInvoices !== 'undefined' && overdueInvoices && overdueInvoices.length > 0) { %>
-                <div class="row mb-4">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header section-card-header d-flex justify-content-between align-items-center">
-                                <div class="fw-bold"><i class="bi bi-exclamation-triangle me-2 text-danger"></i>Tagihan Terlambat</div>
-                                <span class="badge bg-danger rounded-pill"><%= overdueInvoices.length %></span>
-                            </div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive">
-                                    <table class="table table-hover mb-0" style="font-size:0.8rem;">
-                                        <thead><tr>
-                                            <th class="ps-3">Pelanggan</th>
-                                            <th>Jumlah / Tempo</th>
-                                            <th class="pe-3">Aksi</th>
-                                        </tr></thead>
-                                        <tbody>
-                                        <% overdueInvoices.forEach(function(inv) { %>
-                                        <tr>
-                                            <td class="ps-3">
-                                                <div class="d-flex flex-column">
-                                                    <span class="fw-bold small"><%= inv.customer_name %></span>
-                                                    <small class="text-muted" style="font-size:0.7rem;"><%= inv.customer_phone %></small>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <span class="fw-bold small">Rp <%= parseFloat(inv.amount).toLocaleString('id-ID') %></span><br>
-                                                <span class="text-danger" style="font-size:0.7rem;"><%= new Date(inv.due_date).toLocaleDateString('id-ID') %></span>
-                                            </td>
-                                            <td class="pe-3">
-                                                <button class="btn btn-danger btn-sm py-0" onclick="suspendCustomer('<%= inv.username %>')"><i class="bi bi-slash-circle me-1"></i>Isolir</button>
-                                                <button class="btn btn-success btn-sm py-0 ms-1"
-                                                    data-phone="<%= inv.customer_phone || '' %>"
-                                                    data-name="<%= inv.customer_name || '' %>"
-                                                    data-invoicenumber="<%= inv.invoice_number || '' %>"
-                                                    data-amount="<%= inv.amount || 0 %>"
-                                                    onclick="sendWaReminderFromBtn(this)"><i class="bi bi-whatsapp"></i></button>
-                                            </td>
-                                        </tr>
-                                        <% }); %>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                <!-- Tagihan Lunas Terbaru -->
+                <div class="col-lg-4 mb-3">
+                    <div class="card recent-card h-100">
+                        <div class="card-header recent-card-header d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-receipt-check me-2"></i>Tagihan Lunas Terbaru</span>
+                            <a href="/admin/billing/invoices?status=paid" class="btn btn-xs btn-outline-success">Lihat Semua</a>
+                        </div>
+                        <div class="card-body p-0">
+                            <% if (typeof recentPaidInvoices !== 'undefined' && recentPaidInvoices && recentPaidInvoices.length > 0) { %>
+                            <ul class="recent-list">
+                                <% recentPaidInvoices.forEach(function(inv) { %>
+                                <li class="recent-item">
+                                    <div class="ri-avatar ri-avatar-green"><i class="bi bi-check-lg"></i></div>
+                                    <div class="ri-info">
+                                        <div class="ri-name"><%= inv.customer_name || 'N/A' %></div>
+                                        <div class="ri-sub"><%= inv.invoice_number || '-' %></div>
+                                    </div>
+                                    <div class="ri-right ri-amount">Rp <%= parseFloat(inv.amount || 0).toLocaleString('id-ID') %></div>
+                                </li>
+                                <% }); %>
+                            </ul>
+                            <% } else { %>
+                            <div class="text-center py-4 text-muted small"><i class="bi bi-inbox d-block fs-3 mb-2 opacity-25"></i>Belum ada data</div>
+                            <% } %>
                         </div>
                     </div>
                 </div>
-                <% } %>
-            </div><!-- /billing-section-wrap -->
+                <!-- Tiket Gangguan Terbaru -->
+                <div class="col-lg-4 mb-3">
+                    <div class="card recent-card h-100">
+                        <div class="card-header recent-card-header d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-bug-fill me-2"></i>Tiket Gangguan Terbaru</span>
+                            <a href="/admin/trouble" class="btn btn-xs btn-outline-danger">Lihat Semua</a>
+                        </div>
+                        <div class="card-body p-0">
+                            <% if (typeof recentTickets !== 'undefined' && recentTickets && recentTickets.length > 0) { %>
+                            <ul class="recent-list">
+                                <% recentTickets.forEach(function(t) { %>
+                                <li class="recent-item">
+                                    <div class="ri-avatar ri-avatar-red"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                                    <div class="ri-info">
+                                        <div class="ri-name"><%= t.name || t.customer_name || 'Pelanggan' %></div>
+                                        <div class="ri-sub"><%= t.category || t.description && t.description.substring(0,30) || '-' %></div>
+                                    </div>
+                                    <div class="ri-right">
+                                        <% if (t.status === 'open') { %>
+                                        <span class="badge-status yellow">Pending</span>
+                                        <% } else if (t.status === 'in_progress') { %>
+                                        <span class="badge-status blue">Proses</span>
+                                        <% } else if (t.status === 'resolved' || t.status === 'closed') { %>
+                                        <span class="badge-status green">Selesai</span>
+                                        <% } else { %>
+                                        <span class="badge-status brown"><%= t.status %></span>
+                                        <% } %>
+                                    </div>
+                                </li>
+                                <% }); %>
+                            </ul>
+                            <% } else { %>
+                            <div class="text-center py-4 text-muted small"><i class="bi bi-inbox d-block fs-3 mb-2 opacity-25"></i>Belum ada tiket</div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             </main>
     </div>
