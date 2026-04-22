@@ -233,28 +233,28 @@
             <% const bs = typeof billingStats !== 'undefined' ? billingStats : {}; %>
             <div class="db-section-label"><i class="bi bi-lightning-charge-fill me-2"></i>Akses Cepat Operasional</div>
             <div class="quick-action-grid mb-4">
-                <a href="/admin/billing/customers/new" class="qa-card qa-blue" id="qa-add-customer">
+                <a href="/admin/billing/customers/new" class="qa-card qa-indigo" id="qa-add-customer">
                     <div class="qa-icon"><i class="bi bi-person-plus-fill"></i></div>
                     <div class="qa-label">Tambah Pelanggan</div>
                 </a>
-                <a href="/admin/installation-jobs/new" class="qa-card qa-purple" id="qa-add-job">
+                <a href="/admin/installation-jobs/new" class="qa-card qa-green" id="qa-add-job">
                     <div class="qa-icon"><i class="bi bi-tools"></i></div>
                     <div class="qa-label">Tambah Job Teknisi</div>
                 </a>
-                <a href="/admin/trouble" class="qa-card qa-red" id="qa-add-ticket">
+                <a href="/admin/trouble" class="qa-card qa-orange" id="qa-add-ticket">
                     <div class="qa-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
                     <div class="qa-label">Tambah Tiket Gangguan</div>
                 </a>
-                <a href="/admin/billing/payments" class="qa-card qa-green" id="qa-payment">
+                <a href="/admin/billing/payments" class="qa-card qa-blue" id="qa-payment">
                     <div class="qa-icon"><i class="bi bi-cash-coin"></i></div>
                     <div class="qa-label">Input Pembayaran</div>
                 </a>
-                <a href="/admin/billing/collector-remittance" class="qa-card qa-orange" id="qa-setoran">
-                    <div class="qa-icon"><i class="bi bi-bag-check-fill"></i></div>
+                <a href="/admin/billing/collector-remittance" class="qa-card qa-purple" id="qa-setoran">
+                    <div class="qa-icon"><i class="bi bi-wallet2"></i></div>
                     <div class="qa-label">Terima Setoran</div>
                 </a>
-                <a href="/admin/billing/expenses" class="qa-card qa-pink" id="qa-expense">
-                    <div class="qa-icon"><i class="bi bi-wallet2"></i></div>
+                <a href="/admin/billing/expenses" class="qa-card qa-red" id="qa-expense">
+                    <div class="qa-icon"><i class="bi bi-box-arrow-up-right"></i></div>
                     <div class="qa-label">Tambah Pengeluaran</div>
                 </a>
             </div>
@@ -263,73 +263,75 @@
             <div class="db-section-label"><i class="bi bi-bar-chart-fill me-2"></i>Statistik Pelanggan & Tagihan</div>
             <div class="stat-grid-6 mb-4">
                 <a href="/admin/billing/customers" class="stat-card-big stat-indigo" id="sc-total-customer">
-                    <div class="sc-icon"><i class="bi bi-people-fill"></i></div>
+                    <div class="sc-header">
+                        <span class="sc-label">Total Pelanggan</span>
+                        <span class="sc-badge"><i class="bi bi-people-fill me-1"></i> Database</span>
+                    </div>
                     <div class="sc-value"><%= bs.total_customers || 0 %></div>
-                    <div class="sc-label">Total Pelanggan</div>
-                    <div class="sc-sub">Keseluruhan Database</div>
+                    <div class="sc-sub">Pelanggan terdaftar total</div>
                 </a>
-                <a href="/admin/billing/customers?status=active" class="stat-card-big stat-green" id="sc-active">
-                    <div class="sc-icon"><i class="bi bi-person-check-fill"></i></div>
+                <a href="/admin/billing/customers?status=active" class="stat-card-big stat-emerald" id="sc-active">
+                    <div class="sc-header">
+                        <span class="sc-label">Pelanggan Aktif</span>
+                        <span class="sc-badge"><i class="bi bi-check-circle-fill me-1"></i> Aktif</span>
+                    </div>
                     <div class="sc-value"><%= bs.active_customers || 0 %></div>
-                    <div class="sc-label">Pelanggan Aktif</div>
-                    <div class="sc-sub"><span class="sc-badge green">Lancar</span></div>
+                    <div class="sc-sub">Status terkoneksi saat ini</div>
                 </a>
-                <a href="/admin/billing/customers?status=inactive" class="stat-card-big stat-brown" id="sc-inactive">
-                    <div class="sc-icon"><i class="bi bi-person-x-fill"></i></div>
+                <a href="/admin/billing/customers?status=inactive" class="stat-card-big stat-rose" id="sc-inactive">
+                    <div class="sc-header">
+                        <span class="sc-label">Pelanggan Nonaktif</span>
+                        <span class="sc-badge"><i class="bi bi-x-circle-fill me-1"></i> Isolir</span>
+                    </div>
                     <div class="sc-value"><%= (bs.total_customers || 0) - (bs.active_customers || 0) %></div>
-                    <div class="sc-label">Pelanggan Non-Aktif</div>
-                    <div class="sc-sub"><span class="sc-badge brown">Isolir / Suspend</span></div>
+                    <div class="sc-sub">Isolir / Berhenti berlangganan</div>
                 </a>
                 <a href="/admin/billing/invoices" class="stat-card-big stat-blue" id="sc-total-invoice">
-                    <div class="sc-icon"><i class="bi bi-receipt-cutoff"></i></div>
+                    <div class="sc-header">
+                        <span class="sc-label">Total Tagihan</span>
+                        <span class="sc-badge"><i class="bi bi-receipt me-1"></i> Bln Ini</span>
+                    </div>
                     <div class="sc-value">Rp <%= (bs.monthly_revenue || 0).toLocaleString('id-ID') %></div>
-                    <div class="sc-label">Total Tagihan Bulan Ini</div>
-                    <div class="sc-sub">Sudah Berjalan</div>
+                    <div class="sc-sub">Akumulasi tagihan bulan ini</div>
                 </a>
-                <a href="/admin/billing/invoices?status=unpaid" class="stat-card-big stat-red" id="sc-unpaid">
-                    <div class="sc-icon"><i class="bi bi-exclamation-circle-fill"></i></div>
+                <a href="/admin/billing/invoices?status=unpaid" class="stat-card-big stat-amber" id="sc-unpaid">
+                    <div class="sc-header">
+                        <span class="sc-label">Belum Bayar</span>
+                        <span class="sc-badge"><%= bs.unpaid_monthly_invoices || 0 %> Inv</span>
+                    </div>
                     <div class="sc-value">Rp <%= (bs.monthly_unpaid || 0).toLocaleString('id-ID') %></div>
-                    <div class="sc-label">Belum Bayar</div>
-                    <div class="sc-sub"><span class="sc-badge red"><%= bs.unpaid_monthly_invoices || 0 %> Tertunggak</span></div>
+                    <div class="sc-sub">Piutang berjalan</div>
                 </a>
                 <a href="/admin/billing/customers" class="stat-card-big stat-teal" id="sc-new-customer">
-                    <div class="sc-icon"><i class="bi bi-person-fill-add"></i></div>
+                    <div class="sc-header">
+                        <span class="sc-label">Pelanggan Baru</span>
+                        <span class="sc-badge"><i class="bi bi-graph-up-arrow me-1"></i> Plus</span>
+                    </div>
                     <div class="sc-value"><%= typeof newCustomersThisMonth !== 'undefined' ? newCustomersThisMonth : 0 %></div>
-                    <div class="sc-label">Pelanggan Baru</div>
-                    <div class="sc-sub">Bulan Ini</div>
+                    <div class="sc-sub">Bulan berjalan</div>
                 </a>
             </div>
 
-            <!-- ====== NAS MONITORING (tanpa gauge) ====== -->
-            <div class="db-section-label"><i class="bi bi-router-fill me-2"></i>Monitoring NAS & Traffic</div>
-            <div class="row mb-4">
-              <div class="col-md-12">
-                <div class="card nas-monitor-card">
-                  <div class="card-header section-card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                      <div class="fw-bold"><i class="bi bi-cpu me-1"></i>Monitoring NAS</div>
-                      <div class="d-flex align-items-center gap-2">
-                        <select id="nasSelect1" class="form-select form-select-sm" style="width:180px;font-size:0.85rem;">
-                          <option value="">-- Pilih NAS 1 --</option>
-                        </select>
-                        <select id="nasSelect2" class="form-select form-select-sm" style="width:180px;font-size:0.85rem;">
-                          <option value="">-- Pilih NAS 2 --</option>
-                        </select>
-                        <button id="refreshMonitoring" class="btn btn-sm btn-light"><i class="bi bi-arrow-clockwise"></i></button>
-                        <span id="lastUpdate" style="font-size:0.75rem;opacity:0.6;"></span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="card-body">
-                    <div id="monitoringContainer" class="row">
-                      <div class="col-12 text-center text-muted py-5">
-                        <i class="bi bi-router" style="font-size:3rem;opacity:0.3;"></i>
-                        <p class="mt-3">Pilih NAS untuk memulai monitoring</p>
-                      </div>
-                    </div>
-                  </div>
+            <!-- ====== NAS MONITORING ====== -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="db-section-label m-0"><i class="bi bi-router-fill me-2"></i>Monitoring NAS & Traffic</div>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="nasSelect1" class="form-select form-select-sm" style="width:180px;font-size:0.85rem; border-color:var(--border);">
+                        <option value="">-- Pilih NAS 1 --</option>
+                    </select>
+                    <select id="nasSelect2" class="form-select form-select-sm" style="width:180px;font-size:0.85rem; border-color:var(--border);">
+                        <option value="">-- Pilih NAS 2 --</option>
+                    </select>
+                    <button id="refreshMonitoring" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
+                    <span id="lastUpdate" class="text-muted" style="font-size:0.75rem;"></span>
                 </div>
-              </div>
+            </div>
+            
+            <div id="monitoringContainer" class="row mb-4">
+                <div class="col-12 text-center text-muted py-5" style="background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border);">
+                    <i class="bi bi-router" style="font-size:3rem;opacity:0.3;"></i>
+                    <p class="mt-3">Pilih NAS untuk memulai monitoring</p>
+                </div>
             </div>
 
             <!-- ====== 3 RECENT CARDS ====== -->
@@ -726,5 +728,7 @@ function sendWaReminderFromBtn(btn) {
 
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="/js/dashboard-charts.js"></script>
 </body>
 </html>
