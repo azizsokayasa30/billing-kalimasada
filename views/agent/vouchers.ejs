@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -193,19 +193,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../partials/theme-head') %>
 </head>
 <body>
     <!-- Mobile Container -->
@@ -1020,7 +1008,7 @@
                             </div>
                             
                             <div class="validity">
-                                Valid until used • Single device
+                                Valid until used â€¢ Single device
                             </div>
                             
                             <div class="divider"></div>
@@ -1061,10 +1049,10 @@
             const price = document.getElementById('resultPrice') ? document.getElementById('resultPrice').textContent : '';
             
             const voucherInfo = `Voucher Hotspot Berhasil!\n\n` +
-                `📱 Username: ${voucherCode}\n` +
-                `🔑 Password: ${voucherPassword}\n` +
-                `📦 Paket: ${packageName}\n` +
-                `💰 Harga: ${price}\n\n` +
+                `ðŸ“± Username: ${voucherCode}\n` +
+                `ðŸ”‘ Password: ${voucherPassword}\n` +
+                `ðŸ“¦ Paket: ${packageName}\n` +
+                `ðŸ’° Harga: ${price}\n\n` +
                 `Silakan gunakan kredensial di atas untuk mengakses WiFi hotspot.`;
             
             navigator.clipboard.writeText(voucherInfo).then(function() {
@@ -1161,4 +1149,5 @@
     </div> <!-- End Mobile Container -->
 </body>
 </html>
+
 

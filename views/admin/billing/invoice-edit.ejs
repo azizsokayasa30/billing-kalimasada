@@ -11,19 +11,7 @@
     <!-- Admin Mobile Optimizations -->
     <link href="/css/admin-mobile.css" rel="stylesheet">
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -221,19 +209,19 @@ document.getElementById('editInvoiceForm').addEventListener('submit', function(e
     .then(result => {
         if (result.success) {
             // Show success notification
-            showAlert('success', '✅ Invoice berhasil diperbarui!');
+            showAlert('success', '? Invoice berhasil diperbarui!');
             
             // Redirect to invoice detail page after a short delay
             setTimeout(() => {
                 window.location.href = `/admin/billing/invoices/<%= invoice.id %>`;
             }, 1500);
         } else {
-            showAlert('danger', '❌ ' + result.message);
+            showAlert('danger', '? ' + result.message);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        showAlert('danger', '❌ Terjadi kesalahan saat memperbarui invoice');
+        showAlert('danger', '? Terjadi kesalahan saat memperbarui invoice');
     })
     .finally(() => {
         // Re-enable submit button
@@ -254,17 +242,17 @@ function deleteInvoice() {
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                showAlert('success', '✅ Invoice berhasil dihapus!');
+                showAlert('success', '? Invoice berhasil dihapus!');
                 setTimeout(() => {
                     window.location.href = '/admin/billing/invoices';
                 }, 1500);
             } else {
-                showAlert('danger', '❌ ' + result.message);
+                showAlert('danger', '? ' + result.message);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            showAlert('danger', '❌ Terjadi kesalahan saat menghapus invoice');
+            showAlert('danger', '? Terjadi kesalahan saat menghapus invoice');
         });
     }
 }

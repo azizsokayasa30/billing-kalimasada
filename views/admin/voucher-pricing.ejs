@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -13,14 +13,14 @@
     <link href="/css/admin-mobile.css" rel="stylesheet">
     <style>
         body {
-            background-color: #f8f9fa;
+            background-color: var(--bg-secondary, #f8f9fa);
         }
         .pricing-card {
             border: 1px solid #e0e0e0;
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 20px;
-            background: #fff;
+            background: var(--panel-bg, #ffffff);
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .pricing-header {
@@ -47,19 +47,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../partials/theme-head') %>
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -688,3 +676,4 @@
     </div>
 </body>
 </html>
+

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -65,7 +65,7 @@
         }
 
         .page-header {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 20px;
             padding: 30px;
             margin-bottom: 30px;
@@ -74,7 +74,7 @@
 
         .page-header h1 {
             font-weight: 700;
-            color: #333;
+            color: var(--text-primary, #333);
             margin-bottom: 10px;
         }
 
@@ -91,7 +91,7 @@
 
         /* Sidebar Controls */
         .controls-panel {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 20px;
             padding: 25px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
@@ -104,7 +104,7 @@
             font-size: 1.3rem;
             font-weight: 600;
             margin-bottom: 20px;
-            color: #333;
+            color: var(--text-primary, #333);
         }
 
         .form-group {
@@ -150,7 +150,7 @@
 
         /* Voucher Preview Area */
         .preview-area {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 20px;
             padding: 30px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
@@ -168,7 +168,7 @@
 
         .preview-header h3 {
             font-weight: 700;
-            color: #333;
+            color: var(--text-primary, #333);
             margin: 0;
         }
 
@@ -203,7 +203,7 @@
 
         /* Modern Voucher Card */
         .voucher-card-modern {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 20px;
             padding: 25px;
             box-shadow: 0 8px 30px rgba(0,0,0,0.12);
@@ -263,7 +263,7 @@
         .voucher-company-name {
             font-size: 1.1rem;
             font-weight: 700;
-            color: #333;
+            color: var(--text-primary, #333);
             margin-bottom: 15px;
             text-align: center;
         }
@@ -296,7 +296,7 @@
         }
 
         .voucher-credentials {
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             border-radius: 15px;
             padding: 15px;
             margin-bottom: 15px;
@@ -355,7 +355,7 @@
 
         .credential-value {
             font-weight: 700;
-            color: #333;
+            color: var(--text-primary, #333);
             font-family: 'Courier New', monospace;
             font-size: 1rem;
         }
@@ -414,7 +414,7 @@
 
         .info-value {
             font-weight: 700;
-            color: #333;
+            color: var(--text-primary, #333);
         }
 
         .voucher-footer-modern {
@@ -463,7 +463,7 @@
             border: 1px solid #ddd;
             border-radius: 3px;
             overflow: hidden;
-            background: white;
+            background: var(--panel-bg, #ffffff);
             height: 25mm; /* A4 (297mm) - padding (4mm) - 10 gap (15mm) = 278mm / 11 baris = ~25mm */
             position: relative;
             page-break-inside: avoid;
@@ -521,7 +521,7 @@
         .compact-voucher-code {
             font-size: 1rem;
             font-weight: 800;
-            color: #333 !important;
+            color: var(--text-primary, #333) !important;
             text-align: center;
             margin-bottom: 4px;
             padding-bottom: 3px;
@@ -578,7 +578,7 @@
             }
 
             body {
-                background: white !important;
+                background: var(--panel-bg, #ffffff) !important;
                 padding: 0 !important;
                 margin: 0 !important;
             }
@@ -689,7 +689,7 @@
             .compact-company-name,
             .compact-voucher-code,
             .compact-info {
-                color: #333 !important;
+                color: var(--text-primary, #333) !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
@@ -763,19 +763,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../partials/theme-head') %>
 </head>
 <body data-logo-url="<%= settings && settings.logo_filename ? ('/img/' + settings.logo_filename + '?ts=' + Date.now()) : '/img/logo.png' %>">
     <%- include('../partials/admin-responsive-sidebar', { page: 'voucher-template', settings: settings }) %>
@@ -1105,4 +1093,5 @@
     </script>
 </body>
 </html>
+
 

@@ -1,0 +1,638 @@
+/**
+ * theme-patch.css — Universal theme consistency patch
+ * Loaded LAST (after all other CSS) via a <link> tag
+ * This is the single source of truth for background/text on body & main-content.
+ *
+ * Rule: CSS variables defined in theme-overrides.css drive everything here.
+ */
+
+/* ===========================================================
+   CSS VARIABLE DECLARATIONS
+   Light mode / default — so var(--panel-bg) etc works in inline styles
+   =========================================================== */
+
+:root,
+[data-theme="light"] {
+  --panel-bg:        #ffffff;
+  --panel-accent:    #f8fafc;
+  --panel-border:    #e2e8f0;
+  --bg-primary:      #f1f5f9;
+  --bg-secondary:    #f8fafc;
+  --bg-tertiary:     #ffffff;
+  --text-primary:    #0f172a;
+  --text-secondary:  #334155;
+  --text-tertiary:   #64748b;
+  --border-color:    #e2e8f0;
+}
+
+[data-theme="dark"] {
+  --panel-bg:        #1e293b;
+  --panel-accent:    #243044;
+  --panel-border:    #334155;
+  --bg-primary:      #0a0f1a;
+  --bg-secondary:    #0f172a;
+  --bg-tertiary:     #1e293b;
+  --text-primary:    #f1f5f9;
+  --text-secondary:  #cbd5e1;
+  --text-tertiary:   #94a3b8;
+  --border-color:    #334155;
+}
+
+/* ===========================================================
+   BODY & ROOT BACKGROUND
+   =========================================================== */
+
+/* Default (light) */
+:root body,
+[data-theme="light"] body {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* Dark */
+[data-theme="dark"] body,
+[data-theme="dark"] html {
+  background-color: #0a0f1a !important;
+  color: #f1f5f9 !important;
+}
+
+/* ===========================================================
+   MAIN CONTENT AREA
+   Every page wraps content in .main-content — this overrides
+   all hardcoded inline #f8f9fa / white values.
+   =========================================================== */
+
+[data-theme="light"] .main-content,
+:root .main-content {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="dark"] .main-content {
+  background-color: #0a0f1a !important;
+  color: #f1f5f9 !important;
+}
+
+/* finance-modern f-main-area */
+[data-theme="dark"] .f-main-area {
+  background-color: transparent !important;
+  color: #f1f5f9 !important;
+}
+[data-theme="light"] .f-main-area,
+[data-theme="light"] .f-main-area {
+  background-color: transparent !important;
+  color: #0f172a !important;
+}
+
+/* ===========================================================
+   CARDS — dark mode proper contrast
+   =========================================================== */
+
+[data-theme="dark"] .card,
+[data-theme="dark"] .f-card,
+[data-theme="dark"] .f-premium-card {
+  background-color: #1e293b !important;
+  background-image: none !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .card .card-header,
+[data-theme="dark"] .f-card .f-card-header {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .card .card-body,
+[data-theme="dark"] .f-card .f-card-body {
+  color: #f1f5f9 !important;
+}
+
+/* Light mode card */
+[data-theme="light"] .card,
+[data-theme="light"] .card {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* ===========================================================
+   TABLES — full dark support
+   =========================================================== */
+
+[data-theme="dark"] .table,
+[data-theme="dark"] .table > :not(caption) > * > * {
+  background-color: transparent !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .table-light,
+[data-theme="dark"] thead.table-light,
+[data-theme="dark"] thead.table-light th,
+[data-theme="dark"] .table > thead > tr > th {
+  background-color: #243044 !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .table-hover > tbody > tr:hover > * {
+  background-color: rgba(96, 165, 250, 0.08) !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  color: #f1f5f9 !important;
+}
+
+/* ===========================================================
+   FORMS & INPUTS — dark mode
+   =========================================================== */
+
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select,
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  background-color: #243044 !important;
+  color: #f1f5f9 !important;
+  border-color: #475569 !important;
+}
+
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus,
+[data-theme="dark"] input:focus,
+[data-theme="dark"] textarea:focus {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2) !important;
+}
+
+[data-theme="dark"] ::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+[data-theme="dark"] .f-input,
+[data-theme="dark"] .f-select {
+  background-color: #243044 !important;
+  color: #f1f5f9 !important;
+  border-color: #475569 !important;
+}
+
+/* ===========================================================
+   MODALS
+   =========================================================== */
+
+[data-theme="dark"] .modal-content {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .modal-header {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .modal-body {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .modal-footer {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+}
+
+/* ===========================================================
+   TYPOGRAPHY — guaranteed contrast
+   =========================================================== */
+
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] h4,
+[data-theme="dark"] h5,
+[data-theme="dark"] h6 {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] p {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] label,
+[data-theme="dark"] .form-label {
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .text-muted,
+[data-theme="dark"] small {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .text-dark {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .text-black {
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] span {
+  color: inherit;
+}
+
+/* Light mode typography */
+[data-theme="light"] .text-dark,
+[data-theme="light"] .text-dark {
+  color: #0f172a !important;
+}
+
+/* ===========================================================
+   BACKGROUND / BG-LIGHT override
+   =========================================================== */
+
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-light,
+[data-theme="dark"] .bg-body {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+/* f-container and finance wrappers */
+[data-theme="dark"] .f-container {
+  background-color: transparent !important;
+  color: #f1f5f9 !important;
+}
+
+/* report-card used in reports.ejs */
+[data-theme="dark"] .report-card {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .report-card .report-label,
+[data-theme="dark"] .report-card .report-value,
+[data-theme="dark"] .report-card .report-section h5 {
+  color: #f1f5f9 !important;
+}
+
+/* stat-card in reports.ejs */
+[data-theme="dark"] .stat-card {
+  color: #ffffff !important;
+}
+
+/* header glass */
+[data-theme="dark"] .f-header-glass {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border-color: rgba(51, 65, 85, 0.6) !important;
+  color: #f1f5f9 !important;
+}
+
+/* ===========================================================
+   ALERTS — in dark mode
+   =========================================================== */
+
+[data-theme="dark"] .alert-info {
+  background-color: rgba(56, 189, 248, 0.12) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+  color: #7dd3fc !important;
+}
+
+[data-theme="dark"] .alert-warning {
+  background-color: rgba(252, 211, 77, 0.12) !important;
+  border-color: rgba(252, 211, 77, 0.3) !important;
+  color: #fef08a !important;
+}
+
+[data-theme="dark"] .alert-success {
+  background-color: rgba(74, 222, 128, 0.12) !important;
+  border-color: rgba(74, 222, 128, 0.3) !important;
+  color: #86efac !important;
+}
+
+[data-theme="dark"] .alert-danger {
+  background-color: rgba(248, 113, 113, 0.12) !important;
+  border-color: rgba(248, 113, 113, 0.3) !important;
+  color: #fca5a5 !important;
+}
+
+/* ===========================================================
+   BREADCRUMB & BORDERS
+   =========================================================== */
+
+[data-theme="dark"] .breadcrumb {
+  background-color: transparent !important;
+}
+
+[data-theme="dark"] .breadcrumb-item a {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .breadcrumb-item.active {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .border-bottom {
+  border-color: #334155 !important;
+}
+
+/* ===========================================================
+   SPECIAL — pf-header
+   =========================================================== */
+
+[data-theme="dark"] .mobile-header {
+  background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%) !important;
+  color: #ffffff !important;
+}
+
+/* ===========================================================
+   LIGHT THEME — Ensure clean white/light theme too
+   =========================================================== */
+
+[data-theme="light"] .report-card,
+[data-theme="light"] .report-card {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .report-label,
+[data-theme="light"] .report-label {
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .report-value,
+[data-theme="light"] .report-value {
+  color: #475569 !important;
+}
+
+/* ===========================================================
+   COLLECTOR PAGES & FINANCE MODERN PAGES
+   (.finance-content-area is on body for finance pages)
+   =========================================================== */
+
+[data-theme="dark"] body.finance-content-area {
+  background-color: #0a0f1a !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="light"] body.finance-content-area,
+[data-theme="light"] body.finance-content-area {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="dark"] .f-wrapper {
+  background-color: transparent !important;
+}
+
+/* ===========================================================
+   FORCE OVERRIDE on any remaining inline styles
+   These target Bootstrap's own CSS variables used internally
+   =========================================================== */
+
+[data-theme="dark"] {
+  --bs-body-bg: #0a0f1a;
+  --bs-body-color: #f1f5f9;
+  --bs-card-bg: #1e293b;
+  --bs-border-color: #334155;
+  --bs-table-bg: transparent;
+  --bs-table-color: #f1f5f9;
+  --bs-table-border-color: #334155;
+  --bs-modal-bg: #1e293b;
+  --bs-modal-color: #f1f5f9;
+  --bs-input-bg: #243044;
+  --bs-input-color: #f1f5f9;
+  --bs-input-border-color: #475569;
+  --bs-form-select-bg: #243044;
+  --bs-dropdown-bg: #1e293b;
+  --bs-dropdown-link-color: #cbd5e1;
+  --bs-dropdown-border-color: #334155;
+}
+
+[data-theme="light"],
+[data-theme="light"] {
+  --bs-body-bg: #f1f5f9;
+  --bs-body-color: #0f172a;
+  --bs-card-bg: #ffffff;
+  --bs-border-color: #e2e8f0;
+  --bs-table-bg: transparent;
+  --bs-table-color: #0f172a;
+  --bs-input-bg: #ffffff;
+  --bs-input-color: #0f172a;
+}
+
+/* ===========================================================
+   ADDITIONAL DARK OVERRIDES — catch-all for specific classes
+   found in audit
+   =========================================================== */
+
+/* Card container - catch deeper selectors */
+[data-theme="dark"] .card-header,
+[data-theme="dark"] .card-footer {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .card-body {
+  background-color: transparent !important;
+  color: #f1f5f9 !important;
+}
+
+/* Row backgrounds that bleed */
+[data-theme="dark"] .row {
+  background-color: transparent !important;
+}
+
+/* collector-selectable-card */
+[data-theme="dark"] .collector-selectable-card {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .collector-selectable-card strong,
+[data-theme="dark"] .collector-selectable-card span,
+[data-theme="dark"] .collector-selectable-card p {
+  color: #f1f5f9 !important;
+}
+
+/* f-stat-card direct */
+[data-theme="dark"] .f-stat-card {
+  color: #ffffff !important;
+}
+
+/* mini-stat-grid (collector-reports) */
+[data-theme="dark"] .mini-stat-grid {
+  background-color: #243044 !important;
+}
+
+/* f-card-footer */
+[data-theme="dark"] .f-card-footer {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+}
+
+/* list group used in reports */
+[data-theme="dark"] .list-group-item {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Bootstrap table inside card in dark */
+[data-theme="dark"] .table-responsive {
+  background-color: transparent !important;
+}
+
+[data-theme="dark"] .table tbody tr {
+  background-color: transparent !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .table tbody tr td {
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+/* profit-loss table rows in financial-report.ejs */
+[data-theme="dark"] .f-pl-total-row {
+  background-color: #1e3a5f !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .f-pl-category-row {
+  background-color: #243044 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Breadcrumb */
+[data-theme="dark"] .breadcrumb-item + .breadcrumb-item::before {
+  color: #64748b !important;
+}
+
+/* Badge text in dark - preserve badge color but ensure readability */
+[data-theme="dark"] .badge {
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .badge.bg-light {
+  background-color: #475569 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .badge.text-dark {
+  color: #f1f5f9 !important;
+}
+
+/* form-highlight used in remittance */
+[data-theme="dark"] .form-highlight {
+  background: linear-gradient(to bottom, #1e2d45, #1e293b) !important;
+  border-color: #334155 !important;
+}
+
+/* section inside collector pages */
+[data-theme="dark"] section {
+  background-color: transparent !important;
+}
+
+/* Charts - ensure canvas bg is transparent */
+[data-theme="dark"] .chart-container,
+[data-theme="dark"] canvas {
+  background-color: transparent !important;
+}
+
+/* Inline background for income/expense pages */
+[data-theme="dark"] .report-section h5 {
+  color: #60a5fa !important;
+}
+
+[data-theme="dark"] .report-item {
+  border-color: #334155 !important;
+}
+
+/* border-bottom dividers */
+[data-theme="dark"] .pb-3.border-bottom,
+[data-theme="dark"] .pt-3.border-bottom,
+[data-theme="dark"] .mb-3.border-bottom {
+  border-color: #334155 !important;
+}
+
+/* Mobile page containers in dark */
+[data-theme="dark"] .page-container,
+[data-theme="dark"] .content-container {
+  background-color: transparent !important;
+}
+
+/* payment card in collector */
+[data-theme="dark"] .payment-card {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* ===========================================================
+   LIGHT MODE — ensure bright, clean, fully readable
+   =========================================================== */
+
+[data-theme="light"] .card,
+[data-theme="light"] .card {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .card-header,
+[data-theme="light"] .card-header {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .table th,
+[data-theme="light"] .table th {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .table td,
+[data-theme="light"] .table td {
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .modal-content,
+[data-theme="light"] .modal-content {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] label,
+[data-theme="light"] label {
+  color: #1e293b !important;
+}
+
+[data-theme="light"] .form-control,
+[data-theme="light"] .form-control,
+[data-theme="light"] .form-select,
+[data-theme="light"] .form-select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] .collector-selectable-card,
+[data-theme="light"] .collector-selectable-card {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .collector-selectable-card strong,
+[data-theme="light"] .collector-selectable-card strong {
+  color: #0f172a !important;
+}
+

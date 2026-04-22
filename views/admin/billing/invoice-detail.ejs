@@ -12,19 +12,7 @@
     <!-- Admin Mobile Optimizations -->
     <link href="/css/admin-mobile.css" rel="stylesheet">
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -496,14 +484,14 @@
             document.getElementById('markAsPaidForm').reset();
             
             // Show success notification
-            showAlert('success', '✅ Tagihan berhasil ditandai sebagai lunas!');
+            showAlert('success', '? Tagihan berhasil ditandai sebagai lunas!');
             
             // Reload page after a short delay
             setTimeout(() => location.reload(), 1500);
         })
         .catch(error => {
             console.error('Error:', error);
-            showAlert('danger', '❌ Terjadi kesalahan saat menandai tagihan sebagai lunas');
+            showAlert('danger', '? Terjadi kesalahan saat menandai tagihan sebagai lunas');
         })
         .finally(() => {
             // Re-enable submit button
@@ -559,13 +547,13 @@
             });
             const res = await resp.json();
             if (res.success) {
-                showAlert('success', '✅ Layanan berhasil diisolir.');
+                showAlert('success', '? Layanan berhasil diisolir.');
             } else {
-                showAlert('danger', '❌ Gagal isolir: ' + (res.message || 'Unknown error'));
+                showAlert('danger', '? Gagal isolir: ' + (res.message || 'Unknown error'));
             }
         } catch (e) {
             console.error(e);
-            showAlert('danger', '❌ Terjadi kesalahan saat isolir');
+            showAlert('danger', '? Terjadi kesalahan saat isolir');
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
@@ -586,13 +574,13 @@
             });
             const res = await resp.json();
             if (res.success) {
-                showAlert('success', '✅ Layanan berhasil direstore.');
+                showAlert('success', '? Layanan berhasil direstore.');
             } else {
-                showAlert('danger', '❌ Gagal restore: ' + (res.message || 'Unknown error'));
+                showAlert('danger', '? Gagal restore: ' + (res.message || 'Unknown error'));
             }
         } catch (e) {
             console.error(e);
-            showAlert('danger', '❌ Terjadi kesalahan saat restore');
+            showAlert('danger', '? Terjadi kesalahan saat restore');
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;

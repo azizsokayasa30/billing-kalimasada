@@ -1,4 +1,4 @@
-ï»¿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %> - Admin Portal</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="/vendor/boxicons/boxicons.min.css" rel="stylesheet">
     
     <link href="/css/theme.css" rel="stylesheet">
@@ -41,45 +42,15 @@
         .odp-inactive { background-color: #6c757d; }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/admin">
-                <i class="bi bi-wifi"></i> Admin Portal
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="/admin">
-                    <i class="bi bi-house"></i> Dashboard
-                </a>
-                <a class="nav-link" href="/admin/cable-network">
-                    <i class="bi bi-diagram-3-fill"></i> Cable Network
-                </a>
-                <a class="nav-link" href="/admin/cable-network/cables">
-                    <i class="bi bi-ethernet"></i> Cable Routes
-                </a>
-                <a class="nav-link" href="/admin/billing/mapping-new">
-                    <i class="bi bi-map"></i> Map View
-                </a>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container-fluid mt-4">
+    <div class="container-fluid">
+    <div class="row">
+        <%- include('../../partials/admin-responsive-sidebar', { page: 'cable-network-odp' }) %>
+        <main class="col-md-10 main-content ms-sm-auto">
+            <div class="mt-4">
         <!-- Header -->
         <div class="row mb-4">
             <div class="col-12">
@@ -718,7 +689,7 @@
             const newOdpName = document.querySelector('input[name="name"]').value || 'ODP Baru';
             
             if (preview && previewText) {
-                previewText.textContent = `${fromOdpName} â†’ ${newOdpName} (${distance}m)`;
+                previewText.textContent = `${fromOdpName} ? ${newOdpName} (${distance}m)`;
                 preview.style.display = 'block';
             }
         }
@@ -849,19 +820,19 @@
             
             // Define tile layers
             const lightLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                attribution: 'Â© OpenStreetMap contributors Â© CARTO',
+                attribution: '© OpenStreetMap contributors © CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
             });
             
             const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: 'Â© OpenStreetMap contributors Â© CARTO',
+                attribution: '© OpenStreetMap contributors © CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
             });
             
             const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Â© Esri â€” Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                attribution: '© Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
                 maxZoom: 20
             });
             
@@ -1047,19 +1018,19 @@
             
             // Define tile layers
             const lightLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                attribution: 'Â© OpenStreetMap contributors Â© CARTO',
+                attribution: '© OpenStreetMap contributors © CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
             });
             
             const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: 'Â© OpenStreetMap contributors Â© CARTO',
+                attribution: '© OpenStreetMap contributors © CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
             });
             
             const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Â© Esri â€” Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                attribution: '© Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
                 maxZoom: 20
             });
             
@@ -1322,7 +1293,14 @@
             }, 5000);
         }
     </script>
+            </div>
+        </main>
+    </div>
+</div>
 </body>
 </html>
+
+
+
 
 

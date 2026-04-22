@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -56,27 +56,17 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body class="finance-content-area">
-    <div class="f-wrapper">
-        <%- include('../../partials/billing-sidebar') %>
-        
-        <main class="f-main-area main-content">
+    <div class="container-fluid">
+        <div class="row">
+            <%- include('../../partials/billing-sidebar') %>
+            
+            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content" style="padding-top: 1rem;">
+                <div class="f-main-area" style="padding: 0;">
             <!-- PAGE HEADER (Glass) -->
-            <header class="f-header-glass">
+            <header class="f-header-glass" style="margin: -1rem -1.5rem 2rem -1.5rem; padding: 1.25rem 1.5rem;">
                 <div>
                     <h1 class="f-page-title f-premium-text"><i class="bi bi-cash-coin me-2"></i>Terima Setoran</h1>
                     <p class="f-page-subtitle">Proses penyetoran uang kolektor ke kasir.</p>
@@ -326,7 +316,9 @@
                     </div>
                 </section>
             </div>
-        </main>
+                </div>
+            </main>
+        </div>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -434,3 +426,4 @@
     </script>
 </body>
 </html>
+

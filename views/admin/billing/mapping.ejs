@@ -19,7 +19,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             min-height: 400px;
-            background-color: #f8f9fa;
+            background-color: var(--bg-secondary, #f8f9fa);
         }
 
         /* Animasi untuk data flow pada kabel */
@@ -98,7 +98,7 @@
         }
         
         .map-controls {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             padding: 15px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
@@ -189,7 +189,7 @@
         }
         
         .info-panel {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
@@ -210,7 +210,7 @@
         }
         
         .legend {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             padding: 15px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
@@ -231,7 +231,7 @@
         }
         
         .coordinate-stats {
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             border-radius: 8px;
             padding: 15px;
             border: 1px solid #dee2e6;
@@ -577,7 +577,7 @@
         }
 
         .popup-card {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             margin-bottom: 12px;
@@ -655,7 +655,7 @@
         }
 
         .info-row .value {
-            color: #333;
+            color: var(--text-primary, #333);
             font-size: 13px;
             text-align: right;
             max-width: 140px;
@@ -670,7 +670,7 @@
             gap: 15px;
             margin-bottom: 15px;
             padding: 10px;
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             border-radius: 8px;
         }
 
@@ -783,7 +783,7 @@
         }
 
         .network-controls {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             padding: 15px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
@@ -851,7 +851,7 @@
         }
 
         .detail-item .value {
-            color: #333;
+            color: var(--text-primary, #333);
             text-align: right;
             max-width: 120px;
             overflow: hidden;
@@ -907,19 +907,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -1226,11 +1214,11 @@
         // Initialize map
         function initMap() {
             try {
-                console.log('🗺️ Initializing map...');
+                console.log('??? Initializing map...');
                 
                 // Check if Leaflet is loaded
                 if (typeof L === 'undefined') {
-                    console.error('❌ Leaflet library not loaded!');
+                    console.error('? Leaflet library not loaded!');
                     showToast('Error: Map library tidak ter-load. Silakan refresh halaman.', 'error');
                     return;
                 }
@@ -1238,18 +1226,18 @@
                 // Check if map container exists
                 const mapContainer = document.getElementById('map');
                 if (!mapContainer) {
-                    console.error('❌ Map container not found!');
+                    console.error('? Map container not found!');
                     showToast('Error: Map container tidak ditemukan.', 'error');
                     return;
                 }
                 
-                console.log('✅ Map container found:', mapContainer);
+                console.log('? Map container found:', mapContainer);
                 
                 // Default location (Jakarta) - akan diupdate setelah load data
                 const defaultLat = -6.2088;
                 const defaultLng = 106.8456;
                 
-                console.log('🗺️ Creating map with coordinates:', defaultLat, defaultLng);
+                console.log('??? Creating map with coordinates:', defaultLat, defaultLng);
                 
                 // Create map instance
                 map = L.map('map', {
@@ -1259,7 +1247,7 @@
                     attributionControl: true
                 });
                 
-                console.log('✅ Map created successfully');
+                console.log('? Map created successfully');
                 
                 // Define tile layers
                 const lightLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -1291,7 +1279,7 @@
                 
                 L.control.layers(baseMaps).addTo(map);
                 
-                console.log('✅ Map tiles added');
+                console.log('? Map tiles added');
                 
                 // Clear loading indicator
                 mapContainer.innerHTML = '';
@@ -1306,14 +1294,14 @@
                 loadMapData();
                 
             } catch (error) {
-                console.error('❌ Error initializing map:', error);
+                console.error('? Error initializing map:', error);
                 showToast('Error: Gagal memuat peta. ' + error.message, 'error');
             }
         }
 
         // Load map data
         async function loadMapData() {
-            console.log('🚀 Fast loadMapData started - NEW APPROACH');
+            console.log('?? Fast loadMapData started - NEW APPROACH');
             
             // Show loading state
             updateStats('totalCustomers', 'Loading...');
@@ -1323,12 +1311,12 @@
             
             try {
                 // SINGLE API CALL untuk semua data - approach baru
-                console.log('🔍 Loading ALL data from single endpoint...');
+                console.log('?? Loading ALL data from single endpoint...');
                 const response = await fetch('/admin/api/mapping/devices');
                 const data = await response.json();
                 
                 if (data.success) {
-                    console.log('✅ All data loaded successfully:', {
+                    console.log('? All data loaded successfully:', {
                         customers: data.data.customers?.length || 0,
                         onus: data.data.devicesWithCoords?.length || 0,
                         odps: data.data.odps?.length || 0,
@@ -1377,10 +1365,10 @@
                         autoFocusMapToCustomers(data.data.customers);
                     }
                     
-                    console.log('✅ All data loaded and rendered successfully');
+                    console.log('? All data loaded and rendered successfully');
                     
                 } else {
-                    console.error('❌ API response failed:', data);
+                    console.error('? API response failed:', data);
                     showToast('Error loading data: ' + (data.message || 'Unknown error'), 'error');
                 }
                 
@@ -1388,7 +1376,7 @@
                 loadPackages();
                 
             } catch (error) {
-                console.error('❌ Error in fast loadMapData:', error);
+                console.error('? Error in fast loadMapData:', error);
                 showToast('Error loading data: ' + error.message, 'error');
                 
                 updateStats('totalCustomers', 'Error');
@@ -1400,7 +1388,7 @@
                 try {
                     await loadGenieACSDataDirectly();
                 } catch (fallbackError) {
-                    console.error('❌ Fallback GenieACS data fetch also failed:', fallbackError);
+                    console.error('? Fallback GenieACS data fetch also failed:', fallbackError);
                 }
             }
         }
@@ -1446,7 +1434,7 @@
             if (mapInfoPanel) {
                 mapInfoPanel.innerHTML = `
                     <div class="mb-3">
-                        <h6 class="text-success">📍 Lokasi Pelanggan</h6>
+                        <h6 class="text-success">?? Lokasi Pelanggan</h6>
                         <div class="small">
                             <div>• Total ditampilkan: <strong>${customersCount}</strong> pelanggan</div>
                             <div>• Map otomatis fokus ke area pelanggan</div>
@@ -1454,7 +1442,7 @@
                     </div>
                     <div class="alert alert-info alert-sm">
                         <small>
-                            <strong>💡 Tips:</strong> Klik marker untuk melihat detail pelanggan dan device.
+                            <strong>?? Tips:</strong> Klik marker untuk melihat detail pelanggan dan device.
                         </small>
                     </div>
                 `;
@@ -1467,7 +1455,7 @@
             if (noCoordsPanel) {
                 noCoordsPanel.innerHTML = `
                     <div class="mb-3">
-                        <h6 class="text-warning">⚠️ Tidak Ada Koordinat</h6>
+                        <h6 class="text-warning">?? Tidak Ada Koordinat</h6>
                         <div class="small">
                             <div>• Belum ada pelanggan dengan koordinat</div>
                             <div>• Tambahkan koordinat di form edit customer</div>
@@ -1475,7 +1463,7 @@
                     </div>
                     <div class="alert alert-warning alert-sm">
                         <small>
-                            <strong>💡 Tips:</strong> Edit customer dan tambahkan latitude/longitude untuk menampilkan di peta.
+                            <strong>?? Tips:</strong> Edit customer dan tambahkan latitude/longitude untuk menampilkan di peta.
                         </small>
                     </div>
                 `;
@@ -1514,14 +1502,14 @@
 
         // Update statistik koordinat customer
         function updateCustomerCoordinateStats(withCoords, withoutCoords) {
-            console.log('🔍 updateCustomerCoordinateStats called with:', { withCoords, withoutCoords });
+            console.log('?? updateCustomerCoordinateStats called with:', { withCoords, withoutCoords });
             const statsContainer = document.getElementById('coordinateStats');
-            console.log('🔍 coordinateStats container found:', !!statsContainer);
+            console.log('?? coordinateStats container found:', !!statsContainer);
             
             if (statsContainer) {
                 statsContainer.innerHTML = `
                     <div class="mb-3">
-                        <h6 class="text-primary">📊 Statistik Koordinat Customer</h6>
+                        <h6 class="text-primary">?? Statistik Koordinat Customer</h6>
                         <div class="row text-center">
                             <div class="col-6">
                                 <div class="badge bg-success">${withCoords}</div>
@@ -1534,9 +1522,9 @@
                         </div>
                     </div>
                 `;
-                console.log('✅ Updated coordinate stats');
+                console.log('? Updated coordinate stats');
             } else {
-                console.error('❌ coordinateStats container not found');
+                console.error('? coordinateStats container not found');
             }
         }
 
@@ -1546,7 +1534,7 @@
             if (deviceInfoPanel) {
                 deviceInfoPanel.innerHTML = `
                     <div class="mb-3">
-                        <h6 class="text-info">🔗 Sumber Koordinat Device</h6>
+                        <h6 class="text-info">?? Sumber Koordinat Device</h6>
                         <div class="small">
                             <div>• PPPoE Username: ${data.coordinateSources.pppoe_username}</div>
                             <div>• Device Tag: ${data.coordinateSources.device_tag}</div>
@@ -1555,7 +1543,7 @@
                     </div>
                     <div class="alert alert-info alert-sm">
                         <small>
-                            <strong>💡 Tips:</strong> Device tanpa koordinat dapat diupdate melalui form edit customer atau bulk import.
+                            <strong>?? Tips:</strong> Device tanpa koordinat dapat diupdate melalui form edit customer atau bulk import.
                         </small>
                     </div>
                 `;
@@ -1565,49 +1553,49 @@
         // Refresh mapping data (untuk dipanggil setelah customer diupdate)
         async function refreshMappingData() {
             try {
-                console.log('🔄 Refreshing mapping data...');
+                console.log('?? Refreshing mapping data...');
                 
                 // Clear existing layers with proper error handling
                 if (customerLayer && typeof customerLayer.clearLayers === 'function') {
-                    console.log('🗑️ Clearing customer layer');
+                    console.log('??? Clearing customer layer');
                     customerLayer.clearLayers();
                     map.removeLayer(customerLayer);
                     customerLayer = null;
                 }
                 if (cableLayer && typeof cableLayer.clearLayers === 'function') {
-                    console.log('🗑️ Clearing cable layer');
+                    console.log('??? Clearing cable layer');
                     cableLayer.clearLayers();
                     map.removeLayer(cableLayer);
                     cableLayer = null;
                 }
                 if (odpLayer && typeof odpLayer.clearLayers === 'function') {
-                    console.log('🗑️ Clearing ODP layer');
+                    console.log('??? Clearing ODP layer');
                     odpLayer.clearLayers();
                     map.removeLayer(odpLayer);
                     odpLayer = null;
                 }
                 if (networkSegmentLayer && typeof networkSegmentLayer.clearLayers === 'function') {
-                    console.log('🗑️ Clearing network segment layer');
+                    console.log('??? Clearing network segment layer');
                     networkSegmentLayer.clearLayers();
                     map.removeLayer(networkSegmentLayer);
                     networkSegmentLayer = null;
                 }
                 if (onuLayer && typeof onuLayer.clearLayers === 'function') {
-                    console.log('🗑️ Clearing ONU layer');
+                    console.log('??? Clearing ONU layer');
                     onuLayer.clearLayers();
                     map.removeLayer(onuLayer);
                     onuLayer = null;
                 }
                 
                 // Reload all data
-                console.log('📡 Reloading map data...');
+                console.log('?? Reloading map data...');
                 await loadMapData();
-                console.log('📡 Reloading cable network data...');
+                console.log('?? Reloading cable network data...');
                 await loadCableNetworkData();
                 
-                console.log('✅ Mapping data refreshed successfully');
+                console.log('? Mapping data refreshed successfully');
             } catch (error) {
-                console.error('❌ Error refreshing mapping data:', error);
+                console.error('? Error refreshing mapping data:', error);
                 showToast('Error refreshing mapping data: ' + error.message, 'error');
             }
         }
@@ -1615,11 +1603,11 @@
         // Enhanced refresh function with better error handling
         async function refreshMap() {
             try {
-                console.log('🔄 Manual refresh triggered...');
+                console.log('?? Manual refresh triggered...');
                 await refreshMappingData();
                 showToast('Peta berhasil di-refresh!', 'success');
             } catch (error) {
-                console.error('❌ Error in refreshMap:', error);
+                console.error('? Error in refreshMap:', error);
                 showToast('Error refreshing map: ' + error.message, 'error');
             }
         }
@@ -1632,16 +1620,16 @@
             // OPTIMIZATION: Ambil semua device data sekaligus (hanya 1 API call)
             let allDevices = [];
             try {
-                console.log('🔍 Fetching all devices data...');
+                console.log('?? Fetching all devices data...');
                 const deviceResponse = await fetch(`${basePath}/api/mapping/devices`);
                 const deviceData = await deviceResponse.json();
                 
                 if (deviceData.success && deviceData.data.devicesWithCoords) {
                     allDevices = deviceData.data.devicesWithCoords;
-                    console.log(`✅ Loaded ${allDevices.length} devices for mapping`);
+                    console.log(`? Loaded ${allDevices.length} devices for mapping`);
                 }
             } catch (error) {
-                console.warn('⚠️ Error fetching all devices:', error);
+                console.warn('?? Error fetching all devices:', error);
             }
             
             // OPTIMIZATION: Buat map untuk lookup yang cepat
@@ -1658,7 +1646,7 @@
                 }
             });
             
-            console.log(`🔍 Device map created with ${deviceMap.size} entries`);
+            console.log(`?? Device map created with ${deviceMap.size} entries`);
             
             // OPTIMIZATION: Proses customers secara batch (tidak ada API call dalam loop)
             for (const customer of customers) {
@@ -2042,7 +2030,7 @@
                     filterText = `
                         <div class="alert alert-info alert-sm mb-2">
                             <small>
-                                <strong>🔍 Filter Aktif:</strong><br>
+                                <strong>?? Filter Aktif:</strong><br>
                                 ${statusFilter !== 'all' ? `• Status: ${statusFilter === 'online' ? 'Online' : 'Offline'}<br>` : ''}
                                 ${packageFilter !== 'all' ? `• Paket: ${document.getElementById('filterPackage').options[document.getElementById('filterPackage').selectedIndex].text}<br>` : ''}
                                 • Pelanggan: ${visibleCustomers} | ONU: ${visibleONUs}
@@ -2053,7 +2041,7 @@
                 
                 filterInfoPanel.innerHTML = `
                     <div class="mb-3">
-                        <h6 class="text-success">📍 Lokasi Pelanggan</h6>
+                        <h6 class="text-success">?? Lokasi Pelanggan</h6>
                         <div class="small">
                             <div>• Total ditampilkan: <strong>${visibleCustomers}</strong> pelanggan</div>
                             <div>• Total ONU ditampilkan: <strong>${visibleONUs}</strong> device</div>
@@ -2062,7 +2050,7 @@
                     </div>
                     <div class="alert alert-info alert-sm">
                         <small>
-                            <strong>💡 Tips:</strong> Gunakan filter untuk melihat pelanggan berdasarkan paket atau status device.
+                            <strong>?? Tips:</strong> Gunakan filter untuk melihat pelanggan berdasarkan paket atau status device.
                         </small>
                     </div>
                 `;
@@ -2211,12 +2199,12 @@
         // Update statistics
         function updateStats(elementId, value) {
             const element = document.getElementById(elementId);
-            console.log(`🔍 updateStats: ${elementId} = ${value}`);
+            console.log(`?? updateStats: ${elementId} = ${value}`);
             if (element) {
                 element.textContent = value;
-                console.log(`✅ Updated ${elementId} to ${value}`);
+                console.log(`? Updated ${elementId} to ${value}`);
             } else {
-                console.error(`❌ Element ${elementId} not found`);
+                console.error(`? Element ${elementId} not found`);
             }
         }
 
@@ -2233,7 +2221,7 @@
         // Fast loading functions for new approach
         async function loadCustomersFast(customers) {
             return new Promise((resolve) => {
-                console.log('⚡ Fast loading customers...');
+                console.log('? Fast loading customers...');
                 addCustomerMarkers(customers);
                 
                 // Update customer coordinate stats
@@ -2247,7 +2235,7 @@
         
         async function loadONUsFast(devices) {
             return new Promise((resolve) => {
-                console.log('⚡ Fast loading ONU devices...');
+                console.log('? Fast loading ONU devices...');
                 addONUMarkers(devices);
                 
                 // Show device coordinate info
@@ -2259,7 +2247,7 @@
         
         async function loadODPsFast(odps) {
             return new Promise((resolve) => {
-                console.log('⚡ Fast loading ODPs...');
+                console.log('? Fast loading ODPs...');
                 loadODPMarkersFromDatabase(odps);
                 resolve();
             });
@@ -2267,7 +2255,7 @@
         
         async function loadCablesFast(cables) {
             return new Promise((resolve) => {
-                console.log('⚡ Fast loading cables...');
+                console.log('? Fast loading cables...');
                 loadCableRoutesFromDatabase(cables);
                 resolve();
             });
@@ -2275,7 +2263,7 @@
         
         async function loadODPConnectionsFast(connections) {
             return new Promise((resolve) => {
-                console.log('⚡ Fast loading ODP connections...');
+                console.log('? Fast loading ODP connections...');
                 loadODPConnectionsFromDatabase(connections);
                 resolve();
             });
@@ -2358,17 +2346,17 @@
 
         // Initialize map when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('📄 DOM Content Loaded');
+            console.log('?? DOM Content Loaded');
             
             // Prevent double initialization
             if (window.__mappingMapInitialized) {
-                console.log('⚠️ Map already initialized, skipping...');
+                console.log('?? Map already initialized, skipping...');
                 return;
             }
             
             // Wait a bit for Leaflet to load
             setTimeout(() => {
-                console.log('⏰ Initializing map after delay...');
+                console.log('? Initializing map after delay...');
                 initMap();
             }, 500);
             
@@ -2384,7 +2372,7 @@
             // Still loading, wait for DOMContentLoaded
         } else {
             // DOM already loaded, initialize immediately
-            console.log('📄 DOM already loaded, initializing immediately...');
+            console.log('?? DOM already loaded, initializing immediately...');
             setTimeout(() => {
                 initMap();
             }, 1000);
@@ -2877,29 +2865,29 @@
             try {
                 if (!odpLayer) {
                     odpLayer = L.layerGroup();
-                    console.log('✅ ODP layer initialized');
+                    console.log('? ODP layer initialized');
                 }
                 if (!cableLayer) {
                     cableLayer = L.layerGroup();
-                    console.log('✅ Cable layer initialized');
+                    console.log('? Cable layer initialized');
                 }
                 if (!networkSegmentLayer) {
                     networkSegmentLayer = L.layerGroup();
-                    console.log('✅ Network segment layer initialized');
+                    console.log('? Network segment layer initialized');
                 }
             } catch (error) {
-                console.error('❌ Error initializing layers:', error);
+                console.error('? Error initializing layers:', error);
             }
         }
 
         // Load cable network data
         async function loadCableNetworkData() {
             try {
-                console.log('📡 Cable network data already loaded from loadMapData, skipping duplicate loading...');
+                console.log('?? Cable network data already loaded from loadMapData, skipping duplicate loading...');
                 return; // Skip duplicate loading
                 
             } catch (error) {
-                console.error('❌ Error in loadCableNetworkData:', error);
+                console.error('? Error in loadCableNetworkData:', error);
             }
         }
 
@@ -3074,20 +3062,20 @@
                 });
                 
                 odpLayer.addTo(map);
-                console.log(`✅ Loaded ${odps.length} ODP markers`);
+                console.log(`? Loaded ${odps.length} ODP markers`);
             } catch (error) {
-                console.error('❌ Error loading ODP markers:', error);
+                console.error('? Error loading ODP markers:', error);
             }
         }
 
         // Load cable routes from database with animation
         function loadCableRoutesFromDatabase(cableRoutes) {
             if (!cableRoutes || cableRoutes.length === 0) {
-                console.log('⚠️ No cable routes to load or empty array');
+                console.log('?? No cable routes to load or empty array');
                 return;
             }
             
-            console.log(`🔍 Loading ${cableRoutes.length} cable routes from database...`);
+            console.log(`?? Loading ${cableRoutes.length} cable routes from database...`);
             
             try {
                 // Initialize layers if needed
@@ -3172,9 +3160,9 @@
             });
             
                 map.addLayer(cableLayer);
-                console.log(`✅ Loaded ${cableRoutes.length} cable routes from database with animations`);
+                console.log(`? Loaded ${cableRoutes.length} cable routes from database with animations`);
             } catch (error) {
-                console.error('❌ Error loading cable routes from database:', error);
+                console.error('? Error loading cable routes from database:', error);
             }
         }
 
@@ -3241,11 +3229,11 @@
         // Load ODP markers from database
         function loadODPMarkersFromDatabase(odps) {
             if (!odps || odps.length === 0) {
-                console.log('⚠️ No ODPs to load or empty array');
+                console.log('?? No ODPs to load or empty array');
                 return;
             }
             
-            console.log(`🔍 Loading ${odps.length} ODPs from database...`);
+            console.log(`?? Loading ${odps.length} ODPs from database...`);
             
             // Clear existing ODP layer
             if (odpLayer) {
@@ -3255,7 +3243,7 @@
             odpLayer = L.layerGroup();
             
             odps.forEach((odp, index) => {
-                console.log(`📍 Processing ODP ${index + 1}: ${odp.name} at ${odp.latitude}, ${odp.longitude}`);
+                console.log(`?? Processing ODP ${index + 1}: ${odp.name} at ${odp.latitude}, ${odp.longitude}`);
                 if (odp.latitude && odp.longitude) {
                     // Calculate utilization percentage
                     const utilization = (odp.used_ports / odp.capacity) * 100;
@@ -3311,7 +3299,7 @@
             });
             
             map.addLayer(odpLayer);
-            console.log(`✅ Loaded ${odps.length} ODP markers from database`);
+            console.log(`? Loaded ${odps.length} ODP markers from database`);
         }
 
         // Load ODP connections for backbone visualization
@@ -3384,7 +3372,7 @@
             });
             
             map.addLayer(networkSegmentLayer);
-            console.log(`✅ Loaded ${odpConnections.length} ODP connections from database`);
+            console.log(`? Loaded ${odpConnections.length} ODP connections from database`);
         }
 
         // Update mapping statistics
@@ -3409,7 +3397,7 @@
                 updateStats('disconnectedCables', statistics.disconnectedCables);
             }
             
-            console.log('📊 Updated mapping statistics:', statistics);
+            console.log('?? Updated mapping statistics:', statistics);
         }
 
         // Load network segments
@@ -3573,9 +3561,9 @@
 
         // Listen for customer update events (dari parent window atau storage events)
         window.addEventListener('storage', function(e) {
-            console.log('📡 Storage event received:', e.key, e.newValue);
+            console.log('?? Storage event received:', e.key, e.newValue);
             if (e.key === 'customer_updated') {
-                console.log('🔄 Customer update detected via storage, refreshing mapping...');
+                console.log('?? Customer update detected via storage, refreshing mapping...');
                 refreshMappingData();
                 // Clear the storage event
                 localStorage.removeItem('customer_updated');
@@ -3584,7 +3572,7 @@
 
         // Listen for custom events dari parent window
         window.addEventListener('customerUpdated', function() {
-            console.log('🔄 Customer update event received via custom event, refreshing mapping...');
+            console.log('?? Customer update event received via custom event, refreshing mapping...');
             refreshMappingData();
         });
 
@@ -3593,4 +3581,5 @@
     </script>
 </body>
 </html>
+
 

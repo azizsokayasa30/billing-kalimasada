@@ -1,0 +1,825 @@
+/**
+ * ============================================================
+ *  KALIMASADA MASTER THEME  — v1.0.0
+ *  Single Source of Truth untuk semua variabel warna & tema
+ *
+ *  ATURAN:
+ *  1. File ini SELALU di-load PALING AKHIR dari semua CSS.
+ *  2. Jangan edit file CSS lain untuk urusan tema. Edit di sini.
+ *  3. Gunakan variabel --km-* di komponen baru.
+ *  4. File ini menggunakan html[data-theme="dark"] (spesifisitas
+ *     tinggi) sehingga menang atas semua selector di file CSS lama.
+ * ============================================================
+ */
+
+/* ============================================================
+   1. LIGHT MODE TOKEN (default / fallback aman)
+   ============================================================ */
+:root,
+html[data-theme="light"] {
+  /* Backgrounds */
+  --km-bg:           #f1f5f9;
+  --km-surface:      #ffffff;
+  --km-surface-2:    #f8fafc;
+  --km-surface-3:    #f1f5f9;
+
+  /* Borders */
+  --km-border:       #e2e8f0;
+  --km-border-2:     #cbd5e1;
+
+  /* Text */
+  --km-text:         #1e293b;
+  --km-text-2:       #475569;
+  --km-text-muted:   #64748b;
+
+  /* Accents */
+  --km-primary:      #4361ee;
+  --km-primary-rgb:  67, 97, 238;
+  --km-success:      #10b981;
+  --km-danger:       #ef4444;
+  --km-warning:      #f59e0b;
+  --km-info:         #06b6d4;
+
+  /* Shadows */
+  --km-shadow-sm:    0 1px 3px rgba(0,0,0,0.08);
+  --km-shadow-md:    0 4px 12px rgba(0,0,0,0.10);
+  --km-shadow-lg:    0 12px 32px rgba(0,0,0,0.12);
+
+  /* Transition */
+  --km-transition:   0.25s ease;
+
+  /* Backward compat aliases (untuk komponen lama) */
+  --bg-primary:      var(--km-bg);
+  --panel-bg:        var(--km-surface);
+  --panel-accent:    var(--km-surface-2);
+  --border-color:    var(--km-border);
+  --text-primary:    var(--km-text);
+  --text-secondary:  var(--km-text-2);
+  --text-main:       var(--km-text);
+  --text-color:      var(--km-text);
+}
+
+/* ============================================================
+   2. DARK MODE TOKEN
+   ============================================================ */
+html[data-theme="dark"] {
+  /* Backgrounds */
+  --km-bg:           #0f172a;
+  --km-surface:      #1e293b;
+  --km-surface-2:    #243044;
+  --km-surface-3:    #0f172a;
+
+  /* Borders */
+  --km-border:       #334155;
+  --km-border-2:     #475569;
+
+  /* Text */
+  --km-text:         #f1f5f9;
+  --km-text-2:       #cbd5e1;
+  --km-text-muted:   #94a3b8;
+
+  /* Accents */
+  --km-primary:      #60a5fa;
+  --km-primary-rgb:  96, 165, 250;
+  --km-success:      #4ade80;
+  --km-danger:       #f87171;
+  --km-warning:      #fcd34d;
+  --km-info:         #38bdf8;
+
+  /* Shadows */
+  --km-shadow-sm:    0 1px 3px rgba(0,0,0,0.40);
+  --km-shadow-md:    0 4px 12px rgba(0,0,0,0.55);
+  --km-shadow-lg:    0 12px 32px rgba(0,0,0,0.70);
+
+  /* Backward compat aliases */
+  --bg-primary:      var(--km-bg);
+  --bg-secondary:    var(--km-surface);
+  --bg-tertiary:     var(--km-surface-2);
+  --bg-light:        var(--km-surface);
+  --panel-bg:        var(--km-surface);
+  --panel-accent:    var(--km-surface-2);
+  --panel-border:    var(--km-border);
+  --border-color:    var(--km-border);
+  --border-light:    var(--km-border-2);
+  --text-primary:    var(--km-text);
+  --text-secondary:  var(--km-text-2);
+  --text-tertiary:   var(--km-text-muted);
+  --text-main:       var(--km-text);
+  --text-color:      var(--km-text);
+  --accent-primary:  var(--km-primary);
+  --shadow-sm:       var(--km-shadow-sm);
+  --shadow-md:       var(--km-shadow-md);
+  --shadow-lg:       var(--km-shadow-lg);
+}
+
+/* ============================================================
+   3. BASE RESETS — berlaku untuk SEMUA tema
+   ============================================================ */
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--km-bg);
+  color: var(--km-text);
+  transition: background-color var(--km-transition), color var(--km-transition);
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ============================================================
+   4. DARK MODE — ELEMENT OVERRIDES
+   Menggunakan html[data-theme="dark"] agar menang secara alami
+   di cascade tanpa memerlukan !important berlebihan.
+   ============================================================ */
+
+/* --- Body & Layout --- */
+html[data-theme="dark"] body,
+html[data-theme="dark"] main,
+html[data-theme="dark"] .main-content,
+html[data-theme="dark"] .container-fluid,
+html[data-theme="dark"] .container,
+html[data-theme="dark"] .page-wrapper {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="light"] body,
+html[data-theme="light"] main,
+html[data-theme="light"] .main-content,
+html[data-theme="light"] .container-fluid,
+html[data-theme="light"] .container {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+/* --- Cards & Panels --- */
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .card-body,
+html[data-theme="dark"] .form-section,
+html[data-theme="dark"] .settings-card,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .content-panel,
+html[data-theme="dark"] .box,
+html[data-theme="dark"] .widget {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .card-header,
+html[data-theme="dark"] .card-footer,
+html[data-theme="dark"] .section-card-header {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* --- Typography --- */
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] h6,
+html[data-theme="dark"] .h1,
+html[data-theme="dark"] .h2,
+html[data-theme="dark"] .h3,
+html[data-theme="dark"] .h4,
+html[data-theme="dark"] .h5,
+html[data-theme="dark"] .h6 {
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] p,
+html[data-theme="dark"] span:not(.badge),
+html[data-theme="dark"] li,
+html[data-theme="dark"] td,
+html[data-theme="dark"] th,
+html[data-theme="dark"] label,
+html[data-theme="dark"] .form-label,
+html[data-theme="dark"] .setting-label {
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .text-muted,
+html[data-theme="dark"] small,
+html[data-theme="dark"] .setting-value,
+html[data-theme="dark"] .form-text {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .text-dark {
+  color: #f1f5f9 !important;
+}
+
+/* --- Forms --- */
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] .form-select,
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="email"],
+html[data-theme="dark"] input[type="password"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="search"],
+html[data-theme="dark"] input[type="tel"],
+html[data-theme="dark"] input[type="url"],
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .form-control::placeholder,
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+html[data-theme="dark"] .form-control:focus,
+html[data-theme="dark"] .form-select:focus {
+  background-color: #0f172a !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 0.25rem rgba(96, 165, 250, 0.25) !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .input-group-text {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
+}
+
+/* --- Tables --- */
+html[data-theme="dark"] .table {
+  color: #f1f5f9;
+  border-color: #334155;
+}
+
+html[data-theme="dark"] .table thead th,
+html[data-theme="dark"] .table > thead {
+  background-color: #243044 !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .table td,
+html[data-theme="dark"] .table th {
+  border-color: #334155 !important;
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: rgba(255,255,255,0.03) !important;
+}
+
+html[data-theme="dark"] .table-hover > tbody > tr:hover > * {
+  background-color: rgba(255,255,255,0.06) !important;
+}
+
+html[data-theme="dark"] .table-bordered td,
+html[data-theme="dark"] .table-bordered th {
+  border-color: #334155 !important;
+}
+
+/* --- Modals --- */
+html[data-theme="dark"] .modal-content {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .modal-header,
+html[data-theme="dark"] .modal-footer {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .modal-title {
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* --- Dropdown --- */
+html[data-theme="dark"] .dropdown-menu {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .dropdown-item {
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .dropdown-item:hover,
+html[data-theme="dark"] .dropdown-item:focus {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .dropdown-divider {
+  border-color: #334155 !important;
+}
+
+/* --- Alerts --- */
+html[data-theme="dark"] .alert-info {
+  background-color: rgba(6, 182, 212, 0.15) !important;
+  border-color: rgba(6, 182, 212, 0.4) !important;
+  color: #7dd3fc !important;
+}
+
+html[data-theme="dark"] .alert-success {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  color: #6ee7b7 !important;
+}
+
+html[data-theme="dark"] .alert-warning {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.4) !important;
+  color: #fcd34d !important;
+}
+
+html[data-theme="dark"] .alert-danger {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  color: #fca5a5 !important;
+}
+
+/* --- Badges (keep colored ones) --- */
+html[data-theme="dark"] .badge.bg-light {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* --- Buttons --- */
+html[data-theme="dark"] .btn-outline-secondary {
+  color: #94a3b8 !important;
+  border-color: #475569 !important;
+}
+
+html[data-theme="dark"] .btn-outline-secondary:hover {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .btn-light {
+  background-color: #334155 !important;
+  border-color: #475569 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .btn-outline-light {
+  color: #f1f5f9 !important;
+  border-color: #475569 !important;
+}
+
+/* --- Nav Tabs & Pills --- */
+html[data-theme="dark"] .nav-tabs {
+  border-color: #334155;
+}
+
+html[data-theme="dark"] .nav-tabs .nav-link {
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .nav-tabs .nav-link.active {
+  background-color: #1e293b !important;
+  border-color: #334155 #334155 #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .nav-tabs .nav-link:hover {
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+/* --- List Groups --- */
+html[data-theme="dark"] .list-group-item {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .list-group-item:hover,
+html[data-theme="dark"] .list-group-item.active {
+  background-color: #243044 !important;
+}
+
+/* --- Breadcrumb --- */
+html[data-theme="dark"] .breadcrumb {
+  background-color: transparent;
+}
+
+html[data-theme="dark"] .breadcrumb-item,
+html[data-theme="dark"] .breadcrumb-item a {
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .breadcrumb-item.active {
+  color: #f1f5f9;
+}
+
+/* ============================================================
+   5. HALAMAN-SPESIFIK DARK OVERRIDES
+   ============================================================ */
+
+/* --- adminSetting.ejs (Setting Umum) --- */
+html[data-theme="dark"] .form-section {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .command-card {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .command-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+}
+
+html[data-theme="dark"] .command-list code {
+  background-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .logo-preview {
+  background-color: #0f172a !important;
+  border-color: #475569 !important;
+}
+
+/* --- Setting items (mobile billing settings page) --- */
+html[data-theme="dark"] .settings-card {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .setting-item {
+  border-bottom-color: rgba(255,255,255,0.06) !important;
+}
+
+html[data-theme="dark"] .setting-label {
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .setting-value {
+  color: #94a3b8 !important;
+}
+
+/* --- adminDashboard.ejs --- */
+html[data-theme="dark"] .metric-card {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .metric-card-label {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .metric-card-value {
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .dashboard-header {
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .dashboard-header .page-desc {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .section-card-header {
+  background-color: #243044 !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* --- Voucher Template --- */
+html[data-theme="dark"] .preview-area,
+html[data-theme="dark"] .controls-panel,
+html[data-theme="dark"] .page-header,
+html[data-theme="dark"] .voucher-card-modern,
+html[data-theme="dark"] .template-compact {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .voucher-credentials,
+html[data-theme="dark"] .voucher-info-section {
+  background-color: #0f172a !important;
+  background-image: none !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="dark"] .credential-label,
+html[data-theme="dark"] .info-label {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .credential-value,
+html[data-theme="dark"] .info-value,
+html[data-theme="dark"] .voucher-company-name {
+  color: #f1f5f9 !important;
+}
+
+/* --- Toggle Slider (custom checkbox) --- */
+html[data-theme="dark"] .slider {
+  background-color: #334155 !important;
+}
+
+html[data-theme="dark"] .slider:before {
+  background-color: #f1f5f9 !important;
+}
+
+/* ============================================================
+   6. OVERRIDE INLINE STYLE — tangkap hardcoded background
+   Ini adalah jaring pengaman untuk elemen yang masih punya
+   inline style="background: white" atau sejenisnya.
+   ============================================================ */
+html[data-theme="dark"] [style*="background: white"],
+html[data-theme="dark"] [style*="background-color: white"],
+html[data-theme="dark"] [style*="background:#fff"],
+html[data-theme="dark"] [style*="background: #fff"],
+html[data-theme="dark"] [style*="background-color: #fff"],
+html[data-theme="dark"] [style*="background:#ffffff"],
+html[data-theme="dark"] [style*="background: #ffffff"],
+html[data-theme="dark"] [style*="background-color:#ffffff"],
+html[data-theme="dark"] [style*="background-color: #ffffff"],
+html[data-theme="dark"] [style*="background: #f5f6fa"],
+html[data-theme="dark"] [style*="background: #f8f9fa"],
+html[data-theme="dark"] [style*="background-color: #f5f6fa"],
+html[data-theme="dark"] [style*="background-color: #f8f9fa"] {
+  background-color: #1e293b !important;
+  background: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+/* ============================================================
+   7. LIGHT MODE — PASTIKAN BERSIH
+   ============================================================ */
+html[data-theme="light"] body,
+html[data-theme="light"] .main-content,
+html[data-theme="light"] main {
+  background-color: #f1f5f9;
+  color: #1e293b;
+}
+
+html[data-theme="light"] .card {
+  background-color: #ffffff;
+  color: #1e293b;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] .form-control,
+html[data-theme="light"] .form-select {
+  background-color: #ffffff;
+  border-color: #e2e8f0;
+  color: #1e293b;
+}
+
+/* ============================================================
+   8. UTILITY CLASSES
+   ============================================================ */
+.km-surface { background-color: var(--km-surface); color: var(--km-text); }
+.km-surface-2 { background-color: var(--km-surface-2); color: var(--km-text); }
+.km-text-muted { color: var(--km-text-muted) !important; }
+.km-border { border-color: var(--km-border) !important; }
+
+
+
+/* ============================================================
+   9. SIDEBAR MASTER THEME (INDEPENDENT)
+   ============================================================ */
+/**
+ * KALIMASADA BILLING - SIDEBAR THEME
+ * Theme khusus untuk sidebar agar warnanya statis dan independen
+ * dari tema utama (dark/light mode).
+ */
+
+ :root {
+    /* === SIDEBAR (selalu dark, tidak berubah dengan theme) === */
+    --sb-bg:               #0f172a;
+    --sb-bg-hover:         #1e293b;
+    --sb-bg-active:        #1d4ed8;
+    --sb-border:           #1e293b;
+    --sb-text:             #f8fafc;
+    --sb-muted:            #cbd5e1; /* Brighter slate-300 */
+    --sb-subtle:           #94a3b8; /* Brighter slate-400 */
+    --sb-primary:          #3b82f6;
+    --sb-primary-glow:     rgba(59,130,246,0.15);
+    --sb-active-text:      #ffffff;
+    --sb-section-text:     #cbd5e1; /* Brighter slate-300 */
+    --sb-radius:           8px;
+    --sb-footer-bg:        #0a1120;
+  }
+  
+  /* ============================================================
+     ===== SIDEBAR — ALWAYS DARK, HIGH CONTRAST =====
+     ============================================================ */
+  
+  /* Override semua variabel sb-* agar sidebar selalu dark */
+  .sb,
+  #adminSidebar,
+  #billingSidebar,
+  html[data-theme="light"] .sb,
+  html[data-theme="light"] #adminSidebar,
+  html[data-theme="light"] #billingSidebar {
+    background: var(--sb-bg, #0f172a) !important;
+    border-right: 1px solid var(--sb-border, #1e293b) !important;
+    color: var(--sb-text, #f8fafc) !important;
+  }
+  
+  /* Header branding */
+  .sb-header,
+  html[data-theme="light"] .sb-header {
+    background: var(--sb-bg, #0f172a) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+    padding: 18px 16px !important;
+  }
+  
+  .sb-brand-name,
+  html[data-theme="light"] .sb-brand-name {
+    color: var(--sb-text, #f8fafc) !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+  }
+  .sb-brand-tag,
+  html[data-theme="light"] .sb-brand-tag {
+    color: var(--sb-section-text) !important;
+    font-size: 10px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  
+  /* Section titles */
+  .sb-section-title,
+  html[data-theme="light"] .sb-section-title,
+  html[data-theme="light"] .sb-section-title span {
+    color: var(--sb-section-text, #cbd5e1) !important;
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .sb-section-title.sb-collapsible:hover,
+  html[data-theme="light"] .sb-section-title.sb-collapsible:hover,
+  html[data-theme="light"] .sb-section-title.sb-collapsible:hover span {
+    background: var(--sb-bg-hover) !important;
+    color: var(--sb-text, #f8fafc) !important;
+  }
+  
+  /* Nav items */
+  .sb .sb-item,
+  html[data-theme="light"] .sb .sb-item,
+  html[data-theme="light"] .sb .sb-item span,
+  html[data-theme="light"] .sb .sb-item i {
+    color: var(--sb-muted, #cbd5e1) !important;
+  }
+  .sb .sb-item {
+    background: transparent !important;
+    border-color: transparent !important;
+    border-radius: var(--sb-radius, 8px) !important;
+    transition: all 160ms ease;
+  }
+  .sb .sb-item i {
+    color: var(--sb-subtle, #94a3b8) !important;
+    transition: color 160ms ease;
+  }
+  .sb .sb-item:hover,
+  html[data-theme="light"] .sb .sb-item:hover,
+  html[data-theme="light"] .sb .sb-item:hover span {
+    background: var(--sb-bg-hover, #1e293b) !important;
+    color: var(--sb-text, #f8fafc) !important;
+    text-decoration: none !important;
+  }
+  .sb .sb-item:hover i,
+  html[data-theme="light"] .sb .sb-item:hover i { color: var(--sb-primary, #3b82f6) !important; }
+  
+  /* Active item — solid blue accent */
+  .sb .sb-item.active,
+  html[data-theme="light"] .sb .sb-item.active,
+  html[data-theme="light"] .sb .sb-item.active span {
+    background: var(--sb-primary, #3b82f6) !important;
+    color: var(--sb-active-text, #ffffff) !important;
+    border-color: transparent !important;
+    box-shadow: 0 2px 8px rgba(59,130,246,0.4) !important;
+  }
+  .sb .sb-item.active i,
+  html[data-theme="light"] .sb .sb-item.active i { color: #fff !important; }
+  .sb .sb-item.active::before {
+    display: none !important; /* hapus indicator lama, pakai bg highlight */
+  }
+  
+  /* App Switcher */
+  .sb .sb-app-switcher-btn {
+    background: var(--sb-bg-hover) !important;
+    border-color: rgba(255,255,255,0.08) !important;
+    color: var(--sb-text) !important;
+  }
+  .sb .sb-app-switcher-btn:hover {
+    border-color: var(--sb-primary) !important;
+    background: rgba(59,130,246,0.1) !important;
+  }
+  .sb .sb-app-current i { color: var(--sb-primary) !important; }
+  .sb .sb-app-dropdown {
+    background: #0a1120 !important;
+    border-color: rgba(255,255,255,0.08) !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+  }
+  .sb .sb-app-option {
+    color: var(--sb-muted) !important;
+  }
+  .sb .sb-app-option:hover {
+    background: var(--sb-bg-hover) !important;
+    color: var(--sb-text) !important;
+  }
+  .sb .sb-app-option.active {
+    color: var(--sb-primary) !important;
+    background: rgba(59,130,246,0.12) !important;
+  }
+  
+  /* Footer */
+  .sb .sb-footer {
+    background: var(--sb-footer-bg) !important;
+    border-top: 1px solid rgba(255,255,255,0.06) !important;
+  }
+  .sb .sb-action-btn,
+  html[data-theme="light"] .sb .sb-action-btn,
+  html[data-theme="light"] .sb .sb-action-btn span,
+  html[data-theme="light"] .sb .sb-action-btn i {
+    background: transparent !important;
+    border-color: rgba(255,255,255,0.08) !important;
+    color: var(--sb-muted) !important;
+  }
+  .sb .sb-action-btn:hover,
+  html[data-theme="light"] .sb .sb-action-btn:hover,
+  html[data-theme="light"] .sb .sb-action-btn:hover span {
+    background: var(--sb-bg-hover) !important;
+    color: var(--sb-primary) !important;
+    border-color: rgba(59,130,246,0.3) !important;
+  }
+  .sb .sb-action-btn:hover i,
+  html[data-theme="light"] .sb .sb-action-btn:hover i {
+    color: var(--sb-primary) !important;
+  }
+  
+  /* Theme Toggle Icon (Sun/Moon) - Yellow/Aesthetic */
+  .sb #globalThemeToggle i,
+  html[data-theme="light"] .sb #globalThemeToggle i {
+    color: #fbbf24 !important; /* Amber/Yellow color */
+  }
+  .sb #globalThemeToggle:hover i,
+  html[data-theme="light"] .sb #globalThemeToggle:hover i {
+    color: #fde047 !important; /* Brighter yellow on hover */
+    text-shadow: 0 0 8px rgba(253, 224, 71, 0.5); /* Nice aesthetic glow */
+  }
+  
+  .sb .sb-action-logout:hover {
+    color: #f87171 !important;
+    background: rgba(239,68,68,0.1) !important;
+    border-color: rgba(239,68,68,0.3) !important;
+  }
+  
+  /* Server time */
+  .sb .sb-time-label,
+  html[data-theme="light"] .sb .sb-time-label {
+    color: var(--sb-section-text) !important;
+    font-size: 9px !important;
+    letter-spacing: 0.1em;
+  }
+  .sb .sb-time-value,
+  html[data-theme="light"] .sb .sb-time-value {
+    color: var(--sb-muted) !important;
+    font-size: 11px !important;
+  }
+  .sb .sb-version-tag,
+  html[data-theme="light"] .sb .sb-version-tag { color: var(--sb-section-text) !important; }
+  
+  /* Scrollbar inside sidebar */
+  .sb::-webkit-scrollbar { width: 3px; }
+  .sb::-webkit-scrollbar-thumb { background: #1e293b; }
+  .sb::-webkit-scrollbar-thumb:hover { background: #334155; }
+  
+  /* Mobile navbar (bagian atas di mobile) */
+  .mobile-navbar {
+    background: #0f172a !important;
+    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  }
+  
+  /* Exceptions — things we don't want to transition */
+  .sb, nav.sb, #adminSidebar, #billingSidebar,
+  .sb *, nav.sb *, #adminSidebar *, #billingSidebar * {
+    transition-property: background-color, border-color, color, box-shadow, transform, opacity !important;
+    transition-duration: 160ms !important;
+  }
+

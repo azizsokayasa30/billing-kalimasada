@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -20,7 +20,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f8f9fa;
+            background-color: var(--bg-secondary, #f8f9fa);
         }
         
         .map-container {
@@ -39,7 +39,7 @@
             position: absolute;
             top: 20px;
             right: 20px;
-            background: white;
+            background: var(--panel-bg, #ffffff);
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -49,7 +49,7 @@
         
         .control-panel h5 {
             margin-bottom: 15px;
-            color: #333;
+            color: var(--text-primary, #333);
             font-weight: 600;
         }
         
@@ -66,7 +66,7 @@
             position: absolute;
             bottom: 20px;
             left: 20px;
-            background: white;
+            background: var(--panel-bg, #ffffff);
             padding: 15px;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -91,7 +91,7 @@
         .popup-title {
             font-weight: bold;
             margin-bottom: 10px;
-            color: #333;
+            color: var(--text-primary, #333);
             border-bottom: 2px solid #28a745;
             padding-bottom: 5px;
         }
@@ -212,26 +212,14 @@
             left: 50%;
             transform: translate(-50%, -50%);
             z-index: 2000;
-            background: white;
+            background: var(--panel-bg, #ffffff);
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="map-container">
@@ -329,26 +317,26 @@
         
         // Initialize map
         function initMap() {
-            console.log('🗺️ Initializing map...');
+            console.log('ðŸ—ºï¸ Initializing map...');
             
             // Create map centered on Jakarta
             map = L.map('map').setView([-6.2088, 106.8456], 13);
             
             // Define tile layers
             const lightLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                attribution: '© OpenStreetMap contributors © CARTO',
+                attribution: 'Â© OpenStreetMap contributors Â© CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
             });
             
             const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '© OpenStreetMap contributors © CARTO',
+                attribution: 'Â© OpenStreetMap contributors Â© CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
             });
             
             const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: '© Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                attribution: 'Â© Esri â€” Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
                 maxZoom: 20
             });
             
@@ -371,7 +359,7 @@
             cableLayer = L.layerGroup().addTo(map);
             backboneLayer = L.layerGroup().addTo(map);
             
-            console.log('✅ Map initialized successfully');
+            console.log('âœ… Map initialized successfully');
             
             // Load network data
             loadNetworkData();
@@ -380,14 +368,14 @@
         // Load network data from API
         async function loadNetworkData() {
             try {
-                console.log('📡 Loading network data...');
+                console.log('ðŸ“¡ Loading network data...');
                 
                 const response = await fetch('/admin/api/mapping/new');
                 const result = await response.json();
                 
                 if (result.success) {
                     networkData = result.data;
-                    console.log('✅ Network data loaded:', networkData);
+                    console.log('âœ… Network data loaded:', networkData);
                     
                     // Render all data
                     renderNetworkData();
@@ -399,12 +387,12 @@
                     document.getElementById('loading').style.display = 'none';
                     
                 } else {
-                    console.error('❌ Failed to load network data:', result.error);
+                    console.error('âŒ Failed to load network data:', result.error);
                     throw new Error(result.error || 'Failed to load network data');
                 }
                 
             } catch (error) {
-                console.error('❌ Error loading network data:', error);
+                console.error('âŒ Error loading network data:', error);
                 document.getElementById('loading').innerHTML = `
                     <div class="text-center text-danger">
                         <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
@@ -418,7 +406,7 @@
         // Render all network data
         function renderNetworkData() {
             try {
-                console.log('🎨 Rendering network data...');
+                console.log('ðŸŽ¨ Rendering network data...');
                 
                 // Clear existing layers
                 clearLayers();
@@ -454,17 +442,17 @@
                 // Fit map to data
                 fitToBounds();
                 
-                console.log('✅ Network data rendered successfully');
+                console.log('âœ… Network data rendered successfully');
                 
             } catch (error) {
-                console.error('❌ Error rendering network data:', error);
+                console.error('âŒ Error rendering network data:', error);
                 throw error;
             }
         }
         
         // Clear all layers
         function clearLayers() {
-            console.log('🧹 Clearing all layers...');
+            console.log('ðŸ§¹ Clearing all layers...');
             
             if (customerLayer) customerLayer.clearLayers();
             if (onuLayer) onuLayer.clearLayers();
@@ -472,12 +460,12 @@
             if (cableLayer) cableLayer.clearLayers();
             if (backboneLayer) backboneLayer.clearLayers();
             
-            console.log('✅ All layers cleared');
+            console.log('âœ… All layers cleared');
         }
         
         // Render customers
         function renderCustomers(customers) {
-            console.log(`👥 Rendering ${customers.length} customers...`);
+            console.log(`ðŸ‘¥ Rendering ${customers.length} customers...`);
             
             customers.forEach(customer => {
                 if (customer.latitude && customer.longitude) {
@@ -510,7 +498,7 @@
         
         // Render ONU devices
         function renderONUDevices(devices) {
-            console.log(`📡 Rendering ${devices.length} ONU devices...`);
+            console.log(`ðŸ“¡ Rendering ${devices.length} ONU devices...`);
             
             devices.forEach(device => {
                 if (device.latitude && device.longitude) {
@@ -546,7 +534,7 @@
         
         // Render ODPs
         function renderODPs(odps) {
-            console.log(`📡 Rendering ${odps.length} ODPs...`);
+            console.log(`ðŸ“¡ Rendering ${odps.length} ODPs...`);
             
             odps.forEach(odp => {
                 if (odp.latitude && odp.longitude) {
@@ -597,7 +585,7 @@
         
         // Render cables
         function renderCables(cables) {
-            console.log(`🔌 Rendering ${cables.length} cables...`);
+            console.log(`ðŸ”Œ Rendering ${cables.length} cables...`);
             
             cables.forEach(cable => {
                 if (cable.coordinates && cable.coordinates.length >= 2) {
@@ -629,7 +617,7 @@
         
         // Render backbone cables
         function renderBackboneCables(cables) {
-            console.log(`🌐 Rendering ${cables.length} backbone cables...`);
+            console.log(`ðŸŒ Rendering ${cables.length} backbone cables...`);
             
             cables.forEach(cable => {
                 if (cable.coordinates && cable.coordinates.length >= 2) {
@@ -662,9 +650,9 @@
         
         // Add data flow animations
         function addDataFlowAnimations() {
-            console.log('🎬 Adding data flow animations...');
+            console.log('ðŸŽ¬ Adding data flow animations...');
             
-            // Animasi untuk cable routes (Customer → ODP)
+            // Animasi untuk cable routes (Customer â†’ ODP)
             if (cableLayer) {
                 cableLayer.eachLayer(function(layer) {
                     if (layer instanceof L.Polyline && layer.options.className && layer.options.className.includes('cable-connected')) {
@@ -673,7 +661,7 @@
                 });
             }
             
-            // Animasi untuk backbone cables (ODP → ODP)
+            // Animasi untuk backbone cables (ODP â†’ ODP)
             if (backboneLayer) {
                 backboneLayer.eachLayer(function(layer) {
                     if (layer instanceof L.Polyline) {
@@ -682,7 +670,7 @@
                 });
             }
             
-            console.log('✅ Data flow animations added');
+            console.log('âœ… Data flow animations added');
         }
         
         // Create animated data flow for cables
@@ -797,7 +785,7 @@
             
             if (hasData) {
                 map.fitBounds(bounds, { padding: [20, 20] });
-                console.log('✅ Map fitted to data bounds');
+                console.log('âœ… Map fitted to data bounds');
             }
         }
         
@@ -805,30 +793,30 @@
         document.getElementById('showCustomers').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(customerLayer);
-                console.log('✅ Customer layer shown');
+                console.log('âœ… Customer layer shown');
             } else {
                 map.removeLayer(customerLayer);
-                console.log('❌ Customer layer hidden');
+                console.log('âŒ Customer layer hidden');
             }
         });
         
         document.getElementById('showONU').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(onuLayer);
-                console.log('✅ ONU layer shown');
+                console.log('âœ… ONU layer shown');
             } else {
                 map.removeLayer(onuLayer);
-                console.log('❌ ONU layer hidden');
+                console.log('âŒ ONU layer hidden');
             }
         });
         
         document.getElementById('showODP').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(odpLayer);
-                console.log('✅ ODP layer shown');
+                console.log('âœ… ODP layer shown');
             } else {
                 map.removeLayer(odpLayer);
-                console.log('❌ ODP layer hidden');
+                console.log('âŒ ODP layer hidden');
             }
         });
         
@@ -836,11 +824,11 @@
             if (this.checked) {
                 map.addLayer(cableLayer);
                 map.addLayer(backboneLayer);
-                console.log('✅ Cables layers shown');
+                console.log('âœ… Cables layers shown');
             } else {
                 map.removeLayer(cableLayer);
                 map.removeLayer(backboneLayer);
-                console.log('❌ Cables layers hidden');
+                console.log('âŒ Cables layers hidden');
             }
         });
         
@@ -851,3 +839,4 @@
     </script>
 </body>
 </html>
+

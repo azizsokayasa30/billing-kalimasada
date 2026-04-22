@@ -1,14 +1,7 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <!-- Theme Init: Jalankan SEBELUM CSS load untuk mencegah flash -->
-    <script>
-      (function(){
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
+    <!-- Theme Init: Di-handle oleh theme-head.ejs -->
     <%- include('partials/hard-reload') %>
     <meta charset="UTF-8">
     <title><% if (typeof isTechnicianView !== 'undefined' && isTechnicianView) { %>Dashboard Teknisi<% } else { %>Dashboard Admin<% } %></title>
@@ -24,20 +17,7 @@
     <link href="/css/dashboard-modern.css" rel="stylesheet">
     
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=2" rel="stylesheet">
-    <link href="/css/card-system.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('partials/theme-head') %>
 </head>
 <body>
 <div class="container-fluid">

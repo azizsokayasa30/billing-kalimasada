@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -12,20 +12,7 @@
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <link href="/css/card-system.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 
     <style>
         body { background: var(--bg-primary, #f1f5f9); font-family: 'Inter', system-ui, sans-serif; }
@@ -264,7 +251,7 @@
                                     <% if (area.kode_area) { %>
                                     <span style="font-family: monospace; font-size: 0.78rem; font-weight: 700; background: rgba(37,99,235,0.1); color: #2563eb; padding: 3px 8px; border-radius: 6px; letter-spacing: 0.05em;"><%= area.kode_area %></span>
                                     <% } else { %>
-                                    <span class="text-muted" style="font-size:0.8rem; font-style:italic;">—</span>
+                                    <span class="text-muted" style="font-size:0.8rem; font-style:italic;">â€”</span>
                                     <% } %>
                                 </td>
                                 <td>
@@ -272,7 +259,7 @@
                                 </td>
                                 <td style="max-width:240px;">
                                     <span class="text-muted" style="font-size:0.85rem;">
-                                        <%= area.deskripsi ? area.deskripsi : '—' %>
+                                        <%= area.deskripsi ? area.deskripsi : 'â€”' %>
                                     </span>
                                 </td>
                                 <td>
@@ -323,7 +310,7 @@
             <div class="pagination-wrap">
                 <div class="pagination-info">
                     Halaman <strong><%= pagination.currentPage %></strong> dari <strong><%= pagination.totalPages %></strong>
-                    &nbsp;·&nbsp; Total <strong><%= pagination.totalCount %></strong> area
+                    &nbsp;Â·&nbsp; Total <strong><%= pagination.totalCount %></strong> area
                 </div>
                 <nav>
                     <ul class="pagination pagination-sm mb-0" style="gap:4px;">
@@ -672,3 +659,4 @@ function showToast(msg, type) {
 <%- include('../../partials/responsive-footer') %>
 </body>
 </html>
+

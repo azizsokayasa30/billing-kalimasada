@@ -10,21 +10,10 @@
     <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
 
     <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <link href="/css/card-system.css?v=1" rel="stylesheet">
+    <%- include('../../partials/theme-head') %>
 
     <style>
-        body { background: var(--bg-primary, #f1f5f9); font-family: 'Inter', system-ui, sans-serif; }
+        body { background: var(--bg-color, #f1f5f9); font-family: 'Inter', system-ui, sans-serif; }
         .page-wrapper { display: flex; min-height: 100vh; }
         .main-content { flex: 1; padding: 24px; overflow-x: hidden; }
         @media (min-width: 768px) { .main-content { margin-left: 16.666667%; } }
@@ -43,22 +32,22 @@
 
         /* Card System */
         .content-card {
-            background: var(--panel-bg, #fff);
-            border: 1px solid var(--panel-border, #e2e8f0);
+            background: var(--surface-1, #fff);
+            border: 1px solid var(--border-color, #e2e8f0);
             border-radius: 16px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.06);
             overflow: hidden;
         }
         .content-card-header {
             padding: 18px 24px;
-            border-bottom: 1px solid var(--panel-border, #e2e8f0);
+            border-bottom: 1px solid var(--border-color, #e2e8f0);
             display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
-            background: var(--panel-accent, #f8fafc);
+            background: var(--surface-2, #f8fafc);
         }
         .content-card-title { font-size: 1rem; font-weight: 600; color: var(--text-primary, #0f172a); margin: 0; display: flex; align-items: center; gap: 8px; }
 
-        .area-table th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary, #64748b); padding: 12px 16px; background: var(--panel-accent, #f8fafc); border-bottom: 1px solid var(--panel-border, #e2e8f0); white-space: nowrap; }
-        .area-table td { padding: 13px 16px; font-size: 0.875rem; color: var(--text-primary, #0f172a); vertical-align: middle; border-bottom: 1px solid var(--panel-border, #e2e8f0); }
+        .area-table th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted, #64748b); padding: 12px 16px; background: var(--surface-2, #f8fafc); border-bottom: 1px solid var(--border-color, #e2e8f0); white-space: nowrap; }
+        .area-table td { padding: 13px 16px; font-size: 0.875rem; color: var(--text-primary, #0f172a); vertical-align: middle; border-bottom: 1px solid var(--border-color, #e2e8f0); }
         .area-table tbody tr:last-child td { border-bottom: none; }
         .area-table tbody tr:hover td { background: rgba(37,99,235,0.03); }
 
@@ -72,7 +61,7 @@
         .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1050; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
         .modal-overlay.show { display: flex; }
         .modal-box {
-            background: var(--panel-bg, #fff);
+            background: var(--surface-1, #fff);
             border-radius: 16px;
             width: 100%; max-width: 600px;
             box-shadow: 0 24px 64px rgba(0,0,0,0.18);
@@ -81,23 +70,24 @@
             display: flex; flex-direction: column; max-height: 90vh;
         }
         @keyframes modalIn { from { transform: scale(0.95) translateY(10px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
-        .modal-box-header { padding: 20px 24px; border-bottom: 1px solid var(--panel-border, #e2e8f0); display: flex; align-items: center; justify-content: space-between; background: var(--panel-accent, #f8fafc); }
+        .modal-box-header { padding: 20px 24px; border-bottom: 1px solid var(--border-color, #e2e8f0); display: flex; align-items: center; justify-content: space-between; background: var(--surface-2, #f8fafc); }
         .modal-box-title { font-weight: 700; font-size: 1.05rem; color: var(--text-primary, #0f172a); margin: 0; }
-        .modal-box-body { padding: 24px; background: var(--panel-bg, #fff); overflow-y: auto; }
-        .modal-box-footer { padding: 16px 24px; border-top: 1px solid var(--panel-border, #e2e8f0); display: flex; justify-content: flex-end; gap: 10px; background: var(--panel-accent, #f8fafc); }
+        .modal-box-body { padding: 24px; background: var(--surface-1, #fff); overflow-y: auto; }
+        .modal-box-footer { padding: 16px 24px; border-top: 1px solid var(--border-color, #e2e8f0); display: flex; justify-content: flex-end; gap: 10px; background: var(--surface-2, #f8fafc); }
 
         .area-checkbox-list {
             display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
         }
         .area-check-item {
-            border: 1px solid var(--panel-border);
+            border: 1px solid var(--border-color);
             padding: 10px 14px;
             border-radius: 8px;
             display: flex; align-items: center; gap: 10px;
             cursor: pointer;
             transition: 0.2s;
+            color: var(--text-primary);
         }
-        .area-check-item:hover { background: var(--panel-accent); }
+        .area-check-item:hover { background: var(--surface-2); }
         .area-check-item.active { border-color: #2563eb; background: rgba(37,99,235,0.05); }
 
     </style>

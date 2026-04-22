@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -60,7 +60,7 @@
         /* Removed .stats-cards grid - now using Bootstrap grid system */
         
         .stat-card {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 15px;
             padding: 1.5rem;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
@@ -117,7 +117,7 @@
         }
         
         .quick-actions {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 15px;
             padding: 2rem;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
@@ -131,7 +131,7 @@
         }
         
         .action-btn {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border: 2px solid #e9ecef;
             border-radius: 12px;
             padding: 1.5rem;
@@ -144,7 +144,7 @@
         
         .action-btn:hover {
             border-color: #28a745;
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             transform: translateY(-3px);
             box-shadow: 0 4px 12px rgba(40,167,69,0.2);
             color: #28a745;
@@ -167,7 +167,7 @@
         }
         
         .recent-payments {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 15px;
             padding: 2rem;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
@@ -201,7 +201,7 @@
         }
         
         .navbar {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             padding: 1rem 0;
         }
@@ -315,19 +315,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../partials/theme-head') %>
 </head>
 <body>
     <!-- Navigation -->
@@ -560,3 +548,4 @@
     </script>
 </body>
 </html>
+

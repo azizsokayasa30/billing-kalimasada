@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -35,7 +35,7 @@
                 max-width: 100%;
             }
             .table th {
-                background-color: #f8f9fa !important;
+                background-color: var(--bg-secondary, #f8f9fa) !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
                 color-adjust: exact;
@@ -57,7 +57,7 @@
                 padding: 20px;
             }
             .container-fluid {
-                background: white;
+                background: var(--panel-bg, #ffffff);
                 box-shadow: 0 0 10px rgba(0,0,0,0.1);
                 padding: 20px;
                 margin: 0 auto;
@@ -67,7 +67,7 @@
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.2;
-            color: #333;
+            color: var(--text-primary, #333);
             font-size: 10px;
             margin: 0;
             padding: 0;
@@ -76,7 +76,7 @@
         .container-fluid {
             max-width: 19.5cm;
             margin: 0 auto;
-            background: white;
+            background: var(--panel-bg, #ffffff);
             padding: 0.3cm;
             min-height: 27.5cm;
             position: relative;
@@ -106,13 +106,13 @@
         .invoice-number {
             font-size: 0.9rem;
             font-weight: bold;
-            color: #333;
+            color: var(--text-primary, #333);
             margin-top: 3px;
             display: block;
         }
         
         .invoice-details {
-            background-color: #f8f9fa;
+            background-color: var(--bg-secondary, #f8f9fa);
             padding: 5px 8px;
             border-radius: 3px;
             margin: 5px 0;
@@ -144,7 +144,7 @@
         }
         
         .table th {
-            background-color: #f8f9fa !important;
+            background-color: var(--bg-secondary, #f8f9fa) !important;
             border-top: 1px solid #dee2e6;
             padding: 3px 5px;
         }
@@ -215,19 +215,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <!-- Print Button (Screen Only) -->

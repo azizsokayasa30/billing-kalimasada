@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kelola Agent - Admin Portal</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     
     <link href="/css/theme.css" rel="stylesheet">
@@ -13,7 +14,7 @@
     <link href="/css/admin-mobile.css" rel="stylesheet">
     <style>
         body {
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         .navbar {
@@ -31,7 +32,7 @@
             box-shadow: 0 8px 25px rgba(0,0,0,0.15);
         }
         .agent-item {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 10px;
             padding: 1rem;
             margin-bottom: 0.5rem;
@@ -78,76 +79,15 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../partials/theme-head') %>
 </head>
 <body>
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/admin/dashboard">
-                <i class="fas fa-crown me-2"></i>
-                Admin Portal
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/dashboard">
-                            <i class="fas fa-home me-1"></i>Dashboard
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/billing">
-                            <i class="fas fa-credit-card me-1"></i>Billing
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/admin/agents">
-                            <i class="fas fa-user-tie me-1"></i>Agent
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/technicians">
-                            <i class="fas fa-tools me-1"></i>Teknisi
-                        </a>
-                    </li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user me-1"></i>
-                            Admin
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/admin/settings">
-                                <i class="fas fa-cog me-2"></i>Pengaturan
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/admin/logout">
-                                <i class="fas fa-sign-out-alt me-2"></i>Logout
-                            </a></li>
-                        </ul>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container-fluid mt-4">
+    <div class="container-fluid">
+    <div class="row">
+        <%- include('../partials/admin-responsive-sidebar', { page: 'agents' }) %>
+        <main class="col-md-10 main-content ms-sm-auto">
+            <div class="mt-4">
         <!-- Header -->
         <div class="row mb-4">
             <div class="col-md-8">
@@ -885,5 +825,12 @@
             loadAgents();
         }, 30000);
     </script>
+            </div>
+        </main>
+    </div>
+</div>
 </body>
 </html>
+
+
+

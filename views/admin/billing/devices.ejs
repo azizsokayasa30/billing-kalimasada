@@ -28,19 +28,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -178,11 +166,11 @@
 
         async function loadDevices() {
             try {
-                console.log('🔍 Loading devices...');
+                console.log('?? Loading devices...');
                 const response = await fetch('/admin/billing/api/devices');
                 
-                console.log('📡 Response status:', response.status);
-                console.log('📡 Response headers:', response.headers.get('content-type'));
+                console.log('?? Response status:', response.status);
+                console.log('?? Response headers:', response.headers.get('content-type'));
                 
                 if (response.status === 401 || response.status === 403) {
                     showError('Authentication required. Please login first.');
@@ -204,7 +192,7 @@
                     showError('Error loading devices: ' + (data.message || 'Unknown error'));
                 }
             } catch (error) {
-                console.error('❌ Error loading devices:', error);
+                console.error('? Error loading devices:', error);
                 if (error.message.includes('Unexpected token')) {
                     showError('Server returned HTML instead of JSON. Please check if you are logged in.');
                 } else {
@@ -304,3 +292,4 @@
     </script>
 </body>
 </html>
+

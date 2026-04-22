@@ -530,7 +530,7 @@
             
             /* Add close button for panels */
             .control-panel.show::after, .stats-panel.show::after {
-                content: '✕';
+                content: '?';
                 position: absolute;
                 top: 10px;
                 right: 15px;
@@ -655,19 +655,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -697,14 +685,14 @@
                     <div class="form-check mb-2">
                         <input class="form-check-input" type="checkbox" id="odpLayer" checked>
                         <label class="form-check-label" for="odpLayer">
-                                        <span class="stat-icon odp me-2" style="font-size: 12px;">⚡</span>ODPs
+                                        <span class="stat-icon odp me-2" style="font-size: 12px;">?</span>ODPs
                         </label>
                     </div>
                     
                     <div class="form-check mb-2">
                         <input class="form-check-input" type="checkbox" id="customerLayer" checked>
                         <label class="form-check-label" for="customerLayer">
-                                        <span class="stat-icon customer me-2" style="font-size: 12px;">📶</span>ONUs
+                                        <span class="stat-icon customer me-2" style="font-size: 12px;">??</span>ONUs
                         </label>
                     </div>
                     
@@ -738,7 +726,7 @@
                     <h5><i class="bi bi-bar-chart-steps me-2"></i>Network Statistics</h5>
                     
                     <div class="stat-item">
-                                    <span class="stat-icon odp" style="font-size: 12px;">⚡</span>
+                                    <span class="stat-icon odp" style="font-size: 12px;">?</span>
                         <div>
                             <div class="fw-bold">ODPs</div>
                             <small class="text-muted" id="odpCount">0</small>
@@ -746,7 +734,7 @@
                     </div>
                     
                     <div class="stat-item">
-                                    <span class="stat-icon customer" style="font-size: 12px;">📶</span>
+                                    <span class="stat-icon customer" style="font-size: 12px;">??</span>
                         <div>
                                         <div class="fw-bold">ONUs</div>
                             <small class="text-muted" id="customerCount">0</small>
@@ -793,14 +781,14 @@
 
         // Initialize map
         function initMap() {
-            console.log('🗺️ Initializing technician mapping...');
+            console.log('??? Initializing technician mapping...');
             
             try {
                 // Create map centered on Jakarta
                 map = L.map('map').setView([-6.2088, 106.8456], 13);
-                console.log('✅ Map instance created successfully');
+                console.log('? Map instance created successfully');
             } catch (error) {
-                console.error('❌ Error creating map:', error);
+                console.error('? Error creating map:', error);
                 return;
             }
             
@@ -851,7 +839,7 @@
                             collapsed: true
             }).addTo(map);
             
-            console.log('✅ Map initialized successfully with satellite view as default');
+            console.log('? Map initialized successfully with satellite view as default');
             
             // Load network data
             loadNetworkData();
@@ -883,25 +871,25 @@
         // Load network data from API
         async function loadNetworkData() {
             try {
-                console.log('📡 Loading network data...');
+                console.log('?? Loading network data...');
                 showLoading();
                 
                 const response = await fetch('/technician/api/mapping-data');
-                console.log('📡 API Response status:', response.status);
+                console.log('?? API Response status:', response.status);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
                 const data = await response.json();
-                console.log('📡 API Response data:', data);
+                console.log('?? API Response data:', data);
                 
                 if (data.success) {
                     networkData = data.data;
-                    console.log('📡 Network data loaded:', networkData);
+                    console.log('?? Network data loaded:', networkData);
                     
                     // Debug: Log detailed data structure
-                    console.log('🔍 Detailed network data structure:');
+                    console.log('?? Detailed network data structure:');
                     console.log('- ODPs:', networkData.odps);
                     console.log('- Customers:', networkData.customers);
                     console.log('- Cables:', networkData.cables);
@@ -924,7 +912,7 @@
         
         // Render network data on map
         function renderNetworkData() {
-            console.log('🎨 Rendering network data...');
+            console.log('?? Rendering network data...');
             
             // Clear existing layers
             customerLayer.clearLayers();
@@ -934,7 +922,7 @@
             
             // Render ODPs (following admin map approach - simple and clean)
             if (networkData.odps && networkData.odps.length > 0) {
-                console.log(`📡 Rendering ${networkData.odps.length} ODPs...`);
+                console.log(`?? Rendering ${networkData.odps.length} ODPs...`);
                 
                 networkData.odps.forEach((odp, index) => {
                     console.log(`ODP ${index + 1}:`, {
@@ -946,7 +934,7 @@
                     });
                     
                     if (odp.latitude && odp.longitude) {
-                        console.log(`🎯 Creating ODP marker for "${odp.name}" at [${odp.latitude}, ${odp.longitude}]`);
+                        console.log(`?? Creating ODP marker for "${odp.name}" at [${odp.latitude}, ${odp.longitude}]`);
                                         // Create ODP marker dengan icon tower yang lebih kecil dan elegan
                                         const odpIcon = L.divIcon({
                                             className: 'custom-odp-icon',
@@ -970,7 +958,7 @@
                                             font-weight: bold;
                                             pointer-events: none;
                                             text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-                                        ">⚡</div>
+                                        ">?</div>
                                         
                                     </div>
                                     <div style="
@@ -1006,20 +994,20 @@
                         `);
                         
                         odpLayer.addLayer(marker);
-                        console.log(`✅ ODP "${odp.name}" rendered at [${odp.latitude}, ${odp.longitude}]`);
+                        console.log(`? ODP "${odp.name}" rendered at [${odp.latitude}, ${odp.longitude}]`);
                     } else {
-                        console.log(`❌ ODP "${odp.name}" has invalid coordinates: [${odp.latitude}, ${odp.longitude}]`);
+                        console.log(`? ODP "${odp.name}" has invalid coordinates: [${odp.latitude}, ${odp.longitude}]`);
                     }
                 });
                 
-                console.log(`✅ ${networkData.odps.length} ODPs rendered successfully`);
+                console.log(`? ${networkData.odps.length} ODPs rendered successfully`);
             } else {
-                console.log('❌ No ODPs data found');
+                console.log('? No ODPs data found');
             }
             
             // Render Customers (following admin map approach - simple and clean)
             if (networkData.customers && networkData.customers.length > 0) {
-                console.log(`👥 Rendering ${networkData.customers.length} customers...`);
+                console.log(`?? Rendering ${networkData.customers.length} customers...`);
                 
                 networkData.customers.forEach((customer, index) => {
                     console.log(`Customer ${index + 1}:`, {
@@ -1031,22 +1019,22 @@
                     });
                     
                     if (customer.latitude && customer.longitude) {
-                        console.log(`🎯 Creating Customer marker for "${customer.name}" at [${customer.latitude}, ${customer.longitude}]`);
+                        console.log(`?? Creating Customer marker for "${customer.name}" at [${customer.latitude}, ${customer.longitude}]`);
                             // Create ONU marker dengan icon yang berbeda per status
                             let onuColor, onuIconHtml, onuStatus;
                             
                             if (customer.status === 'suspended') {
                                 onuColor = '#FF9800'; // warning (orange)
                                 onuStatus = 'Suspend';
-                                onuIconHtml = '<div style="color: white; font-size: 14px; font-weight: bold; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.6);">⚠️</div>';
+                                onuIconHtml = '<div style="color: white; font-size: 14px; font-weight: bold; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.6);">??</div>';
                             } else if (customer.status === 'inactive') {
                                 onuColor = '#F44336'; // danger (red)
                                 onuStatus = 'Inactive';
-                                onuIconHtml = '<div style="color: white; font-size: 14px; font-weight: bold; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.6);">❌</div>';
+                                onuIconHtml = '<div style="color: white; font-size: 14px; font-weight: bold; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.6);">?</div>';
                             } else {
                                 onuColor = '#4CAF50'; // active (green)
                                 onuStatus = 'Aktif';
-                                onuIconHtml = '<div style="color: white; font-size: 14px; font-weight: bold; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.6);">📶</div>';
+                                onuIconHtml = '<div style="color: white; font-size: 14px; font-weight: bold; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.6);">??</div>';
                             }
                             
                             const onuIconEl = L.divIcon({
@@ -1112,20 +1100,20 @@
                         `);
                         
                         customerLayer.addLayer(marker);
-                        console.log(`✅ Customer "${customer.name}" rendered at [${customer.latitude}, ${customer.longitude}]`);
+                        console.log(`? Customer "${customer.name}" rendered at [${customer.latitude}, ${customer.longitude}]`);
                     } else {
-                        console.log(`❌ Customer "${customer.name}" has invalid coordinates: [${customer.latitude}, ${customer.longitude}]`);
+                        console.log(`? Customer "${customer.name}" has invalid coordinates: [${customer.latitude}, ${customer.longitude}]`);
                     }
                 });
                 
-                console.log(`✅ ${networkData.customers.length} customers rendered successfully`);
+                console.log(`? ${networkData.customers.length} customers rendered successfully`);
             } else {
-                console.log('❌ No customers data found');
+                console.log('? No customers data found');
             }
             
             // Render Cable Routes
             if (networkData.cables && networkData.cables.length > 0) {
-                console.log(`🔌 Rendering ${networkData.cables.length} cables...`);
+                console.log(`?? Rendering ${networkData.cables.length} cables...`);
                 
                 networkData.cables.forEach((cable, index) => {
                     console.log(`Cable ${index + 1}:`, {
@@ -1154,7 +1142,7 @@
                             }
                         }
                         
-                        console.log(`📍 Cable ${cable.name}: From [${cable.start_lat}, ${cable.start_lng}] → To [${cable.end_lat}, ${cable.end_lng}]`);
+                        console.log(`?? Cable ${cable.name}: From [${cable.start_lat}, ${cable.start_lng}] ? To [${cable.end_lat}, ${cable.end_lng}]`);
                         
                         const polyline = L.polyline([
                             [cable.start_lat, cable.start_lng],
@@ -1177,18 +1165,18 @@
                         `);
                         
                         cableLayer.addLayer(polyline);
-                        console.log(`✅ Cable "${cable.name}" rendered from ODP to Customer`);
+                        console.log(`? Cable "${cable.name}" rendered from ODP to Customer`);
                     } else {
-                        console.log(`❌ Cable "${cable.name}" has invalid coordinates`);
+                        console.log(`? Cable "${cable.name}" has invalid coordinates`);
                     }
                 });
                 
-                console.log(`✅ ${networkData.cables.length} cables rendered`);
+                console.log(`? ${networkData.cables.length} cables rendered`);
             }
             
             // Render Backbone
             if (networkData.backbone && networkData.backbone.length > 0) {
-                console.log(`🌐 Rendering ${networkData.backbone.length} backbone routes...`);
+                console.log(`?? Rendering ${networkData.backbone.length} backbone routes...`);
                 
                 networkData.backbone.forEach((backbone, index) => {
                     console.log(`Backbone ${index + 1}:`, {
@@ -1211,7 +1199,7 @@
                             backboneClass = 'cable-line disconnected';
                         }
                         
-                        console.log(`📍 Backbone ${backbone.name}: From [${backbone.start_lat}, ${backbone.start_lng}] → To [${backbone.end_lat}, ${backbone.end_lng}]`);
+                        console.log(`?? Backbone ${backbone.name}: From [${backbone.start_lat}, ${backbone.start_lng}] ? To [${backbone.end_lat}, ${backbone.end_lng}]`);
                         
                         const polyline = L.polyline([
                             [backbone.start_lat, backbone.start_lng],
@@ -1235,16 +1223,16 @@
                         `);
                         
                         backboneLayer.addLayer(polyline);
-                        console.log(`✅ Backbone "${backbone.name}" rendered from ODP to ODP`);
+                        console.log(`? Backbone "${backbone.name}" rendered from ODP to ODP`);
                     } else {
-                        console.log(`❌ Backbone "${backbone.name}" has invalid coordinates`);
+                        console.log(`? Backbone "${backbone.name}" has invalid coordinates`);
                     }
                 });
                 
-                console.log(`✅ ${networkData.backbone.length} backbone routes rendered`);
+                console.log(`? ${networkData.backbone.length} backbone routes rendered`);
             }
             
-            console.log('✅ Network data rendered successfully');
+            console.log('? Network data rendered successfully');
             
             // Fit map to data bounds
             fitToBounds();
@@ -1285,19 +1273,19 @@
             if (hasData) {
                 // Fit map to bounds with padding
                 map.fitBounds(bounds, { padding: [20, 20] });
-                console.log(`✅ Map fitted to bounds containing data`);
+                console.log(`? Map fitted to bounds containing data`);
             } else {
                 // Fallback to Jakarta if no data
-                console.log('📍 No data found, using default Jakarta location');
+                console.log('?? No data found, using default Jakarta location');
                 map.setView([-6.2088, 106.8456], 13);
             }
         }
         
         // Add data flow animations
         function addDataFlowAnimations() {
-            console.log('🎬 Adding data flow animations...');
+            console.log('?? Adding data flow animations...');
             
-            // Animasi untuk cable routes (Customer → ODP)
+            // Animasi untuk cable routes (Customer ? ODP)
             if (cableLayer) {
                 cableLayer.eachLayer(function(layer) {
                     if (layer instanceof L.Polyline) {
@@ -1306,7 +1294,7 @@
                 });
             }
             
-            // Animasi untuk backbone cables (ODP → ODP)
+            // Animasi untuk backbone cables (ODP ? ODP)
             if (backboneLayer) {
                 backboneLayer.eachLayer(function(layer) {
                     if (layer instanceof L.Polyline) {
@@ -1315,7 +1303,7 @@
                 });
             }
             
-            console.log('✅ Data flow animations added');
+            console.log('? Data flow animations added');
         }
         
         // Create animated data flow for cables
@@ -1524,28 +1512,28 @@
         
         // Initialize map when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 DOM Content Loaded - Initializing map...');
+            console.log('?? DOM Content Loaded - Initializing map...');
             initMap();
             
             // Mobile toggle event handler
             const mobileToggle = document.getElementById('mobileToggle');
             if (mobileToggle) {
-                console.log('📱 Mobile toggle button found, adding event listener...');
+                console.log('?? Mobile toggle button found, adding event listener...');
                 mobileToggle.addEventListener('click', function() {
-                    console.log('🔄 Mobile toggle clicked');
+                    console.log('?? Mobile toggle clicked');
                     const controlPanel = document.querySelector('.control-panel');
                     const statsPanel = document.querySelector('.stats-panel');
                     
                     if (controlPanel && statsPanel) {
-                        console.log('📋 Panels found, toggling display...');
+                        console.log('?? Panels found, toggling display...');
                         if (controlPanel.classList.contains('show')) {
                             controlPanel.classList.remove('show');
                             statsPanel.classList.add('show');
-                            console.log('✅ Control panel hidden, stats panel shown');
+                            console.log('? Control panel hidden, stats panel shown');
                         } else {
                             controlPanel.classList.add('show');
                             statsPanel.classList.remove('show');
-                            console.log('✅ Control panel shown, stats panel hidden');
+                            console.log('? Control panel shown, stats panel hidden');
                         }
                         
                         // Add click outside to close
@@ -1554,40 +1542,40 @@
                                 if (!controlPanel.contains(e.target) && !statsPanel.contains(e.target) && !mobileToggle.contains(e.target)) {
                                     controlPanel.classList.remove('show');
                                     statsPanel.classList.remove('show');
-                                    console.log('✅ Panel closed by clicking outside');
+                                    console.log('? Panel closed by clicking outside');
                                 }
                             });
                         }, 100);
                     } else {
-                        console.log('❌ Panels not found');
+                        console.log('? Panels not found');
                     }
                 });
             } else {
-                console.log('❌ Mobile toggle button not found');
+                console.log('? Mobile toggle button not found');
             }
             
             // Mobile layer toggle event handler
             const mobileLayerToggle = document.getElementById('mobileLayerToggle');
             if (mobileLayerToggle) {
-                console.log('🗺️ Mobile layer toggle button found, adding event listener...');
+                console.log('??? Mobile layer toggle button found, adding event listener...');
                 mobileLayerToggle.addEventListener('click', function() {
-                    console.log('🔄 Mobile layer toggle clicked');
+                    console.log('?? Mobile layer toggle clicked');
                     // Toggle layer control visibility
                     const layerControl = document.querySelector('.leaflet-control-layers');
                     if (layerControl) {
                         if (layerControl.classList.contains('show')) {
                             layerControl.classList.remove('show');
-                            console.log('✅ Layer control hidden');
+                            console.log('? Layer control hidden');
                         } else {
                             layerControl.classList.add('show');
-                            console.log('✅ Layer control shown');
+                            console.log('? Layer control shown');
                         }
                     } else {
-                        console.log('❌ Layer control not found');
+                        console.log('? Layer control not found');
                     }
                 });
             } else {
-                console.log('❌ Mobile layer toggle button not found');
+                console.log('? Mobile layer toggle button not found');
             }
         });
     </script>
@@ -1596,3 +1584,4 @@
 </div>
 </body>
 </html>
+

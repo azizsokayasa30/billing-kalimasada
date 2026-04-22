@@ -4132,6 +4132,63 @@ router.get('/areas', getAppSettings, async (req, res) => {
     }
 });
 
+// GET /admin/billing/collector-areas — Mapping Area Kolektor
+router.get('/collector-areas', getAppSettings, async (req, res) => {
+    try {
+        const db = require('../config/billing').db;
+
+        // Ambil semua kolektor beserta area mereka
+        const collectorsRows = await new Promise((resolve, reject) => {
+            db.all(`
+                SELECT c.id, c.name, c.phone, 
+                       (SELECT GROUP_CONCAT(area, ',') FROM collector_areas WHERE collector_id = c.id) as assigned_areas
+                FROM collectors c
+                ORDER BY c.name ASC
+            `, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        // Ambil semua area yang tersedia (dari tabel areas)
+        const allAreas = await new Promise((resolve, reject) => {
+            db.all(`SELECT nama_area FROM areas ORDER BY nama_area ASC`, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+
+        const collectors = collectorsRows.map(c => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone || '-',
+            areas: c.assigned_areas ? c.assigned_areas.split(',') : []
+        }));
+
+        res.render('admin/billing/collector-areas', {
+            page: 'collector-areas',
+            appSettings: req.appSettings,
+            collectors: collectors,
+            areas: allAreas
+        });
+    } catch (error) {
+        console.error('Error loading collector areas:', error);
+        res.status(500).render('error', { message: 'Error loading collector areas', error: error.message, appSettings: req.appSettings });
+    }
+});
+
+// POST /admin/billing/collector-areas/save
+router.post('/collector-areas/save', adminAuth, async (req, res) => {
+    try {
+        const { collector_id, areas } = req.body;
+        await billingManager.saveCollectorAreas(collector_id, areas || []);
+        res.json({ success: true, message: 'Mapping area berhasil diperbarui' });
+    } catch (error) {
+        console.error('Error saving collector areas:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // GET /admin/billing/areas/list — API: daftar area (support filter status=aktif)
 router.get('/areas/list', async (req, res) => {
     try {

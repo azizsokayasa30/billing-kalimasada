@@ -1,0 +1,19 @@
+<!-- THEME HEAD PARTIAL — Kalimasada Theme System v1.0 -->
+<script>
+(function(){
+  try {
+    if (window.__km_theme_init) return;
+    window.__km_theme_init = true;
+    var stored = localStorage.getItem('kalimasada_theme');
+    var theme = (stored === 'dark' || stored === 'light') ? stored
+      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    localStorage.setItem('kalimasada_theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    window.KALIMASADA_THEME = theme;
+  } catch(e) {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+</script>
+<link rel="stylesheet" href="/css/theme-system.css?v=3">
+<link rel="stylesheet" href="/css/kalimasada-theme.css?v=1.0.2">

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pendaftaran Agent - Admin Panel</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     
     <link href="/css/theme.css" rel="stylesheet">
@@ -13,7 +14,7 @@
     <link href="/css/admin-mobile.css" rel="stylesheet">
     <style>
         body {
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         .navbar {
@@ -80,43 +81,15 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../partials/theme-head') %>
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/admin/dashboard">
-                <i class="fas fa-user-tie me-2"></i>
-                Admin Panel
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="/admin/dashboard">
-                    <i class="fas fa-home me-1"></i>Dashboard
-                </a>
-                <a class="nav-link" href="/admin/agents">
-                    <i class="fas fa-users me-1"></i>Manage Agents
-                </a>
-                <a class="nav-link" href="/admin/logout">
-                    <i class="fas fa-sign-out-alt me-1"></i>Logout
-                </a>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container-fluid mt-4">
+    <div class="container-fluid">
+    <div class="row">
+        <%- include('../partials/admin-responsive-sidebar', { page: 'agent-registrations' }) %>
+        <main class="col-md-10 main-content ms-sm-auto">
+            <div class="mt-4">
         <div class="row">
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -451,5 +424,12 @@
             loadAgentRegistrations();
         }
     </script>
+            </div>
+        </main>
+    </div>
+</div>
 </body>
 </html>
+
+
+

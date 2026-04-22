@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -15,7 +15,7 @@
     <link href="/css/admin-mobile.css" rel="stylesheet">
     <style>
         .payment-form {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 1rem;
@@ -58,7 +58,7 @@
         }
         
         .customer-card {
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             border-radius: 8px;
             padding: 1rem;
             margin-bottom: 1rem;
@@ -66,7 +66,7 @@
         }
         
         .invoice-item {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 8px;
             padding: 1rem;
             margin-bottom: 0.5rem;
@@ -98,19 +98,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <!-- Mobile Header -->
@@ -428,3 +416,4 @@
     </script>
 </body>
 </html>
+

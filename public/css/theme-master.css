@@ -1,0 +1,696 @@
+/**
+ * THEME MASTER — Kalimasada Billing System
+ * ==========================================
+ * File ini adalah SATU-SATUNYA sumber kebenaran untuk sistem tema.
+ * Dimuat PALING AKHIR setelah semua CSS lain.
+ *
+ * Prinsip sederhana:
+ *  - DARK  mode = background hitam (#111827),  font putih (#f9fafb)
+ *  - LIGHT mode = background putih (#ffffff),  font hitam (#111827)
+ *
+ * Semua komponen mengikuti prinsip ini tanpa exception,
+ * kecuali: tombol aksi (btn-primary, btn-success, dll) dan badge
+ * yang memang punya warna sendiri.
+ *
+ * Load order: Bootstrap → CSS lain → dark-theme-global → theme-overrides → theme-patch → [THIS FILE]
+ */
+
+/* ============================================================
+   BAGIAN 1 — BOOTSTRAP CSS VARIABLE OVERRIDE
+   Bootstrap 5 pakai CSS vars. Override di sini agar semua
+   komponen Bootstrap otomatis ikut tema.
+   ============================================================ */
+
+/* LIGHT MODE */
+:root,
+[data-theme="light"] {
+  /* Backgrounds */
+  --bs-body-bg:               #f1f5f9;
+  --bs-body-color:            #111827;
+  --bs-card-bg:               #ffffff;
+  --bs-card-color:            #111827;
+  --bs-modal-bg:              #ffffff;
+  --bs-modal-color:           #111827;
+  --bs-table-bg:              transparent;
+  --bs-table-color:           #111827;
+  --bs-table-striped-bg:      rgba(0,0,0,0.03);
+  --bs-table-striped-color:   #111827;
+  --bs-table-hover-bg:        rgba(0,0,0,0.04);
+  --bs-table-hover-color:     #111827;
+  --bs-table-border-color:    #dee2e6;
+  --bs-border-color:          #dee2e6;
+  --bs-border-color-translucent: rgba(0,0,0,.175);
+  --bs-input-bg:              #ffffff;
+  --bs-input-color:           #111827;
+  --bs-input-border-color:    #ced4da;
+  --bs-form-select-bg:        #ffffff;
+  --bs-dropdown-bg:           #ffffff;
+  --bs-dropdown-color:        #111827;
+  --bs-dropdown-border-color: #dee2e6;
+  --bs-dropdown-link-color:   #111827;
+  --bs-list-group-bg:         #ffffff;
+  --bs-list-group-color:      #111827;
+  --bs-list-group-border-color: #dee2e6;
+  --bs-nav-tabs-border-color: #dee2e6;
+  --bs-nav-link-color:        #374151;
+
+  /* Custom vars */
+  --panel-bg:      #ffffff;
+  --panel-accent:  #f8fafc;
+  --panel-border:  #e2e8f0;
+  --bg-page:       #f1f5f9;
+  --text-main:     #111827;
+  --text-muted:    #6b7280;
+  --text-heading:  #0f172a;
+}
+
+/* DARK MODE */
+[data-theme="dark"] {
+  /* Backgrounds */
+  --bs-body-bg:               #111827;
+  --bs-body-color:            #f9fafb;
+  --bs-card-bg:               #1f2937;
+  --bs-card-color:            #f9fafb;
+  --bs-modal-bg:              #1f2937;
+  --bs-modal-color:           #f9fafb;
+  --bs-table-bg:              transparent;
+  --bs-table-color:           #f9fafb;
+  --bs-table-striped-bg:      rgba(255,255,255,0.03);
+  --bs-table-striped-color:   #f9fafb;
+  --bs-table-hover-bg:        rgba(255,255,255,0.06);
+  --bs-table-hover-color:     #f9fafb;
+  --bs-table-border-color:    #374151;
+  --bs-border-color:          #374151;
+  --bs-border-color-translucent: rgba(255,255,255,.15);
+  --bs-input-bg:              #374151;
+  --bs-input-color:           #f9fafb;
+  --bs-input-border-color:    #4b5563;
+  --bs-form-select-bg:        #374151;
+  --bs-dropdown-bg:           #1f2937;
+  --bs-dropdown-color:        #f9fafb;
+  --bs-dropdown-border-color: #374151;
+  --bs-dropdown-link-color:   #d1d5db;
+  --bs-list-group-bg:         #1f2937;
+  --bs-list-group-color:      #f9fafb;
+  --bs-list-group-border-color: #374151;
+  --bs-nav-tabs-border-color: #374151;
+  --bs-nav-link-color:        #9ca3af;
+
+  /* Custom vars */
+  --panel-bg:      #1f2937;
+  --panel-accent:  #374151;
+  --panel-border:  #374151;
+  --bg-page:       #111827;
+  --text-main:     #f9fafb;
+  --text-muted:    #9ca3af;
+  --text-heading:  #f9fafb;
+}
+
+
+/* ============================================================
+   BAGIAN 2 — BODY & PAGE WRAPPER
+   ============================================================ */
+
+/* Light */
+:root body,
+[data-theme="light"] body {
+  background-color: #f1f5f9 !important;
+  color: #111827 !important;
+}
+
+/* Dark */
+[data-theme="dark"] body {
+  background-color: #111827 !important;
+  color: #f9fafb !important;
+}
+
+/* All page container wrappers */
+[data-theme="dark"] .container-fluid,
+[data-theme="dark"] .main-content,
+[data-theme="dark"] .f-main-area,
+[data-theme="dark"] .f-wrapper,
+[data-theme="dark"] .f-container,
+[data-theme="dark"] .page-wrapper,
+[data-theme="dark"] .content-wrapper,
+[data-theme="dark"] .page-content {
+  background-color: transparent !important;
+  color: #f9fafb !important;
+}
+
+[data-theme="light"] .main-content,
+:root .main-content {
+  background-color: #f1f5f9 !important;
+  color: #111827 !important;
+}
+
+
+/* ============================================================
+   BAGIAN 3 — CARDS (Bootstrap .card + custom .f-card, dll)
+   ============================================================ */
+
+/* DARK cards */
+[data-theme="dark"] .card,
+[data-theme="dark"] .f-card,
+[data-theme="dark"] .f-premium-card,
+[data-theme="dark"] .report-card,
+[data-theme="dark"] .panel,
+[data-theme="dark"] .info-card,
+[data-theme="dark"] .payment-card,
+[data-theme="dark"] .collector-card,
+[data-theme="dark"] .form-card,
+[data-theme="dark"] .detail-card,
+[data-theme="dark"] .setting-card {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #f9fafb !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
+  background-image: none !important; /* remove gradients */
+}
+
+[data-theme="dark"] .card-header,
+[data-theme="dark"] .f-card-header {
+  background-color: #374151 !important;
+  border-color: #4b5563 !important;
+  color: #f9fafb !important;
+}
+
+[data-theme="dark"] .card-body,
+[data-theme="dark"] .f-card-body {
+  background-color: transparent !important;
+  color: #f9fafb !important;
+}
+
+[data-theme="dark"] .card-footer,
+[data-theme="dark"] .f-card-footer {
+  background-color: #374151 !important;
+  border-color: #4b5563 !important;
+  color: #d1d5db !important;
+}
+
+/* LIGHT cards */
+[data-theme="light"] .card,
+[data-theme="light"] .card,
+[data-theme="light"] .f-card,
+[data-theme="light"] .f-card,
+[data-theme="light"] .f-premium-card,
+[data-theme="light"] .f-premium-card,
+[data-theme="light"] .report-card,
+[data-theme="light"] .report-card {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+  color: #111827 !important;
+}
+
+[data-theme="light"] .card-header,
+[data-theme="light"] .card-header {
+  background-color: #f9fafb !important;
+  border-color: #e5e7eb !important;
+  color: #111827 !important;
+}
+
+[data-theme="light"] .card-body,
+[data-theme="light"] .card-body {
+  color: #111827 !important;
+}
+
+
+/* ============================================================
+   BAGIAN 4 — TABLES
+   ============================================================ */
+
+/* DARK tables */
+[data-theme="dark"] .table {
+  color: #f9fafb !important;
+  border-color: #374151 !important;
+  --bs-table-bg: transparent;
+  --bs-table-color: #f9fafb;
+  --bs-table-border-color: #374151;
+}
+
+[data-theme="dark"] .table > :not(caption) > * > * {
+  background-color: transparent !important;
+  color: #f9fafb !important;
+  border-color: #374151 !important;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .table thead tr th,
+[data-theme="dark"] .table > thead > tr > th,
+[data-theme="dark"] thead.table-light th,
+[data-theme="dark"] .table-light th,
+[data-theme="dark"] .table-light td {
+  background-color: #374151 !important;
+  color: #d1d5db !important;
+  border-color: #4b5563 !important;
+}
+
+[data-theme="dark"] .table tbody tr {
+  background-color: transparent !important;
+}
+
+[data-theme="dark"] .table tbody td {
+  color: #f9fafb !important;
+  border-color: #374151 !important;
+}
+
+[data-theme="dark"] .table-hover > tbody > tr:hover > * {
+  background-color: rgba(255,255,255,0.06) !important;
+  color: #f9fafb !important;
+}
+
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: rgba(255,255,255,0.03) !important;
+  color: #f9fafb !important;
+}
+
+/* LIGHT tables */
+[data-theme="light"] .table th,
+[data-theme="light"] .table th {
+  background-color: #f1f5f9 !important;
+  color: #111827 !important;
+}
+
+[data-theme="light"] .table td,
+[data-theme="light"] .table td {
+  color: #111827 !important;
+}
+
+
+/* ============================================================
+   BAGIAN 5 — FORMS & INPUTS
+   ============================================================ */
+
+/* DARK */
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select,
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+[data-theme="dark"] textarea,
+[data-theme="dark"] select,
+[data-theme="dark"] .f-input,
+[data-theme="dark"] .f-select {
+  background-color: #374151 !important;
+  color: #f9fafb !important;
+  border-color: #4b5563 !important;
+}
+
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus,
+[data-theme="dark"] input:focus,
+[data-theme="dark"] textarea:focus,
+[data-theme="dark"] select:focus {
+  background-color: #4b5563 !important;
+  color: #f9fafb !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 3px rgba(96,165,250,0.25) !important;
+}
+
+[data-theme="dark"] ::placeholder {
+  color: #6b7280 !important;
+  opacity: 1;
+}
+
+[data-theme="dark"] .input-group-text {
+  background-color: #374151 !important;
+  color: #d1d5db !important;
+  border-color: #4b5563 !important;
+}
+
+[data-theme="dark"] label,
+[data-theme="dark"] .form-label {
+  color: #d1d5db !important;
+}
+
+[data-theme="dark"] .form-text {
+  color: #9ca3af !important;
+}
+
+[data-theme="dark"] select option {
+  background-color: #1f2937;
+  color: #f9fafb;
+}
+
+/* LIGHT */
+[data-theme="light"] .form-control,
+[data-theme="light"] .form-control,
+[data-theme="light"] .form-select,
+[data-theme="light"] .form-select,
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]) {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border-color: #d1d5db !important;
+}
+
+[data-theme="light"] label,
+[data-theme="light"] label {
+  color: #374151 !important;
+}
+
+
+/* ============================================================
+   BAGIAN 6 — TYPOGRAPHY
+   ============================================================ */
+
+/* DARK */
+[data-theme="dark"] h1,[data-theme="dark"] h2,[data-theme="dark"] h3,
+[data-theme="dark"] h4,[data-theme="dark"] h5,[data-theme="dark"] h6 {
+  color: #f9fafb !important;
+}
+
+[data-theme="dark"] p {
+  color: #d1d5db !important;
+}
+
+[data-theme="dark"] small,
+[data-theme="dark"] .text-muted,
+[data-theme="dark"] .text-secondary {
+  color: #9ca3af !important;
+}
+
+[data-theme="dark"] .text-dark { color: #f9fafb !important; }
+[data-theme="dark"] .text-black { color: #f9fafb !important; }
+[data-theme="dark"] .text-body { color: #f9fafb !important; }
+
+/* Semantic colors tetap sama di dark */
+[data-theme="dark"] .text-success  { color: #4ade80 !important; }
+[data-theme="dark"] .text-danger   { color: #f87171 !important; }
+[data-theme="dark"] .text-warning  { color: #fbbf24 !important; }
+[data-theme="dark"] .text-info     { color: #38bdf8 !important; }
+[data-theme="dark"] .text-primary  { color: #60a5fa !important; }
+
+/* LIGHT */
+[data-theme="light"] .text-dark,
+[data-theme="light"] .text-dark { color: #111827 !important; }
+[data-theme="light"] h1,[data-theme="light"] h2,[data-theme="light"] h3,[data-theme="light"] h4,[data-theme="light"] h5,[data-theme="light"] h6,
+[data-theme="light"] h1,[data-theme="light"] h2,[data-theme="light"] h3,
+[data-theme="light"] h4,[data-theme="light"] h5,[data-theme="light"] h6 {
+  color: #111827 !important;
+}
+
+
+/* ============================================================
+   BAGIAN 7 — MODALS
+   ============================================================ */
+
+[data-theme="dark"] .modal-content {
+  background-color: #1f2937 !important;
+  color: #f9fafb !important;
+  border-color: #374151 !important;
+}
+[data-theme="dark"] .modal-header {
+  background-color: #374151 !important;
+  border-color: #4b5563 !important;
+  color: #f9fafb !important;
+}
+[data-theme="dark"] .modal-body {
+  background-color: #1f2937 !important;
+  color: #f9fafb !important;
+}
+[data-theme="dark"] .modal-footer {
+  background-color: #374151 !important;
+  border-color: #4b5563 !important;
+}
+[data-theme="dark"] .modal-title { color: #f9fafb !important; }
+[data-theme="dark"] .btn-close { filter: invert(1) brightness(0.9) !important; }
+
+[data-theme="light"] .modal-content,[data-theme="light"] .modal-content {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+[data-theme="light"] .modal-header,[data-theme="light"] .modal-header {
+  background-color: #f9fafb !important;
+  border-color: #e5e7eb !important;
+  color: #111827 !important;
+}
+[data-theme="light"] .modal-body,[data-theme="light"] .modal-body {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+[data-theme="light"] .btn-close,[data-theme="light"] .btn-close { filter: none !important; }
+
+
+/* ============================================================
+   BAGIAN 8 — DROPDOWNS & NAVIGATION
+   ============================================================ */
+
+[data-theme="dark"] .dropdown-menu {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+}
+[data-theme="dark"] .dropdown-item {
+  color: #d1d5db !important;
+}
+[data-theme="dark"] .dropdown-item:hover {
+  background-color: #374151 !important;
+  color: #f9fafb !important;
+}
+[data-theme="dark"] .dropdown-divider { border-color: #374151 !important; }
+
+
+/* ============================================================
+   BAGIAN 9 — ALERTS
+   ============================================================ */
+
+[data-theme="dark"] .alert-info    { background-color: rgba(56,189,248,0.15) !important; border-color: rgba(56,189,248,0.3) !important; color: #7dd3fc !important; }
+[data-theme="dark"] .alert-success { background-color: rgba(74,222,128,0.15) !important; border-color: rgba(74,222,128,0.3) !important; color: #86efac !important; }
+[data-theme="dark"] .alert-warning { background-color: rgba(251,191,36,0.15) !important; border-color: rgba(251,191,36,0.3) !important; color: #fde68a !important; }
+[data-theme="dark"] .alert-danger  { background-color: rgba(248,113,113,0.15) !important; border-color: rgba(248,113,113,0.3) !important; color: #fca5a5 !important; }
+
+
+/* ============================================================
+   BAGIAN 10 — BADGES (warna semantic tetap ada, pastikan text kontras)
+   ============================================================ */
+
+[data-theme="dark"] .badge.bg-secondary { background-color: #374151 !important; color: #d1d5db !important; }
+[data-theme="dark"] .badge.bg-light     { background-color: #4b5563 !important; color: #f9fafb !important; }
+[data-theme="dark"] .badge.text-dark    { color: #f9fafb !important; }
+[data-theme="dark"] .badge.bg-info      { background-color: rgba(56,189,248,0.25) !important; color: #38bdf8 !important; }
+[data-theme="dark"] .badge.bg-success   { background-color: rgba(74,222,128,0.25) !important; color: #4ade80 !important; }
+[data-theme="dark"] .badge.bg-warning   { background-color: rgba(251,191,36,0.25) !important; color: #fbbf24 !important; }
+[data-theme="dark"] .badge.bg-danger    { background-color: rgba(248,113,113,0.25) !important; color: #f87171 !important; }
+[data-theme="dark"] .badge.bg-primary   { background-color: rgba(96,165,250,0.25) !important; color: #60a5fa !important; }
+
+
+/* ============================================================
+   BAGIAN 11 — LIST GROUP
+   ============================================================ */
+
+[data-theme="dark"] .list-group-item {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #f9fafb !important;
+}
+[data-theme="dark"] .list-group-item:hover,
+[data-theme="dark"] .list-group-item:focus {
+  background-color: #374151 !important;
+  color: #f9fafb !important;
+}
+[data-theme="dark"] .list-group-item.active {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+
+/* ============================================================
+   BAGIAN 12 — PAGINATION
+   ============================================================ */
+
+[data-theme="dark"] .page-link {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #d1d5db !important;
+}
+[data-theme="dark"] .page-link:hover {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+}
+[data-theme="dark"] .page-item.active .page-link {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+}
+
+
+/* ============================================================
+   BAGIAN 13 — BORDERS & DIVIDERS
+   ============================================================ */
+
+[data-theme="dark"] .border,
+[data-theme="dark"] .border-top,
+[data-theme="dark"] .border-bottom,
+[data-theme="dark"] .border-start,
+[data-theme="dark"] .border-end {
+  border-color: #374151 !important;
+}
+[data-theme="dark"] hr { border-color: #374151 !important; opacity: 1; }
+
+
+/* ============================================================
+   BAGIAN 14 — BREADCRUMB
+   ============================================================ */
+
+[data-theme="dark"] .breadcrumb { background-color: transparent !important; }
+[data-theme="dark"] .breadcrumb-item a { color: #9ca3af !important; }
+[data-theme="dark"] .breadcrumb-item.active { color: #d1d5db !important; }
+[data-theme="dark"] .breadcrumb-item + .breadcrumb-item::before { color: #6b7280 !important; }
+
+
+/* ============================================================
+   BAGIAN 15 — BACKGROUND UTILITIES
+   ============================================================ */
+
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-light,
+[data-theme="dark"] .bg-body {
+  background-color: #1f2937 !important;
+  color: #f9fafb !important;
+}
+
+[data-theme="dark"] .bg-dark { background-color: #111827 !important; }
+
+/* Subtle backgrounds */
+[data-theme="dark"] .bg-success-subtle { background-color: rgba(74,222,128,0.12) !important; }
+[data-theme="dark"] .bg-danger-subtle  { background-color: rgba(248,113,113,0.12) !important; }
+[data-theme="dark"] .bg-warning-subtle { background-color: rgba(251,191,36,0.12) !important; }
+[data-theme="dark"] .bg-info-subtle    { background-color: rgba(56,189,248,0.12) !important; }
+[data-theme="dark"] .bg-primary-subtle { background-color: rgba(96,165,250,0.12) !important; }
+
+
+/* ============================================================
+   BAGIAN 16 — TABS & NAV
+   ============================================================ */
+
+[data-theme="dark"] .nav-tabs { border-color: #374151 !important; }
+[data-theme="dark"] .nav-tabs .nav-link { color: #9ca3af !important; }
+[data-theme="dark"] .nav-tabs .nav-link.active {
+  background-color: #1f2937 !important;
+  border-color: #374151 #374151 #1f2937 !important;
+  color: #60a5fa !important;
+}
+[data-theme="dark"] .nav-link { color: #9ca3af !important; }
+[data-theme="dark"] .nav-link:hover { color: #60a5fa !important; }
+
+
+/* ============================================================
+   BAGIAN 17 — FINANCE-MODERN SPECIFIC
+   ============================================================ */
+
+[data-theme="dark"] .f-stat-card { color: #ffffff !important; }
+[data-theme="dark"] .f-header-glass {
+  background: rgba(17, 24, 39, 0.92) !important;
+  border-color: rgba(55,65,81,0.8) !important;
+}
+
+[data-theme="dark"] .f-pl-category-row {
+  background-color: #374151 !important;
+  color: #f9fafb !important;
+}
+[data-theme="dark"] .f-pl-total-row {
+  background-color: #1e3a5f !important;
+  color: #f9fafb !important;
+}
+
+[data-theme="dark"] .mini-stat-grid { background-color: #374151 !important; }
+
+[data-theme="dark"] .collector-selectable-card {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #f9fafb !important;
+}
+
+[data-theme="dark"] .form-highlight {
+  background: linear-gradient(to bottom, #283548, #1f2937) !important;
+  border-color: #374151 !important;
+}
+
+[data-theme="dark"] .f-badge-success { background-color: rgba(74,222,128,0.15) !important; color: #4ade80 !important; }
+[data-theme="dark"] .f-badge-error   { background-color: rgba(248,113,113,0.15) !important; color: #f87171 !important; }
+[data-theme="dark"] .f-badge-info    { background-color: rgba(56,189,248,0.15) !important; color: #38bdf8 !important; }
+[data-theme="dark"] .f-badge-outline { border-color: #4b5563 !important; color: #d1d5db !important; }
+
+
+/* ============================================================
+   BAGIAN 18 — MOBILE / REPORT PAGES SPECIFIC
+   ============================================================ */
+
+/* reports.ejs — mobile style items */
+[data-theme="dark"] .report-item {
+  border-color: #374151 !important;
+}
+[data-theme="dark"] .report-label { color: #f9fafb !important; }
+[data-theme="dark"] .report-value { color: #d1d5db !important; }
+[data-theme="dark"] .report-section h5 { color: #60a5fa !important; }
+
+/* Mobile headers keep gradient but dark version */
+[data-theme="dark"] .mobile-header {
+  /* Keep gradient, just darken */
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important;
+  color: #ffffff !important;
+}
+
+/* stat-card on reports.ejs - already has gradient, keep it */
+[data-theme="dark"] .stat-card {
+  color: #ffffff !important;
+}
+[data-theme="dark"] .stat-value,
+[data-theme="dark"] .stat-label,
+[data-theme="dark"] .stat-icon { color: #ffffff !important; }
+
+
+/* ============================================================
+   BAGIAN 19 — BUTTONS (hanya perbaiki dark-mode outline & secondary)
+   Primary/Success/Danger buttons tetap berwarna di kedua tema
+   ============================================================ */
+
+[data-theme="dark"] .btn-secondary,
+[data-theme="dark"] .btn-light {
+  background-color: #374151 !important;
+  border-color: #4b5563 !important;
+  color: #f9fafb !important;
+}
+[data-theme="dark"] .btn-secondary:hover,
+[data-theme="dark"] .btn-light:hover {
+  background-color: #4b5563 !important;
+  color: #ffffff !important;
+}
+[data-theme="dark"] .btn-outline-secondary {
+  border-color: #4b5563 !important;
+  color: #d1d5db !important;
+}
+[data-theme="dark"] .btn-outline-secondary:hover {
+  background-color: #374151 !important;
+  color: #f9fafb !important;
+}
+
+
+/* ============================================================
+   BAGIAN 20 — SCROLLBAR
+   ============================================================ */
+
+[data-theme="dark"] ::-webkit-scrollbar-track { background: #111827; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #374151; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+
+/* ============================================================
+   BAGIAN 21 — ROW & COL (always transparent!)
+   ============================================================ */
+
+.row, .col, [class*="col-"] { background-color: transparent !important; }
+
+/* ============================================================
+   BAGIAN 22 — SIDEBAR always dark regardless of theme
+   (sidebar variables are hardcoded via .sb class)
+   ============================================================ */
+
+.sb, #adminSidebar, #billingSidebar,
+.sb *, #adminSidebar *, #billingSidebar * {
+  color-scheme: dark !important;
+}
+
+.sb, #adminSidebar, #billingSidebar {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}

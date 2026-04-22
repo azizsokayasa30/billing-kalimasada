@@ -13,7 +13,7 @@
 
 /* ============================================================
    RESET — Netralkan variabel dark-theme-global.css yang aktif
-   di semua tema (karena file itu define di :root, bukan di
+   di semua tema (karena file itu define di [data-theme="light"], bukan di
    [data-theme="dark"])
    ============================================================ */
 
@@ -102,35 +102,28 @@
    ============================================================ */
 
 [data-theme="light"] body,
-:root body {
+[data-theme="light"] body {
   background-color: #f1f5f9 !important;
   color: #0f172a !important;
 }
 
-/* Semua div, span, p harus pakai warna gelap di light mode */
-[data-theme="light"] p,
-[data-theme="light"] span,
-[data-theme="light"] label,
-[data-theme="light"] div:not(.sb):not(.sb *):not(#adminSidebar):not(#adminSidebar *):not(#billingSidebar):not(#billingSidebar *):not(.mobile-navbar):not(.mobile-navbar *) {
-  color: inherit;
-}
-
+/* Removed aggressive inherit rules that break badge/button text colors */
 /* Card di light mode — clean gradient, tinted blue-white */
 [data-theme="light"] .card,
-:root .card {
+[data-theme="light"] .card {
   background: linear-gradient(135deg, #ffffff 0%, #f4f8fc 100%) !important;
   border-color: #dde6f0 !important;
   color: #020617 !important;
   box-shadow: 0 2px 8px rgba(37,99,235,0.06), 0 1px 3px rgba(0,0,0,0.04) !important;
 }
 [data-theme="light"] .card-header,
-:root .card-header {
+[data-theme="light"] .card-header {
   background: linear-gradient(90deg, #f8fafc 0%, #eff6ff 100%) !important;
   border-color: #dde6f0 !important;
   color: #020617 !important;
 }
 [data-theme="light"] .card-body,
-:root .card-body { color: #020617 !important; }
+[data-theme="light"] .card-body { color: #020617 !important; }
 
 
 /* Tables di light mode */
@@ -158,12 +151,12 @@
 
 /* bg-light di light mode harus memang terang */
 [data-theme="light"] .bg-light,
-:root .bg-light {
+[data-theme="light"] .bg-light {
   background-color: #f8fafc !important;
   color: #334155 !important;
 }
 [data-theme="light"] .bg-white,
-:root .bg-white {
+[data-theme="light"] .bg-white {
   background-color: #ffffff !important;
 }
 
@@ -172,7 +165,7 @@
    ============================================================ */
 
 /* Modal utama: background putih solid */
-:root .modal-content,
+[data-theme="light"] .modal-content,
 [data-theme="light"] .modal-content {
   background-color: #ffffff !important;
   color: #0f172a !important;
@@ -181,7 +174,7 @@
 }
 
 /* Modal header: background terang */
-:root .modal-header,
+[data-theme="light"] .modal-header,
 [data-theme="light"] .modal-header {
   background-color: #f8fafc !important;
   border-bottom: 1px solid #dee2e6 !important;
@@ -189,30 +182,30 @@
 }
 
 /* Modal body: pastikan putih solid, tidak transparan */
-:root .modal-body,
+[data-theme="light"] .modal-body,
 [data-theme="light"] .modal-body {
   background-color: #ffffff !important;
   color: #0f172a !important;
 }
 
 /* Modal footer: terang */
-:root .modal-footer,
+[data-theme="light"] .modal-footer,
 [data-theme="light"] .modal-footer {
   background-color: #f8fafc !important;
   border-top: 1px solid #dee2e6 !important;
 }
 
 /* Tombol close di light mode — tidak perlu invert */
-:root .btn-close,
+[data-theme="light"] .btn-close,
 [data-theme="light"] .btn-close {
   filter: none !important;
 }
 
 /* Input di dalam modal di light mode */
-:root .modal-body .form-control,
-:root .modal-body .form-select,
-:root .modal-body textarea,
-:root .modal-body input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="light"] .modal-body .form-control,
+[data-theme="light"] .modal-body .form-select,
+[data-theme="light"] .modal-body textarea,
+[data-theme="light"] .modal-body input:not([type="checkbox"]):not([type="radio"]),
 [data-theme="light"] .modal-body .form-control,
 [data-theme="light"] .modal-body .form-select,
 [data-theme="light"] .modal-body textarea,
@@ -223,7 +216,7 @@
 }
 
 /* Input group text di modal light mode */
-:root .modal-body .input-group-text,
+[data-theme="light"] .modal-body .input-group-text,
 [data-theme="light"] .modal-body .input-group-text {
   background-color: #f1f5f9 !important;
   color: #374151 !important;
@@ -231,28 +224,28 @@
 }
 
 /* Label dalam modal light mode */
-:root .modal-body label,
-:root .modal-body .form-label,
+[data-theme="light"] .modal-body label,
+[data-theme="light"] .modal-body .form-label,
 [data-theme="light"] .modal-body label,
 [data-theme="light"] .modal-body .form-label {
   color: #1e293b !important;
 }
 
 /* Modal title */
-:root .modal-title,
+[data-theme="light"] .modal-title,
 [data-theme="light"] .modal-title {
   color: #0f172a !important;
 }
 
 /* Select option di light mode modal */
-:root .modal-body select option,
+[data-theme="light"] .modal-body select option,
 [data-theme="light"] .modal-body select option {
   background-color: #ffffff;
   color: #0f172a;
 }
 
 /* Form text/hint di modal */
-:root .modal-body .form-text,
+[data-theme="light"] .modal-body .form-text,
 [data-theme="light"] .modal-body .form-text {
   color: #64748b !important;
 }
@@ -639,102 +632,7 @@
 /* Chart backgrounds */
 [data-theme="dark"] canvas { filter: none; }
 
-/* ============================================================
-   SIDEBAR — SELALU GELAP, TIDAK BERUBAH DENGAN TEMA
-   Sidebar menggunakan class .sb, #adminSidebar, #billingSidebar
-   Variabel --sb-* sudah hardcode ke warna gelap di :root
-   ============================================================ */
-
-/* Pastikan sidebar tidak terpengaruh theme switch */
-.sb,
-#adminSidebar,
-#billingSidebar,
-.sb *,
-#adminSidebar *,
-#billingSidebar * {
-  color-scheme: dark !important;
-}
-
-.sb,
-#adminSidebar,
-#billingSidebar {
-  background-color: #0f172a !important;
-  color: #f8fafc !important;
-}
-
-/* Brand/header sidebar */
-.sb .sb-header { background-color: #0f172a !important; }
-.sb .sb-brand-name { color: #f8fafc !important; font-weight: 700 !important; }
-.sb .sb-brand-tag { color: #64748b !important; }
-
-/* Nav items text — kontras di sidebar gelap */
-.sb .sb-item {
-  color: #94a3b8 !important;
-  background: transparent !important;
-}
-.sb .sb-item i { color: #475569 !important; }
-.sb .sb-item:hover {
-  background-color: #1e293b !important;
-  color: #f1f5f9 !important;
-}
-.sb .sb-item:hover i { color: #3b82f6 !important; }
-.sb .sb-item.active {
-  background-color: #1d4ed8 !important;
-  color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(29,78,216,0.5) !important;
-}
-.sb .sb-item.active i { color: #ffffff !important; }
-
-/* Section titles di sidebar */
-.sb .sb-section-title {
-  color: #475569 !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.08em;
-}
-.sb .sb-section-title.sb-collapsible:hover {
-  background-color: #1e293b !important;
-  color: #64748b !important;
-}
-.sb .sb-chevron { color: #475569 !important; }
-
-/* Divider di sidebar */
-.sb .sb-section-divider {
-  background-color: #1e293b !important;
-}
-
-/* Footer sidebar */
-.sb .sb-footer {
-  background-color: #0a1120 !important;
-  border-top: 1px solid #1e293b !important;
-}
-.sb .sb-action-btn {
-  background: transparent !important;
-  border-color: rgba(255,255,255,0.08) !important;
-  color: #94a3b8 !important;
-}
-.sb .sb-action-btn:hover {
-  background-color: #1e293b !important;
-  color: #3b82f6 !important;
-  border-color: rgba(59,130,246,0.3) !important;
-}
-.sb .sb-action-logout:hover {
-  color: #f87171 !important;
-  background-color: rgba(239,68,68,0.1) !important;
-  border-color: rgba(239,68,68,0.3) !important;
-}
-.sb .sb-time-label { color: #475569 !important; font-size: 9px !important; }
-.sb .sb-time-value { color: #64748b !important; font-size: 11px !important; }
-.sb .sb-version-tag { color: #475569 !important; }
-.sb .sb-version-build { color: #334155 !important; }
-
-/* Mobile navbar — selalu gelap */
-.mobile-navbar,
-.mobile-navbar * {
-  background-color: #0f172a !important;
-  border-color: #1e293b !important;
-}
-.mobile-navbar .navbar-brand,
-.mobile-navbar .mobile-nav-title { color: #f8fafc !important; }
+/* Sidebar styles moved to kalimasada-sidebar.css */
 .mobile-navbar .btn { color: #f8fafc !important; }
 
 /* Theme toggle button di sidebar */
@@ -755,14 +653,14 @@
    ============================================================ */
 
 /* Section card headers di light mode — kontras bagus */
-:root .section-card-header,
+[data-theme="light"] .section-card-header,
 [data-theme="light"] .section-card-header {
   background-color: #1e293b !important;
   color: #ffffff !important;
 }
 
 /* Stats info di light mode */
-:root .stats-info,
+[data-theme="light"] .stats-info,
 [data-theme="light"] .stats-info {
   background-color: #f1f5f9 !important;
   border-left-color: #94a3b8 !important;
@@ -770,21 +668,21 @@
 }
 
 /* Light mode badge subtle */
-:root .bg-success-subtle { background-color: #dcfce7 !important; }
-:root .bg-danger-subtle  { background-color: #fee2e2 !important; }
-:root .bg-warning-subtle { background-color: #fef9c3 !important; }
-:root .bg-info-subtle    { background-color: #e0f2fe !important; }
-:root .bg-primary-subtle { background-color: #dbeafe !important; }
-:root .text-success      { color: #16a34a !important; }
-:root .text-danger       { color: #dc2626 !important; }
-:root .text-warning      { color: #d97706 !important; }
-:root .text-info         { color: #0284c7 !important; }
-:root .text-primary      { color: #2563eb !important; }
+[data-theme="light"] .bg-success-subtle { background-color: #dcfce7 !important; }
+[data-theme="light"] .bg-danger-subtle  { background-color: #fee2e2 !important; }
+[data-theme="light"] .bg-warning-subtle { background-color: #fef9c3 !important; }
+[data-theme="light"] .bg-info-subtle    { background-color: #e0f2fe !important; }
+[data-theme="light"] .bg-primary-subtle { background-color: #dbeafe !important; }
+[data-theme="light"] .text-success      { color: #16a34a !important; }
+[data-theme="light"] .text-danger       { color: #dc2626 !important; }
+[data-theme="light"] .text-warning      { color: #d97706 !important; }
+[data-theme="light"] .text-info         { color: #0284c7 !important; }
+[data-theme="light"] .text-primary      { color: #2563eb !important; }
 
 /* Jangan override di dalam sidebar untuk light mode */
-:root .sb .text-success,
-:root .sb .text-danger,
-:root .sb .text-primary,
+[data-theme="light"] .sb .text-success,
+[data-theme="light"] .sb .text-danger,
+[data-theme="light"] .sb .text-primary,
 [data-theme="light"] .sb .text-success,
 [data-theme="light"] .sb .text-danger,
 [data-theme="light"] .sb .text-primary {
@@ -803,9 +701,9 @@
 }
 
 /* Light mode: pastikan teks gelap */
-:root .card .fw-bold,
 [data-theme="light"] .card .fw-bold,
-:root .card strong,
+[data-theme="light"] .card .fw-bold,
+[data-theme="light"] .card strong,
 [data-theme="light"] strong {
   color: #0f172a !important;
 }
@@ -823,3 +721,258 @@
 .toast.bg-danger, [data-theme='dark'] .toast.bg-danger { background-color: #dc3545 !important; color: #ffffff !important; opacity: 1 !important; border: none !important; }
 .toast.bg-info, [data-theme='dark'] .toast.bg-info { background-color: #0dcaf0 !important; color: #ffffff !important; opacity: 1 !important; border: none !important; }
 .toast.bg-warning, [data-theme='dark'] .toast.bg-warning { background-color: #ffc107 !important; color: #212529 !important; opacity: 1 !important; border: none !important; }
+
+/* ============================================================
+   ULTIMATE DARK MODE ENFORCER
+   Mengatasi inline <style> dan utility classes yang masih putih
+   ============================================================ */
+
+/* Paksa komponen spesifik untuk menggunakan background gelap di dark mode */
+[data-theme="dark"] .navbar,
+[data-theme="dark"] .navbar-light,
+[data-theme="dark"] .navbar.bg-white,
+[data-theme="dark"] .navbar[style*="background"],
+[data-theme="dark"] .content-card,
+[data-theme="dark"] .metric-card,
+[data-theme="dark"] .user-profile,
+[data-theme="dark"] .sb-app-dropdown,
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-light,
+[data-theme="dark"] .card-header.bg-white,
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .stats-card,
+[data-theme="dark"] #technicianSidebar {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+    border-color: #334155 !important;
+}
+
+[data-theme="dark"] .navbar .nav-link,
+[data-theme="dark"] .navbar .navbar-brand,
+[data-theme="dark"] .navbar i {
+    color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .navbar .nav-link:hover,
+[data-theme="dark"] .navbar .nav-link.active {
+    color: #60a5fa !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme="dark"] .text-muted,
+[data-theme="dark"] .content-card .text-muted,
+[data-theme="dark"] .metric-card .text-muted {
+    color: #94a3b8 !important;
+}
+
+/* Meng-override hardcoded inline background style (background: white / #fff) */
+[data-theme="dark"] [style*="background: white"],
+[data-theme="dark"] [style*="background: #fff"],
+[data-theme="dark"] [style*="background:#fff"],
+[data-theme="dark"] [style*="background-color: white"],
+[data-theme="dark"] [style*="background-color: #fff"],
+[data-theme="dark"] [style*="background-color:#fff"],
+[data-theme="dark"] [style*="background-color: #ffffff"],
+[data-theme="dark"] [style*="background-color:#ffffff"] {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+    border-color: #334155 !important;
+}
+
+/* Fix text yang tidak terbaca karena text-dark atau inline text hitam di mode gelap */
+[data-theme="dark"] .text-dark,
+[data-theme="dark"] [style*="color: #2d3436"],
+[data-theme="dark"] [style*="color:#2d3436"],
+[data-theme="dark"] [style*="color: #000"],
+[data-theme="dark"] [style*="color:#000"] {
+    color: #f1f5f9 !important;
+}
+
+/* ============================================================
+   SPECIFIC PAGE OVERRIDES (Voucher Template & Settings)
+   ============================================================ */
+
+/* Print Voucher Page Overrides */
+[data-theme="dark"] .page-header,
+[data-theme="dark"] .controls-panel,
+[data-theme="dark"] .preview-area,
+[data-theme="dark"] .voucher-card-modern,
+[data-theme="dark"] .template-compact {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+    border-color: #334155 !important;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3) !important;
+}
+
+[data-theme="dark"] .preview-header {
+    border-bottom-color: #334155 !important;
+}
+
+[data-theme="dark"] .voucher-credentials,
+[data-theme="dark"] .voucher-info-section {
+    background: #0f172a !important;
+    background-image: none !important;
+    color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .credential-item,
+[data-theme="dark"] .voucher-footer-modern {
+    border-color: #334155 !important;
+}
+
+[data-theme="dark"] .credential-label,
+[data-theme="dark"] .info-label {
+    color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .credential-value,
+[data-theme="dark"] .info-value,
+[data-theme="dark"] .voucher-company-name {
+    color: #f1f5f9 !important;
+}
+
+/* Setting Umum Page Overrides */
+[data-theme="dark"] .settings-card {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+    border-color: #334155 !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
+}
+
+[data-theme="dark"] .setting-item {
+    border-bottom-color: rgba(255,255,255,0.05) !important;
+}
+
+[data-theme="dark"] .setting-label {
+    color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .setting-value {
+    color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select {
+    background-color: #0f172a !important;
+    border-color: #334155 !important;
+    color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .mobile-header {
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important;
+}
+
+[data-theme="dark"] .slider {
+    background-color: #334155 !important;
+}
+
+[data-theme="dark"] .slider:before {
+    background-color: #f1f5f9 !important;
+}
+
+/* Mobile Billing & Admin Mobile Components */
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .menu-card,
+[data-theme="dark"] .quick-actions,
+[data-theme="dark"] .mobile-map-stats,
+[data-theme="dark"] .mobile-map-controls,
+[data-theme="dark"] .mobile-map-legend,
+[data-theme="dark"] .mobile-map-stat {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+    border-color: #334155 !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
+}
+
+[data-theme="dark"] .stat-label,
+[data-theme="dark"] .menu-description,
+[data-theme="dark"] .mobile-map-stat-label {
+    color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .stat-value,
+[data-theme="dark"] .menu-title,
+[data-theme="dark"] .mobile-map-stat-number {
+    color: #f1f5f9 !important;
+}
+
+/* Admin Setting Page Overrides */
+[data-theme="dark"] .form-section,
+[data-theme="dark"] .qr-container,
+[data-theme="dark"] #wa-qr-div,
+[data-theme="dark"] .logo-preview {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+    border-color: #334155 !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
+}
+
+[data-theme="dark"] .command-card {
+    background: #0f172a !important;
+    background-color: #0f172a !important;
+    color: #f1f5f9 !important;
+    border-color: #334155 !important;
+}
+
+[data-theme="dark"] .command-list code {
+    background: #334155 !important;
+    color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .logo-preview {
+    border-style: dashed !important;
+    border-color: #475569 !important;
+}
+
+[data-theme="dark"] .alert-custom {
+    background-color: rgba(30, 41, 59, 0.5) !important;
+    color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .text-muted {
+    color: #94a3b8 !important;
+}
+
+/* ULTIMATE BACKGROUND ENFORCER */
+[data-theme="dark"],
+[data-theme="dark"] body,
+[data-theme="dark"] .main-content,
+[data-theme="dark"] .container-fluid,
+[data-theme="dark"] .container,
+[data-theme="dark"] main {
+    background-color: #0f172a !important;
+    background: #0f172a !important;
+}
+
+/* Override Mobile specific variables */
+[data-theme="dark"] {
+    --admin-primary: #60a5fa;
+    --admin-secondary: #3b82f6;
+    --admin-accent: #38bdf8;
+    --admin-light: #0f172a;
+    --admin-dark: #f1f5f9;
+    --admin-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+
+/* Bottom Nav Fixes */
+[data-theme="dark"] .bottom-nav {
+    background: linear-gradient(180deg, #0f172a, #020617) !important;
+    border-top-color: #334155 !important;
+}
+
+[data-theme="dark"] .nav-item {
+    color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .nav-item.active,
+[data-theme="dark"] .nav-item:hover {
+    color: #f1f5f9 !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+

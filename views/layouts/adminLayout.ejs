@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <!-- Theme Init: Jalankan SEBELUM render untuk mencegah FOUC -->
@@ -85,19 +85,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=3" rel="stylesheet">
-    <link href="/css/theme-system.css?v=3" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1735" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../partials/theme-head') %>
 </head>
 <body>
 <div class="container-fluid">
@@ -194,14 +182,14 @@ $(function() {
       success: function(res) {
         let notif = $('#restartNotif');
         if (res.success) {
-          // Mode development: server dimanage nodemon — tampilkan info, jangan redirect
+          // Mode development: server dimanage nodemon â€” tampilkan info, jangan redirect
           if (res.mode === 'development') {
             notif.removeClass('d-none alert-danger alert-success')
                  .addClass('alert-info')
                  .html('<i class="bi bi-info-circle-fill me-2"></i><strong>Mode Development</strong> &mdash; Server berjalan via <strong>nodemon</strong>. Tidak perlu restart manual. Simpan file apapun untuk memicu reload otomatis.');
             setTimeout(function() { notif.addClass('d-none'); }, 6000);
             $btn.prop('disabled', false).html(originalText);
-            return; // STOP — jangan mulai countdown atau redirect
+            return; // STOP â€” jangan mulai countdown atau redirect
           }
           // Mode production (PM2): jalankan countdown dan redirect ke login
           restartSuccess = true;
@@ -227,3 +215,4 @@ $(function() {
 </script>
 </body>
 </html>
+

@@ -21,19 +21,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -453,7 +441,7 @@
 
             // Load profiles into Add form on open
             $('#addPackageModal').on('shown.bs.modal', function(){
-                console.log('🔍 Modal opened - resetting form...');
+                console.log('?? Modal opened - resetting form...');
                 // Reset form and hide tax group
                 $('#addPackageForm')[0].reset();
                 $('#enable_tax').prop('checked', false);
@@ -733,7 +721,7 @@
             const sel = document.querySelector(selectSelector);
             if (!sel) return;
             
-            console.log('🔍 Loading PPPoE profiles:', { selectSelector, selectedValue, routerId });
+            console.log('?? Loading PPPoE profiles:', { selectSelector, selectedValue, routerId });
             
             // If router_id is provided, filter profiles by NAS
             let url = '/admin/mikrotik/profiles/api';
@@ -747,22 +735,22 @@
             
             fetch(url)
                 .then(r => {
-                    console.log('📡 API Response status:', r.status);
+                    console.log('?? API Response status:', r.status);
                     return r.json();
                 })
                 .then(data => {
-                    console.log('📦 API Response data:', data);
+                    console.log('?? API Response data:', data);
                     let profiles = [];
                     if (data && data.success && Array.isArray(data.profiles)) {
                         profiles = data.profiles;
-                        console.log('✅ Profiles received:', profiles.length);
+                        console.log('? Profiles received:', profiles.length);
                         
                         // Store all profiles if not router-specific
                         if (!routerId) {
                             allProfiles = profiles;
                         }
                     } else {
-                        console.warn('⚠️ Invalid response format:', data);
+                        console.warn('?? Invalid response format:', data);
                     }
                     
                     // Build unique name list from profiles
@@ -776,7 +764,7 @@
                             console.log(`Profile ${p.name}: nas_id=${p.nas_id}, routerId=${routerId}, matches=${matches}`);
                             return matches;
                         });
-                        console.log(`🔍 Filtered profiles for router ${routerId}:`, filteredProfiles.length);
+                        console.log(`?? Filtered profiles for router ${routerId}:`, filteredProfiles.length);
                     }
                     
                     // Build unique name list
@@ -785,7 +773,7 @@
                         return (p.name || p['name'] || '').trim();
                     }).filter(Boolean)));
                     
-                    console.log('📝 Profile names found:', names);
+                    console.log('?? Profile names found:', names);
                     
                     // Fallback ensure 'default' exists if we have profiles
                     if (names.length > 0 && !names.includes('default')) {
@@ -801,7 +789,7 @@
                         opt.textContent = 'Tidak ada profile untuk NAS ini';
                         sel.appendChild(opt);
                         sel.disabled = false;
-                        console.warn('⚠️ No profiles found for router:', routerId);
+                        console.warn('?? No profiles found for router:', routerId);
                         return;
                     }
                     
@@ -812,7 +800,7 @@
                         opt.textContent = 'default';
                         sel.appendChild(opt);
                         sel.value = 'default';
-                        console.warn('⚠️ No profiles available, using default');
+                        console.warn('?? No profiles available, using default');
                         return;
                     }
                     
@@ -831,7 +819,7 @@
                         sel.value = names[0];
                     }
                     
-                    console.log('✅ Profile dropdown populated. Selected:', sel.value);
+                    console.log('? Profile dropdown populated. Selected:', sel.value);
                     
                     // If selectedValue is not in list but exists, append it
                     if (selectedValue && !names.includes(selectedValue) && selectedValue !== 'default') {
@@ -840,11 +828,11 @@
                         opt.textContent = selectedValue;
                         sel.appendChild(opt);
                         sel.value = selectedValue;
-                        console.log('➕ Added missing profile to dropdown:', selectedValue);
+                        console.log('? Added missing profile to dropdown:', selectedValue);
                     }
                 })
                 .catch(err => {
-                    console.error('❌ Error loading PPPoE profiles:', err);
+                    console.error('? Error loading PPPoE profiles:', err);
                     if (typeof showAlert === 'function') {
                         showAlert('danger', 'Gagal memuat PPPoE profiles dari Mikrotik: ' + err.message);
                     }
@@ -897,7 +885,7 @@
             e.preventDefault();
             
             // Debug logging
-            console.log('🔍 Form submission debug:');
+            console.log('?? Form submission debug:');
             console.log('   - Checkbox checked:', $('#enable_tax').is(':checked'));
             console.log('   - Tax rate input value:', $('#tax_rate').val());
             console.log('   - Tax rate input disabled:', $('#tax_rate').prop('disabled'));
@@ -1029,16 +1017,16 @@
                         // Load profiles based on selected router_id, then set selection and show modal
                         const routerId = package.router_id || null;
                         const selected = package.pppoe_profile || 'default';
-                        console.log('🔍 Edit package - Loading profiles:', { routerId, selected, package });
+                        console.log('?? Edit package - Loading profiles:', { routerId, selected, package });
                         
                         // Always load profiles, even if router_id is not set
                         if (routerId) {
                             // Load profiles from specific router
-                            console.log('📡 Loading profiles from router:', routerId);
+                            console.log('?? Loading profiles from router:', routerId);
                             loadPPPoEProfiles('#edit_pppoe_profile', selected, parseInt(routerId));
                         } else {
                             // Load all profiles if no router_id
-                            console.log('📡 Loading all profiles (no router_id)');
+                            console.log('?? Loading all profiles (no router_id)');
                             loadPPPoEProfiles('#edit_pppoe_profile', selected, null);
                         }
                         <% } %>

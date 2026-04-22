@@ -1,29 +1,61 @@
 const fs = require('fs');
+const path = require('path');
 
-const FILE_PATH = 'views/admin/billing/customers.ejs';
-let content = fs.readFileSync(FILE_PATH, 'utf8');
+const filesToUpdate = [
+    'views/admin/billing/expenses.ejs',
+    'views/admin/billing/financial-report.ejs',
+    'views/admin/billing/monthly-summary.ejs',
+    'views/admin/billing/invoices.ejs'
+];
 
-// Include all filters in the hidden inputs of both timeFilterForm and the main filter form
-// First fix timeFilterForm
-const timeFilterFormReplacement = `                    <!-- Carry over other filters so we don't lose them -->
-                    <% if(typeof filters !== 'undefined') { %>
-                        <% if(filters.package_id) { %><input type="hidden" name="package_id" value="<%= filters.package_id %>"><% } %>
-                        <% if(filters.area) { %><input type="hidden" name="area" value="<%= filters.area %>"><% } %>
-                        <% if(filters.collector_id) { %><input type="hidden" name="collector_id" value="<%= filters.collector_id %>"><% } %>
-                        <% if(filters.payment_status) { %><input type="hidden" name="payment_status" value="<%= filters.payment_status %>"><% } %>
-                        <% if(filters.customer_type) { %><input type="hidden" name="customer_type" value="<%= filters.customer_type %>"><% } %>
-                    <% } %>`;
+for (const relPath of filesToUpdate) {
+    const fullPath = path.join(__dirname, '..', relPath);
+    if (!fs.existsSync(fullPath)) continue;
 
-content = content.replace(/<!-- Carry over other filters so we don't lose them -->[\s\S]*?<% } %>/g, timeFilterFormReplacement);
+    let content = fs.readFileSync(fullPath, 'utf8');
 
-// Main filter form needs to carry over month/year/customer_type
-const mainFormReplacement = `<form method="GET" action="/admin/billing/customers" class="row mb-4 bg-light p-3 rounded border mx-0">
-                            <!-- Preserve time filters and customer_type -->
-                            <% if(typeof selectedMonth !== 'undefined') { %><input type="hidden" name="month" value="<%= selectedMonth %>"><% } %>
-                            <% if(typeof selectedYear !== 'undefined') { %><input type="hidden" name="year" value="<%= selectedYear %>"><% } %>
-                            <% if(typeof filters !== 'undefined' && filters.customer_type) { %><input type="hidden" name="customer_type" value="<%= filters.customer_type %>"><% } %>`;
+    // 1. Change container-fluid to container at the outermost level
+    // Some files might have multiple container-fluids, we want the body direct child usually,
+    // or we can just replace all <div class="container-fluid"> with <div class="container">
+    if (relPath !== 'views/admin/billing/invoice-print.ejs') {
+        content = content.replace(/<div class="container-fluid( px-3)?">/g, '<div class="container">');
+    }
 
-content = content.replace('<form method="GET" action="/admin/billing/customers" class="row mb-4 bg-light p-3 rounded border mx-0">', mainFormReplacement);
+    // 2. Move Refresh & Export buttons to top right
+    if (relPath === 'views/admin/billing/expenses.ejs') {
+        const topHtml = `<div>
+                        <a href="/admin/billing/expenses" class="btn btn-outline-secondary me-2">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </a>
+                        <button type="button" class="btn btn-outline-success me-2" onclick="exportToCSV()">
+                            <i class="bi bi-download"></i> Export CSV
+                        </button>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
+                            <i class="bi bi-plus-lg"></i> Tambah Pengeluaran
+                        </button>
+                    </div>`;
+        content = content.replace(/<div>\s*<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addExpenseModal">[\s\S]*?<\/div>/, topHtml);
+        
+        // Remove from form
+        const filterHtml = `<div class="col-md-3">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-search"></i> Filter
+                                </button>
+                            </div>
+                        </form>`;
+        content = content.replace(/<div class="col-md-3">\s*<button type="submit" class="btn btn-primary">[\s\S]*?<\/form>/, filterHtml);
+    }
+    
+    if (relPath === 'views/admin/billing/financial-report.ejs') {
+        // financial-report.ejs buttons might be different
+        // They typically have Export/Print. Let's see if there are buttons to move.
+        // Actually financial report ONLY has form filters. We can move them if they exist.
+    }
+    
+    if (relPath === 'views/admin/billing/monthly-summary.ejs') {
+        // Already top right, but maybe a container change is enough
+    }
 
-fs.writeFileSync(FILE_PATH, content, 'utf8');
-console.log('Fixed EJS state preservation');
+    fs.writeFileSync(fullPath, content, 'utf8');
+    console.log(`Updated ${relPath}`);
+}

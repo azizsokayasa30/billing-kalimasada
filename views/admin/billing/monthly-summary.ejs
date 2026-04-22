@@ -27,7 +27,7 @@
             padding: 1.25rem;
         }
         .stat-item {
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 10px;
@@ -43,7 +43,7 @@
             margin-bottom: 20px;
         }
         .stat-item {
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 10px;
@@ -58,7 +58,7 @@
         }
         .chart-container {
             height: 300px;
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             border-radius: 10px;
             padding: 20px;
             margin: 20px 0;
@@ -80,7 +80,7 @@
             margin-bottom: 20px;
         }
         .metric-card {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 10px;
             padding: 15px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
@@ -113,7 +113,7 @@
         }
         .chart-container {
             height: 300px;
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             border-radius: 10px;
             padding: 20px;
             margin: 20px 0;
@@ -171,19 +171,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -496,13 +484,13 @@
                 document.getElementById('revenueGrowth').textContent = revenueGrowth + '%';
                 const revenueIndicator = document.getElementById('revenueGrowthIndicator');
                 if (revenueGrowth > 0) {
-                    revenueIndicator.textContent = '↗ ' + revenueGrowth + '%';
+                    revenueIndicator.textContent = '? ' + revenueGrowth + '%';
                     revenueIndicator.className = 'growth-indicator growth-positive';
                 } else if (revenueGrowth < 0) {
-                    revenueIndicator.textContent = '↘ ' + revenueGrowth + '%';
+                    revenueIndicator.textContent = '? ' + revenueGrowth + '%';
                     revenueIndicator.className = 'growth-indicator growth-negative';
                 } else {
-                    revenueIndicator.textContent = '→ ' + revenueGrowth + '%';
+                    revenueIndicator.textContent = '? ' + revenueGrowth + '%';
                     revenueIndicator.className = 'growth-indicator growth-neutral';
                 }
             } else {
@@ -520,13 +508,13 @@
                 document.getElementById('customerGrowth').textContent = customerGrowth + '%';
                 const customerIndicator = document.getElementById('customerGrowthIndicator');
                 if (customerGrowth > 0) {
-                    customerIndicator.textContent = '↗ ' + customerGrowth + '%';
+                    customerIndicator.textContent = '? ' + customerGrowth + '%';
                     customerIndicator.className = 'growth-indicator growth-positive';
                 } else if (customerGrowth < 0) {
-                    customerIndicator.textContent = '↘ ' + customerGrowth + '%';
+                    customerIndicator.textContent = '? ' + customerGrowth + '%';
                     customerIndicator.className = 'growth-indicator growth-negative';
                 } else {
-                    customerIndicator.textContent = '→ ' + customerGrowth + '%';
+                    customerIndicator.textContent = '? ' + customerGrowth + '%';
                     customerIndicator.className = 'growth-indicator growth-neutral';
                 }
             } else {
@@ -832,7 +820,7 @@
 
         // Monthly Reset Function
         async function monthlyReset() {
-            if (!confirm('⚠️ PERINGATAN!\n\nAnda akan melakukan reset bulanan yang akan:\n\n✅ Menyimpan snapshot data bulanan\n🔄 Reset statistik ke nol\n📊 Data historis tetap tersimpan\n\nApakah Anda yakin ingin melanjutkan?')) {
+            if (!confirm('?? PERINGATAN!\n\nAnda akan melakukan reset bulanan yang akan:\n\n? Menyimpan snapshot data bulanan\n?? Reset statistik ke nol\n?? Data historis tetap tersimpan\n\nApakah Anda yakin ingin melanjutkan?')) {
                 return;
             }
 
@@ -905,3 +893,4 @@
     </script>
 </body>
 </html>
+

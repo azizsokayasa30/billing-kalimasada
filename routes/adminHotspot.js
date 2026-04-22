@@ -1471,6 +1471,7 @@ router.get('/active-users', async (req, res) => {
 
 // GET: Tampilkan halaman voucher hotspot
 router.get('/voucher', async (req, res) => {
+    const db = new sqlite3.Database(DB_PATH);
     let userAuthMode = 'mikrotik';
     let routers = [];
     let routersProfiles = [];

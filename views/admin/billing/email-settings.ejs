@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -12,7 +12,7 @@
     <link href="/css/admin-mobile.css" rel="stylesheet">
     <style>
         .status-card {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 15px;
             padding: 1.5rem;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
@@ -21,7 +21,7 @@
         }
         
         .template-card {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 15px;
             padding: 1.5rem;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
@@ -108,7 +108,7 @@
         
         .template-disabled {
             opacity: 0.6;
-            background-color: #f8f9fa !important;
+            background-color: var(--bg-secondary, #f8f9fa) !important;
         }
         
         .template-enabled {
@@ -129,24 +129,12 @@
         .variable-list {
             margin-bottom: 1rem;
             padding: 0.5rem;
-            background: #f8f9fa;
+            background: var(--bg-secondary, #f8f9fa);
             border-radius: 5px;
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -234,7 +222,7 @@
                                 <!-- Invoice Created Template -->
                                 <div class="mb-4">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h5>📋 Invoice Created Notification</h5>
+                                        <h5>ðŸ“‹ Invoice Created Notification</h5>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="invoice_created_enabled" checked>
                                             <label class="form-check-label" for="invoice_created_enabled">
@@ -276,7 +264,7 @@
                                 <!-- Due Date Reminder Template -->
                                 <div class="mb-4">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h5>⚠️ Due Date Reminder</h5>
+                                        <h5>âš ï¸ Due Date Reminder</h5>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="due_date_reminder_enabled" checked>
                                             <label class="form-check-label" for="due_date_reminder_enabled">
@@ -318,7 +306,7 @@
                                 <!-- Payment Received Template -->
                                 <div class="mb-4">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h5>✅ Payment Received Notification</h5>
+                                        <h5>âœ… Payment Received Notification</h5>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="payment_received_enabled" checked>
                                             <label class="form-check-label" for="payment_received_enabled">
@@ -359,7 +347,7 @@
                                 <!-- Service Disruption Template -->
                                 <div class="mb-4">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h5>🚨 Service Disruption Notification</h5>
+                                        <h5>ðŸš¨ Service Disruption Notification</h5>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="service_disruption_enabled" checked>
                                             <label class="form-check-label" for="service_disruption_enabled">
@@ -398,7 +386,7 @@
                                 <!-- Service Announcement Template -->
                                 <div class="mb-4">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h5>📢 Service Announcement</h5>
+                                        <h5>ðŸ“¢ Service Announcement</h5>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="service_announcement_enabled" checked>
                                             <label class="form-check-label" for="service_announcement_enabled">
@@ -434,7 +422,7 @@
                                 <!-- Service Suspension Template -->
                                 <div class="mb-4">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h5>⏸️ Service Suspension Notification</h5>
+                                        <h5>â¸ï¸ Service Suspension Notification</h5>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="service_suspension_enabled" checked>
                                             <label class="form-check-label" for="service_suspension_enabled">
@@ -472,7 +460,7 @@
                                 <!-- Service Restoration Template -->
                                 <div class="mb-4">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h5>✅ Service Restoration Notification</h5>
+                                        <h5>âœ… Service Restoration Notification</h5>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="service_restoration_enabled" checked>
                                             <label class="form-check-label" for="service_restoration_enabled">
@@ -511,7 +499,7 @@
                                 <!-- Welcome Message Template -->
                                 <div class="mb-4">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h5>👋 Welcome Message</h5>
+                                        <h5>ðŸ‘‹ Welcome Message</h5>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="welcome_message_enabled" checked>
                                             <label class="form-check-label" for="welcome_message_enabled">
@@ -1095,4 +1083,5 @@
     </script>
 </body>
 </html>
+
 

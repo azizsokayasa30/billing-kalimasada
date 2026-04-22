@@ -21,19 +21,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -935,21 +923,21 @@
             const footerInfo = typeof settings !== 'undefined' && settings.footer_info ? settings.footer_info : 'Internet Tanpa Batas';
 
             if (status === 'paid') {
-                return `✅ *PEMBAYARAN DITERIMA*
+                return `? *PEMBAYARAN DITERIMA*
 
 Halo ${customerName},
 
 Terima kasih! Pembayaran Anda telah kami terima:
 
-📄 *No. Invoice:* ${invoiceNumber || 'N/A'}
-💰 *Jumlah:* Rp ${parseFloat(amount).toLocaleString('id-ID')}
-💳 *Metode Pembayaran:* Manual Admin
-📅 *Tanggal Pembayaran:* ${new Date().toLocaleDateString('id-ID')}
-📦 *Paket:* ${packageDisplay}
+?? *No. Invoice:* ${invoiceNumber || 'N/A'}
+?? *Jumlah:* Rp ${parseFloat(amount).toLocaleString('id-ID')}
+?? *Metode Pembayaran:* Manual Admin
+?? *Tanggal Pembayaran:* ${new Date().toLocaleDateString('id-ID')}
+?? *Paket:* ${packageDisplay}
 
 Layanan internet Anda akan tetap aktif. Terima kasih atas kepercayaan Anda.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+????????????????????????????????????????
 
 ${companyName}
 ${footerInfo}`;
@@ -959,39 +947,39 @@ ${footerInfo}`;
                 const daysRemaining = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
                 
                 if (daysRemaining < 0) {
-                    return `🚨 *TAGIHAN TERLAMBAT*
+                    return `?? *TAGIHAN TERLAMBAT*
 
 Halo ${customerName},
 
 Tagihan Anda telah melewati jatuh tempo:
 
-📄 *No. Invoice:* ${invoiceNumber || 'N/A'}
-💰 *Jumlah:* Rp ${parseFloat(amount).toLocaleString('id-ID')}
-📅 *Jatuh Tempo:* ${formattedDueDate}
-📦 *Paket:* ${packageDisplay}
-⚠️ *Status:* TERLAMBAT ${Math.abs(daysRemaining)} hari
+?? *No. Invoice:* ${invoiceNumber || 'N/A'}
+?? *Jumlah:* Rp ${parseFloat(amount).toLocaleString('id-ID')}
+?? *Jatuh Tempo:* ${formattedDueDate}
+?? *Paket:* ${packageDisplay}
+?? *Status:* TERLAMBAT ${Math.abs(daysRemaining)} hari
 
 Silakan lakukan pembayaran segera untuk menghindari denda keterlambatan.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+????????????????????????????????????????
 
 ${companyName}
 ${footerInfo}`;
                 } else {
-                    return `⚠️ *PERINGATAN JATUH TEMPO*
+                    return `?? *PERINGATAN JATUH TEMPO*
 
 Halo ${customerName},
 
 Tagihan Anda akan jatuh tempo dalam ${daysRemaining} hari:
 
-📄 *No. Invoice:* ${invoiceNumber || 'N/A'}
-💰 *Jumlah:* Rp ${parseFloat(amount).toLocaleString('id-ID')}
-📅 *Jatuh Tempo:* ${formattedDueDate}
-📦 *Paket:* ${packageDisplay}
+?? *No. Invoice:* ${invoiceNumber || 'N/A'}
+?? *Jumlah:* Rp ${parseFloat(amount).toLocaleString('id-ID')}
+?? *Jatuh Tempo:* ${formattedDueDate}
+?? *Paket:* ${packageDisplay}
 
 Silakan lakukan pembayaran segera untuk menghindari denda keterlambatan.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+????????????????????????????????????????
 
 ${companyName}
 ${footerInfo}`;

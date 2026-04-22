@@ -1,0 +1,177 @@
+/**
+ * KALIMASADA BILLING - SIDEBAR THEME
+ * Theme khusus untuk sidebar agar warnanya statis dan independen
+ * dari tema utama (dark/light mode).
+ */
+
+ :root {
+    /* === SIDEBAR (selalu dark, tidak berubah dengan theme) === */
+    --sb-bg:               #0f172a;
+    --sb-bg-hover:         #1e293b;
+    --sb-bg-active:        #1d4ed8;
+    --sb-border:           #1e293b;
+    --sb-text:             #f8fafc;
+    --sb-muted:            #94a3b8;
+    --sb-subtle:           #475569;
+    --sb-primary:          #3b82f6;
+    --sb-primary-glow:     rgba(59,130,246,0.15);
+    --sb-active-text:      #ffffff;
+    --sb-section-text:     #64748b;
+    --sb-radius:           8px;
+    --sb-footer-bg:        #0a1120;
+  }
+  
+  /* ============================================================
+     ===== SIDEBAR — ALWAYS DARK, HIGH CONTRAST =====
+     ============================================================ */
+  
+  /* Override semua variabel sb-* agar sidebar selalu dark */
+  .sb,
+  #adminSidebar,
+  #billingSidebar {
+    background: var(--sb-bg, #0f172a) !important;
+    border-right: 1px solid var(--sb-border, #1e293b) !important;
+    color: var(--sb-text, #f8fafc) !important;
+  }
+  
+  /* Header branding */
+  .sb-header {
+    background: var(--sb-bg, #0f172a) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+    padding: 18px 16px !important;
+  }
+  
+  .sb-brand-name {
+    color: var(--sb-text, #f8fafc) !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+  }
+  .sb-brand-tag {
+    color: var(--sb-section-text) !important;
+    font-size: 10px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  
+  /* Section titles */
+  .sb-section-title {
+    color: var(--sb-section-text) !important;
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .sb-section-title.sb-collapsible:hover {
+    background: var(--sb-bg-hover) !important;
+    color: var(--sb-muted) !important;
+  }
+  
+  /* Nav items */
+  .sb .sb-item {
+    color: var(--sb-muted, #94a3b8) !important;
+    background: transparent !important;
+    border-color: transparent !important;
+    border-radius: var(--sb-radius, 8px) !important;
+    transition: all 160ms ease;
+  }
+  .sb .sb-item i {
+    color: var(--sb-subtle, #475569) !important;
+    transition: color 160ms ease;
+  }
+  .sb .sb-item:hover {
+    background: var(--sb-bg-hover, #1e293b) !important;
+    color: var(--sb-text, #f8fafc) !important;
+    text-decoration: none !important;
+  }
+  .sb .sb-item:hover i { color: var(--sb-primary, #3b82f6) !important; }
+  
+  /* Active item — solid blue accent */
+  .sb .sb-item.active {
+    background: var(--sb-primary, #3b82f6) !important;
+    color: var(--sb-active-text, #ffffff) !important;
+    border-color: transparent !important;
+    box-shadow: 0 2px 8px rgba(59,130,246,0.4) !important;
+  }
+  .sb .sb-item.active i { color: #fff !important; }
+  .sb .sb-item.active::before {
+    display: none !important; /* hapus indicator lama, pakai bg highlight */
+  }
+  
+  /* App Switcher */
+  .sb .sb-app-switcher-btn {
+    background: var(--sb-bg-hover) !important;
+    border-color: rgba(255,255,255,0.08) !important;
+    color: var(--sb-text) !important;
+  }
+  .sb .sb-app-switcher-btn:hover {
+    border-color: var(--sb-primary) !important;
+    background: rgba(59,130,246,0.1) !important;
+  }
+  .sb .sb-app-current i { color: var(--sb-primary) !important; }
+  .sb .sb-app-dropdown {
+    background: #0a1120 !important;
+    border-color: rgba(255,255,255,0.08) !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+  }
+  .sb .sb-app-option {
+    color: var(--sb-muted) !important;
+  }
+  .sb .sb-app-option:hover {
+    background: var(--sb-bg-hover) !important;
+    color: var(--sb-text) !important;
+  }
+  .sb .sb-app-option.active {
+    color: var(--sb-primary) !important;
+    background: rgba(59,130,246,0.12) !important;
+  }
+  
+  /* Footer */
+  .sb .sb-footer {
+    background: var(--sb-footer-bg) !important;
+    border-top: 1px solid rgba(255,255,255,0.06) !important;
+  }
+  .sb .sb-action-btn {
+    background: transparent !important;
+    border-color: rgba(255,255,255,0.08) !important;
+    color: var(--sb-muted) !important;
+  }
+  .sb .sb-action-btn:hover {
+    background: var(--sb-bg-hover) !important;
+    color: var(--sb-primary) !important;
+    border-color: rgba(59,130,246,0.3) !important;
+  }
+  .sb .sb-action-logout:hover {
+    color: #f87171 !important;
+    background: rgba(239,68,68,0.1) !important;
+    border-color: rgba(239,68,68,0.3) !important;
+  }
+  
+  /* Server time */
+  .sb .sb-time-label {
+    color: var(--sb-section-text) !important;
+    font-size: 9px !important;
+    letter-spacing: 0.1em;
+  }
+  .sb .sb-time-value {
+    color: var(--sb-muted) !important;
+    font-size: 11px !important;
+  }
+  .sb .sb-version-tag { color: var(--sb-section-text) !important; }
+  
+  /* Scrollbar inside sidebar */
+  .sb::-webkit-scrollbar { width: 3px; }
+  .sb::-webkit-scrollbar-thumb { background: #1e293b; }
+  .sb::-webkit-scrollbar-thumb:hover { background: #334155; }
+  
+  /* Mobile navbar (bagian atas di mobile) */
+  .mobile-navbar {
+    background: #0f172a !important;
+    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  }
+  
+  /* Exceptions — things we don't want to transition */
+  .sb, nav.sb, #adminSidebar, #billingSidebar,
+  .sb *, nav.sb *, #adminSidebar *, #billingSidebar * {
+    transition-property: background-color, border-color, color, box-shadow, transform, opacity !important;
+    transition-duration: 160ms !important;
+  }

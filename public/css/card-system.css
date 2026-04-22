@@ -309,8 +309,18 @@
   border: none !important;
 }
 
-[class*="card-"] h1, [class*="card-"] h2, [class*="card-"] h3, 
-[class*="card-"] p, [class*="card-"] small, [class*="card-"] span, [class*="card-"] div {
+.card-purple h1, .card-purple h2, .card-purple h3, .card-purple p, .card-purple small, .card-purple span, .card-purple div,
+.card-primary h1, .card-primary h2, .card-primary h3, .card-primary p, .card-primary small, .card-primary span, .card-primary div,
+.card-green h1, .card-green h2, .card-green h3, .card-green p, .card-green small, .card-green span, .card-green div,
+.card-success h1, .card-success h2, .card-success h3, .card-success p, .card-success small, .card-success span, .card-success div,
+.card-red h1, .card-red h2, .card-red h3, .card-red p, .card-red small, .card-red span, .card-red div,
+.card-danger h1, .card-danger h2, .card-danger h3, .card-danger p, .card-danger small, .card-danger span, .card-danger div,
+.card-amber h1, .card-amber h2, .card-amber h3, .card-amber p, .card-amber small, .card-amber span, .card-amber div,
+.card-warning h1, .card-warning h2, .card-warning h3, .card-warning p, .card-warning small, .card-warning span, .card-warning div,
+.card-blue h1, .card-blue h2, .card-blue h3, .card-blue p, .card-blue small, .card-blue span, .card-blue div,
+.card-info h1, .card-info h2, .card-info h3, .card-info p, .card-info small, .card-info span, .card-info div,
+.card-indigo h1, .card-indigo h2, .card-indigo h3, .card-indigo p, .card-indigo small, .card-indigo span, .card-indigo div,
+.card-teal h1, .card-teal h2, .card-teal h3, .card-teal p, .card-teal small, .card-teal span, .card-teal div {
   color: #ffffff !important;
 }
 

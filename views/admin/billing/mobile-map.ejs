@@ -12,7 +12,7 @@
     
     <style>
         body {
-            background-color: #f8f9fa;
+            background-color: var(--bg-secondary, #f8f9fa);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             padding-bottom: 80px;
         }
@@ -266,7 +266,7 @@
         }
 
         .mobile-map-stat {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 12px;
             padding: 1rem;
             text-align: center;
@@ -286,7 +286,7 @@
         }
 
         .mobile-map-controls {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 12px;
             padding: 1rem;
             margin-bottom: 1rem;
@@ -294,7 +294,7 @@
         }
 
         .mobile-map-legend {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 12px;
             padding: 1rem;
             margin-bottom: 1rem;
@@ -330,19 +330,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body class="mobile-mapping-container">
     <!-- Sidebar untuk PC -->
@@ -683,7 +671,7 @@
         // Initialize map when page loads (guard against double init)
         document.addEventListener('DOMContentLoaded', function() {
             if (window.__adminMobileMapInited) {
-                console.log('⚠️ Mobile map already initialized, skipping...');
+                console.log('?? Mobile map already initialized, skipping...');
                 return;
             }
             
@@ -693,7 +681,7 @@
                 loadMapData();
                 bindEvents();
             } catch (error) {
-                console.error('❌ Error initializing mobile map:', error);
+                console.error('? Error initializing mobile map:', error);
             }
         });
 
@@ -703,7 +691,7 @@
             
             // Prevent re-initialization if Leaflet already attached to this container
             if (map || container._leaflet_id || container.classList.contains('leaflet-container')) {
-                console.log('⚠️ Map already initialized, skipping...');
+                console.log('?? Map already initialized, skipping...');
                 return;
             }
 
@@ -748,9 +736,9 @@
                 deviceLayer = L.layerGroup().addTo(map);
                 cableLayer = L.layerGroup().addTo(map);
 
-                console.log('✅ Mobile map initialized successfully');
+                console.log('? Mobile map initialized successfully');
             } catch (error) {
-                console.error('❌ Error initializing mobile map:', error);
+                console.error('? Error initializing mobile map:', error);
                 showToast('Error initializing map: ' + error.message, 'error');
             }
             try { container.dataset.leafletInited = '1'; } catch(e) {}
@@ -758,7 +746,7 @@
 
         async function loadMapData() {
             try {
-                console.log('📡 Loading mobile mapping data from database...');
+                console.log('?? Loading mobile mapping data from database...');
                 
                 // Load customers data
                 await loadCustomers();
@@ -768,7 +756,7 @@
                 const mappingData = await mappingResponse.json();
                 
                 if (mappingData.success) {
-                    console.log('📊 Mobile mapping data loaded:', {
+                    console.log('?? Mobile mapping data loaded:', {
                         odps: mappingData.data.odps?.length || 0,
                         cableRoutes: mappingData.data.cableRoutes?.length || 0,
                         devices: mappingData.data.devicesWithCoords?.length || 0
@@ -804,10 +792,10 @@
                 // Fit map to show all data after loading
                 fitMapToData();
                 
-                console.log('✅ Mobile mapping data loaded successfully');
+                console.log('? Mobile mapping data loaded successfully');
                 
             } catch (error) {
-                console.error('❌ Error loading mobile mapping data:', error);
+                console.error('? Error loading mobile mapping data:', error);
                 showToast('Error loading mapping data: ' + error.message, 'error');
             }
         }
@@ -886,15 +874,15 @@
 
         function loadODPsFromDatabase() {
             if (!odps || odps.length === 0) {
-                console.log('⚠️ No ODPs to load from database');
+                console.log('?? No ODPs to load from database');
                 return;
             }
             
-            console.log(`🔍 Loading ${odps.length} ODPs from database...`);
+            console.log(`?? Loading ${odps.length} ODPs from database...`);
             odpLayer.clearLayers();
             
             odps.forEach((odp, index) => {
-                console.log(`📍 Processing ODP ${index + 1}: ${odp.name} at ${odp.latitude}, ${odp.longitude}`);
+                console.log(`?? Processing ODP ${index + 1}: ${odp.name} at ${odp.latitude}, ${odp.longitude}`);
                 
                 if (odp.latitude && odp.longitude) {
                     // ODP marker berbentuk kotak - pasif, tanpa status
@@ -932,7 +920,7 @@
                 }
             });
             
-            console.log(`✅ Loaded ${odps.length} ODP markers from database`);
+            console.log(`? Loaded ${odps.length} ODP markers from database`);
         }
 
         function addODPMarkers() {
@@ -999,15 +987,15 @@
 
         function loadDevicesFromGenieACS() {
             if (!devices || devices.length === 0) {
-                console.log('⚠️ No devices to load from GenieACS');
+                console.log('?? No devices to load from GenieACS');
                 return;
             }
             
-            console.log(`🔍 Loading ${devices.length} devices from GenieACS...`);
+            console.log(`?? Loading ${devices.length} devices from GenieACS...`);
             deviceLayer.clearLayers();
             
             devices.forEach((device, index) => {
-                console.log(`📱 Processing device ${index + 1}: ${device.serialNumber || device.name} at ${device.latitude}, ${device.longitude}`);
+                console.log(`?? Processing device ${index + 1}: ${device.serialNumber || device.name} at ${device.latitude}, ${device.longitude}`);
                 
                 if (device.latitude && device.longitude) {
                     // Determine styling based on status
@@ -1098,20 +1086,20 @@
                 }
             });
             
-            console.log(`✅ Loaded ${devices.length} device markers from GenieACS`);
+            console.log(`? Loaded ${devices.length} device markers from GenieACS`);
         }
 
         // Load ODP connections (kabel antar ODP)
         function loadODPConnections(odpConnections) {
             if (!odpConnections || odpConnections.length === 0) {
-                console.log('⚠️ No ODP connections to load');
+                console.log('?? No ODP connections to load');
                 return;
             }
             
-            console.log(`🔍 Loading ${odpConnections.length} ODP connections...`);
+            console.log(`?? Loading ${odpConnections.length} ODP connections...`);
             
             odpConnections.forEach((connection, index) => {
-                console.log(`🔗 Processing ODP connection ${index + 1}: ${connection.from_odp_name} -> ${connection.to_odp_name}`);
+                console.log(`?? Processing ODP connection ${index + 1}: ${connection.from_odp_name} -> ${connection.to_odp_name}`);
                 
                 if (connection.from_odp_latitude && connection.from_odp_longitude && 
                     connection.to_odp_latitude && connection.to_odp_longitude) {
@@ -1146,7 +1134,7 @@
                 }
             });
             
-            console.log(`✅ Loaded ${odpConnections.length} ODP connections`);
+            console.log(`? Loaded ${odpConnections.length} ODP connections`);
         }
 
         function addDeviceMarkers() {
@@ -1199,15 +1187,15 @@
 
         function loadCablesFromDatabase() {
             if (!cables || cables.length === 0) {
-                console.log('⚠️ No cable routes to load from database');
+                console.log('?? No cable routes to load from database');
                 return;
             }
             
-            console.log(`🔍 Loading ${cables.length} cable routes from database...`);
+            console.log(`?? Loading ${cables.length} cable routes from database...`);
             cableLayer.clearLayers();
             
             cables.forEach((cable, index) => {
-                console.log(`🔌 Processing cable ${index + 1}: ${cable.customer_name} -> ${cable.odp_name}`);
+                console.log(`?? Processing cable ${index + 1}: ${cable.customer_name} -> ${cable.odp_name}`);
                 
                 if (cable.customer_latitude && cable.customer_longitude && 
                     cable.odp_latitude && cable.odp_longitude) {
@@ -1268,7 +1256,7 @@
                 }
             });
             
-            console.log(`✅ Loaded ${cables.length} cable routes from database with animations`);
+            console.log(`? Loaded ${cables.length} cable routes from database with animations`);
         }
 
         // Create animated data flow on cables for mobile
@@ -1493,12 +1481,12 @@
                 }
                 
                 if (allMarkers.length > 0) {
-                    console.log(`🗺️ Fitting map to ${allMarkers.length} markers`);
+                    console.log(`??? Fitting map to ${allMarkers.length} markers`);
                     const group = new L.featureGroup(allMarkers);
                     map.fitBounds(group.getBounds().pad(0.1));
-                    console.log('✅ Map fitted to data bounds');
+                    console.log('? Map fitted to data bounds');
                 } else {
-                    console.log('⚠️ No markers found, using default view');
+                    console.log('?? No markers found, using default view');
                     // Use default view but check if we have coordinate data
                     if (customers.length > 0 || odps.length > 0 || devices.length > 0) {
                         // Calculate center from data coordinates
@@ -1532,7 +1520,7 @@
                             const centerLat = totalLat / count;
                             const centerLng = totalLng / count;
                             map.setView([centerLat, centerLng], 13);
-                            console.log(`🗺️ Map centered on data: ${centerLat}, ${centerLng}`);
+                            console.log(`??? Map centered on data: ${centerLat}, ${centerLng}`);
                         } else {
                             map.setView([-6.200000, 106.816666], 10);
                         }
@@ -1541,7 +1529,7 @@
                     }
                 }
             } catch (error) {
-                console.error('❌ Error fitting map to data:', error);
+                console.error('? Error fitting map to data:', error);
                 // Fallback to default view
                 map.setView([-6.200000, 106.816666], 10);
             }
@@ -1575,7 +1563,7 @@
                 await loadMapData();
                 showToast('Data peta berhasil di-refresh!', 'success');
             } catch (error) {
-                console.error('❌ Error refreshing mobile map:', error);
+                console.error('? Error refreshing mobile map:', error);
                 showToast('Error refreshing map: ' + error.message, 'error');
             }
         }
@@ -1623,3 +1611,4 @@
     </script>
 </body>
 </html>
+

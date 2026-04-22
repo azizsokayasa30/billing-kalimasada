@@ -49,13 +49,58 @@
     <div class="sb-nav">
         <!-- Dashboard Quick Links — selalu terlihat di semua halaman -->
         <div class="sb-section">
-            <div class="sb-section-title">Dashboard</div>
             <a href="/admin/dashboard" class="sb-item <%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">
                 <i class="bi bi-grid-1x2-fill"></i>
                 <span class="sb-item-text">Dashboard</span>
             </a>
         </div>
-
+        
+        <!-- PELANGGAN BILLING -->
+        <% const billingCustomerPages = ['customers', 'packages', 'member-data', 'member-packages', 'areas', 'collector-areas', 'service-suspension']; %>
+        <% const billingCustomerExpanded = typeof page !== 'undefined' && billingCustomerPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="billingCustomerCollapse"
+                 aria-expanded="<%= billingCustomerExpanded ? 'true' : 'false' %>"
+                 aria-controls="billingCustomerCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Pelanggan</span>
+                <i class="bi <%= billingCustomerExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= billingCustomerExpanded ? 'show' : '' %>" id="billingCustomerCollapse">
+                <a href="/admin/billing/customers" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'customers' ? 'active' : '' %>">
+                    <i class="bi bi-person"></i>
+                    <span class="sb-item-text">Pelanggan PPPoE</span>
+                </a>
+                <a href="/admin/billing/areas" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'areas' ? 'active' : '' %>">
+                    <i class="bi bi-geo-alt-fill"></i>
+                    <span class="sb-item-text">Manajemen Area</span>
+                </a>
+                <a href="/admin/billing/collector-areas" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-areas' ? 'active' : '' %>">
+                    <i class="bi bi-map"></i>
+                    <span class="sb-item-text">Area Kolektor</span>
+                </a>
+                <a href="/admin/billing/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'packages' ? 'active' : '' %>">
+                    <i class="bi bi-box-seam"></i>
+                    <span class="sb-item-text">Paket PPPoE</span>
+                </a>
+                <a href="/admin/member/data" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'member-data' ? 'active' : '' %>">
+                    <i class="bi bi-person-check"></i>
+                    <span class="sb-item-text">Pelanggan Member</span>
+                </a>
+                <a href="/admin/member/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'member-packages' ? 'active' : '' %>">
+                    <i class="bi bi-box-seam"></i>
+                    <span class="sb-item-text">Paket Member</span>
+                </a>
+                <a href="/admin/billing/service-suspension" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'service-suspension' ? 'active' : '' %>">
+                    <i class="bi bi-pause-circle"></i>
+                    <span class="sb-item-text">Penangguhan Layanan</span>
+                </a>
+            </div>
+        </div>
+        
         <!-- PPP CONNECTION -->
         <% const pppPages = ['mikrotik', 'mikrotik-profiles', 'genieacs']; %>
         <% const pppExpanded = typeof page !== 'undefined' && pppPages.includes(page); %>
@@ -85,7 +130,7 @@
                 </a>
             </div>
         </div>
-
+        
         <!-- HOTSPOT & VOUCHER -->
         <% const hotspotPages = ['hotspot-settings','hotspot-master','hotspot-users','hotspot-profiles','hotspot-server-profiles','voucher-template','member-list','routers']; %>
         <% const hotspotExpanded = typeof page !== 'undefined' && hotspotPages.includes(page); %>
@@ -135,184 +180,7 @@
                 </a>
             </div>
         </div>
-
-        <!-- AGENT -->
-        <% const agentPages = ['agents', 'agent-registrations']; %>
-        <% const agentExpanded = typeof page !== 'undefined' && agentPages.includes(page); %>
-        <div class="sb-section">
-            <div class="sb-section-title sb-collapsible"
-                 data-manual-toggle="collapse"
-                 data-target-id="agentCollapse"
-                 aria-expanded="<%= agentExpanded ? 'true' : 'false' %>"
-                 aria-controls="agentCollapse"
-                 role="button"
-                 tabindex="0">
-                <span>Agent</span>
-                <i class="bi <%= agentExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
-            </div>
-            <div class="collapse <%= agentExpanded ? 'show' : '' %>" id="agentCollapse">
-                <a href="/admin/agent-registrations" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'agent-registrations' ? 'active' : '' %>">
-                    <i class="bi bi-person-plus"></i>
-                    <span class="sb-item-text">Pendaftaran Agent</span>
-                </a>
-                <a href="/admin/agents" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'agents' ? 'active' : '' %>">
-                    <i class="bi bi-person-badge-fill"></i>
-                    <span class="sb-item-text">Web Agent</span>
-                </a>
-            </div>
-        </div>
-
-        <!-- TEKNISI -->
-        <% const teknisiPages = ['technicians', 'installations', 'trouble']; %>
-        <% const teknisiExpanded = typeof page !== 'undefined' && teknisiPages.includes(page); %>
-        <div class="sb-section">
-            <div class="sb-section-title sb-collapsible"
-                 data-manual-toggle="collapse"
-                 data-target-id="teknisiCollapse"
-                 aria-expanded="<%= teknisiExpanded ? 'true' : 'false' %>"
-                 aria-controls="teknisiCollapse"
-                 role="button"
-                 tabindex="0">
-                <span>Teknisi</span>
-                <i class="bi <%= teknisiExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
-            </div>
-            <div class="collapse <%= teknisiExpanded ? 'show' : '' %>" id="teknisiCollapse">
-                <a href="/admin/technicians" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'technicians' ? 'active' : '' %>">
-                    <i class="bi bi-people-fill"></i>
-                    <span class="sb-item-text">Kelola Teknisi</span>
-                </a>
-                <a href="/admin/installations" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'installations' ? 'active' : '' %>">
-                    <i class="bi bi-tools"></i>
-                    <span class="sb-item-text">Installation Jobs</span>
-                </a>
-                <a href="/admin/trouble" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'trouble' ? 'active' : '' %>">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    <span class="sb-item-text">Trouble Report</span>
-                </a>
-            </div>
-        </div>
-
-        <!-- TOOLS REPORTING -->
-        <% const toolsPages = ['cable-network-odp', 'cable-network-cables', 'cable-network-analytics', 'mapping-new']; %>
-        <% const toolsExpanded = typeof page !== 'undefined' && toolsPages.includes(page); %>
-        <div class="sb-section">
-            <div class="sb-section-title sb-collapsible"
-                 data-manual-toggle="collapse"
-                 data-target-id="toolsCollapse"
-                 aria-expanded="<%= toolsExpanded ? 'true' : 'false' %>"
-                 aria-controls="toolsCollapse"
-                 role="button"
-                 tabindex="0">
-                <span>Tools & Reporting</span>
-                <i class="bi <%= toolsExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
-            </div>
-            <div class="collapse <%= toolsExpanded ? 'show' : '' %>" id="toolsCollapse">
-                <a href="/admin/cable-network/odp" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cable-network-odp' ? 'active' : '' %>">
-                    <i class="bi bi-broadcast"></i>
-                    <span class="sb-item-text">ODP Management</span>
-                </a>
-                <a href="/admin/cable-network/cables" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cable-network-cables' ? 'active' : '' %>">
-                    <i class="bi bi-diagram-3"></i>
-                    <span class="sb-item-text">Cable Routes</span>
-                </a>
-                <a href="/admin/cable-network/analytics" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cable-network-analytics' ? 'active' : '' %>">
-                    <i class="bi bi-bar-chart"></i>
-                    <span class="sb-item-text">Network Analytics</span>
-                </a>
-                <a href="/admin/billing/mapping-new" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'mapping-new' ? 'active' : '' %>">
-                    <i class="bi bi-map"></i>
-                    <span class="sb-item-text">Network Mapping</span>
-                </a>
-            </div>
-        </div>
-
-        <!-- SETTINGAN -->
-        <% const settingPages = ['setting', 'setting-radius', 'setting-radius-clients', 'connection-settings', 'genieacs-setting', 'cache']; %>
-        <% const settingExpanded = typeof page !== 'undefined' && settingPages.includes(page); %>
-        <div class="sb-section">
-            <div class="sb-section-title sb-collapsible"
-                 data-manual-toggle="collapse"
-                 data-target-id="settingCollapse"
-                 aria-expanded="<%= settingExpanded ? 'true' : 'false' %>"
-                 aria-controls="settingCollapse"
-                 role="button"
-                 tabindex="0">
-                <span>Settingan</span>
-                <i class="bi <%= settingExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
-            </div>
-            <div class="collapse <%= settingExpanded ? 'show' : '' %>" id="settingCollapse">
-                <a href="/admin/settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'setting' ? 'active' : '' %>">
-                    <i class="bi bi-gear"></i>
-                    <span class="sb-item-text">Setting Umum</span>
-                </a>
-                <a href="/admin/radius" class="sb-item sb-sub <%= typeof page !== 'undefined' && (page === 'setting-radius' || page === 'setting-radius-clients') ? 'active' : '' %>">
-                    <i class="bi bi-shield-check"></i>
-                    <span class="sb-item-text">Setting RADIUS</span>
-                </a>
-                <a href="/admin/connection-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'connection-settings' ? 'active' : '' %>">
-                    <i class="bi bi-plug"></i>
-                    <span class="sb-item-text">Setting Mikrotik</span>
-                </a>
-                <a href="/admin/genieacs-setting" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'genieacs-setting' ? 'active' : '' %>">
-                    <i class="bi bi-server"></i>
-                    <span class="sb-item-text">GenieACS Setting</span>
-                </a>
-                <a href="/admin/cache" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cache' ? 'active' : '' %>">
-                    <i class="bi bi-database"></i>
-                    <span class="sb-item-text">Cache Management</span>
-                </a>
-            </div>
-        </div>
-
-        <!-- ─────────── BILLING & ACCOUNTING ─────────── -->
-        <div class="sb-section-divider"></div>
-
-        <!-- PELANGGAN BILLING -->
-        <% const billingCustomerPages = ['customers', 'packages', 'member-data', 'member-packages', 'areas', 'collector-areas', 'service-suspension']; %>
-        <% const billingCustomerExpanded = typeof page !== 'undefined' && billingCustomerPages.includes(page); %>
-        <div class="sb-section">
-            <div class="sb-section-title sb-collapsible"
-                 data-manual-toggle="collapse"
-                 data-target-id="billingCustomerCollapse"
-                 aria-expanded="<%= billingCustomerExpanded ? 'true' : 'false' %>"
-                 aria-controls="billingCustomerCollapse"
-                 role="button"
-                 tabindex="0">
-                <span>Pelanggan</span>
-                <i class="bi <%= billingCustomerExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
-            </div>
-            <div class="collapse <%= billingCustomerExpanded ? 'show' : '' %>" id="billingCustomerCollapse">
-                <a href="/admin/billing/customers" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'customers' ? 'active' : '' %>">
-                    <i class="bi bi-person"></i>
-                    <span class="sb-item-text">Pelanggan PPPoE</span>
-                </a>
-                <a href="/admin/billing/areas" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'areas' ? 'active' : '' %>">
-                    <i class="bi bi-geo-alt-fill"></i>
-                    <span class="sb-item-text">Manajemen Area</span>
-                </a>
-                <a href="/admin/billing/collector-areas" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-areas' ? 'active' : '' %>">
-                    <i class="bi bi-map"></i>
-                    <span class="sb-item-text">Area Kolektor</span>
-                </a>
-                <a href="/admin/billing/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'packages' ? 'active' : '' %>">
-                    <i class="bi bi-box-seam"></i>
-                    <span class="sb-item-text">Paket PPPoE</span>
-                </a>
-                <a href="/admin/member/data" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'member-data' ? 'active' : '' %>">
-                    <i class="bi bi-person-check"></i>
-                    <span class="sb-item-text">Pelanggan Member</span>
-                </a>
-                <a href="/admin/member/packages" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'member-packages' ? 'active' : '' %>">
-                    <i class="bi bi-box-seam"></i>
-                    <span class="sb-item-text">Paket Member</span>
-                </a>
-                <a href="/admin/billing/service-suspension" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'service-suspension' ? 'active' : '' %>">
-                    <i class="bi bi-pause-circle"></i>
-                    <span class="sb-item-text">Penangguhan Layanan</span>
-                </a>
-            </div>
-        </div>
-
+        
         <!-- INVOICING -->
         <% const invoicePages = ['invoices', 'auto-invoice', 'invoices-by-type', 'invoice-list']; %>
         <% const invoiceExpanded = typeof page !== 'undefined' && invoicePages.includes(page); %>
@@ -346,9 +214,9 @@
                 </a>
             </div>
         </div>
-
+        
         <!-- KEUANGAN -->
-        <% const financePages = ['all-payments', 'collectors', 'collector-reports', 'collector-remittance', 'financial-report', 'report-voucher', 'report-pppoe', 'reports', 'expenses', 'income']; %>
+        <% const financePages = ['payment-settings', 'all-payments', 'collectors', 'collector-reports', 'collector-remittance', 'financial-report', 'report-voucher', 'report-pppoe', 'reports', 'expenses', 'income']; %>
         <% const financeExpanded = typeof page !== 'undefined' && financePages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -362,6 +230,10 @@
                 <i class="bi <%= financeExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
             </div>
             <div class="collapse <%= financeExpanded ? 'show' : '' %>" id="billingFinanceCollapse">
+                <a href="/admin/billing/payment-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'payment-settings' ? 'active' : '' %>">
+                    <i class="bi bi-gear"></i>
+                    <span class="sb-item-text">Pengaturan Pembayaran</span>
+                </a>
                 <a href="/admin/billing/all-payments" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'all-payments' ? 'active' : '' %>">
                     <i class="bi bi-credit-card"></i>
                     <span class="sb-item-text">Riwayat Pembayaran</span>
@@ -404,44 +276,135 @@
                 </a>
             </div>
         </div>
-
-        <!-- SETTINGAN BILLING -->
-        <% const billingSettingPages = ['payment-settings', 'whatsapp-settings', 'email-settings', 'mapping-new', 'genieacs']; %>
-        <% const billingSettingExpanded = typeof page !== 'undefined' && billingSettingPages.includes(page); %>
+        
+        <!-- AGENT -->
+        <% const agentPages = ['agents', 'agent-registrations']; %>
+        <% const agentExpanded = typeof page !== 'undefined' && agentPages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
                  data-manual-toggle="collapse"
-                 data-target-id="billingSettingCollapse"
-                 aria-expanded="<%= billingSettingExpanded ? 'true' : 'false' %>"
-                 aria-controls="billingSettingCollapse"
+                 data-target-id="agentCollapse"
+                 aria-expanded="<%= agentExpanded ? 'true' : 'false' %>"
+                 aria-controls="agentCollapse"
                  role="button"
                  tabindex="0">
-                <span>Settingan Billing</span>
-                <i class="bi <%= billingSettingExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+                <span>Agent</span>
+                <i class="bi <%= agentExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
             </div>
-            <div class="collapse <%= billingSettingExpanded ? 'show' : '' %>" id="billingSettingCollapse">
-                <a href="/admin/billing/payment-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'payment-settings' ? 'active' : '' %>">
-                    <i class="bi bi-gear"></i>
-                    <span class="sb-item-text">Pengaturan Pembayaran</span>
+            <div class="collapse <%= agentExpanded ? 'show' : '' %>" id="agentCollapse">
+                <a href="/admin/agent-registrations" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'agent-registrations' ? 'active' : '' %>">
+                    <i class="bi bi-person-plus"></i>
+                    <span class="sb-item-text">Pendaftaran Agent</span>
                 </a>
-                <a href="/admin/billing/whatsapp-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'whatsapp-settings' ? 'active' : '' %>">
-                    <i class="bi bi-chat-dots"></i>
-                    <span class="sb-item-text">Pengaturan WhatsApp</span>
+                <a href="/admin/agents" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'agents' ? 'active' : '' %>">
+                    <i class="bi bi-person-badge-fill"></i>
+                    <span class="sb-item-text">Web Agent</span>
                 </a>
-                <a href="/admin/billing/email-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'email-settings' ? 'active' : '' %>">
-                    <i class="bi bi-envelope"></i>
-                    <span class="sb-item-text">Pengaturan Email</span>
+            </div>
+        </div>
+        
+        <!-- TEKNISI -->
+        <% const teknisiPages = ['technicians', 'installations', 'trouble']; %>
+        <% const teknisiExpanded = typeof page !== 'undefined' && teknisiPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="teknisiCollapse"
+                 aria-expanded="<%= teknisiExpanded ? 'true' : 'false' %>"
+                 aria-controls="teknisiCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Teknisi</span>
+                <i class="bi <%= teknisiExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= teknisiExpanded ? 'show' : '' %>" id="teknisiCollapse">
+                <a href="/admin/technicians" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'technicians' ? 'active' : '' %>">
+                    <i class="bi bi-people-fill"></i>
+                    <span class="sb-item-text">Kelola Teknisi</span>
+                </a>
+                <a href="/admin/installations" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'installations' ? 'active' : '' %>">
+                    <i class="bi bi-tools"></i>
+                    <span class="sb-item-text">Installation Jobs</span>
+                </a>
+                <a href="/admin/trouble" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'trouble' ? 'active' : '' %>">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span class="sb-item-text">Trouble Report</span>
+                </a>
+            </div>
+        </div>
+        
+        <!-- TOOLS REPORTING -->
+        <% const toolsPages = ['cable-network-odp', 'cable-network-cables', 'cable-network-analytics', 'mapping-new']; %>
+        <% const toolsExpanded = typeof page !== 'undefined' && toolsPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="toolsCollapse"
+                 aria-expanded="<%= toolsExpanded ? 'true' : 'false' %>"
+                 aria-controls="toolsCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Tools & Reporting</span>
+                <i class="bi <%= toolsExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= toolsExpanded ? 'show' : '' %>" id="toolsCollapse">
+                <a href="/admin/cable-network/odp" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cable-network-odp' ? 'active' : '' %>">
+                    <i class="bi bi-broadcast"></i>
+                    <span class="sb-item-text">ODP Management</span>
+                </a>
+                <a href="/admin/cable-network/cables" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cable-network-cables' ? 'active' : '' %>">
+                    <i class="bi bi-diagram-3"></i>
+                    <span class="sb-item-text">Cable Routes</span>
+                </a>
+                <a href="/admin/cable-network/analytics" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cable-network-analytics' ? 'active' : '' %>">
+                    <i class="bi bi-bar-chart"></i>
+                    <span class="sb-item-text">Network Analytics</span>
                 </a>
                 <a href="/admin/billing/mapping-new" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'mapping-new' ? 'active' : '' %>">
                     <i class="bi bi-map"></i>
                     <span class="sb-item-text">Network Mapping</span>
                 </a>
-                <a href="/admin/genieacs" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'genieacs' ? 'active' : '' %>">
-                    <i class="bi bi-wifi"></i>
-                    <span class="sb-item-text">GenieACS</span>
+            </div>
+        </div>
+        
+        <!-- SETTINGAN -->
+        <% const settingPages = ['setting', 'whatsapp-settings', 'email-settings', 'setting-radius', 'setting-radius-clients', 'connection-settings', 'genieacs-setting', 'cache']; %>
+        <% const settingExpanded = typeof page !== 'undefined' && settingPages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="settingCollapse"
+                 aria-expanded="<%= settingExpanded ? 'true' : 'false' %>"
+                 aria-controls="settingCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Settingan</span>
+                <i class="bi <%= settingExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= settingExpanded ? 'show' : '' %>" id="settingCollapse">
+                <a href="/admin/settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'setting' ? 'active' : '' %>">
+                    <i class="bi bi-gear"></i>
+                    <span class="sb-item-text">Setting Umum</span>
+                </a>
+                <a href="/admin/radius" class="sb-item sb-sub <%= typeof page !== 'undefined' && (page === 'setting-radius' || page === 'setting-radius-clients') ? 'active' : '' %>">
+                    <i class="bi bi-shield-check"></i>
+                    <span class="sb-item-text">Setting RADIUS</span>
+                </a>
+                <a href="/admin/connection-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'connection-settings' ? 'active' : '' %>">
+                    <i class="bi bi-plug"></i>
+                    <span class="sb-item-text">Setting Mikrotik</span>
+                </a>
+                <a href="/admin/genieacs-setting" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'genieacs-setting' ? 'active' : '' %>">
+                    <i class="bi bi-server"></i>
+                    <span class="sb-item-text">GenieACS Setting</span>
+                </a>
+                <a href="/admin/cache" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'cache' ? 'active' : '' %>">
+                    <i class="bi bi-database"></i>
+                    <span class="sb-item-text">Cache Management</span>
                 </a>
             </div>
         </div>
+
     </div>
 
     <!-- Sidebar Footer -->
@@ -557,7 +520,7 @@ document.addEventListener('DOMContentLoaded', function () {
             bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
         }
     }
-    ['pppConnectionCollapse','responsiveHotspotCollapse','agentCollapse','teknisiCollapse','toolsCollapse','settingCollapse','billingCustomerCollapse','billingInvoiceCollapse','billingFinanceCollapse','billingSettingCollapse'].forEach(setupCollapseToggle);
+    ['pppConnectionCollapse','responsiveHotspotCollapse','agentCollapse','teknisiCollapse','toolsCollapse','settingCollapse','billingCustomerCollapse','billingInvoiceCollapse','billingFinanceCollapse'].forEach(setupCollapseToggle);
 
     window.addEventListener('resize', function() { if (window.innerWidth >= 768) closeSidebar(); });
 
@@ -698,15 +661,15 @@ document.addEventListener('DOMContentLoaded', function () {
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-    --sb-bg: #ffffff;
-    --sb-border: #e2e8f0;
-    --sb-item-hover: #f1f5f9;
-    --sb-item-active: #eff6ff;
-    --sb-item-active-border: #bfdbfe;
-    --sb-text: #1e293b;
-    --sb-muted: #64748b;
-    --sb-subtle: #94a3b8;
-    --sb-primary: #2563eb;
+    --sb-bg: #0f172a;
+    --sb-border: #1e293b;
+    --sb-item-hover: #1e293b;
+    --sb-item-active: #2563eb;
+    --sb-item-active-border: #3b82f6;
+    --sb-text: #f8fafc;
+    --sb-muted: #94a3b8;
+    --sb-subtle: #64748b;
+    --sb-primary: #3b82f6;
     --sb-radius: 8px;
 }
 
@@ -714,9 +677,9 @@ document.addEventListener('DOMContentLoaded', function () {
 .sb-mobile-navbar {
     position: fixed; top: 0; left: 0; right: 0; z-index: 1001;
     padding: 10px 16px;
-    background: #ffffff;
+    background: #0f172a;
     border-bottom: 1px solid var(--sb-border);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
 .sb-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 999; opacity: 0; visibility: hidden; transition: 0.3s; backdrop-filter: blur(2px); }
@@ -771,8 +734,6 @@ document.addEventListener('DOMContentLoaded', function () {
 .sb-item.active i { opacity: 1; color: var(--sb-primary); }
 .sb-item.sb-sub { padding-left: 2.5rem; font-size: 12.5px; }
 
-/* Section Divider */
-.sb-section-divider { height: 1px; background: var(--sb-border); margin: 8px 12px 16px; }
 
 /* Footer */
 .sb-footer { padding: 8px; border-top: 1px solid var(--sb-border); margin-top: auto; }

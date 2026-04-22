@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %> - Admin Portal</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="/vendor/boxicons/boxicons.min.css" rel="stylesheet">
     
     <link href="/css/theme.css" rel="stylesheet">
@@ -93,48 +94,15 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/admin">
-                <i class="bi bi-wifi"></i> Admin Portal
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="/admin">
-                    <i class="bi bi-house"></i> Dashboard
-                </a>
-                <a class="nav-link" href="/admin/cable-network/odp">
-                    <i class="bi bi-broadcast"></i> ODP Management
-                </a>
-                <a class="nav-link" href="/admin/cable-network/cables">
-                    <i class="bi bi-ethernet"></i> Cable Routes
-                </a>
-                <a class="nav-link active" href="/admin/cable-network/analytics">
-                    <i class="bi bi-bar-chart-fill"></i> Analytics
-                </a>
-                <a class="nav-link" href="/admin/billing/mapping-new">
-                    <i class="bi bi-map"></i> Map View
-                </a>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container-fluid mt-4">
+    <div class="container-fluid">
+    <div class="row">
+        <%- include('../../partials/admin-responsive-sidebar', { page: 'cable-network-analytics' }) %>
+        <main class="col-md-10 main-content ms-sm-auto">
+            <div class="mt-4">
         <!-- Header -->
         <div class="row mb-4">
             <div class="col-12">
@@ -642,5 +610,12 @@
             loadAnalyticsData();
         });
     </script>
+            </div>
+        </main>
+    </div>
+</div>
 </body>
 </html>
+
+
+

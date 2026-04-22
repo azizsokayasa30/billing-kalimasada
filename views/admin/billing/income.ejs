@@ -21,22 +21,10 @@
     <style>
         .text-purple { color: #6f42c1 !important; }
         .border-purple { border-left: 4px solid #6f42c1 !important; }
-        .main-content { background-color: #f8f9fa; min-height: 100vh; }
+        .main-content { min-height: 100vh; }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <div class="container-fluid">
@@ -46,6 +34,12 @@
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2"><i class="bi bi-cash-stack"></i> Manajemen Pemasukan</h1>
                     <div>
+                        <a href="/admin/billing/income" class="btn btn-outline-secondary me-2">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </a>
+                        <button type="button" class="btn btn-outline-success me-2" onclick="exportToCSV()">
+                            <i class="bi bi-download"></i> Export CSV
+                        </button>
                         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addIncomeModal">
                             <i class="bi bi-plus-lg"></i> Tambah Pemasukan
                         </button>
@@ -67,12 +61,6 @@
                             <div class="col-md-3">
                                 <button type="submit" class="btn btn-primary">
                                     <i class="bi bi-search"></i> Filter
-                                </button>
-                                <a href="/admin/billing/income" class="btn btn-outline-secondary ms-2">
-                                    <i class="bi bi-arrow-clockwise"></i> Reset
-                                </a>
-                                <button type="button" class="btn btn-outline-success ms-2" onclick="exportToCSV()">
-                                    <i class="bi bi-download"></i> Export CSV
                                 </button>
                             </div>
                         </form>
@@ -455,4 +443,5 @@
     </script>
 </body>
 </html>
+
 

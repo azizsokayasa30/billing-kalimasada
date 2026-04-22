@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -22,20 +22,13 @@
             --warning-color: #f72585;
             --info-color: #560bad;
             --light-color: #f8f9fa;
-            --dark-color: #212529;
+            --dark-color: var(--text-primary, #212529);
             --card-border-radius: 16px;
             --btn-border-radius: 50px;
             --transition-speed: 0.3s;
         }
         
-        body {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            min-height: 100vh;
-            color: var(--dark-color);
-            line-height: 1.6;
-            padding-bottom: 80px;
-        }
+        body { min-height: 100vh; font-family: inherit; }
         
         .mobile-header {
             background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
@@ -47,7 +40,7 @@
         }
         
         .payment-detail-card {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 20px;
             padding: 1.5rem;
             margin-bottom: 1rem;
@@ -190,7 +183,7 @@
         }
         
         .payment-timeline {
-            background: white;
+            background: var(--panel-bg, #ffffff);
             border-radius: 20px;
             padding: 1.5rem;
             margin-bottom: 1rem;
@@ -267,19 +260,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../../partials/theme-head') %>
 </head>
 <body>
     <!-- Mobile Header -->
@@ -508,3 +489,4 @@
     </script>
 </body>
 </html>
+

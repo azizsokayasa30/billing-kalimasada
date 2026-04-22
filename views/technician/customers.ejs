@@ -267,19 +267,7 @@
         }
     </style>
 
-    <!-- GLOBAL THEME INJECTION -->
-    <script>
-      (function(){
-        if(window.__theme_init) return; window.__theme_init=true;
-        var t=localStorage.getItem('kalimasada_theme');
-        if(!t) t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
-        document.documentElement.setAttribute('data-theme',t);
-      })();
-    </script>
-    <link href="/css/dark-theme-global.css?v=2" rel="stylesheet">
-    <link href="/css/theme-system.css?v=2" rel="stylesheet">
-    <link href="/css/theme-overrides.css?v=1" rel="stylesheet">
-    <!-- END GLOBAL THEME INJECTION -->
+    <%- include('../partials/theme-head') %>
 </head>
 <body>
     <!-- Navigation -->
@@ -828,7 +816,7 @@
                 
                 if (data.success) {
                     const customer = data.customer;
-                    console.log('📋 Customer data loaded:', customer);
+                    console.log('?? Customer data loaded:', customer);
                     
                     // Load packages and ODPs for dropdowns first
                     await loadEditModalData();
@@ -845,27 +833,27 @@
                     document.getElementById('editCustomerOdp').value = customer.odp_id || '';
                     document.getElementById('editCustomerNotes').value = customer.notes || '';
                     
-                    console.log('✅ Form populated with ODP ID:', customer.odp_id);
-                    console.log('✅ Form populated with Package ID:', customer.package_id);
-                    console.log('✅ Form populated with Status:', customer.status);
-                    console.log('✅ Form populated with PPPoE Username:', customer.pppoe_username);
-                    console.log('✅ Form populated with Email:', customer.email);
-                    console.log('✅ Form populated with Address:', customer.address);
-                    console.log('✅ Form populated with Phone:', customer.phone);
-                    console.log('✅ Form populated with Name:', customer.name);
-                    console.log('✅ Form populated with Notes:', customer.notes);
-                    console.log('✅ Form populated with ID:', customer.id);
+                    console.log('? Form populated with ODP ID:', customer.odp_id);
+                    console.log('? Form populated with Package ID:', customer.package_id);
+                    console.log('? Form populated with Status:', customer.status);
+                    console.log('? Form populated with PPPoE Username:', customer.pppoe_username);
+                    console.log('? Form populated with Email:', customer.email);
+                    console.log('? Form populated with Address:', customer.address);
+                    console.log('? Form populated with Phone:', customer.phone);
+                    console.log('? Form populated with Name:', customer.name);
+                    console.log('? Form populated with Notes:', customer.notes);
+                    console.log('? Form populated with ID:', customer.id);
                     // Username not used in edit form
-                    console.log('🔍 Current ODP select value:', document.getElementById('editCustomerOdp').value);
-                    console.log('🔍 Current Package select value:', document.getElementById('editCustomerPackage').value);
-                    console.log('🔍 Current Status select value:', document.getElementById('editCustomerStatus').value);
-                    console.log('🔍 Current PPPoE Username value:', document.getElementById('editCustomerPppoe').value);
-                    console.log('🔍 Current Email value:', document.getElementById('editCustomerEmail').value);
-                    console.log('🔍 Current Address value:', document.getElementById('editCustomerAddress').value);
-                    console.log('🔍 Current Phone value:', document.getElementById('editCustomerPhone').value);
-                    console.log('🔍 Current Name value:', document.getElementById('editCustomerName').value);
-                    console.log('🔍 Current Notes value:', document.getElementById('editCustomerNotes').value);
-                    console.log('🔍 Current ID value:', document.getElementById('editCustomerId').value);
+                    console.log('?? Current ODP select value:', document.getElementById('editCustomerOdp').value);
+                    console.log('?? Current Package select value:', document.getElementById('editCustomerPackage').value);
+                    console.log('?? Current Status select value:', document.getElementById('editCustomerStatus').value);
+                    console.log('?? Current PPPoE Username value:', document.getElementById('editCustomerPppoe').value);
+                    console.log('?? Current Email value:', document.getElementById('editCustomerEmail').value);
+                    console.log('?? Current Address value:', document.getElementById('editCustomerAddress').value);
+                    console.log('?? Current Phone value:', document.getElementById('editCustomerPhone').value);
+                    console.log('?? Current Name value:', document.getElementById('editCustomerName').value);
+                    console.log('?? Current Notes value:', document.getElementById('editCustomerNotes').value);
+                    console.log('?? Current ID value:', document.getElementById('editCustomerId').value);
                     // Username field not available in edit form
                     
                     // Show modal
@@ -892,7 +880,7 @@
                     const packageSelect = document.getElementById('editCustomerPackage');
                     packageSelect.innerHTML = '<option value="">Pilih Package</option>';
                     
-                    console.log('📦 Loading packages:', packagesData.packages);
+                    console.log('?? Loading packages:', packagesData.packages);
                     
                     packagesData.packages.forEach(pkg => {
                         const option = document.createElement('option');
@@ -901,7 +889,7 @@
                         packageSelect.appendChild(option);
                     });
                     
-                    console.log('✅ Packages loaded');
+                    console.log('? Packages loaded');
                 }
                 
                 // Load ODPs
@@ -912,7 +900,7 @@
                     const odpSelect = document.getElementById('editCustomerOdp');
                     odpSelect.innerHTML = '<option value="">Pilih ODP</option>';
                     
-                    console.log('📡 Loading ODPs:', odpsData.odps);
+                    console.log('?? Loading ODPs:', odpsData.odps);
                     
                     odpsData.odps.forEach(odp => {
                         const option = document.createElement('option');
@@ -921,7 +909,7 @@
                         odpSelect.appendChild(option);
                     });
                     
-                    console.log('✅ ODPs loaded, current value will be set after this');
+                    console.log('? ODPs loaded, current value will be set after this');
                 }
                 
             } catch (error) {
@@ -1102,3 +1090,4 @@
     </script>
 </body>
 </html>
+
