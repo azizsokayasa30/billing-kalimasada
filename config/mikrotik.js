@@ -607,12 +607,8 @@ async function addPPPoEUserRadius({ username, password, profile = null }) {
                 }
             }
 
-            const mikrotikProfileName = profile || profileToUse;
-            await conn.execute(
-                "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Mikrotik-Group', ':=', ?) ON CONFLICT(groupname, attribute) DO UPDATE SET value = excluded.value",
-                [profileToUse, mikrotikProfileName]
-            );
-            logger.info(`[RADIUS] Ensured Mikrotik-Group=${mikrotikProfileName} for profile ${profileToUse}`);
+            // We do not add Mikrotik-Group to radgroupreply because it forces the router to look for a local profile.
+            // The RADIUS server should provide the actual attributes (Framed-Pool, Rate-Limit, etc.) directly.
 
             // HAPUS SEMUA groupname untuk username ini terlebih dahulu untuk menghindari duplikasi
             await conn.execute(
@@ -7521,6 +7517,17 @@ async function addPPPoEProfileRadius(profileData) {
             VALUES (?, 'Simultaneous-Use', ':=', ?)
         `, [groupname, profileData['simultaneous-use'] || '1']);
         
+        // Insert Framed-Protocol and Service-Type for PPPoE (required by Mikrotik RADIUS)
+        await conn.execute(`
+            INSERT INTO radgroupreply (groupname, attribute, op, value)
+            VALUES (?, 'Framed-Protocol', ':=', 'PPP')
+        `, [groupname]);
+        
+        await conn.execute(`
+            INSERT INTO radgroupreply (groupname, attribute, op, value)
+            VALUES (?, 'Service-Type', ':=', 'Framed-User')
+        `, [groupname]);
+        
         // Insert Rate-Limit if provided
         if (rateLimitStr) {
             await conn.execute(`
@@ -7767,7 +7774,8 @@ async function editPPPoEProfileRadius(profileData) {
                 'Session-Timeout', 'Idle-Timeout',
                 'Framed-IP-Address', 'Framed-Pool',
                 'MS-Primary-DNS-Server', 'MS-Secondary-DNS-Server',
-                'MikroTik-Address-List', 'MikroTik-Parent-Queue'
+                'MikroTik-Address-List', 'MikroTik-Parent-Queue',
+                'Framed-Protocol', 'Service-Type'
             )
         `, [groupnameToUpdate]);
         
@@ -7805,6 +7813,17 @@ async function editPPPoEProfileRadius(profileData) {
         const idleTimeout = profileData['idle-timeout'] || 
                           (profileData.idleTimeout ? convertToSeconds(profileData.idleTimeout, profileData.idleTimeoutUnit) : null);
         
+        // Re-insert Framed-Protocol and Service-Type for PPPoE
+        await conn.execute(`
+            INSERT INTO radgroupreply (groupname, attribute, op, value)
+            VALUES (?, 'Framed-Protocol', ':=', 'PPP')
+        `, [groupnameToUpdate]);
+        
+        await conn.execute(`
+            INSERT INTO radgroupreply (groupname, attribute, op, value)
+            VALUES (?, 'Service-Type', ':=', 'Framed-User')
+        `, [groupnameToUpdate]);
+
         // Insert updated attributes
         if (rateLimitStr) {
             await conn.execute(`
