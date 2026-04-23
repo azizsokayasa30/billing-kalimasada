@@ -379,11 +379,11 @@
                     <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
                     <div class="alert alert-info mb-3">
                         <i class="bi bi-info-circle me-2"></i>
-                        <strong>Mode RADIUS Aktif:</strong> Profile akan disimpan ke database RADIUS. 
-                        Pilih NAS sebagai referensi atau untuk update profile di router tertentu.
+                        <strong>Mode RADIUS Aktif:</strong> Profile akan disimpan ke database RADIUS.
                     </div>
                     <% } %>
 
+                    <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
                     <div class="mb-3">
                         <label for="routerId" class="form-label"><i class="bi bi-router me-1"></i>NAS (Router) *</label>
                         <select class="form-select" id="routerId" name="router_id" required>
@@ -398,6 +398,9 @@
                         </select>
                         <small class="text-muted">Pilih NAS (router) tempat profile akan dibuat</small>
                     </div>
+                    <% } else { %>
+                    <input type="hidden" id="routerId" name="router_id" value="">
+                    <% } %>
                     
                     <div class="row">
                         <div class="col-md-6">

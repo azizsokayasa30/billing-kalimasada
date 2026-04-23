@@ -124,152 +124,118 @@
                 const routerId = d.routerId || index;
                 
                 return `
-                    <div class="col-md-12 mb-3" data-router-id="${routerId}">
-                        <div class="card">
-                            <div class="card-header section-card-header">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong><i class="bi bi-router"></i> ${routerName}</strong>
-                                        ${d.identity && d.identity !== 'N/A' ? `<small class="ms-2">(${d.identity})</small>` : ''}
+                    <div class="col-md-12 mb-4" data-router-id="${routerId}">
+                        <div class="row">
+                            <!-- NAS Status & Basic Stats -->
+                            <div class="col-lg-4 mb-3">
+                                <div class="recent-card h-100 p-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-4">
+                                        <h5 class="fw-bold m-0" style="color: var(--fg);"><i class="bi bi-router"></i> ${routerName}</h5>
+                                        <span class="badge-status green d-flex align-items-center gap-1">
+                                            <span class="spinner-grow spinner-grow-sm text-success" style="width: 0.5rem; height: 0.5rem;" role="status"></span>
+                                            CONNECTED
+                                        </span>
                                     </div>
-                                    <small>${routerIp} | Uptime: ${d.uptimeFormatted || d.uptime || 'N/A'}</small>
-                                </div>
-                                <div class="mt-2" style="font-size: 0.85rem;">
-                                    ${d.boardName && d.boardName !== 'N/A' ? `<span class="badge bg-light text-dark me-1"><i class="bi bi-cpu"></i> ${d.boardName}</span>` : ''}
-                                    ${d.cpu && d.cpu !== 'N/A' ? `<span class="badge bg-light text-dark me-1"><i class="bi bi-motherboard"></i> ${d.cpu}</span>` : ''}
-                                    ${d.version && d.version !== 'N/A' ? `<span class="badge bg-light text-dark me-1"><i class="bi bi-code-square"></i> ${d.version}</span>` : ''}
-                                    ${d.voltage !== null && d.voltage > 0 ? `<span class="badge bg-light text-dark"><i class="bi bi-lightning"></i> ${d.voltage.toFixed(1)}V</span>` : ''}
+                                    <div class="mb-3 text-muted small card-header-info">
+                                        <div class="nas-detail-row">
+                                            <span class="nas-detail-label">IP Address</span>
+                                            <span class="nas-detail-val">${routerIp}</span>
+                                        </div>
+                                        <div class="nas-detail-row">
+                                            <span class="nas-detail-label">Uptime</span>
+                                            <span class="nas-detail-val">${d.uptimeFormatted || d.uptime || 'N/A'}</span>
+                                        </div>
+                                        <div class="nas-detail-row">
+                                            <span class="nas-detail-label">Identity</span>
+                                            <span class="nas-detail-val identity-val">${d.identity || 'N/A'}</span>
+                                        </div>
+                                        <div class="nas-detail-row mt-2 router-badges" style="display:flex; flex-wrap:wrap; gap:4px; border:none; padding:0;">
+                                            ${d.boardName && d.boardName !== 'N/A' ? `<span class="badge bg-light text-dark"><i class="bi bi-cpu"></i> ${d.boardName}</span>` : ''}
+                                            ${d.cpu && d.cpu !== 'N/A' ? `<span class="badge bg-light text-dark"><i class="bi bi-motherboard"></i> ${d.cpu}</span>` : ''}
+                                            ${d.version && d.version !== 'N/A' ? `<span class="badge bg-light text-dark"><i class="bi bi-code-square"></i> ${d.version}</span>` : ''}
+                                            ${d.voltage !== null && d.voltage > 0 ? `<span class="badge bg-light text-dark"><i class="bi bi-lightning"></i> ${d.voltage.toFixed(1)}V</span>` : ''}
+                                            ${d.temperature !== null && d.temperature > 0 ? `<span class="badge bg-light text-dark"><i class="bi bi-thermometer-half"></i> ${d.temperature}°C</span>` : ''}
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-4" data-metric="cpu">
+                                        <div class="nas-progress-wrap">
+                                            <div class="nas-progress-label"><i class="bi bi-cpu"></i> CPU Load</div>
+                                            <div class="nas-progress-val">${d.cpuLoad}%</div>
+                                        </div>
+                                        <div class="nas-progress-bg">
+                                            <div class="nas-progress-bar bg-indigo" style="width: ${d.cpuLoad}%"></div>
+                                        </div>
+                                        <div class="text-end text-muted cpu-subtext" style="font-size:0.7rem;">${d.cpuCount} Core(s) @ ${d.cpuFrequency} MHz</div>
+                                    </div>
+                                    
+                                    <div class="mt-3" data-metric="ram">
+                                        <div class="nas-progress-wrap">
+                                            <div class="nas-progress-label"><i class="bi bi-memory"></i> RAM Usage</div>
+                                            <div class="nas-progress-val">${d.memoryUsedPercent}%</div>
+                                        </div>
+                                        <div class="nas-progress-bg">
+                                            <div class="nas-progress-bar bg-emerald" style="width: ${d.memoryUsedPercent}%"></div>
+                                        </div>
+                                        <div class="text-end text-muted ram-subtext" style="font-size:0.7rem;">${d.memoryUsedMB.toFixed(1)} MB / ${d.totalMemoryMB.toFixed(1)} MB</div>
+                                    </div>
+                                    
+                                    <div class="mt-3" data-metric="hdd">
+                                        <div class="nas-progress-wrap">
+                                            <div class="nas-progress-label"><i class="bi bi-hdd"></i> HDD Usage</div>
+                                            <div class="nas-progress-val">${d.diskUsedPercent}%</div>
+                                        </div>
+                                        <div class="nas-progress-bg" style="margin-bottom: 0;">
+                                            <div class="nas-progress-bar" style="background: var(--warning); width: ${d.diskUsedPercent}%"></div>
+                                        </div>
+                                        <div class="text-end text-muted hdd-subtext" style="font-size:0.7rem; margin-top:6px;">${d.diskUsedMB.toFixed(1)} MB / ${d.totalDiskMB.toFixed(1)} MB</div>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="card-body">
-                                <!-- Row 1: RAM, CPU, HDD -->
-                                <div class="row mb-3">
-                                    <!-- RAM -->
-                                    <div class="col-md-4" data-metric="ram">
-                                        <div class="card bg-light">
-                                            <div class="card-body p-2">
-                                                <small class="text-muted">Used RAM Memory</small>
-                                                <div class="progress mb-1" style="height: 20px;">
-                                                    <div class="progress-bar ${d.memoryUsedPercent > 80 ? 'bg-danger' : d.memoryUsedPercent > 60 ? 'bg-warning' : 'bg-success'}" 
-                                                         style="width: ${d.memoryUsedPercent}%">
-                                                        ${d.memoryUsedPercent}%
-                                                    </div>
+                            
+                            <!-- Realtime Traffic Chart -->
+                            <div class="col-lg-8 mb-3">
+                                <div class="recent-card h-100 p-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-4">
+                                        <div>
+                                            <h5 class="fw-bold m-0" style="color: var(--fg);">Real-time Traffic</h5>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <select id="interfaceSelect${routerId}" class="form-select form-select-sm" style="width: 200px; font-size: 0.8rem;">
+                                                <option value="">-- Pilih Interface --</option>
+                                                ${d.interfaces ? d.interfaces.map(iface => `<option value="${iface.name}">${iface.name}</option>`).join('') : ''}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <div class="stats-info" id="interfaceTrafficStats${routerId}">
+                                                <div class="small text-muted mb-1 fw-bold">RX (Receive)</div>
+                                                <div class="fw-bold text-primary mb-3" style="font-size: 1.2rem;"><span id="rxCurrent${routerId}">0 Mbps</span></div>
+                                                
+                                                <div class="small text-muted mb-1 fw-bold">TX (Transmit)</div>
+                                                <div class="fw-bold text-success mb-3" style="font-size: 1.2rem;"><span id="txCurrent${routerId}">0 Mbps</span></div>
+                                                
+                                                <div class="small text-muted" style="font-size:0.65rem;">
+                                                    <div class="mb-1">Min RX: <span id="rxMin${routerId}">0</span> | Max: <span id="rxMax${routerId}">0</span></div>
+                                                    <div>Min TX: <span id="txMin${routerId}">0</span> | Max: <span id="txMax${routerId}">0</span></div>
                                                 </div>
-                                                <small class="text-muted">${d.memoryUsedMB.toFixed(1)} MB / ${d.totalMemoryMB.toFixed(1)} MB</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <!-- CPU -->
-                                    <div class="col-md-4" data-metric="cpu">
-                                        <div class="card bg-light">
-                                            <div class="card-body p-2">
-                                                <small class="text-muted">CPU Load</small>
-                                                <div class="progress mb-1" style="height: 20px;">
-                                                    <div class="progress-bar ${d.cpuLoad > 80 ? 'bg-danger' : d.cpuLoad > 60 ? 'bg-warning' : 'bg-info'}" 
-                                                         style="width: ${d.cpuLoad}%">
-                                                        ${d.cpuLoad}%
-                                                    </div>
+                                                <div class="small text-muted mt-2" style="font-size:0.65rem;">
+                                                    Avg RX: <span id="rxAvg${routerId}">0</span> | Avg TX: <span id="txAvg${routerId}">0</span>
                                                 </div>
-                                                <small class="text-muted">${d.cpuCount} Core(s) @ ${d.cpuFrequency} MHz</small>
                                             </div>
                                         </div>
-                                    </div>
-                                    <!-- HDD -->
-                                    <div class="col-md-4" data-metric="hdd">
-                                        <div class="card bg-light">
-                                            <div class="card-body p-2">
-                                                <small class="text-muted">HDD Utilization</small>
-                                                <div class="progress mb-1" style="height: 20px;">
-                                                    <div class="progress-bar ${d.diskUsedPercent > 80 ? 'bg-danger' : d.diskUsedPercent > 60 ? 'bg-warning' : 'bg-secondary'}" 
-                                                         style="width: ${d.diskUsedPercent}%">
-                                                        ${d.diskUsedPercent}%
-                                                    </div>
-                                                </div>
-                                                <small class="text-muted">${d.diskUsedMB.toFixed(1)} MB / ${d.totalDiskMB.toFixed(1)} MB</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Row 2: Temperature, Network In, Network Out - Gauge Charts -->
-                                <div class="row mb-3">
-                                    <!-- Temperature Gauge -->
-                                    <div class="col-md-4" data-metric="temperature">
-                                        <div class="card bg-light">
-                                            <div class="card-body p-3 text-center" style="min-height: 280px;">
-                                                <small class="text-muted d-block mb-2 text-start" style="font-size: 0.9rem; font-weight: 500;">Temperature</small>
-                                                <div id="tempGauge${routerId}" style="height: 240px;"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <!-- Network In Gauge -->
-                                    <div class="col-md-4" data-metric="network-in">
-                                        <div class="card bg-light">
-                                            <div class="card-body p-3 text-center" style="min-height: 280px;">
-                                                <small class="text-muted d-block mb-2 text-start" style="font-size: 0.9rem; font-weight: 500;">Total Network Inbound</small>
-                                                <div id="networkInGauge${routerId}" style="height: 240px;"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <!-- Network Out Gauge -->
-                                    <div class="col-md-4" data-metric="network-out">
-                                        <div class="card bg-light">
-                                            <div class="card-body p-3 text-center" style="min-height: 280px;">
-                                                <small class="text-muted d-block mb-2 text-start" style="font-size: 0.9rem; font-weight: 500;">Total Network Outbound</small>
-                                                <div id="networkOutGauge${routerId}" style="height: 240px;"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Row 3: Interface Traffic Chart (Per Interface dengan Dropdown) -->
-                                ${d.interfaces && d.interfaces.length > 0 ? `
-                                <div class="row">
-                                    <div class="col-12">
-                                        <div class="card bg-light">
-                                            <div class="card-header d-flex justify-content-between align-items-center">
-                                                <small class="fw-bold">Interface Traffic</small>
-                                                <select id="interfaceSelect${routerId}" class="form-select form-select-sm" style="width: 250px; font-size: 0.85rem;">
-                                                    <option value="">-- Pilih Interface --</option>
-                                                    ${d.interfaces.map(iface => `
-                                                        <option value="${iface.name}">${iface.name}</option>
-                                                    `).join('')}
-                                                </select>
-                                            </div>
-                                            <div class="card-body p-3">
-                                                <div class="row align-items-center">
-                                                    <!-- Stats Info Card -->
-                                                    <div class="col-md-2">
-                                                        <div class="stats-info" id="interfaceTrafficStats${routerId}">
-                                                            <h6 class="mb-2 fw-bold" id="interfaceTrafficTitle${routerId}">-</h6>
-                                                            <div class="small text-muted mb-2 fw-bold">RX (Receive)</div>
-                                                            <div class="small text-muted mb-1">Current: <span id="rxCurrent${routerId}" class="fw-bold text-primary">0 Mbps</span></div>
-                                                            <div class="small text-muted mb-1">Min: <span id="rxMin${routerId}" class="text-success">0 Mbps</span></div>
-                                                            <div class="small text-muted mb-1">Max: <span id="rxMax${routerId}" class="text-danger">0 Mbps</span></div>
-                                                            <div class="small text-muted mb-3">Avg: <span id="rxAvg${routerId}" class="text-info">0 Mbps</span></div>
-                                                            <div class="small text-muted mb-2 fw-bold">TX (Transmit)</div>
-                                                            <div class="small text-muted mb-1">Current: <span id="txCurrent${routerId}" class="fw-bold text-primary">0 Mbps</span></div>
-                                                            <div class="small text-muted mb-1">Min: <span id="txMin${routerId}" class="text-success">0 Mbps</span></div>
-                                                            <div class="small text-muted mb-1">Max: <span id="txMax${routerId}" class="text-danger">0 Mbps</span></div>
-                                                            <div class="small text-muted">Avg: <span id="txAvg${routerId}" class="text-info">0 Mbps</span></div>
-                                                        </div>
-                                                    </div>
-                                                    <!-- Chart -->
-                                                    <div class="col-md-10">
-                                                        <div style="position: relative; height: 400px; background-color: #ffffff;">
-                                                            <canvas id="rxBytesChart${routerId}" style="max-height: 380px;"></canvas>
-                                                            <div id="noInterfaceSelected${routerId}" class="text-center text-muted py-5" style="display: none;">
-                                                                <i class="bi bi-graph-up" style="font-size: 2rem;"></i>
-                                                                <p class="mt-2">Pilih interface untuk menampilkan grafik</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                        <div class="col-md-9">
+                                            <div style="position: relative; height: 320px; background-color: transparent;">
+                                                <canvas id="rxBytesChart${routerId}" style="max-height: 320px;"></canvas>
+                                                <div id="noInterfaceSelected${routerId}" class="text-center text-muted py-5" style="display: none;">
+                                                    <i class="bi bi-graph-up" style="font-size: 2rem;"></i>
+                                                    <p class="mt-2">Pilih interface untuk melihat trafik</p>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                ` : '<div class="text-center text-muted py-2"><small>No interface data available</small></div>'}
                             </div>
                         </div>
                     </div>
@@ -320,17 +286,6 @@
                                 html += createMonitoringPanel(data, idx + 1);
                             });
                             container.innerHTML = html;
-                            
-                            // Create gauge charts after HTML is rendered
-                            result.data.forEach((data, idx) => {
-                                if (data.success && data.data) {
-                                    const routerId = data.data.routerId || (idx + 1);
-                                    // Delay lebih lama untuk memastikan DOM siap
-                                    setTimeout(() => {
-                                        createGaugeCharts(routerId, data.data);
-                                    }, 300);
-                                }
-                            });
                             
                             // Create bar charts for Rx Bytes - dengan delay untuk memastikan canvas sudah ada
                             setTimeout(() => {
@@ -689,37 +644,34 @@
                 }
                 
                 // Update RAM progress bar
-                const ramBar = panel.querySelector('[data-metric="ram"] .progress-bar');
+                const ramBar = panel.querySelector('[data-metric="ram"] .nas-progress-bar');
                 if (ramBar) {
                     ramBar.style.width = `${data.memoryUsedPercent}%`;
-                    ramBar.textContent = `${data.memoryUsedPercent}%`;
-                    ramBar.className = `progress-bar ${data.memoryUsedPercent > 80 ? 'bg-danger' : data.memoryUsedPercent > 60 ? 'bg-warning' : 'bg-success'}`;
-                    const ramText = panel.querySelector('[data-metric="ram"] small.text-muted');
+                    const ramVal = panel.querySelector('[data-metric="ram"] .nas-progress-val');
+                    if (ramVal) ramVal.textContent = `${data.memoryUsedPercent}%`;
+                    const ramText = panel.querySelector('[data-metric="ram"] .ram-subtext');
                     if (ramText) ramText.textContent = `${data.memoryUsedMB.toFixed(1)} MB / ${data.totalMemoryMB.toFixed(1)} MB`;
                 }
                 
                 // Update CPU progress bar
-                const cpuBar = panel.querySelector('[data-metric="cpu"] .progress-bar');
+                const cpuBar = panel.querySelector('[data-metric="cpu"] .nas-progress-bar');
                 if (cpuBar) {
                     cpuBar.style.width = `${data.cpuLoad}%`;
-                    cpuBar.textContent = `${data.cpuLoad}%`;
-                    cpuBar.className = `progress-bar ${data.cpuLoad > 80 ? 'bg-danger' : data.cpuLoad > 60 ? 'bg-warning' : 'bg-info'}`;
-                    const cpuText = panel.querySelector('[data-metric="cpu"] small.text-muted');
+                    const cpuVal = panel.querySelector('[data-metric="cpu"] .nas-progress-val');
+                    if (cpuVal) cpuVal.textContent = `${data.cpuLoad}%`;
+                    const cpuText = panel.querySelector('[data-metric="cpu"] .cpu-subtext');
                     if (cpuText) cpuText.textContent = `${data.cpuCount} Core(s) @ ${data.cpuFrequency} MHz`;
                 }
                 
                 // Update HDD progress bar
-                const hddBar = panel.querySelector('[data-metric="hdd"] .progress-bar');
+                const hddBar = panel.querySelector('[data-metric="hdd"] .nas-progress-bar');
                 if (hddBar) {
                     hddBar.style.width = `${data.diskUsedPercent}%`;
-                    hddBar.textContent = `${data.diskUsedPercent}%`;
-                    hddBar.className = `progress-bar ${data.diskUsedPercent > 80 ? 'bg-danger' : data.diskUsedPercent > 60 ? 'bg-warning' : 'bg-secondary'}`;
-                    const hddText = panel.querySelector('[data-metric="hdd"] small.text-muted');
+                    const hddVal = panel.querySelector('[data-metric="hdd"] .nas-progress-val');
+                    if (hddVal) hddVal.textContent = `${data.diskUsedPercent}%`;
+                    const hddText = panel.querySelector('[data-metric="hdd"] .hdd-subtext');
                     if (hddText) hddText.textContent = `${data.diskUsedMB.toFixed(1)} MB / ${data.totalDiskMB.toFixed(1)} MB`;
                 }
-                
-                // Update Gauge Charts
-                updateGaugeCharts(routerId, data);
             }
             
             // Start real-time traffic update untuk interface
