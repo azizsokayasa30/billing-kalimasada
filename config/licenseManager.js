@@ -78,63 +78,12 @@ async function initializeLicense() {
 
 // Check license status
 async function checkLicenseStatus() {
-    try {
-        const db = new sqlite3.Database(dbPath);
-        
-        const license = await new Promise((resolve, reject) => {
-            db.get('SELECT * FROM license ORDER BY id DESC LIMIT 1', [], (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
-            });
-        });
-        
-        db.close();
-        
-        if (!license) {
-            // Jika belum ada license, initialize
-            await initializeLicense();
-            return checkLicenseStatus();
-        }
-        
-        // Jika status active, langsung return
-        if (license.status === 'active') {
-            return {
-                status: 'active',
-                license_key: license.license_key,
-                activated_at: license.activated_at,
-                message: 'License aktif'
-            };
-        }
-        
-        // Cek apakah trial sudah habis
-        const now = new Date();
-        const trialEndDate = new Date(license.trial_end_date);
-        
-        if (now > trialEndDate && license.status !== 'active') {
-            // Update status ke expired
-            await updateLicenseStatus('expired');
-            
-            return {
-                status: 'expired',
-                trial_end_date: license.trial_end_date,
-                message: 'Trial period telah berakhir'
-            };
-        }
-        
-        // Masih dalam trial period
-        const daysRemaining = Math.ceil((trialEndDate - now) / (1000 * 60 * 60 * 24));
-        
-        return {
-            status: 'trial',
-            trial_start_date: license.trial_start_date,
-            trial_end_date: license.trial_end_date,
-            days_remaining: daysRemaining > 0 ? daysRemaining : 0,
-            message: `Trial period aktif. ${daysRemaining} hari tersisa.`
-        };
-    } catch (error) {
-        logger.error(`Error checking license status: ${error.message}`);
-        throw error;
-    }
+    return {
+        status: 'active',
+        license_key: 'CVLM-BYPASS-BYPASS-BYPASS',
+        activated_at: new Date().toISOString(),
+        message: 'License aktif (Bypassed)'
+    };
 }
 
 // Update license status
@@ -261,24 +210,12 @@ async function getCurrentLicenseId() {
 
 // Check if license is valid (for middleware)
 async function isLicenseValid() {
-    try {
-        const status = await checkLicenseStatus();
-        return status.status === 'active' || status.status === 'trial';
-    } catch (error) {
-        logger.error(`Error checking license validity: ${error.message}`);
-        return false; // Default to false if error
-    }
+    return true;
 }
 
 // Check if trial is expired
 async function isTrialExpired() {
-    try {
-        const status = await checkLicenseStatus();
-        return status.status === 'expired';
-    } catch (error) {
-        logger.error(`Error checking trial expiration: ${error.message}`);
-        return true; // Default to expired if error
-    }
+    return false;
 }
 
 // Initialize on module load
