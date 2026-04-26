@@ -1979,34 +1979,44 @@ router.get('/customers/summary', async (req, res) => {
 // Bulk delete customers
 router.post('/customers/bulk-delete', async (req, res) => {
     try {
-        const { phones } = req.body || {};
-        if (!Array.isArray(phones) || phones.length === 0) {
-            return res.status(400).json({ success: false, message: 'Daftar pelanggan (phones) kosong atau tidak valid' });
+        const { ids, phones } = req.body || {};
+        
+        // Support backward compatibility (phones) or new standard (ids)
+        const items = ids || phones;
+        const isUsingIds = !!ids;
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ success: false, message: 'Daftar pelanggan kosong atau tidak valid' });
         }
 
         const results = [];
         let success = 0;
         let failed = 0;
 
-        for (const phone of phones) {
+        for (const item of items) {
             try {
-                const deleted = await billingManager.deleteCustomer(String(phone));
-                results.push({ phone, success: true });
+                let deleted;
+                if (isUsingIds) {
+                    deleted = await billingManager.deleteCustomerById(item);
+                } else {
+                    deleted = await billingManager.deleteCustomer(String(item));
+                }
+                results.push({ phone: item, success: true });
                 success++;
             } catch (e) {
                 // Map known errors to friendly messages
                 let msg = e.message || 'Gagal menghapus';
                 if (msg.includes('invoice(s) still exist')) {
                     msg = 'Masih memiliki tagihan, hapus tagihan terlebih dahulu';
-                } else if (msg.includes('Customer not found')) {
+                } else if (msg.includes('Customer not found') || msg.includes('Pelanggan tidak ditemukan')) {
                     msg = 'Pelanggan tidak ditemukan';
                 }
-                results.push({ phone, success: false, message: msg });
+                results.push({ phone: item, success: false, message: msg });
                 failed++;
             }
         }
 
-        return res.json({ success: true, summary: { success, failed, total: phones.length }, results });
+        return res.json({ success: true, summary: { success, failed, total: items.length }, results });
     } catch (error) {
         logger.error('Error bulk deleting customers:', error);
         return res.status(500).json({ success: false, message: 'Gagal melakukan hapus massal pelanggan', error: error.message });
@@ -5623,7 +5633,7 @@ router.post('/customers/:phone/accept', async (req, res) => {
     }
 });
 
-// Delete customer
+// Delete customer by phone (backward compatibility)
 router.delete('/customers/:phone', async (req, res) => {
     try {
         const { phone } = req.params;
@@ -5643,7 +5653,46 @@ router.delete('/customers/:phone', async (req, res) => {
         let errorMessage = 'Gagal menghapus pelanggan';
         let statusCode = 500;
         
-        if (error.message.includes('Customer not found')) {
+        if (error.message.includes('Customer not found') || error.message.includes('Pelanggan tidak ditemukan')) {
+            errorMessage = 'Pelanggan tidak ditemukan';
+            statusCode = 404;
+        } else if (error.message.includes('invoice(s) still exist')) {
+            errorMessage = 'Tidak dapat menghapus pelanggan karena masih memiliki tagihan. Silakan hapus semua tagihan terlebih dahulu.';
+            statusCode = 400;
+        } else if (error.message.includes('foreign key constraint')) {
+            errorMessage = 'Tidak dapat menghapus pelanggan karena masih memiliki data terkait. Silakan hapus data terkait terlebih dahulu.';
+            statusCode = 400;
+        }
+        
+        res.status(statusCode).json({
+            success: false,
+            message: errorMessage,
+            error: error.message
+        });
+    }
+});
+
+// Delete customer by ID
+router.delete('/customers/id/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const deletedCustomer = await billingManager.deleteCustomerById(id);
+        logger.info(`Customer deleted by ID: ${id}`);
+        
+        res.json({
+            success: true,
+            message: 'Pelanggan berhasil dihapus',
+            customer: deletedCustomer
+        });
+    } catch (error) {
+        logger.error('Error deleting customer by ID:', error);
+        
+        // Handle specific error messages
+        let errorMessage = 'Gagal menghapus pelanggan';
+        let statusCode = 500;
+        
+        if (error.message.includes('Customer not found') || error.message.includes('Pelanggan tidak ditemukan')) {
             errorMessage = 'Pelanggan tidak ditemukan';
             statusCode = 404;
         } else if (error.message.includes('invoice(s) still exist')) {

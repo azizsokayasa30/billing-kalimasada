@@ -691,7 +691,7 @@
                                         <% customers.forEach(function(customer) { %>
                                             <tr data-phone="<%= customer.phone %>" data-username="<%= customer.pppoe_username %>">
                                                 <td>
-                                                    <input type="checkbox" class="form-check-input customer-checkbox" value="<%= customer.phone %>">
+                                                    <input type="checkbox" class="form-check-input customer-checkbox" value="<%= customer.id %>">
                                                 </td>
                                                 <td>
                                                     <% if (customer.customer_id) { %>
@@ -749,7 +749,7 @@
                                                         <button class="btn btn-sm btn-success" onclick="sendWhatsAppNotification('<%= customer.phone %>', '<%= customer.name %>')" title="Kirim Notifikasi WhatsApp">
                                                             <i class="bi bi-whatsapp"></i>
                                                         </button>
-                                                        <button class="btn btn-sm btn-danger" onclick="deleteCustomer('<%= customer.phone %>')" title="Hapus Customer">
+                                                        <button class="btn btn-sm btn-danger" onclick="deleteCustomer('<%= customer.id %>')" title="Hapus Customer">
                                                             <i class="bi bi-trash3-fill"></i>
                                                         </button>
                                                     </div>
@@ -1663,9 +1663,9 @@
 
             // Bulk delete click
             $('#bulkDeleteBtn').on('click', function() {
-                const phones = $('.customer-checkbox:checked').map(function(){ return this.value; }).get();
-                if (phones.length === 0) return;
-                if (!confirm(`Hapus ${phones.length} pelanggan terpilih?`)) return;
+                const ids = $('.customer-checkbox:checked').map(function(){ return this.value; }).get();
+                if (ids.length === 0) return;
+                if (!confirm(`Hapus ${ids.length} pelanggan terpilih?`)) return;
 
                 const btn = $(this);
                 const original = btn.html();
@@ -1674,7 +1674,7 @@
                 fetch('/admin/billing/customers/bulk-delete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phones })
+                    body: JSON.stringify({ ids })
                 })
                 .then(r => r.json())
                 .then(data => {
@@ -2868,11 +2868,11 @@
         }
 
         // Delete customer
-        async function deleteCustomer(phone) {
+        async function deleteCustomer(id) {
             if (!confirm('Apakah Anda yakin ingin menghapus pelanggan ini?')) return;
             
             try {
-                const response = await fetch(`/admin/billing/customers/${phone}`, {
+                const response = await fetch(`/admin/billing/customers/id/${id}`, {
                     method: 'DELETE'
                 });
                 
