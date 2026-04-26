@@ -116,7 +116,11 @@ class RADIUSDatabase {
                 acctterminatecause TEXT NOT NULL DEFAULT '',
                 servicetype TEXT DEFAULT NULL,
                 framedprotocol TEXT DEFAULT NULL,
-                framedipaddress TEXT NOT NULL DEFAULT ''
+                framedipaddress TEXT NOT NULL DEFAULT '',
+                framedipv6address TEXT NOT NULL DEFAULT '',
+                framedipv6prefix TEXT NOT NULL DEFAULT '',
+                framedinterfaceid TEXT NOT NULL DEFAULT '',
+                delegatedipv6prefix TEXT NOT NULL DEFAULT ''
             )`,
             `CREATE INDEX IF NOT EXISTS idx_radacct_active ON radacct (acctstoptime, username, acctstarttime)`,
             `CREATE TABLE IF NOT EXISTS radpostauth (
