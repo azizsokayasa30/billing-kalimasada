@@ -249,6 +249,18 @@ async function getRadiusConnection() {
     const conn = new RADIUSDatabase(dbPath);
     conn._isSingleton = true;
     await conn.connect();
+    
+    // ADD THIS: Verify schema exists before returning connection
+    const [tables] = await conn.execute("SELECT name FROM sqlite_master WHERE type='table'");
+    const requiredTables = ['radcheck', 'radreply', 'radgroupcheck', 'radgroupreply', 'radusergroup', 'radacct', 'nas'];
+    const existingTables = tables.map(t => t.name);
+    const missing = requiredTables.filter(t => !existingTables.includes(t));
+    
+    if (missing.length > 0) {
+        logger.error(`[RADIUS-SQLITE] Missing tables: ${missing.join(', ')}`);
+        throw new Error(`RADIUS database schema incomplete. Missing tables: ${missing.join(', ')}`);
+    }
+    
     _singletonConn = conn;
     _singletonPath = dbPath;
     return conn;
