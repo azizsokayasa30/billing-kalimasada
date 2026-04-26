@@ -441,7 +441,7 @@ async function getActivePPPoEConnectionsRadius() {
                 nasipaddress,
                 (strftime('%s', 'now') - strftime('%s', acctstarttime)) as session_time
             FROM radacct
-            WHERE acctstoptime IS NULL
+            WHERE (acctstoptime IS NULL OR acctstoptime = '' OR acctstoptime = '0' OR acctstoptime = '0000-00-00 00:00:00')
         `;
         
         const params = [];
