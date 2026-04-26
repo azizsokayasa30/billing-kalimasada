@@ -281,7 +281,9 @@ async function getPPPoEUsersRadius() {
         let activeUsernames = [];
         try {
             const activeConnections = await getActivePPPoEConnectionsRadius();
-            if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
+            if (Array.isArray(activeConnections)) {
+                activeUsernames = activeConnections.map(c => c.name || c.username);
+            } else if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
                 activeUsernames = activeConnections.data.map(c => c.name || c.username);
             }
         } catch (activeError) {
