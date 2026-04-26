@@ -191,43 +191,7 @@
                 <% } %>
             <% } %>
 
-            <!-- LICENSE STATUS CARD (Trial & Expired only - Active moved to top) -->
-            <% if (typeof licenseStatus !== 'undefined' && licenseStatus) { %>
-            <div class="row mb-4">
-                <div class="col-md-12">
-                    <% if (licenseStatus.status === 'trial') { %>
-                        <div class="alert alert-warning d-flex align-items-center mb-0">
-                            <i class="bi bi-clock-history fs-3 me-3"></i>
-                            <div class="flex-grow-1">
-                                <strong>Mode Trial Aktif</strong>
-                                <div class="small">
-                                    <span class="badge bg-warning text-dark me-2"><%= licenseStatus.days_remaining || 0 %> hari tersisa</span>
-                                    Trial berakhir: <strong><%= licenseStatus.trial_end_date ? new Date(licenseStatus.trial_end_date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' %></strong>
-                                </div>
-                                <div class="small mt-1">
-                                    <a href="/admin/license" class="btn btn-sm btn-warning">
-                                        <i class="bi bi-shield-lock me-1"></i>Aktivasi License Key
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    <% } else if (licenseStatus.status === 'expired') { %>
-                        <div class="alert alert-danger d-flex align-items-center mb-0">
-                            <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
-                            <div class="flex-grow-1">
-                                <strong>Trial Period Telah Berakhir!</strong>
-                                <div class="small">Trial berakhir: <%= licenseStatus.trial_end_date ? new Date(licenseStatus.trial_end_date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '-' %></div>
-                                <div class="small mt-2">
-                                    <a href="/admin/license" class="btn btn-sm btn-danger">
-                                        <i class="bi bi-shield-lock me-1"></i>Aktivasi License Key Sekarang
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    <% } %>
-                </div>
-            </div>
-            <% } %>
+            <!-- LICENSE STATUS CARD REMOVED -->
 
             <!-- ====== QUICK ACTION ====== -->
             <% const bs = typeof billingStats !== 'undefined' ? billingStats : {}; %>
