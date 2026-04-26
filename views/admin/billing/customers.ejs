@@ -1680,8 +1680,14 @@
                 .then(data => {
                     if (data.success) {
                         const s = data.summary || {}; 
-                        showToast('success', `Hapus massal selesai. Berhasil: ${s.success||0}, Gagal: ${s.failed||0}`);
-                        setTimeout(() => location.reload(), 1000);
+                        if (s.failed > 0) {
+                            let failMsgs = data.results.filter(r => !r.success).map(r => r.phone + ': ' + r.message).join('<br>');
+                            showToast('warning', `Selesai. Berhasil: ${s.success||0}, Gagal: ${s.failed||0}`, failMsgs);
+                            setTimeout(() => location.reload(), 5000);
+                        } else {
+                            showToast('success', `Hapus massal selesai. Berhasil: ${s.success||0}`);
+                            setTimeout(() => location.reload(), 1500);
+                        }
                     } else {
                         showToast('error', data.message || 'Gagal hapus massal');
                     }

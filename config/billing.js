@@ -2610,6 +2610,18 @@ ${year && month ? `
                                     }
                                 }
                                 
+                                // Hapus user PPPoE dari Mikrotik/RADIUS
+                                try {
+                                    const { deletePPPoEUser } = require('./mikrotik');
+                                    const pppoeToUse = customer.pppoe_username || customer.username;
+                                    if (pppoeToUse) {
+                                        await deletePPPoEUser(pppoeToUse);
+                                        console.log(`✅ Deleted PPPoE user ${pppoeToUse} for customer ${customer.username}`);
+                                    }
+                                } catch (pppoeError) {
+                                    console.warn(`⚠️ PPPoE deletion failed or skipped for ${customer.username}:`, pppoeError.message);
+                                }
+                                
                                 resolve({ username: customer.username, deleted: true });
                             });
                         });
@@ -2673,6 +2685,18 @@ ${year && month ? `
                                     } catch (genieacsError) {
                                         console.warn(`GenieACS cleanup skipped for ${customer.username}:`, genieacsError.message);
                                     }
+                                }
+                                
+                                // Hapus user PPPoE dari Mikrotik/RADIUS
+                                try {
+                                    const { deletePPPoEUser } = require('./mikrotik');
+                                    const pppoeToUse = customer.pppoe_username || customer.username;
+                                    if (pppoeToUse) {
+                                        await deletePPPoEUser(pppoeToUse);
+                                        console.log(`✅ Deleted PPPoE user ${pppoeToUse} for customer ${customer.username}`);
+                                    }
+                                } catch (pppoeError) {
+                                    console.warn(`⚠️ PPPoE deletion failed or skipped for ${customer.username}:`, pppoeError.message);
                                 }
                                 
                                 resolve({ username: customer.username, deleted: true });
