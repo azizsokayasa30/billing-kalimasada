@@ -2879,7 +2879,7 @@
                 const result = await response.json();
                 if (result.success) {
                     showToast(result.message, 'success');
-                    setTimeout(() => window.location.reload(), 1000);
+                    setTimeout(() => window.location.reload(), 2000);
                 } else {
                     showToast(result.message, 'error');
                 }
@@ -3511,15 +3511,8 @@
                 messageHtml += `<br><small style="opacity: 0.9;">${details}</small>`;
             }
             
-            // Tentukan warna solid (hijau untuk success)
-            let solidBgColor = '';
-            if (type === 'success') solidBgColor = '#198754';
-            else if (type === 'danger' || type === 'error') solidBgColor = '#dc3545';
-            else if (type === 'warning') solidBgColor = '#ffc107';
-            else solidBgColor = '#0dcaf0';
-
             const toastHtml = `
-                <div class="toast align-items-center text-white border-0 opacity-100" role="alert" aria-live="assertive" aria-atomic="true" style="min-width: 300px; max-width: 500px; background-color: ${solidBgColor} !important; opacity: 1 !important;">
+                <div class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true" style="min-width: 300px; max-width: 500px;">
                     <div class="d-flex">
                         <div class="toast-body">
                             ${messageHtml}

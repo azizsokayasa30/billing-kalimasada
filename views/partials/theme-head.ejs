@@ -86,6 +86,16 @@ html[data-theme='dark'] .badge.bg-primary { background-color: #2563eb !important
 html[data-theme='dark'] .badge.bg-info    { background-color: #0891b2 !important; color: #fff !important; }
 html[data-theme='dark'] .badge.bg-secondary { background-color: #475569 !important; color: #fff !important; }
 html[data-theme='dark'] .badge.bg-brown   { background-color: #92400e !important; color: #fef3c7 !important; }
+/* ── Global Toast Opacity & Background Fix ────────────────── */
+.toast {
+  --bs-toast-bg-opacity: 1 !important;
+  background-color: rgba(var(--bs-body-bg-rgb), 1) !important;
+}
+.toast.bg-success { background-color: #198754 !important; color: #fff !important; }
+.toast.bg-danger { background-color: #dc3545 !important; color: #fff !important; }
+.toast.bg-warning { background-color: #ffc107 !important; color: #000 !important; }
+.toast.bg-info { background-color: #0dcaf0 !important; color: #000 !important; }
+.toast.bg-primary { background-color: #0d6efd !important; color: #fff !important; }
 </style>
 
 <!-- Badge Formatter: auto-apply warna sesuai isi teks badge -->
