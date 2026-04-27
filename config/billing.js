@@ -3,6 +3,7 @@
     const sqlite3 = require('sqlite3').verbose();
     const PaymentGatewayManager = require('./paymentGateway');
     const logger = require('./logger'); // Added logger import
+    const { syncCustomerToRadius } = require('../utils/radiusCustomerSync');
     const { getCompanyHeader } = require('./message-templates');
     const { getSetting } = require('./settingsManager');
 
@@ -1539,6 +1540,19 @@
                         }
                     }
                     
+                    try {
+                        const radiusSyncResult = await syncCustomerToRadius({
+                            ...customerData,
+                            username: finalUsername,
+                            pppoe_username: autoPPPoEUsername
+                        }, customerData);
+                        if (!radiusSyncResult.success && !radiusSyncResult.skipped) {
+                            logger.warn(`[BILLING] RADIUS sync create warning for ${autoPPPoEUsername}: ${radiusSyncResult.message}`);
+                        }
+                    } catch (radiusSyncError) {
+                        logger.warn(`[BILLING] RADIUS sync create error for ${autoPPPoEUsername}: ${radiusSyncError.message}`);
+                    }
+
                     resolve(customer);
                 }
             });
@@ -2547,6 +2561,22 @@ ${year && month ? `
                             }
                         }
                         
+                        try {
+                            const finalPPPoEUsername = pppoe_username !== undefined ? pppoe_username : oldCustomer.pppoe_username;
+                            const finalUsername = username || oldCustomer.username;
+                            const radiusSyncResult = await syncCustomerToRadius({
+                                ...oldCustomer,
+                                ...customerData,
+                                username: finalUsername,
+                                pppoe_username: finalPPPoEUsername
+                            }, customerData);
+                            if (!radiusSyncResult.success && !radiusSyncResult.skipped) {
+                                logger.warn(`[BILLING] RADIUS sync update warning for ${finalPPPoEUsername || finalUsername}: ${radiusSyncResult.message}`);
+                            }
+                        } catch (radiusSyncError) {
+                            logger.warn(`[BILLING] RADIUS sync update error for ${oldCustomer.username}: ${radiusSyncError.message}`);
+                        }
+
                         resolve({ username: oldCustomer.username, ...customerData });
                     }
                 });
