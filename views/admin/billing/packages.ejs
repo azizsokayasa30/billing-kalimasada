@@ -22,6 +22,31 @@
     </style>
 
     <%- include('../../partials/theme-head') %>
+    <style>
+        /* Fix light theme: modal paket PPPoE tidak transparan */
+        html[data-theme="light"] #addPackageModal .modal-content,
+        html[data-theme="light"] #addPackageModal .modal-body,
+        html[data-theme="light"] #addPackageModal .modal-header,
+        html[data-theme="light"] #addPackageModal .modal-footer,
+        html[data-theme="light"] #editPackageModal .modal-content,
+        html[data-theme="light"] #editPackageModal .modal-body,
+        html[data-theme="light"] #editPackageModal .modal-header,
+        html[data-theme="light"] #editPackageModal .modal-footer,
+        html[data-theme="light"] #viewPackageModal .modal-content,
+        html[data-theme="light"] #viewPackageModal .modal-body,
+        html[data-theme="light"] #viewPackageModal .modal-header,
+        html[data-theme="light"] #viewPackageModal .modal-footer {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+
+        html[data-theme="light"] #addPackageModal .modal-content,
+        html[data-theme="light"] #editPackageModal .modal-content,
+        html[data-theme="light"] #viewPackageModal .modal-content {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+        }
+    </style>
 </head>
 <body>
     <div class="container-fluid">

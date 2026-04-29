@@ -276,12 +276,22 @@
                     </div>
                     <form method="GET" action="/admin/billing/reports/voucher" class="row g-3">
                         <div class="col-md-3">
-                            <label class="form-label small fw-bold text-muted">DARI TANGGAL</label>
-                            <input type="date" class="form-control" name="start_date" value="<%= startDate %>">
+                            <label class="form-label small fw-bold text-muted">BULAN</label>
+                            <select class="form-select" name="month">
+                                <% const monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']; %>
+                                <% for (let m = 1; m <= 12; m++) { %>
+                                    <option value="<%= m %>" <%= Number(month) === m ? 'selected' : '' %>><%= monthNames[m - 1] %></option>
+                                <% } %>
+                            </select>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label small fw-bold text-muted">SAMPAI TANGGAL</label>
-                            <input type="date" class="form-control" name="end_date" value="<%= endDate %>">
+                            <label class="form-label small fw-bold text-muted">TAHUN</label>
+                            <% const currentYear = new Date().getFullYear(); %>
+                            <select class="form-select" name="year">
+                                <% for (let y = currentYear - 3; y <= currentYear + 1; y++) { %>
+                                    <option value="<%= y %>" <%= Number(year) === y ? 'selected' : '' %>><%= y %></option>
+                                <% } %>
+                            </select>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-bold text-muted">STATUS PENGGUNAAN</label>

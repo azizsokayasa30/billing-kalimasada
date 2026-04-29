@@ -181,12 +181,22 @@
                     <div class="f-card-body">
                         <form id="filterForm" class="row g-3">
                             <div class="col-md-3">
-                                <label class="f-label">DARI TANGGAL</label>
-                                <input type="date" class="f-input" name="start_date" id="start_date" value="<%= startDate %>">
+                                <label class="f-label">BULAN</label>
+                                <select class="f-select" name="month" id="month">
+                                    <% const monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']; %>
+                                    <% for (let m = 1; m <= 12; m++) { %>
+                                        <option value="<%= m %>" <%= Number(month) === m ? 'selected' : '' %>><%= monthNames[m - 1] %></option>
+                                    <% } %>
+                                </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="f-label">SAMPAI TANGGAL</label>
-                                <input type="date" class="f-input" name="end_date" id="end_date" value="<%= endDate %>">
+                                <label class="f-label">TAHUN</label>
+                                <% const currentYear = new Date().getFullYear(); %>
+                                <select class="f-select" name="year" id="year">
+                                    <% for (let y = currentYear - 3; y <= currentYear + 1; y++) { %>
+                                        <option value="<%= y %>" <%= Number(year) === y ? 'selected' : '' %>><%= y %></option>
+                                    <% } %>
+                                </select>
                             </div>
                             <div class="col-md-3">
                                 <label class="f-label">TIPE TRANSAKSI</label>
@@ -267,22 +277,22 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         function applyFinancialFilters() {
-            const startDate = document.getElementById('start_date').value;
-            const endDate = document.getElementById('end_date').value;
+            const month = document.getElementById('month').value;
+            const year = document.getElementById('year').value;
             const type = document.getElementById('filter_type').value;
             
             const params = new URLSearchParams();
-            if (startDate) params.append('start_date', startDate);
-            if (endDate) params.append('end_date', endDate);
+            if (month) params.append('month', month);
+            if (year) params.append('year', year);
             if (type) params.append('type', type);
             
             window.location.href = `/admin/billing/financial-report?${params.toString()}`;
         }
 
         function exportProfitLossToExcel() {
-            const sd = document.getElementById('start_date').value;
-            const ed = document.getElementById('end_date').value;
-            window.location.href = `/admin/billing/export/financial-report.xlsx?start_date=${sd}&end_date=${ed}`;
+            const month = document.getElementById('month').value;
+            const year = document.getElementById('year').value;
+            window.location.href = `/admin/billing/export/financial-report.xlsx?month=${month}&year=${year}`;
         }
 
         function exportToCSV() {

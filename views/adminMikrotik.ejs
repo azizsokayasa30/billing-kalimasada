@@ -164,6 +164,24 @@
                 width: auto !important;
             }
         }
+
+        /* Fix light theme: modal tambah/edit PPPoE user tidak transparan */
+        [data-theme="light"] #userModal .modal-content,
+        [data-theme="light"] #userModal .modal-body,
+        [data-theme="light"] #userModal .modal-header,
+        [data-theme="light"] #userModal .modal-footer,
+        [data-theme="light"] #restartMikrotikModal .modal-content,
+        [data-theme="light"] #restartMikrotikModal .modal-body,
+        [data-theme="light"] #restartMikrotikModal .modal-header,
+        [data-theme="light"] #restartMikrotikModal .modal-footer {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+        [data-theme="light"] #userModal .modal-content,
+        [data-theme="light"] #restartMikrotikModal .modal-content {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+        }
     </style>
 
     <%- include('partials/theme-head') %>

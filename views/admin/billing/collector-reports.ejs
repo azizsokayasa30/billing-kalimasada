@@ -44,6 +44,23 @@
         .animate-in {
             animation: f-in 0.4s ease-out forwards;
         }
+
+        /* Fix light theme: text di card kolektor jangan putih */
+        html[data-theme="light"] .f-card .f-card-title,
+        html[data-theme="light"] .f-card .f-card-description,
+        html[data-theme="light"] .mini-stat-grid .f-stat-label,
+        html[data-theme="light"] .mini-stat-grid .f-mono {
+            color: var(--f-foreground) !important;
+        }
+        html[data-theme="light"] .mini-stat-grid .text-info {
+            color: var(--f-info) !important;
+        }
+        html[data-theme="light"] .mini-stat-grid .text-warning {
+            color: var(--f-warning) !important;
+        }
+        html[data-theme="light"] .mini-stat-grid .text-success {
+            color: var(--f-success) !important;
+        }
     </style>
 
     <%- include('../../partials/theme-head') %>

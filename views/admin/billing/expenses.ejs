@@ -42,12 +42,22 @@
                     <div class="card-body">
                         <form method="GET" class="row g-3 align-items-end">
                             <div class="col-md-3">
-                                <label class="form-label">Tanggal Mulai</label>
-                                <input type="date" class="form-control" name="start_date" value="<%= startDate %>">
+                                <label class="form-label">Bulan</label>
+                                <select class="form-select" name="month" id="month_filter">
+                                    <% const monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']; %>
+                                    <% for (let m = 1; m <= 12; m++) { %>
+                                        <option value="<%= m %>" <%= Number(month) === m ? 'selected' : '' %>><%= monthNames[m - 1] %></option>
+                                    <% } %>
+                                </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label">Tanggal Selesai</label>
-                                <input type="date" class="form-control" name="end_date" value="<%= endDate %>">
+                                <label class="form-label">Tahun</label>
+                                <% const currentYear = new Date().getFullYear(); %>
+                                <select class="form-select" name="year" id="year_filter">
+                                    <% for (let y = currentYear - 3; y <= currentYear + 1; y++) { %>
+                                        <option value="<%= y %>" <%= Number(year) === y ? 'selected' : '' %>><%= y %></option>
+                                    <% } %>
+                                </select>
                             </div>
                             <div class="col-md-3">
                                 <button type="submit" class="btn btn-primary">
@@ -364,12 +374,12 @@
         // Load commission data
         async function loadCommissionData() {
             try {
-                const startDate = document.querySelector('input[name="start_date"]').value;
-                const endDate = document.querySelector('input[name="end_date"]').value;
+                const month = document.getElementById('month_filter').value;
+                const year = document.getElementById('year_filter').value;
                 
                 let url = '/admin/billing/api/commission-stats';
-                if (startDate && endDate) {
-                    url += `?start_date=${startDate}&end_date=${endDate}`;
+                if (month && year) {
+                    url += `?month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}`;
                 }
                 
                 const response = await fetch(url);

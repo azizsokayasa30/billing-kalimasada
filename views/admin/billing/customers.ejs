@@ -91,6 +91,37 @@
         .modal-body form {
             overflow: visible !important;
         }
+
+        /* Fix: restore pelanggan modal transparan di tema terang */
+        [data-theme="light"] #importCustomersModal .modal-content,
+        [data-theme="light"] #importCustomersModal .modal-body,
+        [data-theme="light"] #importCustomersModal .modal-header,
+        [data-theme="light"] #importCustomersModal .modal-footer {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+        [data-theme="light"] #importCustomersModal .modal-content {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+        }
+
+        /* Fix: tambah/edit pelanggan modal transparan di tema terang */
+        [data-theme="light"] #addCustomerModal .modal-content,
+        [data-theme="light"] #addCustomerModal .modal-body,
+        [data-theme="light"] #addCustomerModal .modal-header,
+        [data-theme="light"] #addCustomerModal .modal-footer,
+        [data-theme="light"] #editCustomerModal .modal-content,
+        [data-theme="light"] #editCustomerModal .modal-body,
+        [data-theme="light"] #editCustomerModal .modal-header,
+        [data-theme="light"] #editCustomerModal .modal-footer {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+        [data-theme="light"] #addCustomerModal .modal-content,
+        [data-theme="light"] #editCustomerModal .modal-content {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+        }
         
         .pppoe-dropdown-item {
             padding: 8px 12px;

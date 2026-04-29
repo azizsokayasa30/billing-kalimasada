@@ -6,6 +6,13 @@
   "scripts": {
     "start": "set NODE_ENV=development && node app.js",
     "dev": "set NODE_ENV=development && nodemon app.js",
+    "pm2:start": "pm2 start ecosystem.config.cjs --only billing-kalimasada --update-env",
+    "pm2:restart": "pm2 restart billing-kalimasada --update-env",
+    "pm2:stop": "pm2 stop billing-kalimasada",
+    "pm2:delete": "pm2 delete billing-kalimasada",
+    "pm2:kill": "pm2 kill",
+    "pm2:save": "pm2 save",
+    "pm2:logs": "pm2 logs billing-kalimasada",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "echo \"No build process required\"",
     "setup": "npm install && node scripts/init-database.js"
@@ -16,6 +23,7 @@
     "axios": "^1.6.7",
     "bcrypt": "^6.0.0",
     "body-parser": "^1.20.2",
+    "connect-sqlite3": "^0.9.15",
     "cors": "^2.8.6",
     "dotenv": "^16.3.1",
     "ejs": "^3.1.10",

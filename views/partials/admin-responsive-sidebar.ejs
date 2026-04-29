@@ -1,3 +1,7 @@
+<%
+// Force app version to a single consistent value across all pages/sidebar states.
+const FORCED_APP_VERSION = 'v5.4';
+%>
 <!-- Global Card Color System — loads on every page that includes this sidebar -->
 <link href="/css/card-system.css?v=1" rel="stylesheet">
 
@@ -467,8 +471,8 @@
             <div class="sb-time-value" id="serverTimeValue">--:--:--</div>
         </div>
         <div class="sb-version-panel">
-            <span class="sb-version-tag"><%= typeof versionInfo !== 'undefined' ? versionInfo.version : 'v5.1.0' %></span>
-            <span class="sb-version-build"><%= typeof versionInfo !== 'undefined' ? versionInfo.buildNumber : '' %></span>
+            <span class="sb-version-tag"><%= FORCED_APP_VERSION %></span>
+            <span class="sb-version-build"></span>
         </div>
     </div>
 </nav>
@@ -569,68 +573,137 @@ document.addEventListener('DOMContentLoaded', function () {
     // Restart Billing Application
     const restartBtn = document.getElementById('btnRestartBilling');
     if (restartBtn) {
-        restartBtn.addEventListener('click', function(e) {
+        restartBtn.addEventListener('click', async function(e) {
             e.preventDefault();
             if (confirm('Restart aplikasi billing sekarang?')) {
                 restartBtn.disabled = true;
                 restartBtn.style.opacity = '0.6';
-                fetch('/admin/billing/system/restart', { method: 'POST' })
-                .then(res => res.json())
-                .then(data => {
-                    restartBtn.disabled = false;
-                    restartBtn.style.opacity = '';
 
-                    if (data.success) {
-                        // Mode development: server dimanage nodemon, tidak perlu restart manual
-                        if (data.mode === 'development') {
-                            const toast = document.createElement('div');
-                            toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;padding:14px 20px;background:#2563eb;color:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.15);max-width:340px;font-size:0.875rem;line-height:1.5;';
-                            toast.innerHTML = '<div style="font-weight:700;margin-bottom:4px;">ℹ️ Mode Development</div>' +
-                                '<div>Server berjalan via <strong>nodemon</strong>. Untuk restart, simpan file apapun atau gunakan terminal.</div>';
-                            document.body.appendChild(toast);
-                            setTimeout(function() {
-                                toast.style.transition = 'opacity 0.4s';
-                                toast.style.opacity = '0';
-                                setTimeout(function() { toast.remove(); }, 400);
-                            }, 4000);
-                            return;
-                        }
+                const showToast = (variant, message, extra = '') => {
+                    const bg = variant === 'success' ? '#10b981' : variant === 'error' ? '#ef4444' : '#2563eb';
+                    const toast = document.createElement('div');
+                    toast.style.cssText = `position:fixed;top:20px;right:20px;z-index:1050;padding:14px 18px;background:${bg};color:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.15);max-width:380px;font-size:0.875rem;line-height:1.4;`;
+                    toast.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">${variant === 'success' ? 'Berhasil' : variant === 'error' ? 'Gagal' : 'Info'}</div>${message}${extra ? `<div style="margin-top:6px;opacity:0.95;">${extra}</div>` : ''}`;
+                    document.body.appendChild(toast);
+                    return toast;
+                };
 
-                        // Mode production (PM2): countdown dan redirect ke login
-                        let countdown = 5;
-                        const toast = document.createElement('div');
-                        toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:1050;padding:14px 18px;background:#10b981;color:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.15);';
-                        toast.textContent = `Billing berhasil direstart. Mengalihkan ke login dalam ${countdown} detik...`;
-                        document.body.appendChild(toast);
-                        const intervalId = setInterval(() => {
-                            countdown -= 1;
-                            if (countdown <= 0) {
-                                clearInterval(intervalId);
-                                const pollLogin = setInterval(async () => {
-                                    try {
-                                        const res = await fetch('/admin/login', { method: 'GET', cache: 'no-store' });
-                                        if (res.ok) {
-                                            clearInterval(pollLogin);
-                                            window.location.href = '/admin/login';
-                                        }
-                                    } catch (_err) {
-                                        // tunggu server siap
-                                    }
-                                }, 1500);
-                                toast.textContent = 'Menunggu server billing siap. Mengalihkan ke login saat sudah siap...';
-                            } else {
-                                toast.textContent = `Billing berhasil direstart. Mengalihkan ke login dalam ${countdown} detik...`;
-                            }
-                        }, 1000);
-                    } else {
-                        alert('Gagal restart billing: ' + (data.message || data.error || 'Error tidak diketahui'));
+                try {
+                    const res = await fetch('/admin/billing/system/restart', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        cache: 'no-store'
+                    });
+
+                    let data = null;
+                    try {
+                        data = await res.json();
+                    } catch (_e) {
+                        data = null;
                     }
-                })
-                .catch(() => {
-                    restartBtn.disabled = false;
-                    restartBtn.style.opacity = '';
-                    alert('Error menghubungi server untuk restart');
-                });
+
+                    if (!res.ok || !data || !data.success) {
+                        throw new Error((data && (data.message || data.error)) ? (data.message || data.error) : 'Restart billing gagal');
+                    }
+
+                    // Mode development: server dimanage nodemon, tidak perlu restart manual
+                    if (data.mode === 'development') {
+                        restartBtn.disabled = false;
+                        restartBtn.style.opacity = '';
+                        const toast = showToast('info', 'Mode development aktif (nodemon). Tidak perlu restart via PM2.', 'Simpan file JS/EJS untuk memicu reload otomatis.');
+                        setTimeout(function() {
+                            toast.style.transition = 'opacity 0.4s';
+                            toast.style.opacity = '0';
+                            setTimeout(function() { toast.remove(); }, 400);
+                        }, 4000);
+                        return;
+                    }
+
+                    // Mode production (PM2): countdown 5 detik + pastikan server sudah hidup
+                    let countdown = 5;
+                    const toast = showToast('success', 'Billing berhasil direstart. Mengalihkan setelah countdown selesai...');
+                    toast.textContent = `Billing berhasil direstart. Mengalihkan ke login dalam ${countdown} detik...`;
+
+                    const startPolling = () => {
+                        let polls = 0;
+                        const maxPolls = Math.ceil(60000 / 1500); // 60 detik max
+                        const pollId = setInterval(async () => {
+                            polls += 1;
+                            try {
+                                const r = await fetch('/admin/billing/system/server-info', { method: 'GET', cache: 'no-store' });
+                                if (r.ok) {
+                                    clearInterval(pollId);
+                                    toast.textContent = 'Restart sukses. Mengalihkan ke login...';
+                                    window.location.href = '/admin/login';
+                                    return;
+                                }
+                            } catch (_err) {
+                                // server belum siap
+                            }
+
+                            if (polls >= maxPolls) {
+                                clearInterval(pollId);
+                                restartBtn.disabled = false;
+                                restartBtn.style.opacity = '';
+                                toast.textContent = 'Restart sudah dieksekusi, tapi server belum siap dalam 60 detik. Silakan coba lagi.';
+                            }
+                        }, 1500);
+                    };
+
+                    const intervalId = setInterval(() => {
+                        countdown -= 1;
+                        if (countdown <= 0) {
+                            clearInterval(intervalId);
+                            toast.textContent = 'Menunggu server billing siap...';
+                            startPolling();
+                        } else {
+                            toast.textContent = `Billing berhasil direstart. Mengalihkan ke login dalam ${countdown} detik...`;
+                        }
+                    }, 1000);
+                } catch (err) {
+                    // Saat PM2 restart, proses billing bisa langsung mati sehingga fetch request gagal.
+                    // Tetap jalankan flow countdown + polling server-info supaya tetap konsisten.
+                    const toast = showToast('info', 'Restart diproses. Menunggu server siap...', 'Jika beberapa saat gagal, coba ulang.');
+                    let countdown = 5;
+                    toast.textContent = `Restart diproses. Mengalihkan ke login dalam ${countdown} detik...`;
+
+                    const startPolling = () => {
+                        let polls = 0;
+                        const maxPolls = Math.ceil(60000 / 1500); // 60 detik max
+                        const pollId = setInterval(async () => {
+                            polls += 1;
+                            try {
+                                const r = await fetch('/admin/billing/system/server-info', { method: 'GET', cache: 'no-store' });
+                                if (r.ok) {
+                                    clearInterval(pollId);
+                                    toast.textContent = 'Restart sukses. Mengalihkan ke login...';
+                                    window.location.href = '/admin/login';
+                                    return;
+                                }
+                            } catch (_err) {
+                                // server belum siap
+                            }
+
+                            if (polls >= maxPolls) {
+                                clearInterval(pollId);
+                                restartBtn.disabled = false;
+                                restartBtn.style.opacity = '';
+                                toast.textContent = 'Restart sudah diminta, tapi server belum siap dalam 60 detik. Silakan coba lagi.';
+                            }
+                        }, 1500);
+                    };
+
+                    const intervalId = setInterval(() => {
+                        countdown -= 1;
+                        if (countdown <= 0) {
+                            clearInterval(intervalId);
+                            toast.textContent = 'Menunggu server billing siap...';
+                            startPolling();
+                        } else {
+                            toast.textContent = `Restart diproses. Mengalihkan ke login dalam ${countdown} detik...`;
+                        }
+                    }, 1000);
+                }
             }
         });
     }
@@ -789,7 +862,7 @@ document.addEventListener('DOMContentLoaded', function () {
 .sb-time-label { font-size: 9px; font-weight: 600; color: var(--sb-subtle); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2px; }
 .sb-time-value { font-size: 12px; font-weight: 600; color: var(--sb-text); font-variant-numeric: tabular-nums; }
 .sb-version-panel { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 4px; }
-.sb-version-tag { font-size: 10px; font-weight: 600; color: var(--sb-primary); background: #eff6ff; padding: 2px 8px; border-radius: 99px; }
+.sb-version-tag { font-size: 10px; font-weight: 600; color: #ffffff; background: #16a34a; padding: 2px 8px; border-radius: 99px; }
 .sb-version-build { font-size: 9px; color: var(--sb-subtle); }
 
 /* Hamburger */

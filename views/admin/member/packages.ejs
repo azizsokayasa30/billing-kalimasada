@@ -13,6 +13,25 @@
     <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
 
     <%- include('../../partials/theme-head') %>
+    <style>
+        /* Fix light theme: add/edit package modal not transparent */
+        [data-theme="light"] #addPackageModal .modal-content,
+        [data-theme="light"] #addPackageModal .modal-body,
+        [data-theme="light"] #addPackageModal .modal-header,
+        [data-theme="light"] #addPackageModal .modal-footer,
+        [data-theme="light"] #editPackageModal .modal-content,
+        [data-theme="light"] #editPackageModal .modal-body,
+        [data-theme="light"] #editPackageModal .modal-header,
+        [data-theme="light"] #editPackageModal .modal-footer {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+        [data-theme="light"] #addPackageModal .modal-content,
+        [data-theme="light"] #editPackageModal .modal-content {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+        }
+    </style>
 </head>
 <body>
     <div class="container-fluid">

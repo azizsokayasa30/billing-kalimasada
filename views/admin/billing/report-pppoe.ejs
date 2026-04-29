@@ -53,12 +53,22 @@
                     <div class="card-body">
                         <form method="GET" action="/admin/billing/reports/pppoe" class="row g-3">
                             <div class="col-md-4">
-                                <label for="start_date" class="form-label">Tanggal Mulai</label>
-                                <input type="date" class="form-control" id="start_date" name="start_date" value="<%= startDate %>" required>
+                                <label for="month" class="form-label">Bulan</label>
+                                <select class="form-select" id="month" name="month" required>
+                                    <% const monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']; %>
+                                    <% for (let m = 1; m <= 12; m++) { %>
+                                        <option value="<%= m %>" <%= Number(month) === m ? 'selected' : '' %>><%= monthNames[m - 1] %></option>
+                                    <% } %>
+                                </select>
                             </div>
                             <div class="col-md-4">
-                                <label for="end_date" class="form-label">Tanggal Akhir</label>
-                                <input type="date" class="form-control" id="end_date" name="end_date" value="<%= endDate %>" required>
+                                <label for="year" class="form-label">Tahun</label>
+                                <% const currentYear = new Date().getFullYear(); %>
+                                <select class="form-select" id="year" name="year" required>
+                                    <% for (let y = currentYear - 3; y <= currentYear + 1; y++) { %>
+                                        <option value="<%= y %>" <%= Number(year) === y ? 'selected' : '' %>><%= y %></option>
+                                    <% } %>
+                                </select>
                             </div>
                             <div class="col-md-4">
                                 <label for="status" class="form-label">Status</label>

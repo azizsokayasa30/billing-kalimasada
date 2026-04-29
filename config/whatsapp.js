@@ -1,5 +1,17 @@
 const { Boom } = require('@hapi/boom');
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestWaWebVersion } = require('@whiskeysockets/baileys');
+let makeWASocket;
+let DisconnectReason;
+let useMultiFileAuthState;
+let fetchLatestWaWebVersion;
+try {
+    const baileys = require('@whiskeysockets/baileys');
+    makeWASocket = baileys.default;
+    DisconnectReason = baileys.DisconnectReason;
+    useMultiFileAuthState = baileys.useMultiFileAuthState;
+    fetchLatestWaWebVersion = baileys.fetchLatestWaWebVersion;
+} catch (err) {
+    console.error('[WHATSAPP] Baileys load failed, WhatsApp features disabled:', err.message);
+}
 const qrcode = require('qrcode-terminal');
 const path = require('path');
 const axios = require('axios');

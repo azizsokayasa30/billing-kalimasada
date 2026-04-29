@@ -22,6 +22,26 @@
     </style>
 
     <%- include('../../partials/theme-head') %>
+    <style>
+        /* Fix light theme: modal invoice tidak transparan */
+        html[data-theme="light"] #addInvoiceModal .modal-content,
+        html[data-theme="light"] #addInvoiceModal .modal-body,
+        html[data-theme="light"] #addInvoiceModal .modal-header,
+        html[data-theme="light"] #addInvoiceModal .modal-footer,
+        html[data-theme="light"] #whatsappModal .modal-content,
+        html[data-theme="light"] #whatsappModal .modal-body,
+        html[data-theme="light"] #whatsappModal .modal-header,
+        html[data-theme="light"] #whatsappModal .modal-footer {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+
+        html[data-theme="light"] #addInvoiceModal .modal-content,
+        html[data-theme="light"] #whatsappModal .modal-content {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+        }
+    </style>
 </head>
 <body>
     <div class="container-fluid">

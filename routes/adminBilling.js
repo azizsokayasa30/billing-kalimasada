@@ -82,6 +82,18 @@ const isValidOptionalHttpUrl = (v) => {
     return /^https?:\/\//i.test(s);
 };
 
+// Helper: resolve period from month/year (fallback ke current month)
+const resolveMonthYearRange = (query = {}) => {
+    const now = new Date();
+    const parsedMonth = parseInt(query.month, 10);
+    const parsedYear = parseInt(query.year, 10);
+    const month = Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12 ? parsedMonth : (now.getMonth() + 1);
+    const year = Number.isInteger(parsedYear) && parsedYear >= 2000 && parsedYear <= 2100 ? parsedYear : now.getFullYear();
+    const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
+    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+    return { month, year, startDate, endDate };
+};
+
 // Middleware untuk mendapatkan pengaturan aplikasi
 const getAppSettings = (req, res, next) => {
     req.appSettings = {
@@ -1199,12 +1211,9 @@ router.get('/dashboard-legacy', getAppSettings, async (req, res) => {
 router.get('/financial-report', getAppSettings, async (req, res) => {
     try {
         const { start_date, end_date, type } = req.query;
-        
-        // Default date range: current month (auto reset setiap tanggal 1)
-        const now = new Date();
-        // Jika tanggal 1, gunakan bulan berjalan. Jika tidak, tetap gunakan bulan berjalan
-        const startDate = start_date || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        const endDate = end_date || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        const period = resolveMonthYearRange(req.query);
+        const startDate = start_date || period.startDate;
+        const endDate = end_date || period.endDate;
         
         const financialData = await billingManager.getFinancialReport(startDate, endDate, type);
         
@@ -1213,6 +1222,8 @@ router.get('/financial-report', getAppSettings, async (req, res) => {
             financialData,
             startDate,
             endDate,
+            month: period.month,
+            year: period.year,
             type: type || 'all',
             appSettings: req.appSettings,
             page: 'financial-report'
@@ -1235,7 +1246,10 @@ router.get('/financial-report', getAppSettings, async (req, res) => {
 router.get('/api/financial-report', async (req, res) => {
     try {
         const { start_date, end_date, type } = req.query;
-        const financialData = await billingManager.getFinancialReport(start_date, end_date, type);
+        const period = resolveMonthYearRange(req.query);
+        const startDate = start_date || period.startDate;
+        const endDate = end_date || period.endDate;
+        const financialData = await billingManager.getFinancialReport(startDate, endDate, type);
         res.json({ success: true, data: financialData });
     } catch (error) {
         logger.error('Error getting financial report data:', error);
@@ -1247,15 +1261,9 @@ router.get('/api/financial-report', async (req, res) => {
 router.get('/reports/voucher', getAppSettings, adminAuth, async (req, res) => {
     try {
         const { start_date, end_date, status } = req.query;
-        
-        // Default date range: current month
-        const now = new Date();
-        // Pastikan menggunakan timezone lokal untuk mendapatkan tanggal yang benar
-        const year = now.getFullYear();
-        const month = now.getMonth();
-        const startDate = start_date || new Date(year, month, 1).toISOString().split('T')[0];
-        // Tanggal terakhir bulan ini
-        const endDate = end_date || new Date(year, month + 1, 0).toISOString().split('T')[0];
+        const period = resolveMonthYearRange(req.query);
+        const startDate = start_date || period.startDate;
+        const endDate = end_date || period.endDate;
         
         logger.info(`Voucher report query: startDate=${startDate}, endDate=${endDate}, status=${status || 'all'}`);
         
@@ -1275,6 +1283,8 @@ router.get('/reports/voucher', getAppSettings, adminAuth, async (req, res) => {
             invoices: filteredInvoices,
             startDate,
             endDate,
+            month: period.month,
+            year: period.year,
             status: status || 'all',
             appSettings: req.appSettings,
             page: 'report-voucher'
@@ -1297,11 +1307,9 @@ router.get('/reports/voucher', getAppSettings, adminAuth, async (req, res) => {
 router.get('/reports/pppoe', getAppSettings, adminAuth, async (req, res) => {
     try {
         const { start_date, end_date, status } = req.query;
-        
-        // Default date range: current month
-        const now = new Date();
-        const startDate = start_date || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        const endDate = end_date || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        const period = resolveMonthYearRange(req.query);
+        const startDate = start_date || period.startDate;
+        const endDate = end_date || period.endDate;
         
         const stats = await billingManager.getPPPoEReportStats(startDate, endDate);
         const invoices = await billingManager.getPPPoEInvoices(startDate, endDate, status || null);
@@ -1312,6 +1320,8 @@ router.get('/reports/pppoe', getAppSettings, adminAuth, async (req, res) => {
             invoices,
             startDate,
             endDate,
+            month: period.month,
+            year: period.year,
             status: status || 'all',
             appSettings: req.appSettings,
             page: 'report-pppoe'
@@ -1886,7 +1896,10 @@ router.get('/export/monthly-summary.xlsx', adminAuth, async (req, res) => {
 router.get('/export/financial-report.xlsx', async (req, res) => {
     try {
         const { start_date, end_date, type } = req.query;
-        const financialData = await billingManager.getFinancialReport(start_date, end_date, type);
+        const period = resolveMonthYearRange(req.query);
+        const startDate = start_date || period.startDate;
+        const endDate = end_date || period.endDate;
+        const financialData = await billingManager.getFinancialReport(startDate, endDate, type);
         
         // Buat workbook Excel
         const workbook = new ExcelJS.Workbook();
@@ -1933,7 +1946,7 @@ router.get('/export/financial-report.xlsx', async (req, res) => {
         
         // Set response header
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename=laporan-keuangan-${start_date}-${end_date}.xlsx`);
+        res.setHeader('Content-Disposition', `attachment; filename=laporan-keuangan-${startDate}-${endDate}.xlsx`);
         
         // Write to response
         await workbook.xlsx.write(res);
@@ -3127,34 +3140,50 @@ router.post('/system/restart', async (req, res) => {
             || process.env.PM2_APP_NAME
             || process.env.name
             || (typeof process.env.pm_id !== 'undefined' ? process.env.pm_id : null)
-            || 'cvlmedia';
+            || 'billing-kalimasada';
         const opts = { cwd: repoPath, windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/bash' };
 
-        const execAsync = (command) => new Promise((resolve, reject) => {
-            exec(command, opts, (error, stdout, stderr) => {
-                if (error) return reject({ error, stdout, stderr });
-                resolve({ stdout, stderr });
-            });
+        const restartCmd = `pm2 restart ${targetApp}`;
+
+        // Kirim respons cepat dulu supaya fetch client tidak gagal saat proses billing dimatikan/restart.
+        res.json({
+            success: true,
+            message: 'Billing restart requested',
+            app: targetApp,
+            usedFallback: false,
+            mode: 'production'
         });
 
-        const restartCmd = `pm2 restart ${targetApp}`;
-        try {
-            const { stdout } = await execAsync(restartCmd);
-            await execAsync('pm2 save');
-            return res.json({ success: true, message: 'Billing system restarted', log: stdout, app: targetApp, usedFallback: false });
-        } catch (restartError) {
-            const stderr = restartError.stderr || (restartError.error && restartError.error.message) || '';
-            const startFallback = /process.*not found|unknown process|no process found|not found/i.test(stderr);
+        res.on('finish', () => {
+            exec(restartCmd, opts, (restartError, stdout, stderr) => {
+                const stderrStr = (stderr || '').toString();
+                const startFallback = /process.*not found|unknown process|no process found|not found/i.test(stderrStr);
 
-            if (startFallback) {
-                const startCmd = `pm2 start ${path.join(repoPath, 'app.js')} --name "${targetApp}"`;
-                const { stdout } = await execAsync(startCmd);
-                await execAsync('pm2 save');
-                return res.json({ success: true, message: 'Billing system started via PM2 fallback', log: stdout, app: targetApp, usedFallback: true });
-            }
+                if (restartError && startFallback) {
+                    const ecoPath = path.join(repoPath, 'ecosystem.config.cjs');
+                    const startCmd = `pm2 start "${ecoPath}" --only "billing-kalimasada" --update-env`;
+                    exec(startCmd, opts, (startErr, startStdout, startStderr) => {
+                        if (startErr) {
+                            logger.error('PM2 restart fallback failed:', startErr, startStderr);
+                            return;
+                        }
+                        exec('pm2 save', opts, (saveErr) => {
+                            if (saveErr) logger.error('pm2 save failed after fallback:', saveErr);
+                        });
+                    });
+                    return;
+                }
 
-            return res.status(500).json({ success: false, message: 'Restart failed', error: stderr || restartError.error.message, log: restartError.stdout, app: targetApp, fallbackUsed: false });
-        }
+                if (restartError) {
+                    logger.error('PM2 restart command failed:', restartError, stderrStr);
+                }
+
+                exec('pm2 save', opts, (saveErr) => {
+                    if (saveErr) logger.error('pm2 save failed after restart:', saveErr);
+                });
+            });
+        });
+        return;
     } catch (e) {
         res.status(500).json({ success: false, message: 'Unexpected error', error: e.message });
     }
@@ -3171,7 +3200,7 @@ router.get('/system/server-info', async (req, res) => {
         const pm2App = getSetting('pm2_restart_target', null)
             || getSetting('pm2_app_name', null)
             || process.env.PM2_APP_NAME
-            || 'cvlmedia';
+            || 'billing-kalimasada';
         const now = new Date();
 
         res.json({
@@ -6103,10 +6132,13 @@ router.post('/invoices/bulk-delete', adminAuth, async (req, res) => {
 // Payment Management - Collector Transactions Only
 router.get('/payments', getAppSettings, async (req, res) => {
     try {
+        const period = resolveMonthYearRange(req.query);
         // Get filter parameters
         const filters = {
-            from: req.query.from || '',
-            to: req.query.to || '',
+            month: String(period.month),
+            year: String(period.year),
+            from: req.query.from || period.startDate,
+            to: req.query.to || period.endDate,
             collector_id: req.query.collector_id || '',
             status: req.query.status || '',
             q: req.query.q || ''
@@ -7806,13 +7838,18 @@ router.post('/invoices/:id/restore', async (req, res) => {
 router.get('/expenses', getAppSettings, async (req, res) => {
     try {
         const { start_date, end_date } = req.query;
-        const expenses = await billingManager.getExpenses(start_date, end_date);
+        const period = resolveMonthYearRange(req.query);
+        const startDate = start_date || period.startDate;
+        const endDate = end_date || period.endDate;
+        const expenses = await billingManager.getExpenses(startDate, endDate);
         
         res.render('admin/billing/expenses', {
             title: 'Manajemen Pengeluaran',
             expenses,
-            startDate: start_date || '',
-            endDate: end_date || '',
+            startDate,
+            endDate,
+            month: period.month,
+            year: period.year,
             appSettings: req.appSettings
         });
     } catch (error) {
@@ -7919,7 +7956,10 @@ router.delete('/api/expenses/:id', async (req, res) => {
 router.get('/api/commission-stats', async (req, res) => {
     try {
         const { start_date, end_date } = req.query;
-        const stats = await billingManager.getCommissionStats(start_date, end_date);
+        const period = resolveMonthYearRange(req.query);
+        const startDate = start_date || period.startDate;
+        const endDate = end_date || period.endDate;
+        const stats = await billingManager.getCommissionStats(startDate, endDate);
         
         res.json({ success: true, data: stats });
     } catch (error) {
@@ -7932,13 +7972,18 @@ router.get('/api/commission-stats', async (req, res) => {
 router.get('/income', getAppSettings, async (req, res) => {
     try {
         const { start_date, end_date } = req.query;
-        const incomes = await billingManager.getIncomes(start_date, end_date);
+        const period = resolveMonthYearRange(req.query);
+        const startDate = start_date || period.startDate;
+        const endDate = end_date || period.endDate;
+        const incomes = await billingManager.getIncomes(startDate, endDate);
         
         res.render('admin/billing/income', {
             title: 'Manajemen Pemasukan',
             incomes,
-            startDate: start_date || '',
-            endDate: end_date || '',
+            startDate,
+            endDate,
+            month: period.month,
+            year: period.year,
             page: 'income',
             appSettings: req.appSettings
         });

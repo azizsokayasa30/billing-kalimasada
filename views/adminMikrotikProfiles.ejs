@@ -150,6 +150,29 @@
                 margin-bottom: 1rem !important;
             }
         }
+
+        /* Fix light theme: modal form background must be solid */
+        [data-theme="light"] #profileModal .modal-content,
+        [data-theme="light"] #profileModal .modal-body,
+        [data-theme="light"] #profileModal .modal-header,
+        [data-theme="light"] #profileModal .modal-footer,
+        [data-theme="light"] #detailModal .modal-content,
+        [data-theme="light"] #detailModal .modal-body,
+        [data-theme="light"] #detailModal .modal-header,
+        [data-theme="light"] #detailModal .modal-footer,
+        [data-theme="light"] #restartMikrotikModal .modal-content,
+        [data-theme="light"] #restartMikrotikModal .modal-body,
+        [data-theme="light"] #restartMikrotikModal .modal-header,
+        [data-theme="light"] #restartMikrotikModal .modal-footer {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+        [data-theme="light"] #profileModal .modal-content,
+        [data-theme="light"] #detailModal .modal-content,
+        [data-theme="light"] #restartMikrotikModal .modal-content {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+        }
     </style>
 
     <%- include('partials/theme-head') %>
