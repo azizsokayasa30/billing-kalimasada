@@ -62,10 +62,21 @@ console.log(`🚀 [BOOTSTRAP] Current working directory: ${process.cwd()}`);
 console.log(`🚀 [BOOTSTRAP] NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`🚀 [BOOTSTRAP] PORT from ENV: ${process.env.PORT}`);
 console.log(`⏰ [BOOTSTRAP] Timezone locked to: ${process.env.TZ} (WIB UTC+7)`);
-const whatsapp = require('./config/whatsapp');
+const whatsapp = (() => {
+  try {
+    return require('./config/whatsapp');
+  } catch (err) {
+    console.error('[WHATSAPP] Disabled at startup:', err.message);
+    return {
+      connectToWhatsApp: async () => null,
+      setSock: () => {}
+    };
+  }
+})();
 const { monitorPPPoEConnections } = require('./config/mikrotik');
 const fs = require('fs');
 const session = require('express-session');
+const SQLiteStore = require('connect-sqlite3')(session);
 const { getSetting } = require('./config/settingsManager');
 
 // Konfirmasi timezone telah tersetel dengan benar
@@ -390,16 +401,28 @@ app.use('/public', express.static(path.join(__dirname, 'public'), {
   maxAge: '1h', // Cache static files untuk 1 jam
   etag: true
 }));
+const sessionDataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(sessionDataDir)) {
+  fs.mkdirSync(sessionDataDir, { recursive: true });
+}
+
 app.use(session({
   secret: process.env.SESSION_SECRET || getSetting('session_secret', 'kalimasada-billing-secret-key-ganti-ini'),
+  store: new SQLiteStore({
+    db: 'sessions.db',
+    dir: sessionDataDir,
+    concurrentDb: true
+  }),
   resave: false,
-  saveUninitialized: false, // Optimized: tidak save session kosong
-  cookie: { 
+  saveUninitialized: false,
+  rolling: true,
+  cookie: {
     secure: false,
-    maxAge: 24 * 60 * 60 * 1000, // 24 jam
-    httpOnly: true
+    maxAge: 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: 'lax'
   },
-  name: 'admin_session' // Custom session name
+  name: 'admin_session'
 }));
 
 // Route khusus untuk login mobile (harus sebelum semua route admin)
@@ -469,8 +492,17 @@ app.post('/admin/login/mobile', async (req, res) => {
                 req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
             }
 
-            // Redirect to mobile dashboard
-            res.redirect('/admin/billing/mobile');
+            return req.session.save((saveErr) => {
+                if (saveErr) {
+                    console.error('Mobile login session save failed:', saveErr);
+                    return res.render('admin/mobile-login', {
+                        error: 'Gagal menyimpan sesi. Silakan coba lagi.',
+                        success: null,
+                        appSettings: { companyHeader: 'ISP Monitor' }
+                    });
+                }
+                res.redirect('/admin/billing/mobile');
+            });
         } else {
             res.render('admin/mobile-login', { 
                 error: 'Username atau password salah!',
@@ -592,7 +624,7 @@ const adminCableNetworkRouter = require('./routes/adminCableNetwork');
 app.use('/admin/cable-network', blockTechnicianAccess, adminAuth, adminCableNetworkRouter);
 
 // Import dan gunakan route adminCollectors
-const adminCollectorsRouter = require('./routes/adminCollectors');
+const adminCollectorsRouter = require('./billing-kalimasada/routes/adminCollectors');
 app.use('/admin/collectors', blockTechnicianAccess, adminCollectorsRouter);
 
 // Import dan gunakan route cache management

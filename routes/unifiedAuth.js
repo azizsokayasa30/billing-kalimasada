@@ -15,6 +15,16 @@ const agentManager = new AgentManager();
 
 const JWT_SECRET = getSetting('jwt_secret', 'alijaya-billing-secret-2025');
 
+function jsonAfterSessionSave(req, res, payload) {
+    req.session.save((err) => {
+        if (err) {
+            console.error('Unified login session save failed:', err);
+            return res.status(500).json({ success: false, message: 'Gagal menyimpan sesi. Silakan coba lagi.' });
+        }
+        res.json(payload);
+    });
+}
+
 // GET: Unified Login Page
 router.get('/', async (req, res) => {
     try {
@@ -57,7 +67,7 @@ router.post('/', async (req, res) => {
             if (username === adminUsername && password === adminPassword) {
                 req.session.isAdmin = true;
                 req.session.adminUser = username;
-                return res.json({ success: true, redirect: '/admin/dashboard' });
+                return jsonAfterSessionSave(req, res, { success: true, redirect: '/admin/dashboard' });
             }
         }
 
@@ -79,7 +89,7 @@ router.post('/', async (req, res) => {
                 // Collector dashboard might expect other session vars
                 req.session.collectorId = collector.id;
                 req.session.collectorName = collector.name;
-                return res.json({ success: true, redirect: '/collector/dashboard' });
+                return jsonAfterSessionSave(req, res, { success: true, redirect: '/collector/dashboard' });
             }
         }
 
@@ -90,7 +100,7 @@ router.post('/', async (req, res) => {
                 req.session.agentId = result.agent.id;
                 req.session.agentName = result.agent.name;
                 req.session.agentUsername = result.agent.username;
-                return res.json({ success: true, redirect: '/agent/dashboard' });
+                return jsonAfterSessionSave(req, res, { success: true, redirect: '/agent/dashboard' });
             }
         }
 
@@ -105,7 +115,7 @@ router.post('/', async (req, res) => {
                 const sess = await authManager.createTechnicianSession(technician, req);
                 req.session.technicianSessionId = sess.sessionId;
                 req.session.technicianId = technician.id;
-                return res.json({ success: true, redirect: '/technician/dashboard' });
+                return jsonAfterSessionSave(req, res, { success: true, redirect: '/technician/dashboard' });
             }
         }
 
@@ -126,7 +136,7 @@ router.post('/', async (req, res) => {
                 req.session.customer_username = customer.username;
                 req.session.customer_id = customer.customer_id || customer.id;
                 req.session.is_member = false;
-                return res.json({ success: true, redirect: '/customer/dashboard' });
+                return jsonAfterSessionSave(req, res, { success: true, redirect: '/customer/dashboard' });
             }
 
             // Cek di tabel members
@@ -142,7 +152,7 @@ router.post('/', async (req, res) => {
                 req.session.member_username = member.hotspot_username || member.username;
                 req.session.customer_username = member.hotspot_username || member.username;
                 req.session.is_member = true;
-                return res.json({ success: true, redirect: '/customer/billing/dashboard' });
+                return jsonAfterSessionSave(req, res, { success: true, redirect: '/customer/billing/dashboard' });
             }
         }
 
@@ -178,7 +188,7 @@ router.post('/', async (req, res) => {
                             req.session.customer_username = member.hotspot_username || member.username;
                             req.session.is_member = true;
                         }
-                        return res.json({ success: true, redirect: user.role === 'customer' ? '/customer/dashboard' : '/customer/billing/dashboard' });
+                        return jsonAfterSessionSave(req, res, { success: true, redirect: user.role === 'customer' ? '/customer/dashboard' : '/customer/billing/dashboard' });
                     }
                 }
             }
