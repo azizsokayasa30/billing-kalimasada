@@ -281,7 +281,9 @@ async function getPPPoEUsersRadius() {
         let activeUsernames = [];
         try {
             const activeConnections = await getActivePPPoEConnectionsRadius();
-            if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
+            if (Array.isArray(activeConnections)) {
+                activeUsernames = activeConnections.map(c => c.name || c.username);
+            } else if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
                 activeUsernames = activeConnections.data.map(c => c.name || c.username);
             }
         } catch (activeError) {
@@ -439,7 +441,7 @@ async function getActivePPPoEConnectionsRadius() {
                 nasipaddress,
                 (strftime('%s', 'now') - strftime('%s', acctstarttime)) as session_time
             FROM radacct
-            WHERE acctstoptime IS NULL
+            WHERE (acctstoptime IS NULL OR acctstoptime = '' OR acctstoptime = '0' OR acctstoptime = '0000-00-00 00:00:00')
         `;
         
         const params = [];

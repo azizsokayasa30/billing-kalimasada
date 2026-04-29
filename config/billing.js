@@ -2569,51 +2569,59 @@ ${year && month ? `
                 const db = this.db;
                 const customerId = customer.id;
 
-                // Hapus invoice terlebih dahulu (beserta pembayaran terkait via cascade)
-                db.run(`DELETE FROM invoices WHERE customer_id = ?`, [customerId], function(invErr) {
-                    if (invErr) {
-                        console.warn(`⚠️ Error deleting invoices for customer ${customer.username}:`, invErr.message);
-                    } else {
-                        console.log(`✅ Deleted ${this.changes} invoice(s) for customer ${customer.username}`);
-                    }
-
-                    // Hapus cable routes
-                    db.run(`DELETE FROM cable_routes WHERE customer_id = ?`, [customerId], function(cableErr) {
-                        if (cableErr) {
-                            console.warn(`⚠️ Error deleting cable routes for customer ${customer.username}:`, cableErr.message);
-                        }
-
-                        // Hapus trouble reports terkait
-                        db.run(`DELETE FROM trouble_reports WHERE phone = ?`, [customer.phone], function(trErr) {
-                            if (trErr) {
-                                console.warn(`⚠️ Error deleting trouble reports for customer ${customer.username}:`, trErr.message);
-                            }
-
-                            // Hapus customer
-                            db.run(`DELETE FROM customers WHERE phone = ?`, [phone], async function(err) {
-                                if (err) {
-                                    return reject(err);
-                                }
-                                
-                                // Hapus tag dari GenieACS jika ada nomor telepon
-                                if (customer.phone) {
-                                    try {
-                                        const genieacs = require('./genieacs');
-                                        const pppoeToUse = customer.pppoe_username || customer.username;
-                                        const device = await genieacs.findDeviceByPPPoE(pppoeToUse);
-                                        if (device) {
-                                            await genieacs.removeTagFromDevice(device._id, customer.phone);
-                                            console.log(`Removed phone tag ${customer.phone} from GenieACS device ${device._id}`);
-                                        }
-                                    } catch (genieacsError) {
-                                        console.warn(`GenieACS cleanup skipped for ${customer.username}:`, genieacsError.message);
-                                    }
-                                }
-                                
-                                resolve({ username: customer.username, deleted: true });
-                            });
+                const runQuery = (sql, params = []) => {
+                    return new Promise((res) => {
+                        db.run(sql, params, function(err) {
+                            if (err) console.warn(`⚠️ Error executing clean up query for customer ${customer.username}:`, err.message);
+                            res();
                         });
                     });
+                };
+
+                // Hapus semua data terkait untuk menghindari FOREIGN KEY constraint error
+                await runQuery(`DELETE FROM invoices WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM cable_routes WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM trouble_reports WHERE phone = ?`, [customer.phone]);
+                await runQuery(`DELETE FROM collector_assignments WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM collector_transactions WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM agent_customers WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM agent_transactions WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM installation_jobs WHERE customer_id = ?`, [customerId]);
+
+                // Hapus customer
+                db.run(`DELETE FROM customers WHERE phone = ?`, [phone], async function(err) {
+                    if (err) {
+                        return reject(err);
+                    }
+                    
+                    // Hapus tag dari GenieACS jika ada nomor telepon
+                    if (customer.phone) {
+                        try {
+                            const genieacs = require('./genieacs');
+                            const pppoeToUse = customer.pppoe_username || customer.username;
+                            const device = await genieacs.findDeviceByPPPoE(pppoeToUse);
+                            if (device) {
+                                await genieacs.removeTagFromDevice(device._id, customer.phone);
+                                console.log(`Removed phone tag ${customer.phone} from GenieACS device ${device._id}`);
+                            }
+                        } catch (genieacsError) {
+                            console.warn(`GenieACS cleanup skipped for ${customer.username}:`, genieacsError.message);
+                        }
+                    }
+                    
+                    // Hapus user PPPoE dari Mikrotik/RADIUS
+                    try {
+                        const { deletePPPoEUser } = require('./mikrotik');
+                        const pppoeToUse = customer.pppoe_username || customer.username;
+                        if (pppoeToUse) {
+                            await deletePPPoEUser(pppoeToUse);
+                            console.log(`✅ Deleted PPPoE user ${pppoeToUse} for customer ${customer.username}`);
+                        }
+                    } catch (pppoeError) {
+                        console.warn(`⚠️ PPPoE deletion failed or skipped for ${customer.username}:`, pppoeError.message);
+                    }
+                    
+                    resolve({ username: customer.username, deleted: true });
                 });
             } catch (error) {
                 reject(error);
@@ -2634,51 +2642,59 @@ ${year && month ? `
                 const db = this.db;
                 const customerId = customer.id;
 
-                // Hapus invoice terlebih dahulu
-                db.run(`DELETE FROM invoices WHERE customer_id = ?`, [customerId], function(invErr) {
-                    if (invErr) {
-                        console.warn(`⚠️ Error deleting invoices for customer ${customer.username}:`, invErr.message);
-                    } else {
-                        console.log(`✅ Deleted ${this.changes} invoice(s) for customer ${customer.username}`);
-                    }
-
-                    // Hapus cable routes
-                    db.run(`DELETE FROM cable_routes WHERE customer_id = ?`, [customerId], function(cableErr) {
-                        if (cableErr) {
-                            console.warn(`⚠️ Error deleting cable routes for customer ${customer.username}:`, cableErr.message);
-                        }
-
-                        // Hapus trouble reports terkait
-                        db.run(`DELETE FROM trouble_reports WHERE phone = ?`, [customer.phone], function(trErr) {
-                            if (trErr) {
-                                console.warn(`⚠️ Error deleting trouble reports for customer ${customer.username}:`, trErr.message);
-                            }
-
-                            // Hapus customer
-                            db.run(`DELETE FROM customers WHERE id = ?`, [id], async function(err) {
-                                if (err) {
-                                    return reject(err);
-                                }
-                                
-                                // Hapus tag dari GenieACS jika ada nomor telepon
-                                if (customer.phone) {
-                                    try {
-                                        const genieacs = require('./genieacs');
-                                        const pppoeToUse = customer.pppoe_username || customer.username;
-                                        const device = await genieacs.findDeviceByPPPoE(pppoeToUse);
-                                        if (device) {
-                                            await genieacs.removeTagFromDevice(device._id, customer.phone);
-                                            console.log(`Removed phone tag ${customer.phone} from GenieACS device ${device._id}`);
-                                        }
-                                    } catch (genieacsError) {
-                                        console.warn(`GenieACS cleanup skipped for ${customer.username}:`, genieacsError.message);
-                                    }
-                                }
-                                
-                                resolve({ username: customer.username, deleted: true });
-                            });
+                const runQuery = (sql, params = []) => {
+                    return new Promise((res) => {
+                        db.run(sql, params, function(err) {
+                            if (err) console.warn(`⚠️ Error executing clean up query for customer ${customer.username}:`, err.message);
+                            res();
                         });
                     });
+                };
+
+                // Hapus semua data terkait untuk menghindari FOREIGN KEY constraint error
+                await runQuery(`DELETE FROM invoices WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM cable_routes WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM trouble_reports WHERE phone = ?`, [customer.phone]);
+                await runQuery(`DELETE FROM collector_assignments WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM collector_transactions WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM agent_customers WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM agent_transactions WHERE customer_id = ?`, [customerId]);
+                await runQuery(`DELETE FROM installation_jobs WHERE customer_id = ?`, [customerId]);
+
+                // Hapus customer
+                db.run(`DELETE FROM customers WHERE id = ?`, [id], async function(err) {
+                    if (err) {
+                        return reject(err);
+                    }
+                    
+                    // Hapus tag dari GenieACS jika ada nomor telepon
+                    if (customer.phone) {
+                        try {
+                            const genieacs = require('./genieacs');
+                            const pppoeToUse = customer.pppoe_username || customer.username;
+                            const device = await genieacs.findDeviceByPPPoE(pppoeToUse);
+                            if (device) {
+                                await genieacs.removeTagFromDevice(device._id, customer.phone);
+                                console.log(`Removed phone tag ${customer.phone} from GenieACS device ${device._id}`);
+                            }
+                        } catch (genieacsError) {
+                            console.warn(`GenieACS cleanup skipped for ${customer.username}:`, genieacsError.message);
+                        }
+                    }
+                    
+                    // Hapus user PPPoE dari Mikrotik/RADIUS
+                    try {
+                        const { deletePPPoEUser } = require('./mikrotik');
+                        const pppoeToUse = customer.pppoe_username || customer.username;
+                        if (pppoeToUse) {
+                            await deletePPPoEUser(pppoeToUse);
+                            console.log(`✅ Deleted PPPoE user ${pppoeToUse} for customer ${customer.username}`);
+                        }
+                    } catch (pppoeError) {
+                        console.warn(`⚠️ PPPoE deletion failed or skipped for ${customer.username}:`, pppoeError.message);
+                    }
+                    
+                    resolve({ username: customer.username, deleted: true });
                 });
             } catch (error) {
                 reject(error);

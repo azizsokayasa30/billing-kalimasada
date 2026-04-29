@@ -54,8 +54,8 @@ async function parseClientsConfFromDB() {
             logger.info(`[RADIUS-CLIENTS] Loaded ${rows.length} clients dari nas table`);
             return rows.map(row => ({
                 id: row.id,
-                name: row.nasname,
-                ipaddr: row.shortname || row.nasname,  // Use shortname as IP if available
+                name: row.shortname || row.nasname, // shortname contains the friendly name
+                ipaddr: row.nasname, // nasname contains the IP address
                 secret: row.secret || '',
                 nas_type: row.type || 'other',
                 require_message_authenticator: 'no',  // Default
@@ -428,8 +428,8 @@ async function writeClientsConfToDB(clients) {
                     INSERT INTO nas (nasname, shortname, type, secret, description)
                     VALUES (?, ?, ?, ?, ?)
                 `, [
-                    client.name,
-                    client.ipaddr || client.name,
+                    client.ipaddr || client.name, // nasname MUST be the IP address for FreeRADIUS to find it
+                    client.name,                  // shortname is the friendly client name
                     client.nas_type || 'other',
                     client.secret,
                     client.comment || null
