@@ -268,7 +268,7 @@ async function getPPPoEUsersRadius() {
         const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
 
         // Atribut sandi di radcheck (jangan sertakan NT-Password: dipakai app untuk metadata isolir PREVGROUP:…)
-        // Satu baris per username: MIN(id) agar tidak dobel jika ada >1 tipe sandi di radcheck.
+        // Satu baris per username: MIN(rowid) — rowid selalu ada di SQLite; beberapa dump FR tidak punya kolom `id`.
         let query = `
             SELECT 
                 rc.username, 
@@ -282,7 +282,7 @@ async function getPPPoEUsersRadius() {
                 ) as profile
             FROM radcheck rc
             INNER JOIN (
-                SELECT username, MIN(id) AS pick_id
+                SELECT username, MIN(rowid) AS pick_rid
                 FROM radcheck
                 WHERE attribute IN (
                     'Cleartext-Password',
@@ -293,7 +293,7 @@ async function getPPPoEUsersRadius() {
                     'SMD5-Password'
                 )
                 GROUP BY username
-            ) cred ON rc.id = cred.pick_id
+            ) cred ON rc.rowid = cred.pick_rid
         `;
 
         const params = [];
@@ -349,13 +349,13 @@ async function getPPPoEUsersRadius() {
             let fallbackQuery = `
                 SELECT r.username, r.value as password FROM radcheck r
                 INNER JOIN (
-                    SELECT username, MIN(id) AS pick_id FROM radcheck
+                    SELECT username, MIN(rowid) AS pick_rid FROM radcheck
                     WHERE attribute IN (
                         'Cleartext-Password','User-Password','Crypt-Password','MD5-Password','SHA-Password',
                         'SMD5-Password'
                     )
                     GROUP BY username
-                ) c ON r.id = c.pick_id
+                ) c ON r.rowid = c.pick_rid
                 WHERE 1=1`;
             const params = [];
             if (excludeUsernames.length > 0) {
@@ -6530,7 +6530,8 @@ async function getHotspotProfilesMetadata(conn, groupnames = []) {
     const [rows] = await conn.execute(sql, groupnames);
 
     const map = {};
-    rows.forEach(row => {
+    const list = Array.isArray(rows) ? rows : [];
+    list.forEach((row) => {
         const key = row.groupname || row.GROUPNAME || null;
         if (key) {
             map[key] = row;
@@ -6733,7 +6734,8 @@ async function getPPPoEProfilesMetadata(conn, groupnames = []) {
     `, groupnames);
 
     const map = {};
-    rows.forEach(row => {
+    const list = Array.isArray(rows) ? rows : [];
+    list.forEach((row) => {
         map[row.groupname] = row;
     });
     return map;
@@ -7066,63 +7068,27 @@ async function getHotspotProfileDetailRadius(groupname) {
 async function getPPPoEProfilesRadius() {
     const conn = await getRadiusConnection();
     try {
-        // Ambil daftar groupname yang digunakan oleh PPPoE users (yang TIDAK ada di voucher_revenue)
-        const sqlite3 = require('sqlite3').verbose();
-        const dbPath = require('path').join(__dirname, '../data/billing.db');
-        const db = new sqlite3.Database(dbPath);
-        
-        const voucherUsernames = await new Promise((resolve, reject) => {
-            db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
-                if (err) {
-                    logger.warn(`Error getting voucher usernames for PPPoE profiles: ${err.message}`);
-                    resolve([]);
-                } else {
-                    resolve(rows.map(r => r.username));
-                }
-            });
-        });
-        db.close();
-        
-        logger.info(`Found ${voucherUsernames.length} voucher usernames to exclude from PPPoE profiles`);
-        
-        // Ambil groupname yang digunakan oleh voucher users untuk di-exclude
-        let voucherGroupnames = [];
-        if (voucherUsernames.length > 0) {
-            const placeholders = voucherUsernames.map(() => '?').join(',');
-            const [voucherGroups] = await conn.execute(`
-                SELECT DISTINCT groupname
-                FROM radusergroup
-                WHERE username IN (${placeholders})
-            `, voucherUsernames);
-            voucherGroupnames = voucherGroups.map(r => r.groupname);
-        }
-        
-        // Ambil semua groupname dari radgroupreply, exclude yang digunakan oleh voucher
-        // INCLUDE 'isolir' agar profil isolir ditampilkan di UI (dengan badge khusus)
+        // Daftar profil = DISTINCT groupname di radgroupreply (sumber kebenaran RADIUS).
+        // Jangan exclude groupname hanya karena dipakai user voucher di radusergroup — voucher dan PPPoE
+        // sering memakai profile rate-limit yang sama (profile-10mbps, dll.); exclude itu membuat semua profil ISP hilang.
+        // Filter hotspot vs PPPoE hanya lewat hotspot_profiles metadata di bawah.
+
         let query = `
             SELECT DISTINCT groupname
             FROM radgroupreply
             WHERE groupname IS NOT NULL AND groupname != ''
             AND groupname NOT IN ('default')
+            ORDER BY groupname ASC
         `;
-        
-        const params = [];
-        if (voucherGroupnames.length > 0) {
-            const excludePlaceholders = voucherGroupnames.map(() => '?').join(',');
-            query += ` AND groupname NOT IN (${excludePlaceholders})`;
-            params.push(...voucherGroupnames);
-        }
-        
-        query += ` ORDER BY groupname ASC`;
-        
-        logger.info(`Query untuk mendapatkan profil: ${query}`);
-        logger.info(`Params: ${JSON.stringify(params)}`);
-        
-        const [groupRows] = await conn.execute(query, params);
-        
-        logger.info(`Ditemukan ${groupRows.length} groupname dari radgroupreply`);
 
-        const groupnames = groupRows.map(row => row.groupname);
+        logger.info('[PPPoE profiles RADIUS] Query distinct groupname dari radgroupreply (tanpa exclude grup voucher)');
+
+        const [groupRows] = await conn.execute(query, []);
+
+        const groupRowList = Array.isArray(groupRows) ? groupRows : [];
+        logger.info(`Ditemukan ${groupRowList.length} groupname dari radgroupreply`);
+
+        const groupnames = groupRowList.map((row) => row.groupname).filter(Boolean);
 
         // Jangan tampilkan profile yang dibuat untuk hotspot. Profile hotspot disimpan
         // di tabel metadata `hotspot_profiles`, jadi gunakan itu sebagai penanda.
@@ -7169,9 +7135,10 @@ async function getPPPoEProfilesRadius() {
                 WHERE groupname = ?
                 ORDER BY attribute
             `, [groupname]);
-            
+            const attrList = Array.isArray(attrRows) ? attrRows : [];
+
             // Jika tidak ada attribute sama sekali, skip profil ini
-            if (!attrRows || attrRows.length === 0) {
+            if (attrList.length === 0) {
                 logger.warn(`⚠️ Profile ${groupname} tidak memiliki attribute di radgroupreply, skip`);
                 continue;
             }
@@ -7208,7 +7175,7 @@ async function getPPPoEProfilesRadius() {
             };
             
             // Parse attributes
-            attrRows.forEach(attr => {
+            attrList.forEach((attr) => {
                 switch (attr.attribute) {
                     case 'MikroTik-Rate-Limit':
                     case 'Mikrotik-Rate-Limit':
