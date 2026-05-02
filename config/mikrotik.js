@@ -14,6 +14,43 @@ let monitorInterval = null;
 // Connection pool untuk router (reuse koneksi per router)
 const routerConnections = new Map();
 
+/**
+ * Username yang dikecualikan dari daftar PPPoE admin / query radcheck terkait:
+ * - voucher_revenue
+ * - member hotspot dengan hotspot_username eksplisit
+ * Tidak lagi mengecualikan semua members.username (bila hotspot_username kosong) —
+ * nilai itu sering sama dengan PPPoE pelanggan ISP sehingga seluruh baris radcheck ikut terfilter.
+ */
+async function getPppoeRadcheckExcludeUsernames() {
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = path.join(__dirname, '../data/billing.db');
+    const db = new sqlite3.Database(dbPath);
+    try {
+        const vouchers = await new Promise((resolve) => {
+            db.all('SELECT DISTINCT username AS u FROM voucher_revenue', [], (err, rows) => {
+                if (err || !rows) return resolve([]);
+                resolve(rows.map((r) => r.u).filter(Boolean));
+            });
+        });
+        const hotspotOnly = await new Promise((resolve) => {
+            db.all(
+                `SELECT DISTINCT TRIM(hotspot_username) AS u FROM members
+                 WHERE hotspot_username IS NOT NULL AND TRIM(hotspot_username) != ''`,
+                [],
+                (err, rows) => {
+                    if (err || !rows) return resolve([]);
+                    resolve(rows.map((r) => r.u).filter(Boolean));
+                }
+            );
+        });
+        const merged = [...new Set([...vouchers, ...hotspotOnly])];
+        logger.info(`[PPPoE-exclude] voucher + hotspot_username: ${merged.length} username`);
+        return merged;
+    } finally {
+        db.close();
+    }
+}
+
 // Fungsi untuk set instance sock
 function setSock(sockInstance) {
     sock = sockInstance;
@@ -197,55 +234,10 @@ async function getPPPoEUsersRadius() {
     const conn = await getRadiusConnection();
     try {
         logger.info('Fetching PPPoE users from RADIUS database (excluding hotspot vouchers and members)...');
-        
-        // Ambil daftar username yang merupakan voucher dari tabel voucher_revenue
-        // DAN daftar username yang merupakan member hotspot dari tabel members
-        const sqlite3 = require('sqlite3').verbose();
-        const dbPath = require('path').join(__dirname, '../data/billing.db');
-        const db = new sqlite3.Database(dbPath);
-        
-        const [voucherUsernames, memberUsernames] = await Promise.all([
-            new Promise((resolve, reject) => {
-                db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
-                    if (err) {
-                        logger.warn(`Error getting voucher usernames: ${err.message}`);
-                        resolve([]);
-                    } else {
-                        resolve(rows.map(r => r.username));
-                    }
-                });
-            }),
-            new Promise((resolve, reject) => {
-                // Ambil semua hotspot_username dari members (bukan voucher)
-                db.all('SELECT DISTINCT hotspot_username FROM members WHERE hotspot_username IS NOT NULL AND hotspot_username != ""', [], (err, rows) => {
-                    if (err) {
-                        logger.warn(`Error getting member usernames: ${err.message}`);
-                        resolve([]);
-                    } else {
-                        const usernames = rows.map(r => r.hotspot_username).filter(Boolean);
-                        // Juga ambil username biasa jika hotspot_username tidak ada
-                        db.all('SELECT DISTINCT username FROM members WHERE (hotspot_username IS NULL OR hotspot_username = "") AND username IS NOT NULL AND username != ""', [], (err2, rows2) => {
-                            if (err2) {
-                                resolve(usernames);
-                            } else {
-                                const additionalUsernames = rows2.map(r => r.username).filter(Boolean);
-                                resolve([...usernames, ...additionalUsernames]);
-                            }
-                        });
-                    }
-                });
-            })
-        ]);
-        db.close();
-        
-        // Gabungkan voucher dan member usernames untuk exclude
-        const excludeUsernames = [...new Set([...voucherUsernames, ...memberUsernames])];
-        
-        logger.info(`Found ${voucherUsernames.length} voucher usernames and ${memberUsernames.length} member usernames to exclude (total: ${excludeUsernames.length})`);
-        
-        // Query untuk mendapatkan PPPoE users (exclude voucher users DAN member users)
-        // PENTING: Gunakan subquery untuk mengambil hanya satu profile per username
-        // untuk menghindari duplikasi jika satu username memiliki multiple entries di radusergroup
+
+        const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
+
+        // Atribut sandi umum di radcheck (FreeRADIUS / Mikrotik tidak selalu Cleartext-Password)
         let query = `
             SELECT 
                 rc.username, 
@@ -258,7 +250,13 @@ async function getPPPoEUsersRadius() {
                     'default'
                 ) as profile
             FROM radcheck rc
-            WHERE rc.attribute = 'Cleartext-Password'
+            WHERE rc.attribute IN (
+                'Cleartext-Password',
+                'User-Password',
+                'Crypt-Password',
+                'MD5-Password',
+                'SHA-Password'
+            )
         `;
         
         const params = [];
@@ -272,11 +270,12 @@ async function getPPPoEUsersRadius() {
         query += ` ORDER BY rc.username`;
         
         const [rows] = await conn.execute(query, params);
-        
-        logger.info(`Found ${rows.length} PPPoE users in radcheck table (excluding ${excludeUsernames.length} vouchers and members)`);
-        
+        const rowList = Array.isArray(rows) ? rows : [];
+
+        logger.info(`Found ${rowList.length} PPPoE users in radcheck table (excluding ${excludeUsernames.length} voucher/hotspot)`);
+
         await conn.end();
-        
+
         // Ambil daftar user yang sedang aktif untuk menandai status
         let activeUsernames = [];
         try {
@@ -289,8 +288,8 @@ async function getPPPoEUsersRadius() {
         } catch (activeError) {
             logger.warn(`Failed to get active connections: ${activeError.message}`);
         }
-        
-        const users = rows.map(row => ({ 
+
+        const users = rowList.map(row => ({ 
             name: row.username, 
             password: row.password,
             profile: row.profile,
@@ -308,43 +307,12 @@ async function getPPPoEUsersRadius() {
         try {
             logger.info('Trying fallback query without join...');
             const conn2 = await getRadiusConnection();
-            
-            // Get voucher usernames DAN member usernames for fallback
-            const sqlite3 = require('sqlite3').verbose();
-            const dbPath = require('path').join(__dirname, '../data/billing.db');
-            const db = new sqlite3.Database(dbPath);
-            
-            const [voucherUsernames, memberUsernames] = await Promise.all([
-                new Promise((resolve, reject) => {
-                    db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
-                        if (err) resolve([]);
-                        else resolve(rows.map(r => r.username));
-                    });
-                }),
-                new Promise((resolve, reject) => {
-                    db.all('SELECT DISTINCT hotspot_username FROM members WHERE hotspot_username IS NOT NULL AND hotspot_username != ""', [], (err, rows) => {
-                        if (err) {
-                            resolve([]);
-                        } else {
-                            const usernames = rows.map(r => r.hotspot_username).filter(Boolean);
-                            db.all('SELECT DISTINCT username FROM members WHERE (hotspot_username IS NULL OR hotspot_username = "") AND username IS NOT NULL AND username != ""', [], (err2, rows2) => {
-                                if (err2) {
-                                    resolve(usernames);
-                                } else {
-                                    const additionalUsernames = rows2.map(r => r.username).filter(Boolean);
-                                    resolve([...usernames, ...additionalUsernames]);
-                                }
-                            });
-                        }
-                    });
-                })
-            ]);
-            db.close();
-            
-            // Gabungkan untuk exclude
-            const excludeUsernames = [...new Set([...voucherUsernames, ...memberUsernames])];
-            
-            let fallbackQuery = "SELECT username, value as password FROM radcheck WHERE attribute='Cleartext-Password'";
+
+            const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
+
+            let fallbackQuery = `SELECT username, value as password FROM radcheck WHERE attribute IN (
+                'Cleartext-Password','User-Password','Crypt-Password','MD5-Password','SHA-Password'
+            )`;
             const params = [];
             if (excludeUsernames.length > 0) {
                 const placeholders = excludeUsernames.map(() => '?').join(',');
@@ -353,22 +321,25 @@ async function getPPPoEUsersRadius() {
             }
             fallbackQuery += " ORDER BY username";
             
-            const [rows] = await conn2.execute(fallbackQuery, params);
-            
+            const [fbRows] = await conn2.execute(fallbackQuery, params);
+            const fbList = Array.isArray(fbRows) ? fbRows : [];
+
             // Ambil daftar user yang sedang aktif untuk fallback juga
             let activeUsernames = [];
             try {
                 const activeConnections = await getActivePPPoEConnectionsRadius();
-                if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
+                if (Array.isArray(activeConnections)) {
+                    activeUsernames = activeConnections.map(c => c.name || c.username);
+                } else if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
                     activeUsernames = activeConnections.data.map(c => c.name || c.username);
                 }
             } catch (activeError) {
                 logger.warn(`Failed to get active connections in fallback: ${activeError.message}`);
             }
-            
+
             await conn2.end();
-            logger.info(`Fallback query found ${rows.length} PPPoE users (excluding ${excludeUsernames.length} vouchers and members)`);
-            return rows.map(row => ({ 
+            logger.info(`Fallback query found ${fbList.length} PPPoE users (excluding ${excludeUsernames.length} voucher/hotspot)`);
+            return fbList.map(row => ({ 
                 name: row.username, 
                 password: row.password, 
                 profile: 'default',
@@ -385,49 +356,9 @@ async function getPPPoEUsersRadius() {
 async function getActivePPPoEConnectionsRadius() {
     const conn = await getRadiusConnection();
     try {
-        // Ambil daftar voucher usernames DAN member usernames untuk exclude
-        const sqlite3 = require('sqlite3').verbose();
-        const dbPath = require('path').join(__dirname, '../data/billing.db');
-        const db = new sqlite3.Database(dbPath);
-        
-        const [voucherUsernames, memberUsernames] = await Promise.all([
-            new Promise((resolve, reject) => {
-                db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
-                    if (err) {
-                        logger.warn(`Error getting voucher usernames for active connections: ${err.message}`);
-                        resolve([]);
-                    } else {
-                        resolve(rows.map(r => r.username));
-                    }
-                });
-            }),
-            new Promise((resolve, reject) => {
-                // Ambil semua hotspot_username dari members (bukan voucher)
-                db.all('SELECT DISTINCT hotspot_username FROM members WHERE hotspot_username IS NOT NULL AND hotspot_username != ""', [], (err, rows) => {
-                    if (err) {
-                        logger.warn(`Error getting member usernames for active connections: ${err.message}`);
-                        resolve([]);
-                    } else {
-                        const usernames = rows.map(r => r.hotspot_username).filter(Boolean);
-                        // Juga ambil username biasa jika hotspot_username tidak ada
-                        db.all('SELECT DISTINCT username FROM members WHERE (hotspot_username IS NULL OR hotspot_username = "") AND username IS NOT NULL AND username != ""', [], (err2, rows2) => {
-                            if (err2) {
-                                resolve(usernames);
-                            } else {
-                                const additionalUsernames = rows2.map(r => r.username).filter(Boolean);
-                                resolve([...usernames, ...additionalUsernames]);
-                            }
-                        });
-                    }
-                });
-            })
-        ]);
-        db.close();
-        
-        // Gabungkan voucher dan member usernames untuk exclude
-        const excludeUsernames = [...new Set([...voucherUsernames, ...memberUsernames])];
-        
-        logger.info(`Excluding ${voucherUsernames.length} vouchers and ${memberUsernames.length} members from active PPPoE connections (total: ${excludeUsernames.length})`);
+        const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
+
+        logger.info(`Excluding ${excludeUsernames.length} voucher/hotspot from active PPPoE connections`);
         
         // Get active sessions dari radacct (acctstoptime IS NULL), exclude vouchers DAN members
         let query = `
@@ -454,9 +385,10 @@ async function getActivePPPoEConnectionsRadius() {
         query += ` ORDER BY acctstarttime DESC`;
         
         const [activeRows] = await conn.execute(query, params);
-        
+        const activeList = Array.isArray(activeRows) ? activeRows : [];
+
         await conn.end();
-        return activeRows.map(row => ({
+        return activeList.map(row => ({
             name: row.username,
             ip: row.framedipaddress || 'N/A',
             uptime: row.session_time || 0,
@@ -475,51 +407,21 @@ async function getActivePPPoEConnectionsRadius() {
 async function getRadiusStatistics() {
     const conn = await getRadiusConnection();
     try {
-        // Ambil daftar voucher usernames DAN member usernames untuk exclude
-        const sqlite3 = require('sqlite3').verbose();
-        const dbPath = require('path').join(__dirname, '../data/billing.db');
-        const db = new sqlite3.Database(dbPath);
-        
-        const [voucherUsernames, memberUsernames] = await Promise.all([
-            new Promise((resolve, reject) => {
-                db.all('SELECT DISTINCT username FROM voucher_revenue', [], (err, rows) => {
-                    if (err) {
-                        logger.warn(`Error getting voucher usernames for stats: ${err.message}`);
-                        resolve([]);
-                    } else {
-                        resolve(rows.map(r => r.username));
-                    }
-                });
-            }),
-            new Promise((resolve, reject) => {
-                db.all('SELECT DISTINCT hotspot_username FROM members WHERE hotspot_username IS NOT NULL AND hotspot_username != ""', [], (err, rows) => {
-                    if (err) {
-                        logger.warn(`Error getting member usernames for stats: ${err.message}`);
-                        resolve([]);
-                    } else {
-                        const usernames = rows.map(r => r.hotspot_username).filter(Boolean);
-                        db.all('SELECT DISTINCT username FROM members WHERE (hotspot_username IS NULL OR hotspot_username = "") AND username IS NOT NULL AND username != ""', [], (err2, rows2) => {
-                            if (err2) {
-                                resolve(usernames);
-                            } else {
-                                const additionalUsernames = rows2.map(r => r.username).filter(Boolean);
-                                resolve([...usernames, ...additionalUsernames]);
-                            }
-                        });
-                    }
-                });
-            })
-        ]);
-        db.close();
-        
-        // Gabungkan untuk exclude
-        const excludeUsernames = [...new Set([...voucherUsernames, ...memberUsernames])];
-        
-        // Total PPPoE users (exclude vouchers DAN members)
+        const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
+
+        const pwdAttrs = `(
+            'Cleartext-Password',
+            'User-Password',
+            'Crypt-Password',
+            'MD5-Password',
+            'SHA-Password'
+        )`;
+
+        // Total PPPoE users (exclude vouchers DAN hotspot member)
         let totalQuery = `
             SELECT COUNT(DISTINCT username) as total
             FROM radcheck
-            WHERE attribute = 'Cleartext-Password'
+            WHERE attribute IN ${pwdAttrs}
         `;
         const params = [];
         if (excludeUsernames.length > 0) {
@@ -529,8 +431,9 @@ async function getRadiusStatistics() {
         }
         
         const [totalRows] = await conn.execute(totalQuery, params);
-        const totalUsers = totalRows[0]?.total || 0;
-        
+        const totalRowList = Array.isArray(totalRows) ? totalRows : [];
+        const totalUsers = totalRowList[0]?.total || 0;
+
         // Active PPPoE connections (dari radacct), tapi hanya hitung yang username-nya masih ada di radcheck
         // Ini mencegah "data yatim" (orphan) di radacct membuat statistik jadi ngaco.
         let activeQuery = `
@@ -538,8 +441,8 @@ async function getRadiusStatistics() {
             FROM radacct ra
             JOIN radcheck rc
               ON rc.username = ra.username
-             AND rc.attribute = 'Cleartext-Password'
-            WHERE ra.acctstoptime IS NULL
+             AND rc.attribute IN ${pwdAttrs}
+            WHERE (ra.acctstoptime IS NULL OR ra.acctstoptime = '' OR ra.acctstoptime = '0' OR ra.acctstoptime = '0000-00-00 00:00:00')
         `;
         const activeParams = [];
         if (excludeUsernames.length > 0) {
@@ -549,14 +452,15 @@ async function getRadiusStatistics() {
         }
         
         const [activeRows] = await conn.execute(activeQuery, activeParams);
-        const activeConnections = activeRows[0]?.active || 0;
+        const activeRowList = Array.isArray(activeRows) ? activeRows : [];
+        const activeConnections = activeRowList[0]?.active || 0;
         
         // Offline users
         const offlineUsers = Math.max(totalUsers - activeConnections, 0);
         
         await conn.end();
         
-        logger.info(`RADIUS Statistics - Total: ${totalUsers}, Active: ${activeConnections}, Offline: ${offlineUsers} (excluded ${voucherUsernames.length} vouchers)`);
+        logger.info(`RADIUS Statistics - Total: ${totalUsers}, Active: ${activeConnections}, Offline: ${offlineUsers} (excluded ${excludeUsernames.length} voucher/hotspot)`);
         
         return {
             total: totalUsers,

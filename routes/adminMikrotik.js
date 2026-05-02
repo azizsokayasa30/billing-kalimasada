@@ -109,10 +109,12 @@ router.get('/mikrotik', adminAuth, async (req, res) => {
       // RADIUS mode: Get users from RADIUS database
       logger.info('RADIUS mode: Loading users from RADIUS database');
       try {
-        const users = await getPPPoEUsersRadius();
+        const usersRaw = await getPPPoEUsersRadius();
+        const users = Array.isArray(usersRaw) ? usersRaw : [];
         logger.info(`Found ${users.length} users in RADIUS database`);
-        
-        const activeConnections = await getActivePPPoEConnectionsRadius();
+
+        const activeRaw = await getActivePPPoEConnectionsRadius();
+        const activeConnections = Array.isArray(activeRaw) ? activeRaw : [];
         logger.info(`Found ${activeConnections.length} active connections in RADIUS`);
         
         const activeNames = new Set(activeConnections.map(a => a.name));
