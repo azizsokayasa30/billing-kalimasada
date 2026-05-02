@@ -11,6 +11,38 @@ const logger = require('./logger');
 let _singletonConn = null;
 let _singletonPath = null;
 
+/**
+ * Path file SQLite yang dipakai FreeRADIUS harus sama dengan yang dibaca aplikasi.
+ * Prioritas: env RADIUS_SQLITE_PATH → path absolut di app_settings → data/<nama>.db
+ */
+async function resolveRadiusSqliteDbPath() {
+    const { getRadiusConfig } = require('./radiusConfig');
+    const config = await getRadiusConfig();
+    const envPath = process.env.RADIUS_SQLITE_PATH && String(process.env.RADIUS_SQLITE_PATH).trim();
+    if (envPath) {
+        return {
+            dbPath: path.resolve(envPath),
+            source: 'environment:RADIUS_SQLITE_PATH'
+        };
+    }
+    const raw = String(config.radius_database || 'radius').trim();
+    if (!raw) {
+        return {
+            dbPath: path.join(__dirname, '..', 'data', 'radius.db'),
+            source: 'default:data/radius.db'
+        };
+    }
+    if (path.isAbsolute(raw)) {
+        const p = raw.endsWith('.db') ? raw : `${raw}.db`;
+        return { dbPath: p, source: 'app_settings:absolute_path' };
+    }
+    const baseFile = raw.endsWith('.db') ? raw : `${raw}.db`;
+    return {
+        dbPath: path.join(__dirname, '..', 'data', baseFile),
+        source: `app_settings:data/${baseFile}`
+    };
+}
+
 class RADIUSDatabase {
     constructor(dbPath) {
         this.dbPath = dbPath;
@@ -230,15 +262,7 @@ class RADIUSDatabase {
  * Creates once, reuses forever to prevent SQLite locking deadlocks.
  */
 async function getRadiusConnection() {
-    const { getRadiusConfig } = require('./radiusConfig');
-    const config = await getRadiusConfig();
-
-    // WAJIB pakai __dirname (akar proyek), BUKAN process.cwd() — kalau cwd salah
-    // (PM2/script dari folder lain), aplikasi buka DB kosong/salah → Daftar PPPoE kosong
-    // sementara FreeRADIUS tetap pakai file DB yang benar.
-    const dbName = String(config.radius_database || 'radius').trim();
-    const baseFile = dbName.endsWith('.db') ? dbName : `${dbName}.db`;
-    const dbPath = path.join(__dirname, '..', 'data', baseFile);
+    const { dbPath, source } = await resolveRadiusSqliteDbPath();
 
     // Reuse singleton if path matches and connection is still alive
     if (_singletonConn && _singletonPath === dbPath && _singletonConn.db) {
@@ -274,11 +298,50 @@ async function getRadiusConnection() {
     if (missingOptional.length > 0) {
         logger.warn(`[RADIUS-SQLITE] ${dbPath} — tabel opsional tidak ada (fitur terbatas): ${missingOptional.join(', ')}`);
     }
-    logger.info(`[RADIUS-SQLITE] Using ${dbPath} (${existingTables.length} tables, radcheck OK)`);
+    logger.info(
+        `[RADIUS-SQLITE] Using ${dbPath} [${source}] (${existingTables.length} tables, radcheck OK)`
+    );
 
     _singletonConn = conn;
     _singletonPath = dbPath;
     return conn;
 }
 
-module.exports = { getRadiusConnection };
+/** Untuk halaman tes / diagnosa: path ter-resolve + ringkasan isi radcheck (tanpa membuka billing). */
+async function getRadiusSqliteFileDiagnostics() {
+    const resolved = await resolveRadiusSqliteDbPath();
+    const out = {
+        ...resolved,
+        fileExists: fs.existsSync(resolved.dbPath),
+        fileSizeBytes: null,
+        radcheckRowCount: null,
+        radcheckPasswordUserCount: null,
+        error: null
+    };
+    try {
+        if (out.fileExists) {
+            out.fileSizeBytes = fs.statSync(resolved.dbPath).size;
+        }
+        const conn = await getRadiusConnection();
+        const [r1] = await conn.execute('SELECT COUNT(*) as n FROM radcheck');
+        out.radcheckRowCount = Array.isArray(r1) && r1[0] != null ? r1[0].n : null;
+        const [r2] = await conn.execute(`
+            SELECT COUNT(DISTINCT username) as n FROM radcheck
+            WHERE LOWER(TRIM(attribute)) IN (
+                'cleartext-password','user-password','crypt-password','md5-password',
+                'sha-password','smd5-password','mikrotik-password'
+            )
+        `);
+        out.radcheckPasswordUserCount = Array.isArray(r2) && r2[0] != null ? r2[0].n : null;
+        await conn.end();
+    } catch (e) {
+        out.error = e.message;
+    }
+    return out;
+}
+
+module.exports = {
+    getRadiusConnection,
+    resolveRadiusSqliteDbPath,
+    getRadiusSqliteFileDiagnostics
+};

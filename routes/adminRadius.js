@@ -9,6 +9,7 @@ const { adminAuth } = require('./adminAuth');
 const { getRadiusConfig, saveRadiusConfig } = require('../config/radiusConfig');
 const logger = require('../config/logger');
 const { getRadiusConnection } = require('../config/mikrotik');
+const { getRadiusSqliteFileDiagnostics } = require('../config/radiusSQLite');
 const { parseClientsConf, parseClientsConfFromDB, writeClientsConf, writeClientsConfToDB, restartFreeRADIUS, validateClient } = require('../config/radiusClients');
 const { backupRadius, restoreRadius, listBackups } = require('../utils/radiusBackup');
 
@@ -317,43 +318,57 @@ router.get('/radius/test', adminAuth, async (req, res) => {
       });
     }
     
-    // Test koneksi database
+    const sqliteDiag = await getRadiusSqliteFileDiagnostics();
+
     const conn = await getRadiusConnection();
-    
-    // Test query sederhana
+
     const [testRows] = await conn.execute('SELECT 1 as test');
-    const testResult = testRows[0]?.test;
-    
-    // Get statistics untuk verify
+    const testList = Array.isArray(testRows) ? testRows : [];
+    const testResult = testList[0]?.test;
+
     const [userCount] = await conn.execute(`
       SELECT COUNT(DISTINCT username) as total
       FROM radcheck
-      WHERE attribute = 'Cleartext-Password'
+      WHERE LOWER(TRIM(attribute)) IN (
+        'cleartext-password','user-password','crypt-password','md5-password',
+        'sha-password','smd5-password','mikrotik-password'
+      )
     `);
-    const totalUsers = userCount[0]?.total || 0;
-    
-    // Get active connections (hitung hanya untuk username yang memang ada di radcheck sebagai user aktif)
-    // Ini mencegah "data yatim" di radacct membuat statistik jadi tidak konsisten.
-    const [activeCount] = await conn.execute(`
+    const ucList = Array.isArray(userCount) ? userCount : [];
+    const totalUsers = ucList[0]?.total || 0;
+
+    let activeConnections = 0;
+    try {
+      const [activeCount] = await conn.execute(`
       SELECT COUNT(DISTINCT ra.username) as active
       FROM radacct ra
       JOIN radcheck rc
         ON rc.username = ra.username
-       AND rc.attribute = 'Cleartext-Password'
+       AND LOWER(TRIM(rc.attribute)) IN (
+         'cleartext-password','user-password','crypt-password','md5-password',
+         'sha-password','smd5-password','mikrotik-password'
+       )
       WHERE (ra.acctstoptime IS NULL OR ra.acctstoptime = '' OR ra.acctstoptime = '0' OR ra.acctstoptime = '0000-00-00 00:00:00')
     `);
-    const activeConnections = activeCount[0]?.active || 0;
-    
+      const acList = Array.isArray(activeCount) ? activeCount : [];
+      activeConnections = acList[0]?.active || 0;
+    } catch (_) {
+      activeConnections = 0;
+    }
+
     await conn.end();
-    
+
     res.json({
       success: true,
       message: 'Koneksi ke RADIUS database berhasil!',
+      sqlite: sqliteDiag,
       connection: {
         host: settings.radius_host || 'localhost',
         database: settings.radius_database || 'radius',
         user: settings.radius_user || 'radius',
-        status: 'connected'
+        status: 'connected',
+        resolvedSqlitePath: sqliteDiag.dbPath,
+        pathSource: sqliteDiag.source
       },
       statistics: {
         totalUsers: totalUsers,

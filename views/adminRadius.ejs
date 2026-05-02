@@ -80,8 +80,13 @@
               <input type="password" name="radius_password" class="form-control" value="<%= settings.radius_password || 'radius' %>">
             </div>
             <div class="mb-3">
-              <label class="form-label">RADIUS Database</label>
-              <input type="text" name="radius_database" class="form-control" value="<%= settings.radius_database || 'radius' %>">
+              <label class="form-label">RADIUS Database (SQLite)</label>
+              <input type="text" name="radius_database" class="form-control" value="<%= settings.radius_database || 'radius' %>" placeholder="radius atau /var/lib/freeradius/radius.db">
+              <small class="form-text text-muted">
+                <strong>Relatif:</strong> isi nama file tanpa path, mis. <code>radius</code> → aplikasi membuka <code>data/radius.db</code> di folder proyek ini.
+                <strong>Absolut:</strong> jika FreeRADIUS dan billing di <strong>satu server</strong>, isi path penuh file DB yang sama dengan <code>sql</code> di FreeRADIUS, mis. <code>/var/lib/freeradius/radius.db</code>.
+                Atur env <code>RADIUS_SQLITE_PATH</code> untuk override (prioritas tertinggi). Klik <strong>Test Koneksi</strong> untuk melihat <code>resolvedSqlitePath</code> dan jumlah baris <code>radcheck</code>.
+              </small>
             </div>
             <div class="mb-3">
               <button type="submit" class="btn btn-primary">

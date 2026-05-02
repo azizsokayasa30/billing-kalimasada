@@ -4,6 +4,7 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 const logger = require('../config/logger');
 const { getRadiusConfig } = require('../config/radiusConfig');
+const { resolveRadiusSqliteDbPath } = require('../config/radiusSQLite');
 
 const execAsync = promisify(exec);
 
@@ -33,11 +34,9 @@ async function backupRadius() {
         const dbUser = config.radius_user || 'radius';
         const dbPassword = config.radius_password || '';
         const dbName = config.radius_database || 'radius';
-        
-        // 1. Backup Database (SQLite)
+        // 1. Backup Database (SQLite) — path sama logika getRadiusConnection
         logger.info('Backing up RADIUS database (SQLite)...');
-        const dbFileName = dbName.endsWith('.db') ? dbName : `${dbName}.db`;
-        const sourceDbPath = path.join(process.cwd(), 'data', dbFileName);
+        const { dbPath: sourceDbPath } = await resolveRadiusSqliteDbPath();
         const targetDbPath = path.join(tempDir, 'radius-database.db');
         
         try {
@@ -141,8 +140,6 @@ async function restoreRadius(backupFilePath) {
         const dbHost = config.radius_host || 'localhost';
         const dbUser = config.radius_user || 'radius';
         const dbPassword = config.radius_password || '';
-        const dbName = config.radius_database || 'radius';
-        
         // Create temporary directory for extraction
         const tempDir = path.join(process.cwd(), 'backups', 'radius', `restore-temp-${Date.now()}`);
         await fs.mkdir(tempDir, { recursive: true });
@@ -168,14 +165,14 @@ async function restoreRadius(backupFilePath) {
             const dbBackupFile = path.join(tempDir, 'radius-database.db');
             
             if (await fs.access(dbBackupFile).then(() => true).catch(() => false)) {
-                const dbFileName = dbName.endsWith('.db') ? dbName : `${dbName}.db`;
-                const targetDbPath = path.join(process.cwd(), 'data', dbFileName);
-                
+                const { dbPath: targetDbPath } = await resolveRadiusSqliteDbPath();
+                await fs.mkdir(path.dirname(targetDbPath), { recursive: true });
+
                 // Backup existing database first
                 if (await fs.access(targetDbPath).then(() => true).catch(() => false)) {
                     await fs.copyFile(targetDbPath, `${targetDbPath}.bak-${Date.now()}`);
                 }
-                
+
                 // Replace with backup file
                 await fs.copyFile(dbBackupFile, targetDbPath);
                 logger.info('Database restore (SQLite) completed');
