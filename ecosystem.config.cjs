@@ -1,9 +1,12 @@
+const path = require('path');
+
+// cwd = folder repo (sama dengan lokasi ecosystem.config.cjs), jangan hardcode path mesin dev
 module.exports = {
   apps: [
     {
       name: 'billing-kalimasada',
-      script: 'app.js',
-      cwd: '/home/ajizs/internet-express',
+      script: path.join(__dirname, 'app.js'),
+      cwd: __dirname,
       instances: 1,
       exec_mode: 'fork',
       watch: false,

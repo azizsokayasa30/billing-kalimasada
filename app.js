@@ -720,7 +720,7 @@ const adminCableNetworkRouter = require('./routes/adminCableNetwork');
 app.use('/admin/cable-network', blockTechnicianAccess, adminAuth, adminCableNetworkRouter);
 
 // Import dan gunakan route adminCollectors
-const adminCollectorsRouter = require('./billing-kalimasada/routes/adminCollectors');
+const adminCollectorsRouter = require('./routes/adminCollectors');
 app.use('/admin/collectors', blockTechnicianAccess, adminCollectorsRouter);
 
 // Import dan gunakan route cache management
