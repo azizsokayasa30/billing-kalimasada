@@ -72,7 +72,7 @@ router.get('/radius', adminAuth, async (req, res) => {
         radius_host: 'localhost',
         radius_user: 'billing',
         radius_password: '',
-        radius_database: 'billing'
+        radius_database: 'radius'
       },
       backups: backups || [],
       page: 'setting-radius',
@@ -96,7 +96,7 @@ router.post('/radius', adminAuth, async (req, res) => {
       radius_host: radius_host ? radius_host.trim() : 'localhost',
       radius_user: radius_user ? radius_user.trim() : 'billing',
       radius_password: radius_password || '',
-      radius_database: radius_database ? radius_database.trim() : 'billing'
+      radius_database: radius_database ? radius_database.trim() : 'radius'
     });
 
     // Reload untuk ditampilkan
@@ -127,7 +127,7 @@ router.post('/radius', adminAuth, async (req, res) => {
       radius_host: 'localhost',
       radius_user: 'radius',
       radius_password: '',
-      radius_database: 'billing'
+      radius_database: 'radius'
     }));
     
     // Force mode RADIUS

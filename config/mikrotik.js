@@ -255,7 +255,10 @@ async function getPPPoEUsersRadius() {
                 'User-Password',
                 'Crypt-Password',
                 'MD5-Password',
-                'SHA-Password'
+                'SHA-Password',
+                'SMD5-Password',
+                'NT-Password',
+                'LM-Password'
             )
         `;
         
@@ -311,7 +314,8 @@ async function getPPPoEUsersRadius() {
             const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
 
             let fallbackQuery = `SELECT username, value as password FROM radcheck WHERE attribute IN (
-                'Cleartext-Password','User-Password','Crypt-Password','MD5-Password','SHA-Password'
+                'Cleartext-Password','User-Password','Crypt-Password','MD5-Password','SHA-Password',
+                'SMD5-Password','NT-Password','LM-Password'
             )`;
             const params = [];
             if (excludeUsernames.length > 0) {
@@ -414,7 +418,10 @@ async function getRadiusStatistics() {
             'User-Password',
             'Crypt-Password',
             'MD5-Password',
-            'SHA-Password'
+            'SHA-Password',
+            'SMD5-Password',
+            'NT-Password',
+            'LM-Password'
         )`;
 
         // Total PPPoE users (exclude vouchers DAN hotspot member)

@@ -2272,22 +2272,28 @@
                 })
                 .then(data => {
                     console.log('ðŸ“Š API Response data:', data);
-                    
-                    if (data.success && data.data && data.data.length > 0) {
+
+                    if (data.success && Array.isArray(data.data)) {
                         pppoeUsers = data.data;
                         filteredPppoeUsers = [...pppoeUsers];
-                        
                         console.log(`ðŸ“ Loaded ${pppoeUsers.length} users to memory`);
-                        showToast('success', `Loaded ${pppoeUsers.length} PPPoE users from RADIUS Server`);
+                        if (pppoeUsers.length > 0) {
+                            showToast('success', `Loaded ${pppoeUsers.length} PPPoE users from RADIUS Server`);
+                        } else {
+                            showToast('warning', 'Tidak ada user PPPoE di database RADIUS (0 hasil). Periksa Pengaturan RADIUS: nama database harus sama file yang dipakai FreeRADIUS (mis. radius).');
+                        }
                     } else {
-                        console.warn('âš ï¸ No data from API, using test data');
-                        loadTestPppoeUsers();
+                        pppoeUsers = [];
+                        filteredPppoeUsers = [];
+                        console.warn('API PPPoE: respons tidak sukses', data);
+                        showToast('error', (data && data.message) ? data.message : 'Gagal memuat daftar PPPoE dari server');
                     }
                 })
                 .catch(error => {
                     console.error('âŒ Fetch Error:', error);
-                    console.warn('âš ï¸ API Error, using test data');
-                    loadTestPppoeUsers();
+                    pppoeUsers = [];
+                    filteredPppoeUsers = [];
+                    showToast('error', 'Gagal menghubungi API PPPoE: ' + (error && error.message ? error.message : 'periksa jaringan atau log server'));
                 })
                 .finally(() => {
                     // Restore button state
@@ -2444,22 +2450,28 @@
                 })
                 .then(data => {
                     console.log('ðŸ“Š Edit API Response data:', data);
-                    
-                    if (data.success && data.data && data.data.length > 0) {
+
+                    if (data.success && Array.isArray(data.data)) {
                         pppoeUsers = data.data;
                         filteredPppoeUsers = [...pppoeUsers];
-                        
                         console.log(`ðŸ“ Loaded ${pppoeUsers.length} users to memory for edit`);
-                        showToast('success', `Loaded ${pppoeUsers.length} PPPoE users from RADIUS Server`);
+                        if (pppoeUsers.length > 0) {
+                            showToast('success', `Loaded ${pppoeUsers.length} PPPoE users from RADIUS Server`);
+                        } else {
+                            showToast('warning', 'Tidak ada user PPPoE di database RADIUS (0 hasil). Periksa Pengaturan RADIUS: nama database harus sama file yang dipakai FreeRADIUS (mis. radius).');
+                        }
                     } else {
-                        console.warn('âš ï¸ No data from API, using test data for edit');
-                        loadTestEditPppoeUsers();
+                        pppoeUsers = [];
+                        filteredPppoeUsers = [];
+                        console.warn('API PPPoE (edit): respons tidak sukses', data);
+                        showToast('error', (data && data.message) ? data.message : 'Gagal memuat daftar PPPoE dari server');
                     }
                 })
                 .catch(error => {
                     console.error('âŒ Edit Fetch Error:', error);
-                    console.warn('âš ï¸ API Error, using test data for edit');
-                    loadTestEditPppoeUsers();
+                    pppoeUsers = [];
+                    filteredPppoeUsers = [];
+                    showToast('error', 'Gagal menghubungi API PPPoE: ' + (error && error.message ? error.message : 'periksa jaringan atau log server'));
                 })
                 .finally(() => {
                     // Restore button state

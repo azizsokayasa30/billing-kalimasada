@@ -6499,8 +6499,9 @@ router.get('/api/pppoe-users', async (req, res) => {
         
         // getPPPoEUsers() sudah otomatis memilih antara RADIUS atau Mikrotik berdasarkan mode
         // dan sudah mengembalikan status aktif untuk masing-masing mode
-        const pppoeUsers = await getPPPoEUsers();
-        
+        const raw = await getPPPoEUsers();
+        const pppoeUsers = Array.isArray(raw) ? raw : [];
+
         res.json({
             success: true,
             data: pppoeUsers.map(user => ({
@@ -6509,7 +6510,7 @@ router.get('/api/pppoe-users', async (req, res) => {
                 active: user.active || false
             }))
         });
-        
+
         logger.info(`[API] Returned ${pppoeUsers.length} PPPoE users from ${authMode === 'radius' ? 'RADIUS Server' : 'Mikrotik'} (${pppoeUsers.filter(u => u.active).length} active)`);
     } catch (error) {
         logger.error('Error fetching PPPoE users:', error);

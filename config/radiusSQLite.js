@@ -236,7 +236,7 @@ async function getRadiusConnection() {
     // WAJIB pakai __dirname (akar proyek), BUKAN process.cwd() — kalau cwd salah
     // (PM2/script dari folder lain), aplikasi buka DB kosong/salah → Daftar PPPoE kosong
     // sementara FreeRADIUS tetap pakai file DB yang benar.
-    const dbName = String(config.radius_database || 'billing').trim();
+    const dbName = String(config.radius_database || 'radius').trim();
     const baseFile = dbName.endsWith('.db') ? dbName : `${dbName}.db`;
     const dbPath = path.join(__dirname, '..', 'data', baseFile);
 

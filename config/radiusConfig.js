@@ -50,7 +50,7 @@ async function getRadiusConfig() {
                         radius_host: 'localhost',
                         radius_user: 'radius',
                         radius_password: 'radius',
-                        radius_database: 'billing'
+                        radius_database: 'radius'
                     });
                     return;
                 }
@@ -66,7 +66,7 @@ async function getRadiusConfig() {
                     radius_host: config.radius_host || 'localhost',
                     radius_user: config.radius_user || 'radius',
                     radius_password: config.radius_password || 'radius',
-                    radius_database: config.radius_database || 'billing'
+                    radius_database: config.radius_database || 'radius'
                 });
             }
         );
@@ -85,7 +85,7 @@ async function saveRadiusConfig(config) {
             ['radius_host', config.radius_host || 'localhost'],
             ['radius_user', config.radius_user || 'radius'],
             ['radius_password', config.radius_password || 'radius'],
-            ['radius_database', config.radius_database || 'billing']
+            ['radius_database', config.radius_database || 'radius']
         ];
         
         // Use transaction for atomicity
