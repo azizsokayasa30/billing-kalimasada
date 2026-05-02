@@ -42,6 +42,12 @@
         </div>
       <% } %>
 
+      <div class="alert alert-secondary small mb-4">
+        <i class="bi bi-info-circle me-1"></i>
+        Daftar NAS menggabungkan <strong>tabel <code>nas</code></strong> (SQLite RADIUS) dan <strong><code>/etc/freeradius/3.0/clients.conf</code></strong>.
+        Menyimpan perubahan menulis <strong>keduanya</strong> agar sama dengan FreeRADIUS. Jika <code>nas</code> sempat kosong setelah reset DB, pembukaan halaman ini mengisi ulang <code>nas</code> dari file (sekali).
+      </div>
+
       <!-- Add Client Button -->
       <div class="card p-3 shadow-sm mb-4">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addClientModal">

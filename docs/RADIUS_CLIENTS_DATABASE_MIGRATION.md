@@ -3,6 +3,12 @@
 ## Overview
 The RADIUS NAS (Network Access Server) client management has been refactored from a file-based system (`/etc/freeradius/3.0/clients.conf`) to a **database-driven approach** using the existing RADIUS SQLite `nas` table. This eliminates file system permission issues.
 
+### Sinkron dua arah (billing ↔ FreeRADIUS)
+FreeRADIUS tetap membaca **`clients.conf`**. Tabel **`nas`** dipakai aplikasi dan cadangan. Perilaku saat ini:
+- **Baca**: daftar di UI = gabungan **`nas`** + isi **`clients.conf`** (dedupe per IP).
+- **Tulis** (tambah/ubah/hapus dari admin): memperbarui **`clients.conf`** dan **`nas`** agar keduanya sama.
+- Jika **`nas`** kosong (mis. setelah reset SQLite) tetapi **`clients.conf`** masih berisi NAS, pembukaan halaman NAS mengisi ulang **`nas`** dari file (sekali).
+
 ## Problem Solved
 **Original Issue**: `EACCES: permission denied, open '/etc/freeradius/3.0/clients.conf'`
 - The Node.js application runs as a regular user and cannot write to `/etc/freeradius/` directory

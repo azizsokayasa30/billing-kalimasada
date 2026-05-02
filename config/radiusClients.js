@@ -35,42 +35,45 @@ initializeClientsTable().catch(err => {
 });
 
 /**
- * Parse clients dari RADIUS SQLite database (primary)
- * Uses the nas table which stores FreeRADIUS NAS clients
- * Fallback ke file jika database tidak tersedia
+ * Parse clients: gabungan tabel nas (SQLite) + /etc/freeradius/3.0/clients.conf.
+ * - Tampilan aplikasi = union keduanya (dedupe per IP / nama).
+ * - Jika nas kosong tetapi clients.conf berisi client, isi ulang nas otomatis agar konsisten dengan FR.
+ * - Simpan dari UI menulis clients.conf DAN nas (lihat writeClientsConfToDB).
  */
 async function parseClientsConfFromDB() {
+    let dbRows = [];
     try {
         const conn = await getRadiusConnection();
-        // Query nas table: nasname=client name, community/shortname=IP, secret=shared secret
         const [rows] = await conn.execute(`
-            SELECT id, nasname, shortname, type, secret, description 
-            FROM nas 
+            SELECT id, nasname, shortname, type, secret, description
+            FROM nas
             ORDER BY nasname
         `);
-        await conn.end();
-        
-        if (rows && rows.length > 0) {
-            logger.info(`[RADIUS-CLIENTS] Loaded ${rows.length} clients dari nas table`);
-            return rows.map(row => ({
-                id: row.id,
-                name: row.shortname || row.nasname, // shortname contains the friendly name
-                ipaddr: row.nasname, // nasname contains the IP address
-                secret: row.secret || '',
-                nas_type: row.type || 'other',
-                require_message_authenticator: 'no',  // Default
-                comment: row.description || null,
-                fromDB: true
-            }));
-        }
-        
-        logger.warn('[RADIUS-CLIENTS] No clients found in nas table, attempting file read');
-        const fileClients = await parseClientsConfFromFile();
-        return fileClients;
+        dbRows = Array.isArray(rows) ? rows : [];
     } catch (error) {
-        logger.warn(`[RADIUS-CLIENTS] Database read failed, falling back to file: ${error.message}`);
-        return await parseClientsConfFromFile();
+        logger.warn(`[RADIUS-CLIENTS] Gagal baca nas: ${error.message}`);
+        dbRows = [];
     }
+
+    const dbClients = dbRows.map(mapNasRowToClient);
+    const fileClients = await parseClientsConfFromFile();
+    const merged = mergeClientsFromDbAndFile(dbClients, fileClients);
+
+    if (dbRows.length === 0 && fileClients.length > 0) {
+        try {
+            await replaceNasTable(merged);
+            logger.info(
+                `[RADIUS-CLIENTS] nas kosong — disinkronkan dari clients.conf (${merged.length} client)`
+            );
+        } catch (e) {
+            logger.warn(`[RADIUS-CLIENTS] Auto-sync nas dari file gagal: ${e.message}`);
+        }
+    }
+
+    if (merged.length > 0) {
+        logger.info(`[RADIUS-CLIENTS] Daftar gabungan: ${merged.length} client (nas + clients.conf)`);
+    }
+    return merged;
 }
 
 /**
@@ -183,11 +186,111 @@ async function parseClientsConfFromFile() {
             clients.push(currentClient);
         }
 
-        return clients;
+        return clients.map((c) => ({
+            name: c.name,
+            ipaddr: c.ipaddr,
+            addrType: c.addrType || 'ipaddr',
+            secret: c.secret,
+            nas_type: c.nas_type || 'other',
+            require_message_authenticator: c.require_message_authenticator || 'no',
+            comment: c.comment
+        }));
     } catch (error) {
         logger.error(`Error parsing clients.conf: ${error.message}`);
-        throw error;
+        return [];
     }
+}
+
+function isLikelyIpv4(ip) {
+    return /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test((ip || '').trim());
+}
+
+/** Kunci deduplikasi: IP bila valid, else nama client */
+function clientDedupeKey(c) {
+    const ip = (c.ipaddr || '').trim();
+    if (ip && (isLikelyIpv4(ip) || ip.includes(':'))) return `ip:${ip}`;
+    const n = (c.name || '').trim();
+    return n ? `name:${n}` : '';
+}
+
+function mapNasRowToClient(row) {
+    const nn = (row.nasname || '').trim();
+    const sn = (row.shortname || '').trim();
+    const ipaddr = isLikelyIpv4(nn) || (nn && nn.includes(':')) ? nn : '';
+    return {
+        id: row.id,
+        name: sn || nn || 'client',
+        ipaddr: ipaddr || nn,
+        secret: row.secret || '',
+        nas_type: row.type || 'other',
+        require_message_authenticator: 'no',
+        comment: row.description || null,
+        fromDB: true
+    };
+}
+
+/**
+ * Gabungkan klien dari tabel nas (SQLite) + clients.conf (FreeRADIUS).
+ * Untuk IP yang sama, data dari DB menimpa file (nilai di aplikasi diutamakan).
+ */
+function mergeClientsFromDbAndFile(dbClients, fileClients) {
+    const m = new Map();
+    for (const c of fileClients) {
+        if (!c || !c.name) continue;
+        const k = clientDedupeKey(c);
+        if (!k) continue;
+        m.set(k, {
+            name: c.name,
+            ipaddr: c.ipaddr || null,
+            secret: c.secret || '',
+            nas_type: c.nas_type || 'other',
+            require_message_authenticator: c.require_message_authenticator || 'no',
+            comment: c.comment || null,
+            addrType: c.addrType || 'ipaddr'
+        });
+    }
+    for (const c of dbClients) {
+        const k = clientDedupeKey(c);
+        if (!k) continue;
+        const prev = m.get(k) || {};
+        m.set(k, {
+            ...prev,
+            id: c.id,
+            name: c.name,
+            ipaddr: c.ipaddr || prev.ipaddr,
+            secret: c.secret != null && c.secret !== '' ? c.secret : prev.secret,
+            nas_type: c.nas_type || prev.nas_type,
+            require_message_authenticator:
+                c.require_message_authenticator || prev.require_message_authenticator || 'no',
+            comment: c.comment != null ? c.comment : prev.comment,
+            addrType: c.addrType || prev.addrType || 'ipaddr',
+            fromDB: true
+        });
+    }
+    return [...m.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+/** Hanya isi ulang tabel nas (tanpa menulis clients.conf) — dipakai auto-heal + writeClientsConfToDB */
+async function replaceNasTable(clients) {
+    const conn = await getRadiusConnection();
+    await conn.execute('DELETE FROM nas');
+    for (const client of clients) {
+        if (!client.name || !client.secret) {
+            logger.warn(`[RADIUS-CLIENTS] Lewati client tidak lengkap: ${client.name}`);
+            continue;
+        }
+        const ip = (client.ipaddr || '').trim();
+        if (!ip) {
+            logger.warn(`[RADIUS-CLIENTS] Lewati client tanpa IP: ${client.name}`);
+            continue;
+        }
+        await conn.execute(
+            `INSERT INTO nas (nasname, shortname, type, secret, description)
+             VALUES (?, ?, ?, ?, ?)`,
+            [ip, client.name, client.nas_type || 'other', client.secret, client.comment || null]
+        );
+    }
+    logger.info(`[RADIUS-CLIENTS] Tabel nas diisi ulang (${clients.length} entri masukan)`);
 }
 
 /**
@@ -406,45 +509,17 @@ function validateClient(client) {
 }
 
 /**
- * Write clients to RADIUS SQLite database using nas table
- * PRIMARY METHOD - replaces file writing
+ * Tulis daftar client ke clients.conf (yang dibaca FreeRADIUS) DAN ke tabel nas (SQLite).
+ * Keduanya harus sama agar UI, backup DB, dan FR konsisten.
  */
 async function writeClientsConfToDB(clients) {
     try {
-        const conn = await getRadiusConnection();
-        
-        // Clear existing clients (truncate nas table)
-        await conn.execute('DELETE FROM nas');
-        
-        // Insert new clients
-        for (const client of clients) {
-            if (!client.name || !client.secret) {
-                logger.warn(`[RADIUS-CLIENTS] Skipping incomplete client: ${client.name}`);
-                continue;
-            }
-            
-            try {
-                await conn.execute(`
-                    INSERT INTO nas (nasname, shortname, type, secret, description)
-                    VALUES (?, ?, ?, ?, ?)
-                `, [
-                    client.ipaddr || client.name, // nasname MUST be the IP address for FreeRADIUS to find it
-                    client.name,                  // shortname is the friendly client name
-                    client.nas_type || 'other',
-                    client.secret,
-                    client.comment || null
-                ]);
-            } catch (insertError) {
-                logger.warn(`[RADIUS-CLIENTS] Error inserting client ${client.name}: ${insertError.message}`);
-                // Continue with next client
-            }
-        }
-        
-        await conn.end();
-        logger.info(`[RADIUS-CLIENTS] Saved ${clients.length} clients to nas table`);
+        writeClientsConf(clients);
+        await replaceNasTable(clients);
+        logger.info(`[RADIUS-CLIENTS] Disimpan ${clients.length} client ke clients.conf + nas`);
         return true;
     } catch (error) {
-        logger.error(`[RADIUS-CLIENTS] Error writing clients to database: ${error.message}`);
+        logger.error(`[RADIUS-CLIENTS] Error writing clients: ${error.message}`);
         throw error;
     }
 }
