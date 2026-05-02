@@ -169,7 +169,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           'latitude': position.latitude,
           'longitude': position.longitude,
         },
-        if (photoBase64 != null) 'photo_base64': photoBase64,
+        'photo_base64': ?photoBase64,
       });
 
       if (res.statusCode == 200) {

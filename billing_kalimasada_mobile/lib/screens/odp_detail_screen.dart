@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../services/api_client.dart';
 import 'dart:convert';
 import 'customer_detail_screen.dart';
+import '../widgets/odp_map_marker.dart';
 
 class OdpDetailScreen extends StatefulWidget {
   final String odpId;
@@ -107,125 +108,143 @@ class _OdpDetailScreenState extends State<OdpDetailScreen> {
 
   void _showAssignPortDialog() {
     final TextEditingController portNumberController = TextEditingController();
-    String? selectedCustomerId;
-    
+    int? selectedCustomerPk;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Assign Port to Customer', style: TextStyle(color: Color(0xFF070038))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: portNumberController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Port Number',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Autocomplete<Map<String, dynamic>>(
-              optionsBuilder: (TextEditingValue textEditingValue) async {
-                if (textEditingValue.text.isEmpty) {
-                  return const Iterable<Map<String, dynamic>>.empty();
-                }
-                try {
-                  final response = await ApiClient.get('/api/mobile-adapter/customers/search?q=${textEditingValue.text}');
-                  if (response.statusCode == 200) {
-                    final resData = jsonDecode(response.body);
-                    if (resData['success']) {
-                      return List<Map<String, dynamic>>.from(resData['data']);
-                    }
-                  }
-                } catch (e) {
-                  print('Search error: $e');
-                }
-                return const Iterable<Map<String, dynamic>>.empty();
-              },
-              displayStringForOption: (Map<String, dynamic> option) => option['name'],
-              onSelected: (Map<String, dynamic> selection) {
-                selectedCustomerId = selection['customer_id']?.toString();
-              },
-              fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
-                return TextField(
-                  controller: textEditingController,
-                  focusNode: focusNode,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Assign Port to Customer', style: TextStyle(color: Color(0xFF070038))),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: portNumberController,
+                  keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'Customer Name (Type to search)',
+                    labelText: 'Port Number',
                     border: OutlineInputBorder(),
                   ),
-                );
-              },
-              optionsViewBuilder: (context, onSelected, options) {
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4.0,
-                    child: SizedBox(
-                      height: 200.0,
-                      width: MediaQuery.of(context).size.width * 0.65,
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        itemCount: options.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          final option = options.elementAt(index);
-                          return InkWell(
-                            onTap: () {
-                              onSelected(option);
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(option['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  Text(option['customer_id']?.toString() ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+                ),
+                const SizedBox(height: 16),
+                Autocomplete<Map<String, dynamic>>(
+                  optionsBuilder: (TextEditingValue textEditingValue) async {
+                    if (textEditingValue.text.isEmpty) {
+                      return const Iterable<Map<String, dynamic>>.empty();
+                    }
+                    try {
+                      final q = Uri.encodeQueryComponent(textEditingValue.text);
+                      final response = await ApiClient.get('/api/mobile-adapter/customers/search?q=$q');
+                      if (response.statusCode == 200) {
+                        final resData = jsonDecode(response.body);
+                        if (resData['success']) {
+                          return List<Map<String, dynamic>>.from(resData['data']);
+                        }
+                      }
+                    } catch (e) {
+                      print('Search error: $e');
+                    }
+                    return const Iterable<Map<String, dynamic>>.empty();
+                  },
+                  displayStringForOption: (Map<String, dynamic> option) => '${option['name'] ?? ''}',
+                  onSelected: (Map<String, dynamic> selection) {
+                    final dynamic rawId = selection['id'];
+                    final int? pk = rawId is int
+                        ? rawId
+                        : rawId is num
+                            ? rawId.toInt()
+                            : int.tryParse(rawId?.toString() ?? '');
+                    setDialogState(() => selectedCustomerPk = pk);
+                  },
+                  fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                    return TextField(
+                      controller: textEditingController,
+                      focusNode: focusNode,
+                      decoration: const InputDecoration(
+                        labelText: 'Customer Name (Type to search)',
+                        border: OutlineInputBorder(),
                       ),
-                    ),
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        child: SizedBox(
+                          height: 200.0,
+                          width: MediaQuery.of(context).size.width * 0.65,
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: options.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final option = options.elementAt(index);
+                              return InkWell(
+                                onTap: () => onSelected(option),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(option['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      Text(
+                                        'ID: ${option['id']?.toString() ?? '-'}${option['customer_id'] != null ? ' · ${option['customer_id']}' : ''}',
+                                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                if (selectedCustomerPk != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text('Pelanggan terpilih: ID $selectedCustomerPk', style: const TextStyle(fontSize: 12)),
                   ),
-                );
-              },
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final portNum = int.tryParse(portNumberController.text);
-              if (portNum == null || selectedCustomerId == null || selectedCustomerId!.isEmpty) {
-                _showError('Port Number and Customer must be selected');
-                return;
-              }
-              
-              setState(() => isLoading = true);
-              final response = await ApiClient.post('/api/mobile-adapter/odps/${widget.odpId}/assign', {
-                'port_number': portNum,
-                'customer_id': selectedCustomerId,
-              });
-              
-              final resData = jsonDecode(response.body);
-              if (resData['success']) {
-                _showSuccess(resData['message']);
-                _fetchOdpData();
-              } else {
-                _showError(resData['message']);
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF070038), foregroundColor: Colors.white),
-            child: const Text('Assign'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final portNum = int.tryParse(portNumberController.text);
+                  if (portNum == null || selectedCustomerPk == null) {
+                    _showError('Isi nomor port dan pilih pelanggan dari daftar');
+                    return;
+                  }
+                  Navigator.pop(dialogContext);
+
+                  setState(() => isLoading = true);
+                  final odpKey = odpData?['id']?.toString() ?? widget.odpId;
+                  final response = await ApiClient.post('/api/mobile-adapter/odps/$odpKey/assign', {
+                    'port_number': portNum,
+                    'customer_db_id': selectedCustomerPk,
+                  });
+
+                  final resData = jsonDecode(response.body);
+                  if (resData['success']) {
+                    _showSuccess(resData['message']);
+                    _fetchOdpData();
+                  } else {
+                    _showError(resData['message'] ?? 'Gagal');
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF070038), foregroundColor: Colors.white),
+                child: const Text('Assign'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -413,9 +432,12 @@ class _OdpDetailScreenState extends State<OdpDetailScreen> {
                                       double.tryParse(odpData!['latitude'].toString()) ?? -7.404620, 
                                       double.tryParse(odpData!['longitude'].toString()) ?? 109.724536
                                     ),
-                                    width: 32,
-                                    height: 32,
-                                    child: Image.asset('assets/images/odp_icon.png', width: 32, height: 32),
+                                    width: 28,
+                                    height: 33,
+                                    alignment: Alignment.topCenter,
+                                    child: OdpMapMarker(
+                                      status: (odpData!['status'] ?? 'active').toString(),
+                                    ),
                                   ),
                                 ],
                               ),

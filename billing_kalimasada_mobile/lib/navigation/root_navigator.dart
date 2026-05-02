@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/colors.dart';
 import '../store/auth_provider.dart';
+import '../store/notification_provider.dart';
 import '../screens/login_screen.dart';
 import '../screens/technician_dashboard.dart';
 import '../screens/collector_dashboard.dart';
@@ -51,6 +52,30 @@ class _TechnicianTabs extends StatefulWidget {
 
 class _TechnicianTabsState extends State<_TechnicianTabs> {
   int _currentIndex = 0;
+  NotificationProvider? _notificationProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _notificationProvider ??= context.read<NotificationProvider>();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final n = context.read<NotificationProvider>();
+      n.ensurePolling();
+      n.fetchNotifications(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationProvider?.stopPolling();
+    super.dispose();
+  }
 
   void _navigateToTab(int index) {
     setState(() {

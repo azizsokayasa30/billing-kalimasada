@@ -1,24 +1,219 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../store/task_provider.dart';
 import 'job_execution_screen.dart';
 
-class TaskDetailScreen extends StatelessWidget {
+class TaskDetailScreen extends StatefulWidget {
   final Map<String, dynamic> task;
 
   const TaskDetailScreen({super.key, required this.task});
 
   @override
+  State<TaskDetailScreen> createState() => _TaskDetailScreenState();
+}
+
+class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerProviderStateMixin {
+  Timer? _timer;
+  Duration _elapsed = Duration.zero;
+  bool _busy = false;
+  late final AnimationController _spinCtrl;
+  /// Default terbuka agar teknisi langsung melihat password PPPoE di halaman eksekusi (bisa disembunyikan).
+  bool _pppoeObscure = false;
+
+  Map<String, dynamic> get _task => widget.task;
+
+  bool get _isTr => (_task['type']?.toString() ?? '') == 'TR';
+
+  bool get _isInstall => (_task['type']?.toString() ?? '') == 'INSTALL';
+
+  bool get _serverInProgress {
+    final s = (_task['status'] ?? '').toString().toLowerCase();
+    return s == 'in_progress';
+  }
+
+  /// TR atau PSB yang sedang in_progress — tampilkan timer + tombol "Sedang dikerjakan".
+  bool get _workActive => _serverInProgress && (_isTr || _isInstall);
+
+  /// Nilai string dari map tugas (API JSON).
+  String _taskStr(String key) {
+    final v = _task[key];
+    if (v == null) return '';
+    return v.toString().trim();
+  }
+
+  String _pppoeUserDisplay() {
+    final u = _taskStr('pppoe_username');
+    if (u.isNotEmpty) return u;
+    return '';
+  }
+
+  String? _pppoePassRaw() {
+    final p = _task['pppoe_password'];
+    if (p == null) return null;
+    final s = p.toString().trim();
+    return s.isEmpty ? null : s;
+  }
+
+  String _maskedPass(String pass) {
+    final n = pass.length.clamp(6, 24);
+    return String.fromCharCodes(List.filled(n, 0x2022)); // bullet points
+  }
+
+  void _copyField(String text, String label) {
+    final t = text.trim();
+    if (t.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: t));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label disalin')),
+    );
+  }
+
+  DateTime? _parseWorkStart() => parseTaskWorkStarted(_task['work_started_at']?.toString());
+
+  @override
+  void initState() {
+    super.initState();
+    _spinCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+    _syncTimerFromTask();
+  }
+
+  void _ensureSpin(bool active) {
+    if (!mounted) return;
+    if (active) {
+      if (!_spinCtrl.isAnimating) _spinCtrl.repeat();
+    } else {
+      _spinCtrl.stop();
+      _spinCtrl.reset();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant TaskDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.task != widget.task) {
+      _syncTimerFromTask();
+    }
+  }
+
+  void _syncTimerFromTask() {
+    _timer?.cancel();
+    if (!_workActive) {
+      setState(() => _elapsed = Duration.zero);
+      _ensureSpin(false);
+      return;
+    }
+    final start = _parseWorkStart();
+    if (start == null) {
+      setState(() => _elapsed = Duration.zero);
+      _ensureSpin(false);
+      return;
+    }
+    void tick() {
+      if (!mounted) return;
+      setState(() => _elapsed = DateTime.now().difference(start));
+    }
+
+    tick();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => tick());
+    _ensureSpin(true);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _spinCtrl.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    if (h > 0) {
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _onKerjakanTr(BuildContext context) async {
+    final id = _task['id']?.toString();
+    final type = _task['type']?.toString();
+    if (id == null || type == null) return;
+    final tasks = context.read<TaskProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    final ok = await tasks.updateTaskStatus(id, type, 'in_progress');
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      _task['status'] = 'in_progress';
+      _task['work_started_at'] = DateTime.now().toIso8601String();
+      _syncTimerFromTask();
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Gagal memulai tugas. Coba lagi.')),
+      );
+    }
+  }
+
+  void _openJobExecution(BuildContext context) {
+    final tasks = context.read<TaskProvider>();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => JobExecutionScreen(task: Map<String, dynamic>.from(_task)),
+      ),
+    ).then((result) async {
+      if (!mounted) return;
+      await tasks.fetchTasks(refresh: true);
+      if (!mounted || !context.mounted) return;
+      if (result == true) {
+        Navigator.pop(context);
+      }
+    });
+  }
+
+  Future<void> _onKerjakanInstall(BuildContext context) async {
+    final id = _task['id']?.toString();
+    final type = _task['type']?.toString();
+    if (id == null || type == null) return;
+    if (_workActive) {
+      _openJobExecution(context);
+      return;
+    }
+    final tasks = context.read<TaskProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    final ok = await tasks.updateTaskStatus(id, type, 'mulai');
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      _task['status'] = 'in_progress';
+      _task['work_started_at'] = DateTime.now().toIso8601String();
+      _syncTimerFromTask();
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Gagal memulai tugas. Coba lagi.')),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final durLabel = _workActive ? _formatDuration(_elapsed) : '00:00';
+
     return Scaffold(
       backgroundColor: const Color(0xFFFCF8FF),
       appBar: AppBar(
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF070038), // primary
+        foregroundColor: const Color(0xFF070038),
         elevation: 0,
         shape: const Border(
-          bottom: BorderSide(color: Color(0xFFC8C4D3), width: 1), // outline-variant
+          bottom: BorderSide(color: Color(0xFFC8C4D3), width: 1),
         ),
         title: const Text(
           'Eksekusi Tugas',
@@ -43,15 +238,14 @@ class TaskDetailScreen extends StatelessWidget {
       body: Stack(
         children: [
           SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 140), // extra bottom padding for buttons
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Timer & Status Section
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1B0C6B), // primary-container
+                    color: const Color(0xFF1B0C6B),
                     borderRadius: BorderRadius.circular(8),
                     boxShadow: [
                       BoxShadow(
@@ -66,23 +260,23 @@ class TaskDetailScreen extends StatelessWidget {
                     children: [
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
+                        children: [
+                          const Text(
                             'DURASI',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.5,
-                              color: Color(0xCC857ED9), // on-primary-container with opacity
+                              color: Color(0xCC857ED9),
                             ),
                           ),
                           Text(
-                            '00:45:12',
-                            style: TextStyle(
+                            durLabel,
+                            style: const TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 2,
-                              color: Colors.white, // on-primary
+                              color: Colors.white,
                             ),
                           ),
                         ],
@@ -90,20 +284,26 @@ class TaskDetailScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF5A53AB).withValues(alpha: 0.2), // surface-tint/20
+                          color: _workActive
+                              ? const Color(0xFF14532D).withValues(alpha: 0.35)
+                              : const Color(0xFF5A53AB).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.sync, size: 14, color: Color(0xFFE4DFFF)), // surface-variant
-                            SizedBox(width: 8),
+                          children: [
+                            Icon(
+                              _workActive ? Icons.play_circle_filled : Icons.sync,
+                              size: 14,
+                              color: _workActive ? const Color(0xFFB8F5C8) : const Color(0xFFE4DFFF),
+                            ),
+                            const SizedBox(width: 8),
                             Text(
-                              'Dalam Proses',
+                              _workActive ? 'Dalam proses' : 'Menunggu',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFFE4DFFF),
+                                color: _workActive ? const Color(0xFFB8F5C8) : const Color(0xFFE4DFFF),
                               ),
                             ),
                           ],
@@ -113,8 +313,6 @@ class TaskDetailScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
-                // Customer Details Section
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -134,7 +332,7 @@ class TaskDetailScreen extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF19163F), // on-surface
+                              color: Color(0xFF19163F),
                             ),
                           ),
                         ],
@@ -142,38 +340,41 @@ class TaskDetailScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       const Divider(color: Color(0xFFC8C4D3)),
                       const SizedBox(height: 8),
-                      
-                      _buildDetailRow('Nama', task['customer']?.toString() ?? 'Budi Santoso'),
+                      _buildDetailRow('Nama', _task['customer']?.toString() ?? '-'),
                       const SizedBox(height: 8),
-                      _buildDetailRow('ID Pelanggan', task['id']?.toString() ?? 'CST-882910'),
+                      _buildDetailRow(
+                        _isTr ? 'ID Tiket' : 'ID Tugas',
+                        _task['id']?.toString() ?? '-',
+                      ),
                       const SizedBox(height: 8),
-                      _buildDetailRow('Alamat', task['address']?.toString() ?? 'Jl. Merdeka No. 45, Kebayoran Baru, Jakarta Selatan'),
+                      _buildDetailRow('Alamat', _task['address']?.toString() ?? '-'),
                       const SizedBox(height: 16),
-                      
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () async {
-                                final phone = task['phone']?.toString();
+                                final phone = _task['phone']?.toString();
                                 if (phone != null && phone.isNotEmpty) {
                                   final uri = Uri.parse('tel:$phone');
                                   if (await canLaunchUrl(uri)) {
                                     await launchUrl(uri);
-                                  } else {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak dapat membuka aplikasi telepon')));
-                                    }
+                                  } else if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Tidak dapat membuka aplikasi telepon')),
+                                    );
                                   }
                                 } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nomor telepon tidak tersedia')));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Nomor telepon tidak tersedia')),
+                                  );
                                 }
                               },
                               icon: const Icon(Icons.call, size: 18),
                               label: const Text('Hubungi'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF19163F),
-                                backgroundColor: const Color(0xFFEAE5FF), // surface-container-high
+                                backgroundColor: const Color(0xFFEAE5FF),
                                 side: const BorderSide(color: Color(0xFFC8C4D3)),
                                 padding: const EdgeInsets.symmetric(vertical: 10),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -184,25 +385,29 @@ class TaskDetailScreen extends StatelessWidget {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () async {
-                                final address = task['address']?.toString();
+                                final address = _task['address']?.toString();
                                 if (address != null && address.isNotEmpty) {
-                                  final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
+                                  final uri = Uri.parse(
+                                    'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}',
+                                  );
                                   if (await canLaunchUrl(uri)) {
                                     await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                  } else {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak dapat membuka peta')));
-                                    }
+                                  } else if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Tidak dapat membuka peta')),
+                                    );
                                   }
                                 } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alamat tidak tersedia')));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Alamat tidak tersedia')),
+                                  );
                                 }
                               },
                               icon: const Icon(Icons.map, size: 18),
                               label: const Text('Peta'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF19163F),
-                                backgroundColor: const Color(0xFFEAE5FF), // surface-container-high
+                                backgroundColor: const Color(0xFFEAE5FF),
                                 side: const BorderSide(color: Color(0xFFC8C4D3)),
                                 padding: const EdgeInsets.symmetric(vertical: 10),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -215,8 +420,6 @@ class TaskDetailScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
-                // Technical Status Section
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -244,49 +447,65 @@ class TaskDetailScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       const Divider(color: Color(0xFFC8C4D3)),
                       const SizedBox(height: 8),
-                      
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
+                          SizedBox(
+                            width: 108,
                             child: Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF0EBFF), // surface-container
+                                color: const Color(0xFFF0EBFF),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    'Tipe Gangguan',
-                                    style: TextStyle(
-                                      fontSize: 12,
+                                  Text(
+                                    _isTr ? 'Tipe' : 'Job ID',
+                                    style: const TextStyle(
+                                      fontSize: 10,
                                       fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.5,
+                                      letterSpacing: 0.4,
                                       color: Color(0xFF474551),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    task['title']?.toString() ?? 'Koneksi Putus',
+                                    _isTr
+                                        ? (_task['title']?.toString() ?? '-')
+                                        : '#${_task['id']?.toString() ?? '-'}',
                                     style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                       color: Color(0xFF19163F),
                                     ),
-                                    maxLines: 1,
+                                    maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
                                   ),
+                                  if (!_isTr && _taskStr('job_number').isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _taskStr('job_number'),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF0EBFF), // surface-container
+                                color: const Color(0xFFF0EBFF),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Column(
@@ -306,12 +525,14 @@ class TaskDetailScreen extends StatelessWidget {
                                     children: [
                                       const Icon(Icons.priority_high, size: 16, color: Color(0xFFBA1A1A)),
                                       const SizedBox(width: 4),
-                                      Text(
-                                        task['priority']?.toString() ?? 'Tinggi',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                          color: Color(0xFFBA1A1A), // error
+                                      Expanded(
+                                        child: Text(
+                                          _task['priority']?.toString() ?? '-',
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                            color: Color(0xFFBA1A1A),
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -323,40 +544,144 @@ class TaskDetailScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      
-                      const Text(
-                        'Catatan Diagnosa',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                          color: Color(0xFF474551),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF0EBFF), // surface-container
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          task['description']?.toString() ?? 'Kabel optik di tiang utama terindikasi putus akibat cuaca buruk. Membutuhkan penggantian segmen sepanjang 15 meter.',
-                          style: const TextStyle(
+                      if (_isInstall) ...[
+                        const Text(
+                          'Detail PPPOE',
+                          style: TextStyle(
                             fontSize: 14,
-                            color: Color(0xFF19163F),
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
+                            color: Color(0xFF474551),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0EBFF),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFC8C4D3).withValues(alpha: 0.6)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Username PPPoE (login RADIUS / MikroTik)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade800,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: SelectableText(
+                                      _pppoeUserDisplay().isNotEmpty
+                                          ? _pppoeUserDisplay()
+                                          : '— Belum ada di data pelanggan (pastikan job terhubung ke pelanggan & PPPoE terisi di admin, atau nomor HP job sama dengan data pelanggan).',
+                                      style: TextStyle(
+                                        fontSize: _pppoeUserDisplay().isNotEmpty ? 18 : 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF19163F),
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_pppoeUserDisplay().isNotEmpty)
+                                    IconButton(
+                                      tooltip: 'Salin username',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => _copyField(_pppoeUserDisplay(), 'Username PPPoE'),
+                                      icon: const Icon(Icons.copy_outlined, size: 22, color: Color(0xFF474551)),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Password PPPoE',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade800,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_pppoePassRaw() != null && !_pppoeObscure)
+                                    IconButton(
+                                      tooltip: 'Salin password',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => _copyField(_pppoePassRaw()!, 'Password PPPoE'),
+                                      icon: const Icon(Icons.copy_outlined, size: 22, color: Color(0xFF474551)),
+                                    ),
+                                  IconButton(
+                                    tooltip: _pppoeObscure ? 'Tampilkan password' : 'Sembunyikan password',
+                                    onPressed: _pppoePassRaw() == null
+                                        ? null
+                                        : () => setState(() => _pppoeObscure = !_pppoeObscure),
+                                    icon: Icon(
+                                      _pppoeObscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                      size: 22,
+                                    ),
+                                    color: const Color(0xFF474551),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              SelectableText(
+                                _pppoePassRaw() == null
+                                    ? '— (password belum diisi di data pelanggan)'
+                                    : (_pppoeObscure ? _maskedPass(_pppoePassRaw()!) : _pppoePassRaw()!),
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF19163F),
+                                  letterSpacing: _pppoeObscure ? 1.2 : 0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        const Text(
+                          'Catatan Diagnosa',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                            color: Color(0xFF474551),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0EBFF),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _task['description']?.toString() ?? '-',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF19163F),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          
-          // Action Buttons (Bottom Stack)
           Positioned(
             left: 0,
             right: 0,
@@ -370,67 +695,116 @@ class TaskDetailScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        final id = task['id']?.toString();
-                        final type = task['type']?.toString();
-                        if (id != null && type != null) {
-                          // Update status to 'mulai' in background, don't wait for it
-                          context.read<TaskProvider>().updateTaskStatus(id, type, 'mulai');
-                          
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => JobExecutionScreen(task: task),
-                            ),
-                          );
+                  _SmoothActionButton(
+                    enabled: !_busy,
+                    onTap: () async {
+                      if (_isTr) {
+                        if (_workActive) {
+                          _openJobExecution(context);
                         } else {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ID Tugas tidak valid')));
+                          await _onKerjakanTr(context);
                         }
-                      },
-                      icon: const Icon(Icons.play_arrow, size: 20),
-                      label: const Text('Kerjakan'),
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: const Color(0xFF14532D), // success
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
+                      } else {
+                        await _onKerjakanInstall(context);
+                      }
+                    },
+                    borderRadius: 14,
+                    gradient: _workActive
+                        ? const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFF166534),
+                              Color(0xFF15803D),
+                            ],
+                          )
+                        : const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFF4ADE80),
+                              Color(0xFF22C55E),
+                            ],
+                          ),
+                    shadowColor: _workActive ? const Color(0xFF166534) : const Color(0xFF22C55E),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (_workActive) ...[
+                          const Icon(Icons.lock_outline_rounded, size: 20, color: Colors.white),
+                          const SizedBox(width: 8),
+                          RotationTransition(
+                            turns: _spinCtrl,
+                            child: const Icon(Icons.settings_rounded, size: 22, color: Colors.white),
+                          ),
+                          const SizedBox(width: 10),
+                        ] else
+                          const Icon(Icons.play_arrow_rounded, size: 26, color: Colors.white),
+                        Text(
+                          (_isTr || _isInstall)
+                              ? (_workActive ? 'Sedang dikerjakan' : 'Kerjakan')
+                              : 'Kerjakan',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        final id = task['id']?.toString();
-                        final type = task['type']?.toString();
-                        if (id != null && type != null) {
-                          final success = await context.read<TaskProvider>().updateTaskStatus(id, type, 'pending');
-                          if (context.mounted) {
-                            if (success) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tugas berhasil ditandai sebagai pending')));
-                              Navigator.pop(context);
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal memperbarui status tugas')));
-                            }
+                  const SizedBox(height: 10),
+                  _SmoothActionButton(
+                    enabled: !_busy,
+                    onTap: () async {
+                      final id = _task['id']?.toString();
+                      final type = _task['type']?.toString();
+                      if (id != null && type != null) {
+                        final success = await context.read<TaskProvider>().updateTaskStatus(id, type, 'pending');
+                        if (context.mounted) {
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Tugas berhasil ditandai sebagai pending')),
+                            );
+                            Navigator.pop(context);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Gagal memperbarui status tugas')),
+                            );
                           }
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data tugas tidak valid')));
                         }
-                      },
-                      icon: const Icon(Icons.pause, size: 18),
-                      label: const Text('Pending'),
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: const Color(0xFF9A3412), // warning
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Data tugas tidak valid')),
+                        );
+                      }
+                    },
+                    borderRadius: 14,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFF87171),
+                        Color(0xFFEF4444),
+                      ],
+                    ),
+                    shadowColor: const Color(0xFFEF4444),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.pause_circle_outline_rounded, size: 22, color: Colors.white),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Pending',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -452,7 +826,7 @@ class TaskDetailScreen extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.5,
-            color: Color(0xFF474551), // on-surface-variant
+            color: Color(0xFF474551),
           ),
         ),
         const SizedBox(height: 2),
@@ -461,10 +835,63 @@ class TaskDetailScreen extends StatelessWidget {
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF19163F), // on-surface
+            color: Color(0xFF19163F),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Tombol aksi bawah: gradien lembut + bayangan halus.
+class _SmoothActionButton extends StatelessWidget {
+  const _SmoothActionButton({
+    required this.enabled,
+    required this.onTap,
+    required this.child,
+    required this.gradient,
+    required this.shadowColor,
+    this.borderRadius = 14,
+  });
+
+  final bool enabled;
+  final VoidCallback onTap;
+  final Widget child;
+  final Gradient gradient;
+  final Color shadowColor;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1 : 0.5,
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(borderRadius),
+            gradient: gradient,
+            boxShadow: [
+              BoxShadow(
+                color: shadowColor.withValues(alpha: 0.34),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: enabled ? onTap : null,
+              borderRadius: BorderRadius.circular(borderRadius),
+              splashColor: Colors.white24,
+              highlightColor: Colors.white12,
+              child: Center(child: child),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

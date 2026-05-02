@@ -60,6 +60,10 @@ process.on('unhandledRejection', (reason, promise) => {
 // ==========================================
 (() => {
     try {
+        // Hanya Linux: `ps` tidak ada di Windows; guard ini untuk konflik owner proses.
+        if (process.platform !== 'linux') {
+            return;
+        }
         const { execSync } = require('child_process');
         const os = require('os');
         const appPath = require('path').resolve(__filename);
@@ -464,6 +468,7 @@ const cors = require('cors');
 // Import license route
 const licenseRouter = require('./routes/license');
 const { router: apiAuthRouter } = require('./routes/api/auth');
+const mobileAdapterRouter = require('./routes/api/mobileAdapter');
 const apiCustomersRouter = require('./routes/api/customers');
 const apiRoutersRouter = require('./routes/api/routers');
 const apiPackagesRouter = require('./routes/api/packages');
@@ -825,6 +830,9 @@ try {
 
 // Import dan gunakan route API dashboard traffic
 const apiDashboardRouter = require('./routes/apiDashboard');
+// Mobile adapter harus sebelum app.use('/api', …) agar /api/mobile-adapter/* tidak tertelan router /api lain
+app.use('/api/mobile-adapter', mobileAdapterRouter);
+logger.info('✅ API mobile teknisi: /api/mobile-adapter (cek GET /api/mobile-adapter/health)');
 app.use('/api', apiDashboardRouter);
 app.use('/api/auth', apiAuthRouter);
 // NOTE: /login sudah di-mount di baris 555, tidak perlu duplikat di sini
@@ -1222,6 +1230,21 @@ function startServer(portToUse) {
 // Mulai server dengan prioritas: Environment Variable > settings.json > Default 4555
 const port = process.env.PORT || getSetting('server_port', 4555);
 logger.info(`Attempting to start server on port: ${port} (Source: ${process.env.PORT ? 'Environment' : 'Settings'})`);
+// API_URL di .env (untuk mobile) TIDAK mengikat port Node — hindari salah buka di browser
+if (!process.env.PORT && process.env.API_URL) {
+    try {
+        const raw = String(process.env.API_URL).trim().replace(/\/+$/, '');
+        const u = new URL(raw.startsWith('http') ? raw : `http://${raw}`);
+        const apiPort = u.port ? parseInt(u.port, 10) : (u.protocol === 'https:' ? 443 : 80);
+        const listen = parseInt(port, 10);
+        if (apiPort && !Number.isNaN(listen) && apiPort !== listen) {
+            logger.warn(
+                `[WEB] API_URL memakai port ${apiPort}, tetapi server listen di ${listen}. ` +
+                `Tambahkan PORT=${apiPort} di .env (atau buka http://<host>:${listen}) agar web bisa diakses.`
+            );
+        }
+    } catch (_) { /* abaikan URL rusak */ }
+}
 try {
   const { getPublicAppBaseUrl } = require('./config/public-endpoint');
   logger.info(`Public base URL (Android / link): ${getPublicAppBaseUrl()} — atur di .env (lihat .env.example)`);

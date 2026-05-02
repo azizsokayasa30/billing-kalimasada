@@ -1,27 +1,95 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:convert';
 import '../store/auth_provider.dart';
+import '../services/api_client.dart';
 import 'settings_screen.dart';
 
-class TechnicianProfileScreen extends StatelessWidget {
+class TechnicianProfileScreen extends StatefulWidget {
   const TechnicianProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final auth = context.read<AuthProvider>();
+  State<TechnicianProfileScreen> createState() => _TechnicianProfileScreenState();
+}
 
-    // Colors from Stitch design
+class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
+  bool _loading = true;
+  List<Map<String, dynamic>> _recentTasks = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final auth = context.read<AuthProvider>();
+    await auth.refreshTechnicianProfile();
+    try {
+      final response = await ApiClient.get('/api/mobile-adapter/tasks?history=1');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['data'] is List) {
+          final list = List<Map<String, dynamic>>.from(data['data'] as List);
+          if (mounted) {
+            setState(() => _recentTasks = list.take(12).toList());
+          }
+        } else if (mounted) {
+          setState(() => _recentTasks = []);
+        }
+      } else if (mounted) {
+        setState(() => _recentTasks = []);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _recentTasks = []);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _positionLabel(String? position) {
+    switch ((position ?? 'technician').toLowerCase()) {
+      case 'field_officer':
+        return 'Petugas Lapangan';
+      case 'collector':
+        return 'Kolektor';
+      case 'technician':
+      default:
+        return 'Teknisi Lapangan';
+    }
+  }
+
+  String _fmtDate(String? raw) {
+    if (raw == null || raw.isEmpty) return '-';
+    final s = raw.trim();
+    if (s.length >= 10) return s.substring(0, 10);
+    return s;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final u = auth.user;
+
     const bgBackground = Color(0xFFFCF8FF);
     const bgSurfaceContainerLowest = Color(0xFFFFFFFF);
     const bgSurfaceContainerLow = Color(0xFFF6F1FF);
     const bgSurfaceContainer = Color(0xFFF0EBFF);
-
     const primaryColor = Color(0xFF070038);
     const secondaryColor = Color(0xFF7E4990);
     const textOnBackground = Color(0xFF19163F);
     const textOnSurfaceVariant = Color(0xFF474551);
     const outlineVariant = Color(0xFFC8C4D3);
+
+    final name = u?['name']?.toString() ?? 'Teknisi';
+    final position = _positionLabel(u?['position']?.toString());
+    final phone = u?['phone']?.toString() ?? '';
+    final email = u?['email']?.toString();
+    final area = u?['area_coverage']?.toString().trim();
+    final areaDisplay = (area != null && area.isNotEmpty) ? area : 'Belum diatur';
+    final photoUrl = (u?['photo_url']?.toString() ?? '').trim();
+    final hasPhoto = photoUrl.isNotEmpty;
 
     return Scaffold(
       backgroundColor: bgBackground,
@@ -37,7 +105,7 @@ class TechnicianProfileScreen extends StatelessWidget {
           ),
         ),
         title: const Text(
-          'My Profile',
+          'Profil',
           style: TextStyle(
             color: primaryColor,
             fontSize: 22,
@@ -47,6 +115,15 @@ class TechnicianProfileScreen extends StatelessWidget {
         centerTitle: false,
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh, color: primaryColor),
+            tooltip: 'Muat ulang',
+            onPressed: () async {
+              setState(() => _loading = true);
+              await _load();
+              if (mounted) setState(() => _loading = false);
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.settings, color: primaryColor),
             onPressed: () {
               Navigator.push(
@@ -54,247 +131,231 @@ class TechnicianProfileScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
             },
-            tooltip: 'Settings',
+            tooltip: 'Pengaturan',
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.redAccent),
             onPressed: () => _showLogoutDialog(context, auth),
-            tooltip: 'Logout',
+            tooltip: 'Keluar',
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Profile Hero Card
-            Container(
-              decoration: BoxDecoration(
-                color: bgSurfaceContainerLowest,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: outlineVariant.withValues(alpha: 0.5),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF070038)))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFFE4DFFF),
-                              width: 2,
-                            ),
-                            image: const DecorationImage(
-                              image: NetworkImage(
-                                'https://via.placeholder.com/150',
-                              ), // Placeholder avatar
-                              fit: BoxFit.cover,
-                            ),
-                          ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: bgSurfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: outlineVariant.withValues(alpha: 0.5)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                auth.user?['name'] ?? 'Technician',
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: textOnBackground,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Field Technician',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: textOnSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.green.shade200,
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: bgSurfaceContainer,
+                              border: Border.all(color: const Color(0xFFE4DFFF), width: 2),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: hasPhoto
+                                ? Image.network(
+                                    photoUrl,
+                                    width: 80,
+                                    height: 80,
+                                    fit: BoxFit.cover,
+                                    gaplessPlayback: true,
+                                    errorBuilder: (_, __, ___) => Icon(Icons.engineering, size: 40, color: secondaryColor),
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Center(
+                                        child: SizedBox(
+                                          width: 28,
+                                          height: 28,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: secondaryColor,
+                                            value: loadingProgress.expectedTotalBytes != null
+                                                ? loadingProgress.cumulativeBytesLoaded /
+                                                    loadingProgress.expectedTotalBytes!
+                                                : null,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : Icon(Icons.engineering, size: 40, color: secondaryColor),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name,
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: textOnBackground,
                                   ),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.check_circle,
-                                      size: 14,
-                                      color: Colors.green.shade700,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Online',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green.shade800,
-                                      ),
-                                    ),
-                                  ],
+                                const SizedBox(height: 4),
+                                Text(
+                                  position,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: textOnSurfaceVariant,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade50,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.green.shade200),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.check_circle, size: 14, color: Colors.green.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Aktif',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: bgSurfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: outlineVariant.withValues(alpha: 0.5)),
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Kontak & area',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: textOnBackground,
+                          ),
+                        ),
+                        const Divider(height: 24),
+                        _buildContactItem(
+                          Icons.smartphone,
+                          'Nomor HP',
+                          phone.isNotEmpty ? phone : '—',
+                          primaryColor,
+                          bgSurfaceContainer,
+                          onTap: phone.isNotEmpty
+                              ? () {
+                                  final digits = phone.replaceAll(RegExp(r'\s'), '');
+                                  launchUrl(Uri.parse('tel:$digits'));
+                                }
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildContactItem(
+                          Icons.email,
+                          'Email',
+                          (email != null && email.isNotEmpty) ? email : '—',
+                          primaryColor,
+                          bgSurfaceContainer,
+                          onTap: (email != null && email.isNotEmpty)
+                              ? () => launchUrl(Uri.parse('mailto:$email'))
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildContactItem(
+                          Icons.map_outlined,
+                          'Area coverage',
+                          areaDisplay,
+                          primaryColor,
+                          bgSurfaceContainer,
+                          onTap: null,
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Contact Information
-            Container(
-              decoration: BoxDecoration(
-                color: bgSurfaceContainerLowest,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: outlineVariant.withValues(alpha: 0.5),
-                ),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Contact Information',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: textOnBackground,
+                  const SizedBox(height: 24),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: bgSurfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: outlineVariant.withValues(alpha: 0.5)),
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.work_history, color: secondaryColor),
+                            SizedBox(width: 8),
+                            Text(
+                              'Riwayat selesai teknisi',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: textOnBackground,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        if (_recentTasks.isEmpty)
+                          const Text(
+                            'Belum ada tugas berstatus selesai.',
+                            style: TextStyle(color: textOnSurfaceVariant),
+                          )
+                        else
+                          Column(
+                            children: _recentTasks.map((t) {
+                              final title = t['title']?.toString() ?? 'Tugas';
+                              final when = _fmtDate(t['activity_at']?.toString());
+                              return _buildHistoryItem(title, when, 'Selesai');
+                            }).toList(),
+                          ),
+                      ],
                     ),
                   ),
-                  const Divider(height: 24),
-                  _buildContactItem(
-                    Icons.smartphone,
-                    'Phone Number',
-                    auth.user?['phone'] ?? '+62 811-2233-4455',
-                    primaryColor,
-                    bgSurfaceContainer,
-                    onTap: () {
-                      final phone = auth.user?['phone'] ?? '+6281122334455';
-                      final url = Uri.parse('tel:$phone');
-                      launchUrl(url);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _buildContactItem(
-                    Icons.email,
-                    'Email Address',
-                    auth.user?['email'] ?? 'technician@kalimasada.net',
-                    primaryColor,
-                    bgSurfaceContainer,
-                    onTap: () {
-                      final email = auth.user?['email'] ?? 'technician@kalimasada.net';
-                      final url = Uri.parse('mailto:$email');
-                      launchUrl(url);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _buildContactItem(
-                    Icons.location_on,
-                    'Current Location',
-                    auth.user?['area_coverage'] ?? 'Belum ada area',
-                    primaryColor,
-                    bgSurfaceContainer,
-                    onTap: () {
-                      final area = auth.user?['area_coverage'] ?? 'Indonesia';
-                      final url = Uri.parse('geo:0,0?q=$area');
-                      launchUrl(url);
-                    },
-                  ),
+                  const SizedBox(height: 48),
                 ],
               ),
             ),
-
-            const SizedBox(height: 24),
-
-            // Riwayat Pekerjaan
-            Container(
-              decoration: BoxDecoration(
-                color: bgSurfaceContainerLowest,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: outlineVariant.withValues(alpha: 0.5),
-                ),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.work_history, color: secondaryColor),
-                      SizedBox(width: 8),
-                      Text(
-                        'Riwayat Pekerjaan',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: textOnBackground,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Column(
-                    children: [
-                      _buildHistoryItem(
-                        'Instalasi Pelanggan Baru',
-                        '12 April 2026',
-                        'Selesai',
-                      ),
-                      _buildHistoryItem(
-                        'Perbaikan ODP Rusak',
-                        '10 April 2026',
-                        'Selesai',
-                      ),
-                      _buildHistoryItem(
-                        'Maintenance Jaringan',
-                        '05 April 2026',
-                        'Selesai',
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 48), // Padding for bottom nav bar
-          ],
-        ),
-      ),
     );
   }
 
@@ -305,29 +366,23 @@ class TechnicianProfileScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF6F1FF),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: const Color(0xFFC8C4D3).withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: const Color(0xFFC8C4D3).withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF19163F),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF19163F)),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                date,
-                style: const TextStyle(fontSize: 12, color: Color(0xFF474551)),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(date, style: const TextStyle(fontSize: 12, color: Color(0xFF474551))),
+              ],
+            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -338,11 +393,7 @@ class TechnicianProfileScreen extends StatelessWidget {
             ),
             child: Text(
               status,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.green.shade700,
-              ),
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700),
             ),
           ),
         ],
@@ -397,28 +448,8 @@ class TechnicianProfileScreen extends StatelessWidget {
                 ],
               ),
             ),
-            if (onTap != null)
-              const Icon(Icons.chevron_right, color: Color(0xFFC8C4D3), size: 20),
+            if (onTap != null) const Icon(Icons.chevron_right, color: Color(0xFFC8C4D3), size: 20),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChip(String label, Color bgColor, Color outlineColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: outlineColor.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF19163F),
         ),
       ),
     );
@@ -428,19 +459,16 @@ class TechnicianProfileScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        title: const Text('Keluar'),
+        content: const Text('Yakin ingin keluar dari aplikasi?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               auth.logout();
             },
-            child: const Text('Logout', style: TextStyle(color: Colors.red)),
+            child: const Text('Keluar', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

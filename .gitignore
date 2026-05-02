@@ -9,6 +9,12 @@ yarn-error.log*
 data/billing.db
 data/billing.db-wal
 data/billing.db-shm
+/billing.db
+/database.sqlite
+config/database.sqlite
+data/sessions.db
+data/sessions.db-shm
+data/sessions.db-wal
 data/radius.db
 data/radius.db-wal
 data/radius.db-shm

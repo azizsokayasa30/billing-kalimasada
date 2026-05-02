@@ -1030,6 +1030,9 @@ router.get('/mapping', technicianAuth, async (req, res) => {
         // Ambil data pelanggan untuk ditampilkan di peta
         const customers = await billingManager.getCustomers();
 
+        const { ensureMapCenterFromCompanyAddress } = require('../config/mapDefaultCenter');
+        const mapCenter = await ensureMapCenterFromCompanyAddress();
+
         // Render mapping khusus teknisi
         res.render('technician/mapping', {
             title: 'Network Mapping - Portal Teknisi',
@@ -1041,7 +1044,10 @@ router.get('/mapping', technicianAuth, async (req, res) => {
             customers,
             isTechnicianView: true,
             technician: req.technician,
-            technicianRole: req.technician.role
+            technicianRole: req.technician.role,
+            defaultMapLat: mapCenter.lat,
+            defaultMapLng: mapCenter.lng,
+            defaultMapZoom: mapCenter.zoom
         });
 
     } catch (error) {
@@ -1290,8 +1296,8 @@ router.get('/troubletickets/detail/:id', technicianAuth, async (req, res) => {
         const reportId = req.params.id;
         
         // Import trouble report functions
-        const { getTroubleReportById } = require('../config/troubleReport');
-        const report = getTroubleReportById(reportId);
+        const { getTroubleReportById, extractTechnicianCompletion } = require('../config/troubleReport');
+        const report = await getTroubleReportById(reportId);
         
         if (!report) {
             return res.status(404).send('Laporan gangguan tidak ditemukan');
@@ -1311,10 +1317,13 @@ router.get('/troubletickets/detail/:id', technicianAuth, async (req, res) => {
             { report_id: reportId }
         );
         
+        const appPublicBase = (process.env.PUBLIC_APP_BASE_URL || '').replace(/\/$/, '');
         // Render using admin/trouble-report-detail.ejs with technician context
         res.render('admin/trouble-report-detail', {
             title: `Detail Laporan #${reportId} - Portal Teknisi`,
             report,
+            technicianCompletion: extractTechnicianCompletion(report),
+            appPublicBase,
             appSettings: {
                 companyHeader: getSetting('company_header', 'GEMBOK'),
                 footerInfo: getSetting('footer_info', 'Portal Teknisi'),
@@ -1345,10 +1354,16 @@ router.get('/troubletickets/detail/:id', technicianAuth, async (req, res) => {
 router.post('/troubletickets/:id/update', technicianAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, technician_notes } = req.body;
+        const { status, technician_notes, sendNotification } = req.body;
 
-        // Update trouble ticket status
-        const updated = await updateTroubleTicketStatus(id, status, technician_notes, req.technician.id);
+        // Update trouble ticket status (status dari form = status saat ini jika hanya kirim pesan)
+        const updated = await updateTroubleTicketStatus(
+            id,
+            status,
+            technician_notes,
+            req.technician.id,
+            sendNotification
+        );
 
         if (!updated) {
             return res.status(404).json({
@@ -1680,15 +1695,20 @@ async function getTroubleReportsForTechnician(technicianId, role) {
         const allReports = getAllTroubleReports();
         
         // Filter berdasarkan role teknisi
+        const isDone = (st) => {
+            const s = String(st || '').toLowerCase();
+            return s === 'closed' || s === 'resolved';
+        };
         if (role === 'technician') {
-            // Teknisi hanya melihat laporan yang assigned ke dia atau belum di-assign
-            return allReports.filter(report => 
-                !report.assigned_technician_id || 
-                report.assigned_technician_id === technicianId
+            // Teknisi: assigned / belum assign, hanya tiket aktif (bukan riwayat selesai)
+            return allReports.filter(
+                (report) =>
+                    (!report.assigned_technician_id || report.assigned_technician_id === technicianId) &&
+                    !isDone(report.status)
             );
         } else if (role === 'field_officer') {
-            // Field officer bisa melihat semua laporan
-            return allReports;
+            // Field officer: semua laporan aktif (selesai tidak tampil di daftar tugas)
+            return allReports.filter((report) => !isDone(report.status));
         } else {
             // Role lain (collector) hanya melihat laporan terbatas
             return allReports.filter(report => report.status === 'resolved' || report.status === 'closed');
@@ -1725,15 +1745,20 @@ async function canTechnicianAccessReport(technicianId, role, report) {
     }
 }
 
-async function updateTroubleTicketStatus(ticketId, status, notes, technicianId) {
+async function updateTroubleTicketStatus(ticketId, status, notes, technicianId, sendNotification = true) {
     try {
         const { updateTroubleReportStatus } = require('../config/troubleReport');
         
         // Format catatan dengan informasi teknisi
         const technicianNote = notes ? `[Teknisi]: ${notes}` : '';
+        const notify =
+            sendNotification === false ||
+            sendNotification === 'false' ||
+            sendNotification === 0
+                ? false
+                : true;
         
-        // Call the function with the correct parameter signature
-        return updateTroubleReportStatus(ticketId, status, technicianNote, true);
+        return updateTroubleReportStatus(ticketId, status, technicianNote, {}, notify);
     } catch (error) {
         console.error('Error updating trouble ticket:', error);
         return false;

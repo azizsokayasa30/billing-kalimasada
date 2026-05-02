@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/api_client.dart';
+import '../widgets/odp_map_marker.dart';
 
 class TagLocationScreen extends StatefulWidget {
   const TagLocationScreen({super.key});
@@ -157,9 +158,10 @@ class _TagLocationScreenState extends State<TagLocationScreen> {
                               markers: [
                                 Marker(
                                   point: _selectedLocation!,
-                                  width: 48,
-                                  height: 48,
-                                  child: Image.asset('assets/images/odp_icon.png', width: 48, height: 48),
+                                  width: 28,
+                                  height: 33,
+                                  alignment: Alignment.topCenter,
+                                  child: const OdpMapMarker(status: 'active'),
                                 ),
                               ],
                             ),

@@ -1,19 +1,323 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../store/auth_provider.dart';
 import '../store/task_provider.dart';
-import 'execution_notes_screen.dart';
 
-class JobExecutionScreen extends StatelessWidget {
+class JobExecutionScreen extends StatefulWidget {
   final Map<String, dynamic> task;
 
   const JobExecutionScreen({super.key, required this.task});
 
   @override
+  State<JobExecutionScreen> createState() => _JobExecutionScreenState();
+}
+
+class _JobExecutionScreenState extends State<JobExecutionScreen> {
+  Timer? _timer;
+  Duration _elapsed = Duration.zero;
+  bool _completing = false;
+  final TextEditingController _deskripsiCtrl = TextEditingController();
+  final TextEditingController _cableMeterCtrl = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+  XFile? _foto;
+  XFile? _fotoStickerOnt;
+  double? _tagLat;
+  double? _tagLng;
+
+  Map<String, dynamic> get _task => widget.task;
+
+  bool get _isInstall => (_task['type']?.toString() ?? '') == 'INSTALL';
+
+  DateTime? _parseWorkStart() => parseTaskWorkStarted(_task['work_started_at']?.toString());
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AuthProvider>().refreshTechnicianProfile();
+    });
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    final start = _parseWorkStart() ?? DateTime.now();
+    void tick() {
+      if (!mounted) return;
+      setState(() => _elapsed = DateTime.now().difference(start));
+    }
+
+    tick();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => tick());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _deskripsiCtrl.dispose();
+    _cableMeterCtrl.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    if (h > 0) {
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _ambilFotoKamera() async {
+    try {
+      final file = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 82,
+        maxWidth: 1600,
+      );
+      if (file != null && mounted) {
+        setState(() => _foto = file);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Kamera: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _ambilFotoStickerOnt() async {
+    try {
+      final file = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 82,
+        maxWidth: 1600,
+      );
+      if (file != null && mounted) {
+        setState(() => _fotoStickerOnt = file);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Kamera stiker: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _ambilLokasiWajib() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Aktifkan layanan lokasi di perangkat.')),
+        );
+        return;
+      }
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm != LocationPermission.whileInUse && perm != LocationPermission.always) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Izin lokasi diperlukan untuk tag koordinat.')),
+        );
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition();
+      if (!mounted) return;
+      setState(() {
+        _tagLat = pos.latitude;
+        _tagLng = pos.longitude;
+      });
+      messenger.showSnackBar(
+        SnackBar(content: Text('Lokasi: ${_tagLat!.toStringAsFixed(6)}, ${_tagLng!.toStringAsFixed(6)}')),
+      );
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Gagal ambil lokasi: $e')));
+      }
+    }
+  }
+
+  Future<void> _mintaBantuan() async {
+    final auth = context.read<AuthProvider>();
+    await auth.refreshTechnicianProfile();
+    if (!mounted) return;
+    final fromUser = auth.user?['support_whatsapp']?.toString().trim() ?? '';
+    final fromEnv = dotenv.env['SUPPORT_WHATSAPP']?.trim() ?? '';
+    final raw = fromUser.isNotEmpty ? fromUser : fromEnv;
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nomor WhatsApp bantuan belum diatur (admin: contact_whatsapp / .env SUPPORT_WHATSAPP).')),
+      );
+      return;
+    }
+    final wa = digits.startsWith('62') ? digits : '62${digits.startsWith('0') ? digits.substring(1) : digits}';
+    final tipe = _task['type']?.toString() ?? '';
+    final tid = _task['id']?.toString() ?? '';
+    final text = Uri.encodeComponent('Minta bantuan — tugas $tipe #$tid');
+    final uri = Uri.parse('https://wa.me/$wa?text=$text');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak dapat membuka WhatsApp')),
+      );
+    }
+  }
+
+  Future<void> _selesai() async {
+    final desc = _deskripsiCtrl.text.trim();
+    if (desc.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Isi deskripsi penyelesaian terlebih dahulu.')),
+      );
+      return;
+    }
+    final id = _task['id']?.toString();
+    final type = _task['type']?.toString();
+    if (id == null || type == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Data tugas tidak valid')),
+      );
+      return;
+    }
+
+    final tasks = context.read<TaskProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    double? cableM;
+    String? stickerB64;
+    if (_isInstall) {
+      cableM = double.tryParse(_cableMeterCtrl.text.trim().replaceAll(',', '.'));
+      if (cableM == null || cableM < 0 || cableM.isNaN) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Isi panjang kabel (meter) dengan angka valid.')),
+        );
+        return;
+      }
+      if (_fotoStickerOnt == null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Ambil foto stiker belakang ONT dari kamera.')),
+        );
+        return;
+      }
+      if (_tagLat == null || _tagLng == null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Tag lokasi wajib — ketuk Ambil lokasi GPS.')),
+        );
+        return;
+      }
+      try {
+        final bytes = await _fotoStickerOnt!.readAsBytes();
+        stickerB64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text('Gagal membaca foto stiker: $e')));
+        return;
+      }
+    }
+
+    String? photoB64;
+    if (_foto != null) {
+      try {
+        final bytes = await _foto!.readAsBytes();
+        photoB64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      } catch (e) {
+        if (mounted) {
+          messenger.showSnackBar(
+            SnackBar(content: Text('Gagal membaca foto: $e')),
+          );
+        }
+        return;
+      }
+    }
+
+    setState(() => _completing = true);
+    final durationSec = _elapsed.inSeconds;
+    double? latOut;
+    double? lngOut;
+    if (_isInstall) {
+      latOut = _tagLat;
+      lngOut = _tagLng;
+    } else {
+      try {
+        final enabled = await Geolocator.isLocationServiceEnabled();
+        if (enabled) {
+          var perm = await Geolocator.checkPermission();
+          if (perm == LocationPermission.denied) {
+            perm = await Geolocator.requestPermission();
+          }
+          if (perm == LocationPermission.whileInUse || perm == LocationPermission.always) {
+            final pos = await Geolocator.getCurrentPosition();
+            latOut = pos.latitude;
+            lngOut = pos.longitude;
+          }
+        }
+      } catch (_) {
+        /* koordinat opsional untuk TR */
+      }
+    }
+    final err = await tasks.submitTaskCompletion(
+      id,
+      type,
+      completionDescription: desc,
+      completionPhotoBase64: photoB64,
+      workDurationSeconds: durationSec,
+      completionLatitude: latOut,
+      completionLongitude: lngOut,
+      cableLengthM: cableM,
+      stickerPhotoBase64: stickerB64,
+    );
+    if (!mounted) return;
+    setState(() => _completing = false);
+
+    if (err == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Tugas diselesaikan. Notifikasi WA dikirim ke pelanggan.')),
+      );
+      // Satu level pop: daftar tugas atau detail. Bila dari detail, pemanggil mem-pop detail.
+      Navigator.of(context).pop(true);
+    } else {
+      messenger.showSnackBar(SnackBar(content: Text(err)));
+    }
+  }
+
+  /// Input di kartu putih: app global [Brightness.dark] membuat teks field putih;
+  /// bungkus dengan tema terang agar teks & hint terbaca.
+  Widget _lightInputTheme({required Widget child}) {
+    return Theme(
+      data: ThemeData(
+        brightness: Brightness.light,
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF15803D),
+          brightness: Brightness.light,
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     const bgBackground = Color(0xFFFCF8FF);
     const textOnSurface = Color(0xFF19163F);
-    const textOnSurfaceVariant = Color(0xFF474551);
-    
+    const outline = Color(0xFFC8C4D3);
+    const hijauSelesai = Color(0xFF15803D);
+
     return Scaffold(
       backgroundColor: bgBackground,
       appBar: AppBar(
@@ -25,7 +329,7 @@ class JobExecutionScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Eksekusi Tugas #${task['id']}',
+          'Penyelesaian #${_task['id']}',
           style: const TextStyle(
             color: Color(0xFF1B0C6B),
             fontSize: 20,
@@ -33,15 +337,9 @@ class JobExecutionScreen extends StatelessWidget {
           ),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: Color(0xFF070038)),
-            onPressed: () {},
-          ),
-        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: const Color(0xFFC8C4D3).withValues(alpha: 0.5), height: 1),
+          child: Container(color: outline.withValues(alpha: 0.5), height: 1),
         ),
       ),
       body: SingleChildScrollView(
@@ -49,13 +347,12 @@ class JobExecutionScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Active Status Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFFF0EBFF),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFC8C4D3)),
+                border: Border.all(color: outline),
               ),
               child: Column(
                 children: [
@@ -66,13 +363,13 @@ class JobExecutionScreen extends StatelessWidget {
                         width: 12,
                         height: 12,
                         decoration: const BoxDecoration(
-                          color: Color(0xFF7E4990),
+                          color: Color(0xFF14532D),
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 8),
                       const Text(
-                        'STATUS: IN PROGRESS',
+                        'STATUS: DALAM PROSES',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -83,9 +380,9 @@ class JobExecutionScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    '00:45:12',
-                    style: TextStyle(
+                  Text(
+                    _formatDuration(_elapsed),
+                    style: const TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1B0C6B),
@@ -94,22 +391,19 @@ class JobExecutionScreen extends StatelessWidget {
                 ],
               ),
             ),
-            
             const SizedBox(height: 16),
-            
-            // Job Summary Section
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFC8C4D3)),
+                border: Border.all(color: outline),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Job Summary',
+                    'Ringkasan',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -117,235 +411,271 @@ class JobExecutionScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Divider(color: Color(0xFFC8C4D3)),
+                  const Divider(color: outline),
                   const SizedBox(height: 12),
-                  
-                  _buildSummaryItem(Icons.business, 'PELANGGAN', task['customer']?.toString() ?? 'PT. Alpha Networks'),
+                  _buildSummaryItem(Icons.business, 'PELANGGAN', _task['customer']?.toString() ?? '-'),
                   const SizedBox(height: 12),
-                  _buildSummaryItem(Icons.build, 'LAYANAN', task['type'] == 'TR' ? 'Troubleshooting' : 'Pemasangan Baru'),
+                  _buildSummaryItem(
+                    Icons.build,
+                    'LAYANAN',
+                    _task['type'] == 'TR' ? 'Perbaikan / gangguan' : 'Pemasangan baru',
+                  ),
                   const SizedBox(height: 12),
-                  _buildSummaryItem(Icons.location_on, 'ALAMAT', task['address']?.toString() ?? '142 Jalan Sudirman, Kav 45, Jakarta Selatan'),
+                  _buildSummaryItem(Icons.location_on, 'ALAMAT', _task['address']?.toString() ?? '-'),
+                  if (_isInstall) ...[
+                    const SizedBox(height: 12),
+                    _buildPppoeUsernameSummaryRow(context),
+                    const SizedBox(height: 12),
+                    _buildPppoePasswordSummaryRow(context),
+                  ],
                 ],
               ),
             ),
-            
             const SizedBox(height: 16),
-            
-            // Network Health Section
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFC8C4D3)),
+                border: Border.all(color: outline),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Network Health',
+                    'Penyelesaian',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: textOnSurface,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  const Divider(color: Color(0xFFC8C4D3)),
-                  const SizedBox(height: 12),
-                  
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF6F1FF), // surface-container-low
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFC8C4D3)),
+                  const SizedBox(height: 8),
+                  Text(
+                    _isInstall
+                        ? 'Untuk PSB: isi panjang kabel, foto stiker ONT, tag lokasi (wajib), lalu ringkasan pekerjaan. Data tersimpan di server dan tampil di web admin.'
+                        : 'Isi ringkasan pekerjaan. Data ini disimpan dan dikirim ke pelanggan via WhatsApp.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (_isInstall) ...[
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Panjang kabel (meter)',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: textOnSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _lightInputTheme(
+                      child: TextField(
+                        controller: _cableMeterCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(color: Color(0xFF19163F), fontSize: 16),
+                        cursorColor: const Color(0xFF15803D),
+                        decoration: InputDecoration(
+                          hintText: 'Contoh: 45 atau 12.5',
+                          hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 15),
+                          filled: true,
+                          fillColor: const Color(0xFFF9FAFB),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: outline),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: const [
-                                  Icon(Icons.signal_cellular_alt, size: 16, color: Color(0xFF1B0C6B)),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'SIGNAL STRENGTH',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1B0C6B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                '-18.5 dBm',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: textOnSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Healthy',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1B0C6B),
-                                ),
-                              ),
-                            ],
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: outline),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFF15803D), width: 1.5),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF6F1FF),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFC8C4D3)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: const [
-                                  Icon(Icons.router, size: 16, color: Color(0xFF1B0C6B)),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'CONNECTION',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1B0C6B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Online',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: textOnSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Stable',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1B0C6B),
-                                ),
-                              ),
-                            ],
-                          ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Foto stiker bagian belakang ONT',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: textOnSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _completing ? null : _ambilFotoStickerOnt,
+                      icon: const Icon(Icons.camera_alt_outlined, color: Color(0xFF15803D)),
+                      label: Text(_fotoStickerOnt == null ? 'Ambil dari kamera' : 'Ganti foto stiker'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF166534),
+                        side: const BorderSide(color: Color(0xFF86EFAC)),
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    if (_fotoStickerOnt != null) ...[
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.file(
+                          File(_fotoStickerOnt!.path),
+                          height: 160,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
                         ),
                       ),
                     ],
-                  ),
-                  
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Tag lokasi (wajib)',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: textOnSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _completing ? null : _ambilLokasiWajib,
+                      icon: const Icon(Icons.my_location, color: Color(0xFF1D4ED8)),
+                      label: const Text('Ambil lokasi GPS'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF1E3A8A),
+                        side: const BorderSide(color: Color(0xFF93C5FD)),
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    if (_tagLat != null && _tagLng != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Koordinat: ${_tagLat!.toStringAsFixed(6)}, ${_tagLng!.toStringAsFixed(6)}',
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+                  ],
                   const SizedBox(height: 16),
-                  
-                  // Mini Line Chart Placeholder
-                  Container(
-                    height: 100,
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0EBFF),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFC8C4D3)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: List.generate(12, (index) {
-                        // Generate somewhat random heights for the bars
-                        final heights = [0.75, 0.8, 1.0, 0.85, 1.0, 0.8, 1.0, 1.0, 0.9, 1.0, 1.0, 1.0];
-                        return Container(
-                          width: 15,
-                          height: 90 * heights[index],
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFC5C0FF), // primary-fixed-dim
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
-                          ),
-                        );
-                      }),
+                  _lightInputTheme(
+                    child: TextField(
+                      controller: _deskripsiCtrl,
+                      maxLines: 5,
+                      minLines: 3,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: const TextStyle(
+                        color: Color(0xFF19163F),
+                        fontSize: 16,
+                        height: 1.45,
+                      ),
+                      cursorColor: const Color(0xFF15803D),
+                      decoration: InputDecoration(
+                        labelText: 'Deskripsi penyelesaian',
+                        hintText: 'Contoh: kabel diganti, sinyal stabil, tes browsing OK…',
+                        labelStyle: const TextStyle(color: Color(0xFF474551), fontWeight: FontWeight.w500),
+                        floatingLabelStyle: const TextStyle(color: Color(0xFF15803D), fontWeight: FontWeight.w600),
+                        hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 15),
+                        alignLabelWithHint: true,
+                        filled: true,
+                        fillColor: const Color(0xFFF9FAFB),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: outline),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: outline),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFF15803D), width: 1.5),
+                        ),
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 20),
+                  Text(
+                    _isInstall ? 'Foto dokumentasi (opsional)' : 'Foto dokumentasi',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textOnSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _completing ? null : _ambilFotoKamera,
+                    icon: const Icon(Icons.photo_camera_outlined, color: Color(0xFF15803D)),
+                    label: Text(_foto == null ? 'Ambil dari kamera' : 'Ganti foto'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF166534),
+                      side: const BorderSide(color: Color(0xFF86EFAC)),
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  if (_foto != null) ...[
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.file(
+                        File(_foto!.path),
+                        height: 180,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-            
             const SizedBox(height: 24),
-            
-            // Primary Actions
-            ElevatedButton(
-              onPressed: () async {
-                final id = task['id']?.toString();
-                final type = task['type']?.toString();
-                if (id != null && type != null) {
-                  final success = await context.read<TaskProvider>().updateTaskStatus(id, type, 'selesai');
-                  if (context.mounted) {
-                    if (success) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tugas berhasil diselesaikan')));
-                      Navigator.popUntil(context, (route) => route.isFirst);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal menyelesaikan tugas')));
-                    }
-                  }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data tugas tidak valid')));
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B0C6B),
+            FilledButton(
+              onPressed: _completing ? null : _selesai,
+              style: FilledButton.styleFrom(
+                backgroundColor: hijauSelesai,
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: hijauSelesai.withValues(alpha: 0.5),
+                disabledForegroundColor: Colors.white70,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
               ),
-              child: const Text('Selesai (Complete Job)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ),
-            
-            const SizedBox(height: 12),
-            
-            OutlinedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ExecutionNotesScreen(jobId: task['id']?.toString() ?? '')),
-                );
-              },
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF1B0C6B), width: 2),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Add Execution Notes', style: TextStyle(color: Color(0xFF1B0C6B), fontSize: 16, fontWeight: FontWeight.bold)),
-            ),
-            
-            const SizedBox(height: 24),
-            
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.warning, color: Colors.white),
-              label: const Text('Report Issue / Escalation', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFBA1A1A),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              child: Text(
+                _completing ? 'Menyimpan…' : 'Selesai',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                  color: Colors.white,
+                ),
               ),
             ),
-            
-            const SizedBox(height: 48), // Bottom padding
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: _completing ? null : _mintaBantuan,
+              icon: const Icon(Icons.chat_outlined, color: Color(0xFF0D9488)),
+              label: const Text(
+                'Minta bantuan',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F766E),
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                backgroundColor: const Color(0xFFCCFBF1).withValues(alpha: 0.6),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 48),
           ],
         ),
       ),
@@ -378,6 +708,120 @@ class JobExecutionScreen extends StatelessWidget {
                   fontSize: 16,
                   color: Color(0xFF19163F),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _copyPsbField(BuildContext context, String text, String label) {
+    final t = text.trim();
+    if (t.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: t));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label disalin')),
+    );
+  }
+
+  Widget _buildPppoeUsernameSummaryRow(BuildContext context) {
+    final raw = _task['pppoe_username'];
+    final user = raw == null ? '' : raw.toString().trim();
+    final display = user.isEmpty ? '—' : user;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.router_outlined, size: 20, color: Color(0xFF787582)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'USERNAME PPPOE',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF787582),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: SelectableText(
+                      display,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: user.isEmpty ? FontWeight.w500 : FontWeight.w600,
+                        color: const Color(0xFF19163F),
+                      ),
+                    ),
+                  ),
+                  if (user.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Salin username',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _copyPsbField(context, user, 'Username PPPoE'),
+                      icon: const Icon(Icons.copy_outlined, size: 20, color: Color(0xFF474551)),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Password PPPoE bisa disalin (SelectableText + tombol salin).
+  Widget _buildPppoePasswordSummaryRow(BuildContext context) {
+    final raw = _task['pppoe_password'];
+    final pass = raw == null ? '' : raw.toString().trim();
+    final display = pass.isEmpty ? '— (pull-to-refresh daftar tugas / cek billing & RADIUS)' : pass;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.key_outlined, size: 20, color: Color(0xFF787582)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'PASSWORD PPPOE',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF787582),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: SelectableText(
+                      display,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: pass.isEmpty ? FontWeight.w500 : FontWeight.w600,
+                        color: const Color(0xFF19163F),
+                      ),
+                    ),
+                  ),
+                  if (pass.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Salin password',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _copyPsbField(context, pass, 'Password PPPoE'),
+                      icon: const Icon(Icons.copy_outlined, size: 20, color: Color(0xFF474551)),
+                    ),
+                ],
               ),
             ],
           ),

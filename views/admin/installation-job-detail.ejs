@@ -13,38 +13,78 @@
     <!-- Admin Mobile Optimizations -->
     <link href="/css/admin-mobile.css" rel="stylesheet">
     <style>
+        .page-title-row {
+            padding-top: 0.65rem !important;
+            padding-bottom: 0.4rem !important;
+            margin-bottom: 0.65rem !important;
+        }
+        .page-title-row .page-title {
+            font-size: 1.2rem;
+            margin: 0;
+        }
+
         .job-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border-radius: 12px;
-            padding: 2rem;
-            margin-bottom: 2rem;
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+            margin-bottom: 0.85rem;
         }
-        
+        .job-header .job-title-main {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 0.35rem !important;
+        }
+        .job-header .job-meta {
+            font-size: 0.8125rem;
+            margin-bottom: 0.2rem !important;
+            line-height: 1.35;
+        }
+        .job-header .job-meta:last-child {
+            margin-bottom: 0 !important;
+        }
+
         .status-badge {
-            font-size: 1rem;
-            padding: 0.75rem 1rem;
+            font-size: 0.75rem;
+            padding: 0.3rem 0.5rem;
         }
-        
+
         .detail-card {
             border: none;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            margin-bottom: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            margin-bottom: 0.75rem;
         }
-        
+        .detail-card .card-header {
+            padding: 0.45rem 0.75rem;
+        }
+        .detail-card .card-header h5,
+        .detail-card .card-header h6 {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .detail-card .card-body {
+            padding: 0.55rem 0.75rem;
+        }
+
         .detail-section {
-            border-left: 4px solid #667eea;
-            padding: 1rem;
-            margin-bottom: 1rem;
+            border-left: 3px solid #667eea;
+            padding: 0.4rem 0.55rem;
+            margin-bottom: 0.4rem;
+            font-size: 0.875rem;
+            line-height: 1.4;
         }
-        
+        .detail-section:last-child {
+            margin-bottom: 0;
+        }
+
         .history-item {
             border-left: 3px solid #dee2e6;
-            padding: 1rem;
-            margin-bottom: 0.5rem;
+            padding: 0.5rem 0.6rem;
+            margin-bottom: 0.35rem;
             background: var(--bg-secondary, #f8f9fa);
-            border-radius: 8px;
+            border-radius: 6px;
+            font-size: 0.875rem;
         }
         
         .history-item.scheduled { border-left-color: #ffc107; }
@@ -55,12 +95,39 @@
         
         .action-buttons {
             position: sticky;
-            top: 20px;
+            top: 12px;
         }
-        
+
+        .detail-card .btn-sm {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.45rem;
+        }
+
+        .install-tech-summary .block {
+            margin-bottom: 0.55rem;
+        }
+        .install-tech-summary .block:last-child {
+            margin-bottom: 0;
+        }
+        .install-tech-summary .desc-box {
+            padding: 0.5rem 0.65rem;
+            font-size: 0.875rem;
+        }
+        .install-tech-summary .doc-img {
+            max-height: 220px !important;
+        }
+
+        .empty-state-tight {
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+        }
+        .empty-state-tight i {
+            font-size: 2rem !important;
+        }
+
         .priority-badge {
-            font-size: 0.8rem;
-            padding: 0.5rem 0.75rem;
+            font-size: 0.7rem;
+            padding: 0.25rem 0.45rem;
         }
         
         .priority-normal { background-color: #6c757d; }
@@ -78,12 +145,60 @@
         <%- include('../partials/admin-responsive-sidebar', { page: 'installations', settings: settings, versionInfo: versionInfo, versionBadge: versionBadge }) %>
         
         <main class="col-md-10 ms-sm-auto main-content">
+            <% 
+              const installCompletion = typeof technicianInstallCompletion !== 'undefined' ? technicianInstallCompletion : { description: null, photoPath: null, lat: null, lng: null, cableLengthM: null, stickerPhotoPath: null };
+              const imgBaseInstall = typeof appPublicBase !== 'undefined' ? appPublicBase : '';
+              const notesAdminOnly = typeof adminJobNotes !== 'undefined' ? adminJobNotes : null;
+              function parseDbDateInstall(iso) {
+                if (!iso) return null;
+                const s = String(iso).trim();
+                if (!s) return null;
+                const normalized = s.indexOf('T') === -1 ? s.replace(' ', 'T') : s;
+                const d = new Date(normalized);
+                return isNaN(d.getTime()) ? null : d;
+              }
+              function formatDurMsInstall(ms) {
+                if (ms == null || ms < 0) return null;
+                const min = Math.floor(ms / 60000);
+                if (min < 1) return 'Kurang dari 1 menit';
+                const h = Math.floor(min / 60);
+                const m = min % 60;
+                if (h > 0 && m > 0) return h + ' jam ' + m + ' menit';
+                if (h > 0) return h + ' jam';
+                return m + ' menit';
+              }
+              const wsRaw = job.work_started_at;
+              const startInstall = parseDbDateInstall(wsRaw);
+              const endInstall = parseDbDateInstall(job.updated_at);
+              const mobileDurRaw = job.work_duration_seconds != null && job.work_duration_seconds !== ''
+                ? parseInt(job.work_duration_seconds, 10) : NaN;
+              const mobileDurSec = Number.isFinite(mobileDurRaw) && mobileDurRaw >= 0 ? mobileDurRaw : null;
+              const stJob = String(job.status || '').toLowerCase();
+              let installDurationMain = '';
+              let installDurationSub = '';
+              if (stJob === 'in_progress' && startInstall) {
+                installDurationMain = formatDurMsInstall(Date.now() - startInstall.getTime()) + ' (masih berjalan)';
+                installDurationSub = 'Diukur di aplikasi mobile (timer eksekusi).';
+              } else if (stJob === 'completed' && mobileDurSec != null) {
+                installDurationMain = formatDurMsInstall(mobileDurSec * 1000) || '-';
+                installDurationSub = 'Diukur di aplikasi mobile saat teknisi menyelesaikan tugas.';
+              } else if (stJob === 'completed' && startInstall && endInstall) {
+                installDurationMain = formatDurMsInstall(endInstall.getTime() - startInstall.getTime()) || '-';
+                installDurationSub = 'Perkiraan dari waktu mulai di app & terakhir diupdate.';
+              } else if (stJob === 'completed') {
+                installDurationMain = 'Tidak tersedia';
+                installDurationSub = 'Durasi dari aplikasi tidak tercatat.';
+              } else {
+                installDurationMain = '—';
+                installDurationSub = 'Akan tersedia setelah teknisi menyelesaikan tugas di aplikasi mobile.';
+              }
+            %>
             <!-- Header -->
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                <h1 class="h2">
-                    <i class="bi bi-tools me-2"></i>Detail Job Instalasi
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center border-bottom page-title-row">
+                <h1 class="page-title">
+                    <i class="bi bi-tools me-1"></i>Detail Job Instalasi
                 </h1>
-                <div class="btn-toolbar mb-2 mb-md-0">
+                <div class="btn-toolbar mb-0">
                     <a href="/admin/installations" class="btn btn-outline-secondary">
                         <i class="bi bi-arrow-left me-2"></i>Kembali
                     </a>
@@ -92,19 +207,19 @@
 
             <!-- Job Header -->
             <div class="job-header">
-                <div class="row align-items-center">
+                <div class="row align-items-center g-2">
                     <div class="col-md-8">
-                        <h2 class="mb-2">
-                            <i class="bi bi-tools me-2"></i><%= job.job_number || 'N/A' %>
+                        <h2 class="job-title-main">
+                            <i class="bi bi-tools me-1"></i><%= job.job_number || 'N/A' %>
                         </h2>
-                        <p class="mb-1">
-                            <i class="bi bi-person me-2"></i><%= job.customer_name || 'N/A' %>
+                        <p class="job-meta mb-0">
+                            <i class="bi bi-person me-1"></i><%= job.customer_name || 'N/A' %>
                         </p>
-                        <p class="mb-0">
-                            <i class="bi bi-geo-alt me-2"></i><%= job.customer_address || 'Alamat tidak tersedia' %>
+                        <p class="job-meta mb-0">
+                            <i class="bi bi-geo-alt me-1"></i><%= job.customer_address || 'Alamat tidak tersedia' %>
                         </p>
                     </div>
-                    <div class="col-md-4 text-end">
+                    <div class="col-md-4 text-md-end mt-2 mt-md-0">
                         <span class="badge status-badge 
                             <%= job.status === 'scheduled' ? 'bg-warning' : '' %>
                             <%= job.status === 'assigned' ? 'bg-info' : '' %>
@@ -118,7 +233,7 @@
                             <%= job.status === 'cancelled' ? 'Dibatalkan' : '' %>
                         </span>
                         <% if (job.priority) { %>
-                            <br><span class="badge priority-badge priority-<%= job.priority %> mt-2">
+                            <br><span class="badge priority-badge priority-<%= job.priority %> mt-1">
                                 Prioritas: <%= job.priority === 'normal' ? 'Normal' : job.priority === 'high' ? 'Tinggi' : 'Urgent' %>
                             </span>
                         <% } %>
@@ -149,6 +264,13 @@
                                             <i class="bi bi-telephone me-1"></i><%= job.customer_phone || 'N/A' %>
                                         </a>
                                     </div>
+                                    <% if (job.customer_id) { %>
+                                    <div class="detail-section">
+                                        <strong>ID Pelanggan (billing):</strong><br>
+                                        <span class="text-monospace">#<%= job.customer_id %></span>
+                                        <small class="text-muted d-block mt-1">Taut ke data pelanggan untuk PPPoE di app teknisi. Cari di menu Pelanggan / billing dengan ID ini.</small>
+                                    </div>
+                                    <% } %>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="detail-section">
@@ -192,18 +314,20 @@
                                         <% } %>
                                     </div>
                                     <div class="detail-section">
-                                        <strong>Tanggal Instalasi:</strong><br>
-                                        <%= job.installation_date ? formatDbUtcToJakartaDate(job.installation_date) : 'TBD' %>
+                                        <strong>Tanggal Instalasi (jadwal):</strong><br>
+                                        <%= job.installation_date ? formatDbLocalWallClock(job.installation_date) : 'TBD' %>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="detail-section">
-                                        <strong>Waktu Instalasi:</strong><br>
-                                        <%= job.installation_time || 'Waktu tidak ditentukan' %>
+                                        <strong>Waktu mulai di lapangan (app teknisi):</strong><br>
+                                        <%= job.work_started_at ? formatDbLocalWallClock(job.work_started_at) : '—' %>
+                                        <br><small class="text-muted">Dicatat saat teknisi mengetuk mulai / progres di aplikasi mobile.</small>
                                     </div>
                                     <div class="detail-section">
-                                        <strong>Durasi Estimasi:</strong><br>
-                                        <%= job.estimated_duration || 'Durasi tidak ditentukan' %>
+                                        <strong>Durasi pengerjaan:</strong><br>
+                                        <%= installDurationMain %>
+                                        <br><small class="text-muted"><%= installDurationSub %></small>
                                     </div>
                                 </div>
                             </div>
@@ -215,14 +339,64 @@
                                 </div>
                             <% } %>
                             
-                            <% if (job.notes) { %>
+                            <% if (notesAdminOnly) { %>
                                 <div class="detail-section">
-                                    <strong>Catatan:</strong><br>
-                                    <%= job.notes %>
+                                    <strong>Catatan (admin / internal):</strong><br>
+                                    <span style="white-space: pre-wrap;"><%= notesAdminOnly %></span>
                                 </div>
                             <% } %>
                         </div>
                     </div>
+
+                    <% if (installCompletion && (installCompletion.description || installCompletion.photoPath || installCompletion.stickerPhotoPath || installCompletion.cableLengthM != null || (installCompletion.lat != null && installCompletion.lng != null))) { %>
+                    <div class="card detail-card border-success">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">
+                                <i class="bi bi-phone me-2"></i>Detail pemasangan (dari aplikasi teknisi)
+                            </h5>
+                        </div>
+                        <div class="card-body install-tech-summary">
+                            <% if (installCompletion.description) { %>
+                                <div class="block">
+                                    <strong class="small">Ringkasan pekerjaan</strong>
+                                    <div class="desc-box bg-light rounded mt-1 border" style="white-space: pre-wrap;"><%= installCompletion.description %></div>
+                                </div>
+                            <% } %>
+                            <% if (installCompletion.cableLengthM != null) { %>
+                                <div class="block">
+                                    <strong class="small">Panjang kabel</strong><br>
+                                    <span class="small"><%= installCompletion.cableLengthM %> meter</span>
+                                </div>
+                            <% } %>
+                            <% if (installCompletion.photoPath) { %>
+                                <div class="block">
+                                    <strong class="small">Foto dokumentasi</strong><br>
+                                    <img src="<%= imgBaseInstall ? (imgBaseInstall + installCompletion.photoPath) : installCompletion.photoPath %>" alt="Dokumentasi" class="img-fluid rounded border mt-1 doc-img">
+                                </div>
+                            <% } %>
+                            <% if (installCompletion.stickerPhotoPath) { %>
+                                <div class="block">
+                                    <strong class="small">Foto stiker belakang ONT</strong><br>
+                                    <img src="<%= imgBaseInstall ? (imgBaseInstall + installCompletion.stickerPhotoPath) : installCompletion.stickerPhotoPath %>" alt="Stiker ONT" class="img-fluid rounded border mt-1 doc-img">
+                                </div>
+                            <% } %>
+                            <% if (installCompletion.lat != null && installCompletion.lng != null) { %>
+                                <div class="block mb-0">
+                                    <strong class="small">Tag lokasi (GPS teknisi)</strong><br>
+                                    <span class="text-monospace small"><%= installCompletion.lat %>, <%= installCompletion.lng %></span>
+                                    <a href="https://www.google.com/maps?q=<%= installCompletion.lat %>,<%= installCompletion.lng %>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary ms-1 align-middle">
+                                        <i class="bi bi-geo-alt-fill me-1"></i>Maps
+                                    </a>
+                                    <% if (job.customer_id) { %>
+                                        <p class="text-success small mt-1 mb-0"><i class="bi bi-check-circle me-1"></i>Koordinat tersimpan ke data pelanggan.</p>
+                                    <% } else { %>
+                                        <p class="text-muted small mt-1 mb-0">Tanpa ID pelanggan, koordinat hanya di job.</p>
+                                    <% } %>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                    <% } %>
 
                     <!-- Technician Assignment -->
                     <div class="card detail-card">
@@ -252,17 +426,18 @@
                                             <span class="badge bg-info">Ditugaskan</span>
                                         </div>
                                         <div class="detail-section">
-                                            <strong>Tanggal Penugasan:</strong><br>
-                                            <%= job.assigned_at ? formatDbUtcToJakartaDate(job.assigned_at) : 'Tidak diketahui' %>
+                                            <strong>Tanggal penugasan:</strong><br>
+                                            <% const _asg = typeof displayAssignedAt !== 'undefined' ? displayAssignedAt : (job.assigned_at || null); %>
+                                            <%= _asg ? formatDbLocalWallClock(_asg) : 'Tidak diketahui' %>
                                         </div>
                                     </div>
                                 </div>
                             <% } else { %>
-                                <div class="text-center py-4">
-                                    <i class="bi bi-person-x text-muted" style="font-size: 3rem;"></i>
-                                    <h6 class="mt-3 text-muted">Belum ada teknisi yang ditugaskan</h6>
-                                    <button class="btn btn-primary mt-2" onclick="assignTechnician('<%= job.id %>')">
-                                        <i class="bi bi-person-plus me-2"></i>Tugaskan Teknisi
+                                <div class="text-center empty-state-tight">
+                                    <i class="bi bi-person-x text-muted"></i>
+                                    <h6 class="mt-2 mb-2 text-muted small">Belum ada teknisi</h6>
+                                    <button class="btn btn-primary btn-sm" onclick="assignTechnician('<%= job.id %>')">
+                                        <i class="bi bi-person-plus me-1"></i>Tugaskan
                                     </button>
                                 </div>
                             <% } %>
@@ -285,7 +460,7 @@
                                                 <strong>Status berubah dari <%= history.old_status %> ke <%= history.new_status %></strong><br>
                                                 <small class="text-muted">
                                                     <i class="bi bi-clock me-1"></i>
-                                                    <%= formatDbUtcToJakartaDateTime(history.created_at) %>
+                                                    <%= formatDbLocalWallClock(history.created_at) %>
                                                 </small>
                                                 <% if (history.notes) { %>
                                                     <br><small class="text-muted"><%= history.notes %></small>
@@ -296,9 +471,9 @@
                                     </div>
                                 <% }); %>
                             <% } else { %>
-                                <div class="text-center py-4">
-                                    <i class="bi bi-clock text-muted" style="font-size: 3rem;"></i>
-                                    <h6 class="mt-3 text-muted">Belum ada riwayat status</h6>
+                                <div class="text-center empty-state-tight">
+                                    <i class="bi bi-clock text-muted"></i>
+                                    <h6 class="mt-2 mb-0 text-muted small">Belum ada riwayat status</h6>
                                 </div>
                             <% } %>
                         </div>
@@ -315,21 +490,21 @@
                                     <i class="bi bi-lightning me-2"></i>Aksi Cepat
                                 </h6>
                             </div>
-                            <div class="card-body">
+                            <div class="card-body py-2">
                                 <% if (job.status === 'scheduled') { %>
-                                    <button class="btn btn-primary w-100 mb-2" onclick="assignTechnician('<%= job.id %>')">
-                                        <i class="bi bi-person-plus me-2"></i>Tugaskan Teknisi
+                                    <button class="btn btn-primary w-100 mb-1 btn-sm" onclick="assignTechnician('<%= job.id %>')">
+                                        <i class="bi bi-person-plus me-1"></i>Tugaskan Teknisi
                                     </button>
                                 <% } %>
                                 
                                 <% if (job.status === 'in_progress') { %>
-                                    <button class="btn btn-success w-100 mb-2" onclick="completeInstallation('<%= job.id %>')">
-                                        <i class="bi bi-check-circle me-2"></i>Tandai Selesai
+                                    <button class="btn btn-success w-100 mb-1 btn-sm" onclick="completeInstallation('<%= job.id %>')">
+                                        <i class="bi bi-check-circle me-1"></i>Tandai Selesai
                                     </button>
                                 <% } %>
                                 
-                                <a href="/admin/installations/edit/<%= job.id %>" class="btn btn-warning w-100 mb-2">
-                                    <i class="bi bi-pencil me-2"></i>Edit Job
+                                <a href="/admin/installations/edit/<%= job.id %>" class="btn btn-warning w-100 mb-0 btn-sm">
+                                    <i class="bi bi-pencil me-1"></i>Edit Job
                                 </a>
                             </div>
                         </div>
@@ -341,19 +516,19 @@
                                     <i class="bi bi-info-circle me-2"></i>Informasi Job
                                 </h6>
                             </div>
-                            <div class="card-body">
-                                <div class="mb-2">
-                                    <small class="text-muted">Dibuat pada:</small><br>
-                                    <%= job.created_at ? formatDbUtcToJakartaDateTime(job.created_at) : 'Tidak diketahui' %>
+                            <div class="card-body py-2">
+                                <div class="mb-1 small">
+                                    <span class="text-muted">Dibuat:</span><br>
+                                    <%= job.created_at ? formatDbLocalWallClock(job.created_at) : '—' %>
                                 </div>
-                                <div class="mb-2">
-                                    <small class="text-muted">Terakhir diupdate:</small><br>
-                                    <%= job.updated_at ? formatDbUtcToJakartaDateTime(job.updated_at) : 'Tidak diketahui' %>
+                                <div class="mb-1 small">
+                                    <span class="text-muted">Update:</span><br>
+                                    <%= job.updated_at ? formatDbLocalWallClock(job.updated_at) : '—' %>
                                 </div>
                                 <% if (job.completed_at) { %>
-                                    <div class="mb-2">
-                                        <small class="text-muted">Selesai pada:</small><br>
-                                        <%= formatDbUtcToJakartaDateTime(job.completed_at) %>
+                                    <div class="mb-0 small">
+                                        <span class="text-muted">Selesai:</span><br>
+                                        <%= formatDbLocalWallClock(job.completed_at) %>
                                     </div>
                                 <% } %>
                             </div>
@@ -366,24 +541,21 @@
                                     <i class="bi bi-whatsapp me-2"></i>Notifikasi WhatsApp
                                 </h6>
                             </div>
-                            <div class="card-body">
+                            <div class="card-body py-2">
                                 <% if (job.customer_phone) { %>
-                                    <button class="btn btn-success w-100 mb-2" onclick="sendCustomerNotification('<%= job.customer_phone %>', '<%= job.job_number %>')">
-                                        <i class="bi bi-whatsapp me-2"></i>Kirim ke Pelanggan
+                                    <button class="btn btn-success w-100 mb-1 btn-sm" onclick="sendCustomerNotification('<%= job.customer_phone %>', '<%= job.job_number %>')">
+                                        <i class="bi bi-whatsapp me-1"></i>Ke Pelanggan
                                     </button>
                                 <% } %>
                                 
                                 <% if (job.technician_phone) { %>
-                                    <button class="btn btn-info w-100 mb-2" onclick="sendTechnicianNotification('<%= job.technician_phone %>', '<%= job.job_number %>')">
-                                        <i class="bi bi-whatsapp me-2"></i>Kirim ke Teknisi
+                                    <button class="btn btn-info w-100 mb-1 btn-sm" onclick="sendTechnicianNotification('<%= job.technician_phone %>', '<%= job.job_number %>')">
+                                        <i class="bi bi-whatsapp me-1"></i>Ke Teknisi
                                     </button>
                                 <% } %>
                                 
-                                <div class="alert alert-info mt-3">
-                                    <small>
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        Notifikasi akan dibuka di WhatsApp Web/App
-                                    </small>
+                                <div class="alert alert-info py-2 px-2 mb-0 mt-1 small">
+                                    <i class="bi bi-info-circle me-1"></i>Membuka WhatsApp Web/App
                                 </div>
                             </div>
                         </div>

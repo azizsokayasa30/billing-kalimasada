@@ -147,23 +147,23 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
                           'Daftar Tugas',
                           style: TextStyle(
-                            fontSize: 28,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: textOnSurface,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           '${tasks.length} active work orders assigned to you.',
                           style: const TextStyle(
-                            fontSize: 16,
+                            fontSize: 13,
                             color: textOnSurfaceVariant,
                           ),
                         ),
@@ -174,7 +174,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                   // Filters
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       children: [
                         _buildFilterButton(
@@ -218,7 +218,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                     ),
                   ),
                   
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
                   
                   if (provider.error != null && tasks.isEmpty)
                     Center(child: Text(provider.error!, style: const TextStyle(color: Colors.red)))
@@ -231,13 +231,13 @@ class _TaskListScreenState extends State<TaskListScreen> {
                     )
                   else
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Column(
                         children: tasks.map((task) => _buildTaskCard(task)).toList(),
                       ),
                     ),
                   
-                  const SizedBox(height: 80),
+                  const SizedBox(height: 64),
                 ],
               ),
             ),
@@ -261,8 +261,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
   Widget _buildFilterButton({IconData? icon, required String label, IconData? suffixIcon, required Color bgColor, required Color textColor}) {
     return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(20),
@@ -272,21 +272,21 @@ class _TaskListScreenState extends State<TaskListScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 18, color: textColor),
-            const SizedBox(width: 8),
+            Icon(icon, size: 16, color: textColor),
+            const SizedBox(width: 6),
           ],
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.bold,
               color: textColor,
-              letterSpacing: 0.5,
+              letterSpacing: 0.3,
             ),
           ),
           if (suffixIcon != null) ...[
-            const SizedBox(width: 8),
-            Icon(suffixIcon, size: 18, color: textColor),
+            const SizedBox(width: 6),
+            Icon(suffixIcon, size: 16, color: textColor),
           ],
         ],
       ),
@@ -335,32 +335,32 @@ class _TaskListScreenState extends State<TaskListScreen> {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFC8C4D3)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 4,
+            blurRadius: 3,
             offset: const Offset(0, 1),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                width: 6,
+                width: 4,
                 color: typeColor,
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -368,7 +368,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: priorityBgColor,
                               borderRadius: BorderRadius.circular(4),
@@ -376,12 +376,12 @@ class _TaskListScreenState extends State<TaskListScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(priorityIcon, size: 14, color: priorityColor),
-                                const SizedBox(width: 4),
+                                Icon(priorityIcon, size: 12, color: priorityColor),
+                                const SizedBox(width: 3),
                                 Text(
                                   task['priority']?.toString() ?? 'NORMAL',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                     color: priorityColor,
                                   ),
@@ -390,7 +390,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: typeBgColor,
                               borderRadius: BorderRadius.circular(4),
@@ -398,7 +398,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                             child: Text(
                               task['sector'] ?? (type == 'TR' ? 'TIKET' : type == 'INSTALL' ? 'PSB' : 'UMUM'),
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 color: typeColor,
                               ),
@@ -406,29 +406,34 @@ class _TaskListScreenState extends State<TaskListScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 6),
                       Text(
                         task['title']?.toString() ?? 'Tugas',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 22,
+                          fontSize: 15,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF19163F),
+                          height: 1.25,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 6),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.apartment, size: 18, color: Color(0xFF787582)),
-                          const SizedBox(width: 12),
+                          const Icon(Icons.apartment, size: 14, color: Color(0xFF787582)),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   task['customer']?.toString() ?? 'Nama Pelanggan',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    fontSize: 16,
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: Color(0xFF19163F),
                                   ),
@@ -436,7 +441,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                                 Text(
                                   'ID: ${task['id']?.toString() ?? '-'}',
                                   style: const TextStyle(
-                                    fontSize: 16,
+                                    fontSize: 12,
                                     color: Color(0xFF474551),
                                   ),
                                 ),
@@ -445,35 +450,40 @@ class _TaskListScreenState extends State<TaskListScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.location_on, size: 18, color: Color(0xFF787582)),
-                          const SizedBox(width: 12),
+                          const Icon(Icons.location_on, size: 14, color: Color(0xFF787582)),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               task['address']?.toString() ?? 'Alamat tidak tersedia',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontSize: 16,
+                                fontSize: 12,
                                 color: Color(0xFF474551),
+                                height: 1.3,
                               ),
                             ),
                           ),
                         ],
                       ),
                       if (task['phone'] != null) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 4),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.phone, size: 18, color: Color(0xFF787582)),
-                            const SizedBox(width: 12),
+                            const Icon(Icons.phone, size: 14, color: Color(0xFF787582)),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 task['phone'].toString(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 12,
                                   color: Color(0xFF474551),
                                 ),
                               ),
@@ -481,9 +491,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
                           ],
                         ),
                       ],
-                      const SizedBox(height: 16),
-                      const Divider(color: Color(0xFFE4DFFF)),
                       const SizedBox(height: 8),
+                      const Divider(height: 1, color: Color(0xFFE4DFFF)),
+                      const SizedBox(height: 6),
                       
                       // Action buttons based on priority
                       if (task['priority'] == 'HIGH')
@@ -507,11 +517,12 @@ class _TaskListScreenState extends State<TaskListScreen> {
                                 }
                               });
                             },
-                            icon: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
-                            label: const Text('Start Job', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            icon: const Icon(Icons.play_arrow, color: Colors.white, size: 18),
+                            label: const Text('Start Job', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF070038),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              minimumSize: const Size(0, 40),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
                           ),
@@ -524,13 +535,14 @@ class _TaskListScreenState extends State<TaskListScreen> {
                                 onPressed: () {},
                                 style: OutlinedButton.styleFrom(
                                   side: const BorderSide(color: Color(0xFF787582)),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  minimumSize: const Size(0, 40),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 ),
-                                child: const Text('Details', style: TextStyle(color: Color(0xFF19163F), fontWeight: FontWeight.w600)),
+                                child: const Text('Details', style: TextStyle(color: Color(0xFF19163F), fontWeight: FontWeight.w600, fontSize: 13)),
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: ElevatedButton.icon(
                                 onPressed: () {
@@ -550,11 +562,12 @@ class _TaskListScreenState extends State<TaskListScreen> {
                                     }
                                   });
                                 },
-                                icon: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
-                                label: const Text('Start', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                                icon: const Icon(Icons.play_arrow, color: Colors.white, size: 18),
+                                label: const Text('Start', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF070038),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  minimumSize: const Size(0, 40),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 ),
                               ),
@@ -579,10 +592,11 @@ class _TaskListScreenState extends State<TaskListScreen> {
                             },
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFF787582)),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              minimumSize: const Size(0, 40),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            child: const Text('LIHAT', style: TextStyle(color: Color(0xFF19163F), fontWeight: FontWeight.w600)),
+                            child: const Text('LIHAT', style: TextStyle(color: Color(0xFF19163F), fontWeight: FontWeight.w600, fontSize: 13)),
                           ),
                         ),
                     ],

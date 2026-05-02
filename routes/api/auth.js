@@ -9,6 +9,7 @@ const logger = require('../../config/logger');
 const billingManager = require('../../config/billing');
 const AgentManager = require('../../config/agentManager');
 const { sendMessage } = require('../../config/sendMessage');
+const { resolveEmployeePhotoPath, buildPhotoUrl } = require('../../utils/technicianEmployeePhoto');
 
 const agentManager = new AgentManager();
 const dbPath = path.join(__dirname, '../../data/billing.db');
@@ -177,21 +178,53 @@ router.post('/login', async (req, res) => {
             } catch (e) {}
         }
 
-        // Try Technician
+        // Try Technician (nomor: terima format 08… / 62… / +62…)
         if (!role || role === 'technician') {
+            const rawTechPhone = username || phone;
+            const normTechPhone = normalizePhone(rawTechPhone);
+            const techVariants = [rawTechPhone, normTechPhone, '+' + normTechPhone, '0' + normTechPhone.slice(2)].filter(
+                (v, i, a) => v && a.indexOf(v) === i
+            );
+            const techPh = techVariants.map(() => '?').join(',');
             const technician = await new Promise((resolve) => {
-                db.get('SELECT * FROM technicians WHERE phone = ? AND is_active = 1', [username || phone], (err, row) => {
-                    resolve(row);
-                });
+                db.get(
+                    `SELECT * FROM technicians WHERE phone IN (${techPh}) AND is_active = 1`,
+                    techVariants,
+                    (err, row) => resolve(row)
+                );
             });
 
             if (technician && technician.password && bcrypt.compareSync(password, technician.password)) {
                 const token = jwt.sign(
-                    { id: technician.id, username: technician.phone, phone: technician.phone, name: technician.name, role: 'technician' }, 
-                    JWT_SECRET, 
+                    { id: technician.id, username: technician.phone, phone: technician.phone, name: technician.name, role: 'technician' },
+                    JWT_SECRET,
                     { expiresIn: '24h' }
                 );
-                return res.json({ success: true, token, user: { id: technician.id, name: technician.name, role: 'technician' } });
+                const userPayload = {
+                    id: technician.id,
+                    name: technician.name,
+                    role: 'technician',
+                    position: technician.role || 'technician',
+                    phone: technician.phone,
+                    email: technician.email || null,
+                    area_coverage: technician.area_coverage || '',
+                    notes: technician.notes || '',
+                    whatsapp_group_id: technician.whatsapp_group_id || null,
+                    join_date: technician.join_date || null,
+                    last_login: technician.last_login || null
+                };
+                let photoRel = null;
+                try {
+                    photoRel = await new Promise((resolve, reject) => {
+                        resolveEmployeePhotoPath(db, technician, (err, p) => (err ? reject(err) : resolve(p)));
+                    });
+                } catch (e) {
+                    logger.warn('[auth] resolveEmployeePhotoPath:', e.message);
+                }
+                if (photoRel) {
+                    userPayload.photo_url = buildPhotoUrl(photoRel);
+                }
+                return res.json({ success: true, token, user: userPayload });
             }
         }
 

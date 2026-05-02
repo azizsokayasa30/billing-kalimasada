@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -42,10 +42,22 @@
         .customer-search-result {
             border: 1px solid #dee2e6;
             border-radius: 8px;
-            padding: 1rem;
-            margin-top: 1rem;
+            padding: 0.5rem 0.65rem;
+            margin-top: 0.5rem;
             background: var(--panel-bg, #ffffff);
             display: none;
+        }
+        .customer-suggest-list {
+            max-height: 280px;
+            overflow-y: auto;
+            border-radius: 6px;
+        }
+        .customer-suggest-list .list-group-item {
+            border-left: none;
+            border-right: none;
+        }
+        .customer-suggest-list .list-group-item:first-child {
+            border-top: none;
         }
         
         .customer-info {
@@ -127,6 +139,11 @@
                                 <!-- Customer Information Section -->
                                 <div class="form-section">
                                     <h5><i class="bi bi-person me-2"></i>Informasi Pelanggan</h5>
+                                    <div class="alert alert-info py-2 small mb-3">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <strong>ID pelanggan wajib</strong> pada job instalasi (pilih dari pencarian) agar aplikasi teknisi dapat menampilkan username &amp; password PPPoE sesuai data pelanggan di billing/RADIUS.
+                                        Untuk pelanggan baru, buat dulu di menu <strong>Pelanggan</strong> lalu pilih di sini.
+                                    </div>
                                     
                                     <!-- Customer Search -->
                                     <div class="row mb-3">
@@ -134,7 +151,7 @@
                                             <label for="customerSearch" class="form-label">Cari Pelanggan</label>
                                             <div class="input-group">
                                                 <input type="text" class="form-control" id="customerSearch" 
-                                                       placeholder="Masukkan nama, telepon, atau username pelanggan">
+                                                       placeholder="Nama, telepon, username, PPPoE, atau ID pelanggan (ketik ≥2 huruf)">
                                                 <button class="btn btn-outline-secondary" type="button" onclick="searchCustomer()">
                                                     <i class="bi bi-search"></i>
                                                 </button>
@@ -143,7 +160,7 @@
                                         <div class="col-md-4">
                                             <label class="form-label">&nbsp;</label>
                                             <div class="d-grid">
-                                                <button type="button" class="btn btn-outline-primary" onclick="showNewCustomerForm()">
+                                                <button type="button" class="btn btn-outline-secondary" onclick="showNewCustomerBlocked()" title="Gunakan menu Pelanggan untuk menambah pelanggan baru">
                                                     <i class="bi bi-person-plus me-2"></i>Pelanggan Baru
                                                 </button>
                                             </div>
@@ -287,155 +304,347 @@
 
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script>
-    const prefillCustomer = <%- JSON.stringify(typeof prefillCustomer !== 'undefined' ? prefillCustomer : null) %>;
+    const INSTALLATION_PREFILL_KEY = 'installationPrefillV1';
+    const INSTALLATION_PREFILL_MAX_MS = 15 * 60 * 1000;
+
+    const serverPrefillCustomer = <%- JSON.stringify(typeof prefillCustomer !== 'undefined' ? prefillCustomer : null) %>;
+    let storagePrefillRaw = null;
+    try {
+        storagePrefillRaw = sessionStorage.getItem(INSTALLATION_PREFILL_KEY);
+    } catch (e) { /* storage blocked */ }
+
+    function parseStoragePrefill(raw) {
+        if (!raw) return null;
+        try {
+            const o = JSON.parse(raw);
+            if (!o || o.customer_id == null || o.customer_id === '') return null;
+            const ts = typeof o._ts === 'number' ? o._ts : 0;
+            if (ts && (Date.now() - ts > INSTALLATION_PREFILL_MAX_MS)) return null;
+            return o;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    const storagePrefill = parseStoragePrefill(storagePrefillRaw);
+    if (storagePrefillRaw && !storagePrefill) {
+        try { sessionStorage.removeItem(INSTALLATION_PREFILL_KEY); } catch (e) {}
+    }
+    let prefillCustomer = (storagePrefill && storagePrefill.customer_id != null && storagePrefill.customer_id !== '')
+        ? storagePrefill
+        : serverPrefillCustomer;
+
     const editJob = <%- JSON.stringify(typeof job !== 'undefined' ? job : null) %>;
+
+    function escHtml(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function escAttr(s) {
+        return escHtml(s).replace(/\r?\n/g, ' ').trim();
+    }
 
     // Optional: set minimum date to today if field exists
     if (document.getElementById('installationDate')) {
         document.getElementById('installationDate').min = new Date().toISOString().split('T')[0];
     }
     
-    // Customer search functionality
     function searchCustomer() {
-        const searchTerm = document.getElementById('customerSearch').value;
+        const searchTerm = document.getElementById('customerSearch').value.trim();
         if (!searchTerm) {
             showToast('Mohon masukkan kata kunci pencarian', 'warning');
             return;
         }
-        
         if (searchTerm.length < 2) {
             showToast('Minimal 2 karakter untuk pencarian', 'warning');
             return;
         }
-        
-        // Show loading state
+        runCustomerSearch(searchTerm);
+    }
+
+    function runCustomerSearch(searchTerm) {
         const resultDiv = document.getElementById('customerSearchResult');
         resultDiv.style.display = 'block';
         resultDiv.innerHTML = `
-            <div class="text-center py-3">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Mencari...</span>
-                </div>
-                <p class="mt-2 text-muted">Mencari pelanggan...</p>
+            <div class="text-center py-2 d-flex align-items-center justify-content-center gap-2">
+                <div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Mencari...</span></div>
+                <span class="small text-muted">Mencari…</span>
             </div>
         `;
-        
-        // Call real API
+
         fetch(`/admin/installations/api/search-customers?q=${encodeURIComponent(searchTerm)}`)
-            .then(response => response.json())
-            .then(data => {
+            .then((response) => response.json())
+            .then((data) => {
                 if (data.success) {
                     if (data.customers && data.customers.length > 0) {
-                        showCustomerResults(searchTerm, data.customers);
+                        renderCustomerResultsList(data.customers, searchTerm);
                     } else {
                         showNoCustomerResults(searchTerm);
                     }
                 } else {
-                    showCustomerSearchError(data.message || 'Error searching customers');
+                    showCustomerSearchError(data.message || 'Gagal mencari pelanggan');
                 }
             })
-            .catch(error => {
+            .catch((error) => {
                 console.error('Error searching customers:', error);
                 showCustomerSearchError('Terjadi kesalahan saat mencari pelanggan');
             });
     }
-    
-    function showCustomerResults(searchTerm, customers) {
+
+    function renderCustomerResultsList(customers, searchTerm) {
         const resultDiv = document.getElementById('customerSearchResult');
-        resultDiv.innerHTML = `
-            <h6>Hasil Pencarian untuk "${searchTerm}" (${customers.length} pelanggan):</h6>
-            <div class="list-group">
-                ${customers.map(customer => `
-                    <a href="#" class="list-group-item list-group-item-action" 
-                       onclick="selectCustomerFromSearch(${customer.id}, '${customer.name}', '${customer.phone}', '${customer.email || ''}', '${customer.address || ''}', '${customer.pppoe_username || ''}', '')">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">${customer.name}</h6>
-                            <small class="text-primary">${customer.phone}</small>
-                        </div>
-                        ${customer.email ? `<p class="mb-1 text-muted">${customer.email}</p>` : ''}
-                        ${customer.address ? `<small class="text-muted">${customer.address}</small>` : ''}
-                        ${customer.pppoe_username ? `<br><small class="badge bg-info">PPPoE: ${customer.pppoe_username}</small>` : ''}
-                    </a>
-                `).join('')}
-            </div>
-        `;
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = '';
+        const wrap = document.createElement('div');
+        const hdr = document.createElement('div');
+        hdr.className = 'small text-muted mb-2';
+        hdr.textContent = `${customers.length} hasil untuk “${searchTerm}” — klik baris untuk memilih`;
+        wrap.appendChild(hdr);
+        const list = document.createElement('div');
+        list.className = 'list-group customer-suggest-list';
+        customers.forEach((cust) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'list-group-item list-group-item-action py-2 px-2 text-start';
+            const row1 = document.createElement('div');
+            row1.className = 'd-flex w-100 justify-content-between align-items-start gap-2';
+            const nm = document.createElement('strong');
+            nm.className = 'small';
+            nm.textContent = cust.name || '—';
+            const ph = document.createElement('span');
+            ph.className = 'text-primary small text-nowrap';
+            ph.textContent = cust.phone || '';
+            row1.appendChild(nm);
+            row1.appendChild(ph);
+            btn.appendChild(row1);
+            const row2 = document.createElement('div');
+            row2.className = 'small text-muted mt-1';
+            const bits = [];
+            if (cust.customer_id) bits.push('ID pelanggan: ' + String(cust.customer_id));
+            bits.push('ID billing: #' + cust.id);
+            if (cust.pppoe_username) bits.push('PPPoE: ' + cust.pppoe_username);
+            else if (cust.username) bits.push('Login: ' + cust.username);
+            if (cust.package_name) bits.push(String(cust.package_name));
+            row2.textContent = bits.join(' · ');
+            btn.appendChild(row2);
+            btn.addEventListener('click', () => applySelectedCustomer(cust));
+            list.appendChild(btn);
+        });
+        wrap.appendChild(list);
+        resultDiv.appendChild(wrap);
     }
-    
+
     function showNoCustomerResults(searchTerm) {
         const resultDiv = document.getElementById('customerSearchResult');
+        resultDiv.style.display = 'block';
         resultDiv.innerHTML = `
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle me-2"></i>
-                Tidak ada pelanggan ditemukan untuk "${searchTerm}"
-                <br><small>Silakan buat pelanggan baru atau coba kata kunci lain</small>
+            <div class="alert alert-info py-2 mb-0 small">
+                <i class="bi bi-info-circle me-1"></i>
+                Tidak ada pelanggan untuk “${escHtml(searchTerm)}”.
+                <br><span class="text-muted">Buat pelanggan di menu Pelanggan, atau ubah kata kunci.</span>
             </div>
         `;
     }
-    
+
     function showCustomerSearchError(message) {
         const resultDiv = document.getElementById('customerSearchResult');
+        resultDiv.style.display = 'block';
         resultDiv.innerHTML = `
-            <div class="alert alert-danger">
-                <i class="bi bi-exclamation-triangle me-2"></i>
-                ${message}
+            <div class="alert alert-danger py-2 mb-0 small">
+                <i class="bi bi-exclamation-triangle me-1"></i>${escHtml(message)}
             </div>
         `;
     }
     
-    function selectCustomerFromSearch(id, name, phone, email, address, pppoeUsername, pppoePassword) {
-        // Hide search results
+    /** Password Cleartext-Password dari radcheck untuk username PPPoE; fallback billing jika tidak ada. */
+    function loadPppoePasswordFromRadius(effectiveUsername, billingPass) {
+        const slot = document.getElementById('installPppoePwdSlot');
+        const hiddenPwd = document.getElementById('installCustomerPppoePasswordHidden');
+        if (!slot || !hiddenPwd) return;
+        const fb = billingPass != null ? String(billingPass) : '';
+        const u = (effectiveUsername && String(effectiveUsername).trim()) || '';
+        if (!u) {
+            slot.innerHTML = fb
+                ? `<code class="small user-select-all">${escHtml(fb)}</code> <span class="text-muted">(dari billing, tanpa username PPPoE untuk lookup RADIUS)</span>`
+                : '<span class="text-muted">—</span>';
+            hiddenPwd.value = fb;
+            return;
+        }
+        slot.innerHTML = '<span class="text-muted">Memuat dari RADIUS…</span>';
+        fetch(`/admin/installations/api/pppoe-password?username=${encodeURIComponent(u)}`)
+            .then((r) => r.json())
+            .then((data) => {
+                const pwd = data && data.success && data.password != null && String(data.password) !== '' ? String(data.password) : '';
+                if (pwd) {
+                    slot.innerHTML = `<code class="small user-select-all">${escHtml(pwd)}</code>`;
+                    hiddenPwd.value = pwd;
+                } else if (fb) {
+                    slot.innerHTML =
+                        `<span class="text-muted">Tidak di radcheck untuk <code>${escHtml(u)}</code> — billing:</span> <code class="small user-select-all">${escHtml(fb)}</code>`;
+                    hiddenPwd.value = fb;
+                } else {
+                    slot.innerHTML = `<span class="text-muted">Tidak ada di RADIUS (user <code>${escHtml(u)}</code>) — isi password di menu Pelanggan / sync RADIUS</span>`;
+                    hiddenPwd.value = '';
+                }
+            })
+            .catch(() => {
+                if (fb) {
+                    slot.innerHTML =
+                        `<span class="text-muted">RADIUS gagal — billing:</span> <code class="small user-select-all">${escHtml(fb)}</code>`;
+                    hiddenPwd.value = fb;
+                } else {
+                    slot.textContent = 'Gagal memuat dari RADIUS.';
+                    hiddenPwd.value = '';
+                }
+            });
+    }
+
+    function setPackageFromCustomer(packageId) {
+        const pkgSelect = document.getElementById('package_id');
+        if (!pkgSelect || packageId == null || String(packageId).trim() === '') return;
+        const v = String(packageId).trim();
+        let matched = false;
+        for (let i = 0; i < pkgSelect.options.length; i++) {
+            if (String(pkgSelect.options[i].value) === v) {
+                pkgSelect.selectedIndex = i;
+                matched = true;
+                break;
+            }
+        }
+        if (matched) {
+            pkgSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
+    /** cust: baris dari API /customers (id, customer_id teks, username, password, pppoe_username, package_id, …) */
+    function applySelectedCustomer(cust, opts) {
+        const silent = opts && opts.silent;
+        const billingId = cust.id != null ? String(cust.id) : '';
+        if (!billingId || !/^\d+$/.test(billingId)) {
+            showToast('Data pelanggan tidak valid', 'error');
+            return;
+        }
+        const publicId = cust.customer_id != null && String(cust.customer_id).trim() !== '' ? String(cust.customer_id).trim() : '';
+        const name = cust.name || '';
+        const phone = cust.phone || '';
+        const email = cust.email || '';
+        const address = cust.address || '';
+        const loginUser = cust.username || '';
+        const pppoe = cust.pppoe_username || '';
+        const pass = cust.password != null ? String(cust.password) : '';
+        const pkgName = cust.package_name || '';
+        const effectivePppoeUser = (pppoe && String(pppoe).trim()) || (loginUser && String(loginUser).trim()) || '';
+
         document.getElementById('customerSearchResult').style.display = 'none';
-        
-        // Show customer info
+
         const customerInfo = document.getElementById('customerInfo');
         customerInfo.style.display = 'block';
+
+        const eName = escHtml(name);
+        const ePhone = escHtml(phone);
+        const eEmail = email ? escHtml(email) : '';
+        const eAddr = escHtml(address || '') || 'Tidak ada alamat';
+        const ePppoeUser = effectivePppoeUser ? escHtml(effectivePppoeUser) : '<span class="text-muted">—</span>';
+        const ePublic = publicId ? escHtml(publicId) : '<span class="text-muted">—</span>';
+        const ePkg = pkgName ? escHtml(pkgName) : '';
+
         customerInfo.innerHTML = `
-            <div class="alert alert-success">
-                <h6><i class="bi bi-person-check me-2"></i>Pelanggan yang Dipilih:</h6>
-                <div class="row">
+            <div class="alert alert-success py-2 px-3 small mb-0">
+                <div class="fw-semibold mb-2"><i class="bi bi-person-check me-1"></i>Pelanggan dipilih (data untuk teknisi)</div>
+                <div class="row g-2">
                     <div class="col-md-6">
-                        <strong>Nama:</strong> ${name}<br>
-                        <strong>Telepon:</strong> ${phone}
-                        ${pppoeUsername ? `<br><strong>PPPoE:</strong> ${pppoeUsername}` : ''}
+                        <div><span class="text-muted">ID billing (job):</span> <strong class="text-monospace">#${escHtml(billingId)}</strong></div>
+                        <div><span class="text-muted">ID pelanggan:</span> <strong class="text-monospace">${ePublic}</strong></div>
+                        <div><span class="text-muted">Nama:</span> ${eName}</div>
+                        <div><span class="text-muted">Telepon:</span> ${ePhone}</div>
+                        <div><span class="text-muted">Username PPPoE (lookup RADIUS):</span> <code class="small">${ePppoeUser}</code></div>
+                        <div><span class="text-muted">Password PPPoE:</span> <span id="installPppoePwdSlot" class="d-inline-block"></span></div>
                     </div>
                     <div class="col-md-6">
-                        ${email ? `<strong>Email:</strong> ${email}<br>` : ''}
-                        <strong>Alamat:</strong> ${address || 'Tidak ada alamat'}
+                        ${eEmail ? `<div><span class="text-muted">Email:</span> ${eEmail}</div>` : ''}
+                        <div><span class="text-muted">Alamat:</span> ${eAddr}</div>
+                        ${ePkg ? `<div class="mt-1"><span class="text-muted">Paket di data pelanggan:</span> <strong>${ePkg}</strong></div>` : ''}
                     </div>
                 </div>
-                <input type="hidden" name="customer_id" value="${id}">
-                <input type="hidden" name="customer_name" value="${name}">
-                <input type="hidden" name="customer_phone" value="${phone}">
-                <input type="hidden" name="customer_address" value="${address || ''}">
-                <input type="hidden" name="customer_pppoe_username" value="${pppoeUsername || ''}">
-                <input type="hidden" name="customer_pppoe_password" value="${pppoePassword || ''}">
+                <input type="hidden" name="customer_id" value="${escAttr(billingId)}">
+                <input type="hidden" name="customer_name" value="${escAttr(name)}">
+                <input type="hidden" name="customer_phone" value="${escAttr(phone)}">
+                <input type="hidden" name="customer_address" value="${escAttr(address)}">
+                <input type="hidden" name="customer_pppoe_username" value="${escAttr(pppoe || loginUser)}">
+                <input type="hidden" name="customer_pppoe_password" id="installCustomerPppoePasswordHidden" value="${escAttr(pass)}">
                 <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="changeCustomer()">
-                    <i class="bi bi-arrow-repeat me-1"></i>Ganti Pelanggan
+                    <i class="bi bi-arrow-repeat me-1"></i>Ganti pelanggan
                 </button>
             </div>
         `;
-        
-        // Clear search input
+
+        loadPppoePasswordFromRadius(effectivePppoeUser, pass);
+
+        document.getElementById('newCustomerName').required = false;
+        document.getElementById('newCustomerPhone').required = false;
+        document.getElementById('newCustomerAddress').required = false;
+        document.getElementById('newCustomerName').value = name;
+        document.getElementById('newCustomerPhone').value = phone;
+        document.getElementById('newCustomerAddress').value = address;
+
         document.getElementById('customerSearch').value = '';
-        
-        // Show success toast
-        showToast(`Pelanggan ${name} berhasil dipilih`, 'success');
+
+        setPackageFromCustomer(cust.package_id);
+
+        if (!silent) showToast('Pelanggan dipilih', 'success');
     }
-    
+
+    function selectCustomerFromSearch(id, name, phone, email, address, pppoeUsername, pppoePassword) {
+        applySelectedCustomer({
+            id,
+            customer_id: null,
+            username: '',
+            name,
+            phone,
+            email,
+            address,
+            pppoe_username: pppoeUsername || '',
+            password: pppoePassword || '',
+            package_id: null,
+            package_name: ''
+        });
+    }
+
     function selectCustomer(id, name, phone, email, address) {
-        // Legacy function - redirect to new function
         selectCustomerFromSearch(id, name, phone, email, address, '', '');
     }
-    
+
     function changeCustomer() {
-        document.getElementById('customerInfo').style.display = 'none';
+        const customerInfo = document.getElementById('customerInfo');
+        customerInfo.style.display = 'none';
+        customerInfo.innerHTML = '';
         document.getElementById('customerSearch').value = '';
         document.getElementById('customerSearch').focus();
+        document.getElementById('package_id').value = '';
+        document.getElementById('newCustomerName').required = false;
+        document.getElementById('newCustomerPhone').required = false;
+        document.getElementById('newCustomerAddress').required = false;
     }
     
+    function showNewCustomerBlocked() {
+        showToast(
+            'Untuk job instalasi, pelanggan harus sudah ada di sistem (dengan ID). Tambah pelanggan di menu Pelanggan, lalu pilih dari pencarian di sini.',
+            'warning'
+        );
+    }
+
     function showNewCustomerForm() {
         document.getElementById('newCustomerForm').style.display = 'block';
         document.getElementById('customerSearch').disabled = true;
+        
+        // Ensure required validation is active
+        document.getElementById('newCustomerName').required = true;
+        document.getElementById('newCustomerPhone').required = true;
+        document.getElementById('newCustomerAddress').required = true;
     }
     
     // Package search and selection
@@ -510,7 +719,11 @@
     function resetForm() {
         if (confirm('Apakah Anda yakin ingin mereset form? Semua data akan hilang.')) {
             document.getElementById('installationForm').reset();
-            document.getElementById('customerInfo').style.display = 'none';
+            const ci = document.getElementById('customerInfo');
+            ci.innerHTML = '';
+            ci.style.display = 'none';
+            document.getElementById('customerSearchResult').innerHTML = '';
+            document.getElementById('customerSearchResult').style.display = 'none';
             document.getElementById('newCustomerForm').style.display = 'none';
             document.getElementById('customerSearch').disabled = false;
             document.querySelectorAll('.package-card').forEach(card => {
@@ -578,23 +791,21 @@
         });
     }
     
-    // Auto-search customers when typing
+    // Saran pelanggan saat mengetik (debounce)
     let searchTimeout;
-    document.getElementById('customerSearch').addEventListener('input', function() {
+    document.getElementById('customerSearch').addEventListener('input', function () {
         const searchTerm = this.value.trim();
-        
-        // Clear previous timeout
         clearTimeout(searchTimeout);
-        
-        // Hide previous results
-        document.getElementById('customerSearchResult').style.display = 'none';
-        
-        if (searchTerm.length >= 2) {
-            // Delay search to avoid too many API calls
-            searchTimeout = setTimeout(() => {
-                searchCustomer();
-            }, 500);
+        const resultDiv = document.getElementById('customerSearchResult');
+        if (searchTerm.length < 2) {
+            resultDiv.style.display = 'none';
+            resultDiv.innerHTML = '';
+            return;
         }
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML =
+            '<div class="text-center py-1 small text-muted"><span class="spinner-border spinner-border-sm text-primary me-2" role="status"></span>Mengetik… cari pelanggan</div>';
+        searchTimeout = setTimeout(() => runCustomerSearch(searchTerm), 350);
     });
     
     let isSubmittingInstallation = false;
@@ -605,10 +816,11 @@
         const submitBtnEl = document.getElementById('submitBtn');
         const originalSubmitHtml = submitBtnEl ? submitBtnEl.innerHTML : '';
         // Basic validation
-        const customerId = document.querySelector('input[name="customer_id"]');
+        const customerIdEl = document.querySelector('input[name="customer_id"]');
+        const cidVal = customerIdEl && customerIdEl.value ? String(customerIdEl.value).trim() : '';
         const packageId = document.getElementById('package_id').value;
-        if (!customerId && !document.getElementById('newCustomerName').value) {
-            showToast('Mohon pilih atau buat pelanggan baru', 'error');
+        if (!cidVal || !/^\d+$/.test(cidVal)) {
+            showToast('Wajib memilih pelanggan terdaftar dari pencarian (ID pelanggan harus tersimpan pada job).', 'error');
             return;
         }
         if (!packageId) {
@@ -654,36 +866,57 @@
         });
     }
 
-    // Prefill customer after redirect from "Simpan + Buat Tugas"
-    if (prefillCustomer && prefillCustomer.customer_id) {
-        showNewCustomerForm(); // switch context from search to direct selected customer
-        document.getElementById('newCustomerForm').style.display = 'none';
-        selectCustomerFromSearch(
-            prefillCustomer.customer_id,
-            prefillCustomer.customer_name || '',
-            prefillCustomer.customer_phone || '',
-            '',
-            prefillCustomer.customer_address || '',
-            prefillCustomer.pppoe_username || '',
-            prefillCustomer.pppoe_password || ''
-        );
-        if (prefillCustomer.package_id) {
-            const pkgSelect = document.getElementById('package_id');
-            pkgSelect.value = String(prefillCustomer.package_id);
+    // Prefill customer after redirect dari "Simpan + Buat Tugas" (session / sessionStorage)
+    if (prefillCustomer != null && prefillCustomer.customer_id != null && prefillCustomer.customer_id !== '') {
+        try {
+            document.getElementById('newCustomerForm').style.display = 'none';
+            document.getElementById('customerSearch').disabled = false;
+            applySelectedCustomer(
+                {
+                    id: prefillCustomer.customer_id,
+                    customer_id: prefillCustomer.public_customer_id || prefillCustomer.customer_id_text || null,
+                    username: prefillCustomer.username || '',
+                    name: prefillCustomer.customer_name || '',
+                    phone: prefillCustomer.customer_phone || '',
+                    email: prefillCustomer.email || '',
+                    address: prefillCustomer.customer_address || '',
+                    pppoe_username: prefillCustomer.pppoe_username || '',
+                    password: prefillCustomer.pppoe_password || prefillCustomer.password || '',
+                    package_id: prefillCustomer.package_id,
+                    package_name: prefillCustomer.package_name || ''
+                },
+                { silent: true }
+            );
+            if (storagePrefill) {
+                try {
+                    sessionStorage.removeItem(INSTALLATION_PREFILL_KEY);
+                } catch (e) {}
+            }
+        } catch (err) {
+            console.error('Prefill installation customer failed:', err);
         }
     }
 
-    // Prefill form in edit mode from current job data
+    // Edit mode: muat data pelanggan lengkap untuk tampilan teknisi
     if (editJob && editJob.id) {
-        selectCustomerFromSearch(
-            editJob.customer_id || '',
-            editJob.customer_name || '',
-            editJob.customer_phone || '',
-            '',
-            editJob.customer_address || '',
-            editJob.customer_pppoe_username || '',
-            editJob.customer_pppoe_password || ''
-        );
+        if (editJob.customer_id) {
+            applySelectedCustomer(
+                {
+                    id: editJob.customer_id,
+                    customer_id: editJob.customer_public_id_loaded || null,
+                    username: editJob.customer_login_username_loaded || '',
+                    name: editJob.customer_name || '',
+                    phone: editJob.customer_phone || '',
+                    email: '',
+                    address: editJob.customer_address || '',
+                    pppoe_username: editJob.customer_pppoe_username_loaded || editJob.customer_pppoe_username || '',
+                    password: editJob.customer_password_loaded || '',
+                    package_id: editJob.package_id,
+                    package_name: editJob.package_name || ''
+                },
+                { silent: true }
+            );
+        }
         if (editJob.package_id) {
             const pkgSelect = document.getElementById('package_id');
             pkgSelect.value = String(editJob.package_id);

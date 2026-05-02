@@ -5,12 +5,14 @@ import 'theme/colors.dart';
 import 'store/auth_provider.dart';
 import 'store/customer_provider.dart';
 import 'store/task_provider.dart';
+import 'store/notification_provider.dart';
 import 'screens/customer_list_screen.dart';
 import 'navigation/root_navigator.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
+  print('Loaded API_URL: ${dotenv.env['API_URL']}');
 
   runApp(
     MultiProvider(
@@ -18,6 +20,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => AuthProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => CustomerProvider()),
         ChangeNotifierProvider(create: (_) => TaskProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
       child: const MyApp(),
     ),

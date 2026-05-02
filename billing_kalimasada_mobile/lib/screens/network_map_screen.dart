@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/api_client.dart';
 import 'odp_detail_screen.dart';
+import '../widgets/odp_map_marker.dart';
 import 'tag_location_screen.dart';
 
 class NetworkMapScreen extends StatefulWidget {
@@ -94,8 +95,8 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
               initialCenter: _defaultCenter,
               initialZoom: _currentZoom,
               onPositionChanged: (position, hasGesture) {
-                if (hasGesture && position.zoom != null) {
-                  _currentZoom = position.zoom!;
+                if (hasGesture) {
+                  _currentZoom = position.zoom;
                 }
               },
             ),
@@ -106,15 +107,13 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
               ),
               MarkerLayer(
                 markers: _odps.map((odp) {
-                  final status = odp['status'] ?? 'active';
-                  Color markerColor = const Color(0xFF070038); // Default primary
-                  if (status == 'inactive') markerColor = Colors.grey;
-                  if (status == 'maintenance') markerColor = Colors.orange;
+                  final status = (odp['status'] ?? 'active').toString();
 
                   return Marker(
                     point: LatLng(odp['latitude'], odp['longitude']),
-                    width: 50,
-                    height: 50,
+                    width: 28,
+                    height: 33,
+                    alignment: Alignment.topCenter,
                     child: GestureDetector(
                       onTap: () {
                         Navigator.push(
@@ -124,17 +123,7 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
                           ),
                         ).then((_) => _fetchOdps()); // Refresh after returning
                       },
-                      child: Column(
-                        children: [
-                          Image.asset(
-                            'assets/images/odp_icon.png',
-                            width: 32,
-                            height: 32,
-                            color: status == 'active' ? null : markerColor,
-                            colorBlendMode: status == 'active' ? null : BlendMode.srcIn,
-                          ),
-                        ],
-                      ),
+                      child: OdpMapMarker(status: status),
                     ),
                   );
                 }).toList(),

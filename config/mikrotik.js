@@ -192,6 +192,33 @@ async function getRadiusConnection() {
     }
 }
 
+/** Cleartext-Password di radcheck untuk satu username PPPoE (RADIUS SQLite). */
+async function getRadcheckCleartextPassword(username) {
+    const u = (username && String(username).trim()) || '';
+    if (!u) return null;
+    let conn;
+    try {
+        conn = await getRadiusConnection();
+        const [rows] = await conn.execute(
+            "SELECT value FROM radcheck WHERE username = ? AND attribute = 'Cleartext-Password' LIMIT 1",
+            [u]
+        );
+        if (rows && rows[0] && rows[0].value != null && String(rows[0].value) !== '') {
+            return String(rows[0].value);
+        }
+        return null;
+    } catch (e) {
+        try {
+            logger.warn('[RADIUS] getRadcheckCleartextPassword:', e.message);
+        } catch (_) {}
+        return null;
+    } finally {
+        try {
+            if (conn && typeof conn.end === 'function') await conn.end();
+        } catch (_) {}
+    }
+}
+
 // Fungsi untuk mendapatkan seluruh user PPPoE dari RADIUS (BUKAN hotspot voucher DAN BUKAN member hotspot)
 async function getPPPoEUsersRadius() {
     const conn = await getRadiusConnection();
@@ -9418,6 +9445,7 @@ module.exports = {
     getInterfaceTraffic,
     // RADIUS functions
     getRadiusConnection,
+    getRadcheckCleartextPassword,
     getUserAuthModeAsync,
     getRadiusStatistics,
     getPPPoEUsersRadius,

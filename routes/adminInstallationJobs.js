@@ -10,8 +10,43 @@ const logger = require('../config/logger');
 const dbPath = path.join(__dirname, '../data/billing.db');
 const db = new sqlite3.Database(dbPath);
 
+const installationJobSchemaAlters = [
+    'ALTER TABLE installation_jobs ADD COLUMN assigned_at DATETIME',
+    'ALTER TABLE installation_jobs ADD COLUMN customer_id INTEGER',
+    'ALTER TABLE installation_jobs ADD COLUMN work_started_at DATETIME',
+    'ALTER TABLE installation_jobs ADD COLUMN work_duration_seconds INTEGER',
+    'ALTER TABLE installation_jobs ADD COLUMN tech_completion_latitude REAL',
+    'ALTER TABLE installation_jobs ADD COLUMN tech_completion_longitude REAL',
+    'ALTER TABLE installation_jobs ADD COLUMN install_cable_length_m REAL',
+    'ALTER TABLE installation_jobs ADD COLUMN install_ont_sticker_photo_path TEXT'
+];
+db.serialize(() => {
+    for (const sql of installationJobSchemaAlters) {
+        db.run(sql, (err) => {
+            if (err && !/duplicate column/i.test(String(err.message))) {
+                logger.warn('[admin-install-jobs] schema:', err.message);
+            }
+        });
+    }
+    db.run(
+        `UPDATE installation_jobs SET assigned_at = (
+            SELECT MIN(h.created_at) FROM installation_job_status_history h
+            WHERE h.job_id = installation_jobs.id AND LOWER(TRIM(h.new_status)) = 'assigned'
+        )
+        WHERE assigned_at IS NULL
+        AND assigned_technician_id IS NOT NULL`,
+        (err) => {
+            if (err) logger.warn('[admin-install-jobs] backfill assigned_at:', err.message);
+        }
+    );
+});
+
 // Billing manager untuk akses data packages dan technicians
 const billingManager = require('../config/billing');
+const {
+    extractTechnicianInstallCompletion,
+    stripTechnicianInstallCompletionNotes
+} = require('../config/installationJobHelpers');
 
 /**
  * Installation Jobs - Halaman daftar jadwal instalasi
@@ -237,7 +272,7 @@ router.post('/create', adminAuth, async (req, res) => {
             customer_address = existingCustomer.address;
         }
 
-        // Validation minimal: harus ada paket dan salah satu sumber data customer (customer_id atau data baru lengkap)
+        // Validation minimal: harus ada paket dan data customer
         if (!package_id || !customer_name || !customer_phone || !customer_address) {
             return res.status(400).json({
                 success: false,
@@ -245,14 +280,24 @@ router.post('/create', adminAuth, async (req, res) => {
             });
         }
 
-        // Generate job number (prefix bulan sesuai WIB / timezone aplikasi, bukan UTC)
+        const custIdForJob = customer_id ? parseInt(customer_id, 10) : null;
+        if (!Number.isFinite(custIdForJob) || custIdForJob <= 0) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    'Wajib memilih pelanggan terdaftar dari pencarian (ID pelanggan harus tercantum pada job) agar username/password PPPoE di aplikasi teknisi sesuai data pelanggan.'
+            });
+        }
+
+        // Nomor job: PSB-{TANGGAL}{NOMOR URUT} — tanggal YYYYMMDD zona waktu aplikasi, urut 3 digit per hari (contoh PSB-20260502001)
         const localTs = getLocalTimestamp();
-        const datePrefix = localTs.slice(0, 7);
-        
+        const ymd = localTs.slice(0, 10).replace(/-/g, '');
+        const psbPrefix = `PSB-${ymd}`;
+
         const lastJobNumber = await new Promise((resolve, reject) => {
             db.get(
                 'SELECT job_number FROM installation_jobs WHERE job_number LIKE ? ORDER BY job_number DESC LIMIT 1',
-                [`INS-${datePrefix}-%`],
+                [`${psbPrefix}%`],
                 (err, row) => {
                     if (err) reject(err);
                     else resolve(row ? row.job_number : null);
@@ -261,22 +306,27 @@ router.post('/create', adminAuth, async (req, res) => {
         });
 
         let jobCounter = 1;
-        if (lastJobNumber) {
-            const lastCounter = parseInt(lastJobNumber.split('-').pop());
-            jobCounter = lastCounter + 1;
+        if (lastJobNumber && String(lastJobNumber).startsWith(psbPrefix)) {
+            const suffix = String(lastJobNumber).slice(psbPrefix.length);
+            const lastCounter = parseInt(suffix, 10);
+            if (Number.isFinite(lastCounter) && lastCounter >= 0) {
+                jobCounter = lastCounter + 1;
+            }
         }
 
-        const jobNumber = `INS-${datePrefix}-${String(jobCounter).padStart(3, '0')}`;
+        const jobNumber = `${psbPrefix}${String(jobCounter).padStart(3, '0')}`;
 
-        // Insert installation job
+        // Insert installation job (custIdForJob sudah divalidasi di atas)
         const jobId = await new Promise((resolve, reject) => {
             const insertQuery = `
                 INSERT INTO installation_jobs (
                     job_number, customer_name, customer_phone, customer_address,
+                    customer_id,
                     package_id, installation_date, installation_time, assigned_technician_id,
                     status, priority, notes, equipment_needed, estimated_duration,
-                    customer_latitude, customer_longitude, created_by_admin_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    customer_latitude, customer_longitude, created_by_admin_id,
+                    assigned_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
             const initialStatus = assigned_technician_id ? 'assigned' : 'scheduled';
 
@@ -285,13 +335,16 @@ router.post('/create', adminAuth, async (req, res) => {
             const defaultTime = localTs.slice(11, 16);
             const safeInstallationDate = installation_date || defaultDate;
             const safeInstallationTime = installation_time || defaultTime;
+            const assignedAtOnCreate = assigned_technician_id ? getLocalTimestamp() : null;
 
             db.run(insertQuery, [
                 jobNumber, customer_name, customer_phone, customer_address,
+                custIdForJob,
                 package_id, safeInstallationDate, safeInstallationTime, assigned_technician_id || null,
                 initialStatus, priority || 'normal', notes || null, equipment_needed || null,
                 estimated_duration || 120, customer_latitude || null, customer_longitude || null,
-                req.session.adminUser || 'admin'
+                req.session.adminUser || 'admin',
+                assignedAtOnCreate
             ], function(err) {
                 if (err) reject(err);
                 else resolve(this.lastID);
@@ -354,6 +407,16 @@ router.post('/create', adminAuth, async (req, res) => {
             } catch (e) {
                 logger.error('Error sending technician notification on create:', e);
             }
+            try {
+                const fieldNotif = require('../config/technicianFieldNotifications');
+                await fieldNotif.notifyInstallationJob(assigned_technician_id, {
+                    id: jobId,
+                    job_number: jobNumber,
+                    customer_name
+                });
+            } catch (nfErr) {
+                logger.warn('Field notification install create:', nfErr.message || nfErr);
+            }
         }
 
         res.json({
@@ -381,16 +444,25 @@ router.get('/edit/:id', adminAuth, async (req, res) => {
 
         // Get job data
         const job = await new Promise((resolve, reject) => {
-            db.get(`
-                SELECT ij.*, p.name as package_name, t.name as technician_name
+            db.get(
+                `
+                SELECT ij.*, p.name as package_name, t.name as technician_name,
+                       c.pppoe_username AS customer_pppoe_username_loaded,
+                       c.password AS customer_password_loaded,
+                       c.customer_id AS customer_public_id_loaded,
+                       c.username AS customer_login_username_loaded
                 FROM installation_jobs ij
                 LEFT JOIN packages p ON ij.package_id = p.id
                 LEFT JOIN technicians t ON ij.assigned_technician_id = t.id
+                LEFT JOIN customers c ON c.id = ij.customer_id
                 WHERE ij.id = ?
-            `, [jobId], (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
-            });
+            `,
+                [jobId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
         });
 
         if (!job) {
@@ -440,11 +512,21 @@ router.put('/update/:id', adminAuth, async (req, res) => {
     try {
         const jobId = req.params.id;
         const {
+            customer_id,
             customer_name, customer_phone, customer_address,
             package_id, installation_date, installation_time,
             assigned_technician_id, priority, notes, equipment_needed,
             estimated_duration, customer_latitude, customer_longitude, status
         } = req.body;
+
+        const custIdUpdate = customer_id ? parseInt(customer_id, 10) : null;
+        if (!Number.isFinite(custIdUpdate) || custIdUpdate <= 0) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    'ID pelanggan wajib — pilih pelanggan dari pencarian pada form agar job terhubung ke data PPPoE.'
+            });
+        }
 
         // Get current job data
         const currentJob = await new Promise((resolve, reject) => {
@@ -461,10 +543,52 @@ router.put('/update/:id', adminAuth, async (req, res) => {
             });
         }
 
+        const linkedCustomer = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT id, name, phone, address FROM customers WHERE id = ?',
+                [custIdUpdate],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+        if (!linkedCustomer) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID pelanggan tidak ditemukan di database.'
+            });
+        }
+
+        const syncName = linkedCustomer.name || customer_name;
+        const syncPhone = linkedCustomer.phone || customer_phone;
+        const syncAddr = linkedCustomer.address || customer_address;
+
+        const newAssignId = assigned_technician_id ? parseInt(assigned_technician_id, 10) : null;
+        const oldAssignId = currentJob.assigned_technician_id
+            ? parseInt(currentJob.assigned_technician_id, 10)
+            : null;
+        const assignChanged =
+            (Number.isFinite(newAssignId) ? newAssignId : null) !==
+            (Number.isFinite(oldAssignId) ? oldAssignId : null);
+
         // Update installation job
         await new Promise((resolve, reject) => {
-            const updateQuery = `
+            const updateQuery = assignChanged
+                ? `
                 UPDATE installation_jobs SET
+                    customer_id = ?,
+                    customer_name = ?, customer_phone = ?, customer_address = ?,
+                    package_id = ?, installation_date = ?, installation_time = ?,
+                    assigned_technician_id = ?, assigned_at = CURRENT_TIMESTAMP, priority = ?, notes = ?,
+                    equipment_needed = ?, estimated_duration = ?,
+                    customer_latitude = ?, customer_longitude = ?, status = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `
+                : `
+                UPDATE installation_jobs SET
+                    customer_id = ?,
                     customer_name = ?, customer_phone = ?, customer_address = ?,
                     package_id = ?, installation_date = ?, installation_time = ?,
                     assigned_technician_id = ?, priority = ?, notes = ?,
@@ -473,18 +597,32 @@ router.put('/update/:id', adminAuth, async (req, res) => {
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             `;
-            
-            db.run(updateQuery, [
-                customer_name, customer_phone, customer_address,
-                package_id, installation_date, installation_time,
-                assigned_technician_id || null, priority || 'normal', notes || null,
-                equipment_needed || null, estimated_duration || 120,
-                customer_latitude || null, customer_longitude || null,
-                status || currentJob.status, jobId
-            ], (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
+
+            db.run(
+                updateQuery,
+                [
+                    custIdUpdate,
+                    syncName,
+                    syncPhone,
+                    syncAddr,
+                    package_id,
+                    installation_date,
+                    installation_time,
+                    assigned_technician_id || null,
+                    priority || 'normal',
+                    notes || null,
+                    equipment_needed || null,
+                    estimated_duration || 120,
+                    customer_latitude || null,
+                    customer_longitude || null,
+                    status || currentJob.status,
+                    jobId
+                ],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
         });
 
         // Log status change if status changed
@@ -503,6 +641,21 @@ router.put('/update/:id', adminAuth, async (req, res) => {
                     else resolve();
                 });
             });
+        }
+
+        const newTechId = newAssignId;
+        const oldTechId = oldAssignId;
+        if (newTechId && Number.isFinite(newTechId) && newTechId !== oldTechId) {
+            try {
+                const fieldNotif = require('../config/technicianFieldNotifications');
+                await fieldNotif.notifyInstallationJob(newTechId, {
+                    id: parseInt(jobId, 10),
+                    job_number: currentJob.job_number,
+                    customer_name: customer_name || currentJob.customer_name
+                });
+            } catch (nfErr) {
+                logger.warn('Field notification install update assign:', nfErr.message || nfErr);
+            }
         }
 
         res.json({
@@ -739,6 +892,7 @@ router.post('/assign/:id', adminAuth, async (req, res) => {
             db.run(`
                 UPDATE installation_jobs SET
                     assigned_technician_id = ?,
+                    assigned_at = CURRENT_TIMESTAMP,
                     status = CASE 
                         WHEN status = 'scheduled' THEN 'assigned'
                         ELSE status
@@ -770,6 +924,17 @@ router.post('/assign/:id', adminAuth, async (req, res) => {
             });
         }
 
+        try {
+            const fieldNotif = require('../config/technicianFieldNotifications');
+            await fieldNotif.notifyInstallationJob(parseInt(technician_id, 10), {
+                id: parseInt(jobId, 10),
+                job_number: currentJob.job_number,
+                customer_name: currentJob.customer_name
+            });
+        } catch (nfErr) {
+            logger.warn('Field notification install assign:', nfErr.message || nfErr);
+        }
+
         res.json({
             success: true,
             message: 'Teknisi berhasil ditugaskan'
@@ -792,18 +957,24 @@ router.get('/view/:id', adminAuth, async (req, res) => {
         const jobId = req.params.id;
 
         const job = await new Promise((resolve, reject) => {
-            db.get(`
+            db.get(
+                `
                 SELECT ij.*, 
                        p.name as package_name, p.price as package_price,
-                       t.name as technician_name, t.phone as technician_phone
+                       t.name as technician_name, t.phone as technician_phone,
+                       (SELECT MIN(h.created_at) FROM installation_job_status_history h
+                        WHERE h.job_id = ij.id AND LOWER(TRIM(h.new_status)) = 'assigned') AS assigned_at_history
                 FROM installation_jobs ij
                 LEFT JOIN packages p ON ij.package_id = p.id
                 LEFT JOIN technicians t ON ij.assigned_technician_id = t.id
                 WHERE ij.id = ?
-            `, [jobId], (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
-            });
+            `,
+                [jobId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
         });
 
         if (!job) {
@@ -847,9 +1018,18 @@ router.get('/view/:id', adminAuth, async (req, res) => {
             });
         });
 
+        const displayAssignedAt = job.assigned_at || job.assigned_at_history || null;
+        const technicianInstallCompletion = extractTechnicianInstallCompletion(job);
+        const adminJobNotes = stripTechnicianInstallCompletionNotes(job.notes);
+        const appPublicBase = (process.env.PUBLIC_APP_BASE_URL || '').replace(/\/$/, '');
+
         res.render('admin/installation-job-detail', {
             title: 'Detail Job Instalasi',
             job,
+            displayAssignedAt,
+            technicianInstallCompletion,
+            adminJobNotes,
+            appPublicBase,
             statusHistory,
             technicians,
             settings: {
@@ -887,6 +1067,89 @@ router.get('/view/:id', adminAuth, async (req, res) => {
                 class: 'badge-primary',
                 text: 'v1.0.0'
             }
+        });
+    }
+});
+
+/**
+ * Search customers for installation job creation (harus sebelum GET /api/:id agar tidak tertangkap sebagai id job)
+ */
+router.get('/api/search-customers', adminAuth, async (req, res) => {
+    try {
+        const { q: searchTerm } = req.query;
+
+        if (!searchTerm || searchTerm.length < 2) {
+            return res.json({
+                success: true,
+                customers: [],
+                message: 'Minimal 2 karakter untuk pencarian'
+            });
+        }
+
+        const customers = await billingManager.searchCustomers(searchTerm);
+
+        res.json({
+            success: true,
+            customers: customers || [],
+            count: customers ? customers.length : 0
+        });
+    } catch (error) {
+        logger.error('Error searching customers:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error searching customers',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * Get customer details by ID (billing) — harus sebelum GET /api/:id
+ */
+router.get('/api/customer/:id', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const customer = await billingManager.getCustomerById(id);
+
+        if (!customer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Customer tidak ditemukan'
+            });
+        }
+
+        res.json({
+            success: true,
+            customer
+        });
+    } catch (error) {
+        logger.error('Error getting customer details:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error getting customer details',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * Password Cleartext-Password dari radcheck untuk username PPPoE (harus sebelum GET /api/:id)
+ */
+router.get('/api/pppoe-password', adminAuth, async (req, res) => {
+    try {
+        const username = req.query.username != null ? String(req.query.username).trim() : '';
+        if (!username) {
+            return res.json({ success: true, password: null, username: '' });
+        }
+        const { getRadcheckCleartextPassword } = require('../config/mikrotik');
+        const password = await getRadcheckCleartextPassword(username);
+        res.json({ success: true, password, username });
+    } catch (error) {
+        logger.error('[admin-install] pppoe-password:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Gagal membaca password RADIUS'
         });
     }
 });
@@ -991,6 +1254,7 @@ router.post('/assign-technician', adminAuth, async (req, res) => {
             const updateQuery = `
                 UPDATE installation_jobs 
                 SET assigned_technician_id = ?, 
+                    assigned_at = CURRENT_TIMESTAMP,
                     status = 'assigned',
                     priority = ?,
                     notes = COALESCE(?, notes),
@@ -1040,6 +1304,17 @@ router.post('/assign-technician', adminAuth, async (req, res) => {
             // Don't fail the assignment if notification fails
         }
 
+        try {
+            const fieldNotif = require('../config/technicianFieldNotifications');
+            await fieldNotif.notifyInstallationJob(parseInt(technicianId, 10), {
+                id: parseInt(jobId, 10),
+                job_number: job.job_number,
+                customer_name: job.customer_name
+            });
+        } catch (nfErr) {
+            logger.warn('Field notification install assign (API):', nfErr.message || nfErr);
+        }
+
         res.json({
             success: true,
             message: `Teknisi ${technician.name} berhasil ditugaskan untuk job ${job.job_number}`,
@@ -1058,71 +1333,6 @@ router.post('/assign-technician', adminAuth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Gagal menugaskan teknisi: ' + error.message
-        });
-    }
-});
-
-/**
- * Search customers for installation job creation
- */
-router.get('/api/search-customers', adminAuth, async (req, res) => {
-    try {
-        const { q: searchTerm } = req.query;
-        
-        if (!searchTerm || searchTerm.length < 2) {
-            return res.json({
-                success: true,
-                customers: [],
-                message: 'Minimal 2 karakter untuk pencarian'
-            });
-        }
-        
-        // Search customers in billing database
-        const customers = await billingManager.searchCustomers(searchTerm);
-        
-        res.json({
-            success: true,
-            customers: customers || [],
-            count: customers ? customers.length : 0
-        });
-        
-    } catch (error) {
-        logger.error('Error searching customers:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error searching customers',
-            error: error.message
-        });
-    }
-});
-
-/**
- * Get customer details by ID
- */
-router.get('/api/customer/:id', adminAuth, async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        const customer = await billingManager.getCustomerById(id);
-        
-        if (!customer) {
-            return res.status(404).json({
-                success: false,
-                message: 'Customer tidak ditemukan'
-            });
-        }
-        
-        res.json({
-            success: true,
-            customer
-        });
-        
-    } catch (error) {
-        logger.error('Error getting customer details:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error getting customer details',
-            error: error.message
         });
     }
 });

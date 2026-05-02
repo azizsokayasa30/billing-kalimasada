@@ -2114,27 +2114,35 @@ ${year && month ? `
         });
     }
 
-    // Search customers by name, phone, or username
+    // Search customers by name, phone, username, PPPoE, atau ID pelanggan (6 digit)
     async searchCustomers(searchTerm) {
         return new Promise((resolve, reject) => {
             const searchPattern = `%${searchTerm}%`;
-            
+
+            // Skema customers memakai join_date (bukan created_at/updated_at)
             const sql = `
-                SELECT id, username, name, phone, email, address, pppoe_username, 
-                       package_id, status, created_at, updated_at
-                FROM customers 
-                WHERE name LIKE ? OR phone LIKE ? OR username LIKE ? OR pppoe_username LIKE ?
-                ORDER BY name ASC
+                SELECT c.id, c.customer_id, c.username, c.password, c.name, c.phone, c.email, c.address,
+                       c.pppoe_username, c.package_id, c.status, c.join_date,
+                       p.name AS package_name
+                FROM customers c
+                LEFT JOIN packages p ON c.package_id = p.id
+                WHERE c.name LIKE ? OR c.phone LIKE ? OR c.username LIKE ? OR c.pppoe_username LIKE ?
+                   OR (c.customer_id IS NOT NULL AND TRIM(CAST(c.customer_id AS TEXT)) != '' AND CAST(c.customer_id AS TEXT) LIKE ?)
+                ORDER BY c.name ASC
                 LIMIT 20
             `;
-            
-            this.db.all(sql, [searchPattern, searchPattern, searchPattern, searchPattern], (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows || []);
+
+            this.db.all(
+                sql,
+                [searchPattern, searchPattern, searchPattern, searchPattern, searchPattern],
+                (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(rows || []);
+                    }
                 }
-            });
+            );
         });
     }
 

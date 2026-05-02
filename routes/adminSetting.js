@@ -4,7 +4,7 @@ const fsPromises = fs.promises;
 const path = require('path');
 const router = express.Router();
 const multer = require('multer');
-const { getSettingsWithCache, deleteSetting } = require('../config/settingsManager');
+const { getSettingsWithCache, deleteSetting, clearSettingsCache } = require('../config/settingsManager');
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const logger = require('../config/logger');
 const { spawn } = require('child_process');
@@ -191,9 +191,27 @@ router.post('/save', async (req, res) => {
             }
         }
 
+        // Ubah alamat perusahaan → hapus cache geocode agar peta default dihitung ulang
+        const addrFields = ['contact_address', 'company_address', 'payment_cash_address'];
+        const addrChanged = addrFields.some(
+            (k) => String(oldSettings[k] || '').trim() !== String(mergedSettings[k] || '').trim()
+        );
+        if (addrChanged) {
+            [
+                'map_center_geocoded_lat',
+                'map_center_geocoded_lng',
+                'map_center_geocoded_zoom',
+                'map_center_geocoded_query',
+                'map_center_geocoded_at',
+            ].forEach((k) => {
+                delete sanitizedSettings[k];
+            });
+        }
+
         // Tulis ke file dengan error handling yang proper
         try {
             await fsPromises.writeFile(settingsPath, JSON.stringify(sanitizedSettings, null, 2), 'utf8');
+            clearSettingsCache();
         } catch (err) {
             console.error('Error menyimpan settings.json:', err);
             return res.status(500).json({ 

@@ -368,7 +368,7 @@ router.get('/api/mapping/new', adminAuth, async (req, res) => {
             console.log(`📊 Found ${genieacsDevices.length} devices from GenieACS`);
             
             if (!genieacsDevices || genieacsDevices.length === 0) {
-                console.log('⚠️ No devices from GenieACS, using fallback');
+                console.log('⚠️ No devices from GenieACS — ONU list will be empty');
                 throw new Error('No GenieACS data available');
             }
             
@@ -518,7 +518,7 @@ router.get('/api/mapping/new', adminAuth, async (req, res) => {
             }
             
             if (devicesWithCoords.length === 0) {
-                console.log('⚠️ No devices with coordinates found, using fallback');
+                console.log('⚠️ No devices with coordinates — ONU list will be empty');
                 throw new Error('No devices with coordinates');
             }
             
@@ -528,59 +528,10 @@ router.get('/api/mapping/new', adminAuth, async (req, res) => {
                     
                 } catch (error) {
                     console.error('❌ Error loading ONU devices from GenieACS:', error.message);
-                    console.log('🚀 BACKEND: GenieACS error, using fallback');
-                    console.log('🔄 Falling back to customer-based ONU simulation...');
-                    
-            // FIXED: Sekarang customers sudah tersedia karena di-load terlebih dahulu
-            if (!customers || customers.length === 0) {
-                console.error('❌ No customers available for fallback');
-                onuDevices = [];
-            } else {
-                    // Fallback: Create simulated ONU devices from customers
-                    const fallbackDevices = customers.map((customer, index) => ({
-                        id: `fallback_${customer.id}`,
-                        serialNumber: `SIM${customer.id.toString().padStart(4, '0')}`,
-                        name: `Simulated ONU ${customer.name}`,
-                        model: 'Simulated ONU',
-                        status: index % 2 === 0 ? 'Online' : 'Offline',
-                        ssid: `SSID_${customer.id}`,
-                        latitude: customer.latitude,
-                        longitude: customer.longitude,
-                        customerName: customer.name,
-                        customerPhone: customer.phone,
-                        customerPPPoE: customer.pppoe_username,
-                        customerAddress: customer.address,
-                    customerPackage: customer.package_name || 'N/A',
-                        customerStatus: customer.status,
-                        odpName: customer.odp_name || 'N/A',
-                        rxPower: '-15.5',
-                        txPower: '2.1',
-                        temperature: '45°C',
-                        uptime: '7 days',
-                        lastInform: new Date().toISOString(),
-                        firmware: '1.0.0',
-                        hardware: 'v1.0',
-                        ipAddress: `192.168.1.${100 + index}`,
-                        macAddress: `00:11:22:33:44:${index.toString(16).padStart(2, '0')}`,
-                        coordinateSource: 'fallback',
-                        
-                        // Add genieacsData for fallback devices
-                        genieacsData: {
-                            manufacturer: 'Simulated',
-                            hardwareVersion: 'v1.0',
-                            softwareVersion: '1.0.0',
-                            deviceUptime: 604800, // 7 days in seconds
-                            pppoeUsername: customer.pppoe_username,
-                            pppoeIP: `192.168.1.${100 + index}`,
-                        pppoeMac: `00:11:22:33:44:${index.toString(16).padStart(2, '0')}`
-                        }
-                    }));
-                    
-                    console.log(`✅ Created ${fallbackDevices.length} fallback ONU devices`);
-                    console.log('🔍 Sample fallback device:', JSON.stringify(fallbackDevices[0], null, 2));
-                console.log('🚀 BACKEND: Fallback completed');
-                onuDevices = fallbackDevices;
-            }
+                    // Jangan isi peta dengan ONU simulasi (fallback_*, SIM*, dll.) — itu bukan data nyata
+                    // dan tidak bisa "dihapus" dari DB. Daftar ONU kosong sampai GenieACS / mapping valid.
+                    onuDevices = [];
+                    console.log('ℹ️ BACKEND: Daftar ONU dikosongkan (tanpa simulasi). Perbaiki GenieACS atau koordinat pelanggan.');
                 }
         
         db.close();

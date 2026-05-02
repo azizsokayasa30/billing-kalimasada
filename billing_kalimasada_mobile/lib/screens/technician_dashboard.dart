@@ -3,9 +3,9 @@ import 'package:provider/provider.dart';
 import '../store/auth_provider.dart';
 import '../store/customer_provider.dart';
 import '../store/task_provider.dart';
+import '../store/notification_provider.dart';
 import 'notifications_screen.dart';
 import 'technician_profile_screen.dart';
-import 'add_new_customer_screen.dart';
 import 'attendance_screen.dart';
 import 'network_status_screen.dart';
 import 'customer_list_screen.dart';
@@ -30,6 +30,7 @@ class _TechnicianDashboardState extends State<TechnicianDashboard> with SingleTi
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CustomerProvider>().fetchDashboardStats();
       context.read<TaskProvider>().fetchTasks();
+      context.read<NotificationProvider>().fetchNotifications(silent: true);
     });
 
     _blinkController = AnimationController(
@@ -144,17 +145,54 @@ class _TechnicianDashboardState extends State<TechnicianDashboard> with SingleTi
                           ),
                           Row(
                             children: [
-                              IconButton(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                              Consumer<NotificationProvider>(
+                                builder: (context, notif, _) {
+                                  final c = notif.unreadCount;
+                                  return Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      IconButton(
+                                        onPressed: () {
+                                          final notif = context.read<NotificationProvider>();
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                                          ).then((_) {
+                                            notif.fetchNotifications(silent: true);
+                                          });
+                                        },
+                                        icon: const Icon(Icons.notifications_outlined, color: textOnPrimary),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                                        ),
+                                      ),
+                                      if (c > 0)
+                                        Positioned(
+                                          right: 4,
+                                          top: 4,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFBA1A1A),
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                                            ),
+                                            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                                            child: Text(
+                                              c > 99 ? '99+' : '$c',
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                                height: 1.1,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   );
                                 },
-                                icon: const Icon(Icons.notifications_outlined, color: textOnPrimary),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: Colors.white.withValues(alpha: 0.1),
-                                ),
                               ),
                               const SizedBox(width: 8),
                               GestureDetector(

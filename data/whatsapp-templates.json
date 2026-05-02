@@ -1,12 +1,12 @@
 {
   "invoice_created": {
     "title": "Tagihan Baru",
-    "template": "\n📋 *TAGIHAN BARU*\n\nHalo {customer_name},\n\nTagihan bulanan Anda telah dibuat:\n\n📄 *No. Invoice:* {invoice_number}\n💰 *Jumlah:* Rp {amount}\n📅 *Jatuh Tempo:* {due_date}\n📦 *Paket:* {package_name} ({package_speed})\n📝 *Catatan:* {notes}\n\n*Cek Status Dan Lakukan Pembayaran Anda Di*\nwww.cvlmedia.my.id\n*_Login Dengan No Hp Terdaftar_*\n\nSilakan lakukan pembayaran sebelum tanggal jatuh tempo untuk menghindari denda keterlambatan.\nTerima kasih atas kepercayaan Anda.\n\n*CV. LINTAS MULTIMEDIA*\nˢᵘᵖᵖᵒʳᵗᵉᵈ ᵇʸ\nᴾᵀ.ᴶᴵᴺᴼᴹ ᴺᴱᵀᵂᴼᴿᴷ ᴵᴺᴰᴼᴺᴱˢᴵᴬ",
+    "template": "\n📋 *TAGIHAN BARU*\n\nHalo {customer_name},\n\nTagihan bulanan Anda telah dibuat:\n\n📄 *No. Invoice:* {invoice_number}\n💰 *Jumlah:* Rp {amount}\n📅 *Jatuh Tempo:* {due_date}\n📦 *Paket:* {package_name} ({package_speed})\n📝 *Catatan:* {notes}\n\n*Cek Status Dan Lakukan Pembayaran Anda Di*\nwww.billlingskynet.kalimasada.id\n*_Login Dengan No Hp Terdaftar_*\n\nSilakan lakukan pembayaran sebelum tanggal jatuh tempo untuk menghindari denda keterlambatan.\nTerima kasih atas kepercayaan Anda.\n\nKALIMASADA INTI SARANA",
     "enabled": true
   },
   "due_date_reminder": {
     "title": "Peringatan Jatuh Tempo",
-    "template": "\n⚠️ PEMBERITAHUAN TAGIHAN TERLAMBAT\n\nTagihan Anda telah melewati jatuh tempo:\n📄 *No. Invoice:* {invoice_number}\n💰 *Jumlah:* Rp {amount}\n📅 *Jatuh Tempo:* {due_date}\n      * Status: TERLAMBAT ⚠️\n\nCek Status Dan Lakukan Pembayaran Anda Di\nwww.cvlmedia.my.id\nLogin Dengan No Hp Terdaftar\nSilakan lakukan pembayaran segera untuk menghindari denda keterlambatan.\nCV. LINTAS MULTIMEDIA\nˢᵘᵖᵖᵒʳᵗᵉᵈ ᵇʸ\nᴾᵀ.ᴶᴵᴺᴼᴹ ᴺᴱᵀᵂᴼᴿᴷ ᴵᴺᴰᴼᴺᴱˢᴵᴬ\n\nHubungi kami jika ada kendala dalam pembayaran.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nInfo Hubungi : 081368888498",
+    "template": "\n⚠️ PEMBERITAHUAN TAGIHAN TERLAMBAT\n\nTagihan Anda telah melewati jatuh tempo:\n📄 *No. Invoice:* {invoice_number}\n💰 *Jumlah:* Rp {amount}\n📅 *Jatuh Tempo:* {due_date}\n      * Status: TERLAMBAT ⚠️\n\nCek Status Dan Lakukan Pembayaran Anda Di\nwww.cvlmedia.my.id\nLogin Dengan No Hp Terdaftar\nSilakan lakukan pembayaran segera untuk menghindari denda keterlambatan.\nKALIMASADA INTI SARANA\n\nHubungi kami jika ada kendala dalam pembayaran.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nInfo Hubungi : 0816411615",
     "enabled": true
   },
   "payment_received": {

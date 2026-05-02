@@ -11,6 +11,28 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthProvider>();
+      if (auth.role == 'technician') {
+        auth.refreshTechnicianProfile();
+      }
+    });
+  }
+
+  String _positionLabel(String? position) {
+    switch ((position ?? 'technician').toLowerCase()) {
+      case 'field_officer':
+        return 'Petugas Lapangan';
+      case 'collector':
+        return 'Kolektor';
+      case 'technician':
+      default:
+        return 'Teknisi Lapangan';
+    }
+  }
 
   void _showLogoutDialog(BuildContext context, AuthProvider auth) {
     showDialog(
@@ -39,7 +61,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    
+    final u = auth.user;
+    final photoUrl = (u?['photo_url']?.toString() ?? '').trim();
+    final hasPhoto = photoUrl.isNotEmpty;
+    final String roleChipLabel;
+    if (auth.role == 'technician') {
+      roleChipLabel = _positionLabel(u?['position']?.toString());
+    } else if (auth.role == 'collector') {
+      roleChipLabel = 'Kolektor';
+    } else if (auth.role == 'agent') {
+      roleChipLabel = 'Agen';
+    } else if (auth.role == 'admin') {
+      roleChipLabel = 'Admin';
+    } else {
+      roleChipLabel = 'Akun';
+    }
+
     const bgBackground = Color(0xFFFCF8FF);
     const textOnSurface = Color(0xFF19163F);
     const textOnSurfaceVariant = Color(0xFF474551);
@@ -81,7 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: const Color(0xFFF6F1FF), // surface-container-low
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: const Color(0xFFC8C4D3).withOpacity(0.3),
+                  color: const Color(0xFFC8C4D3).withValues(alpha: 0.3),
                 ),
               ),
               child: Column(
@@ -93,14 +130,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
+                          color: const Color(0xFFF0EBFF),
                           border: Border.all(color: primaryContainer, width: 2),
-                          image: const DecorationImage(
-                            image: NetworkImage(
-                              'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=1976&auto=format&fit=crop',
-                            ),
-                            fit: BoxFit.cover,
-                          ),
                         ),
+                        clipBehavior: Clip.antiAlias,
+                        child: hasPhoto
+                            ? Image.network(
+                                photoUrl,
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, __, ___) => Icon(
+                                  Icons.person,
+                                  size: 40,
+                                  color: primaryContainer,
+                                ),
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Center(
+                                    child: SizedBox(
+                                      width: 28,
+                                      height: 28,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: primaryContainer,
+                                        value: loadingProgress.expectedTotalBytes != null
+                                            ? loadingProgress.cumulativeBytesLoaded /
+                                                loadingProgress.expectedTotalBytes!
+                                            : null,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            : Icon(Icons.person, size: 40, color: primaryContainer),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -108,7 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              auth.user?['name'] ?? 'Technician Name',
+                              u?['name']?.toString() ?? 'Pengguna',
                               style: const TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
@@ -116,7 +180,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ),
                             Text(
-                              'ID: ${auth.user?['id'] ?? 'Unknown'}',
+                              'ID: ${u?['id'] ?? '-'}',
                               style: const TextStyle(
                                 fontSize: 16,
                                 color: textOnSurfaceVariant,
@@ -136,16 +200,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(
+                                children: [
+                                  const Icon(
                                     Icons.verified,
                                     size: 16,
                                     color: primaryColor,
                                   ),
-                                  SizedBox(width: 4),
+                                  const SizedBox(width: 4),
                                   Text(
-                                    'FIELD TECH II',
-                                    style: TextStyle(
+                                    roleChipLabel.toUpperCase(),
+                                    style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                       color: primaryColor,

@@ -328,6 +328,46 @@ function setSockInstance(sockInstance) {
   setSock(sockInstance);
 }
 
+/** Isi dari catatan teknisi di app mobile: [Penyelesaian teknisi] + teks + baris foto opsional */
+function extractTechnicianCompletion(report) {
+  if (!report || !Array.isArray(report.notes)) {
+    return { description: null, photoPath: null, completedAt: null };
+  }
+  const candidates = report.notes.filter(
+    (n) => n && typeof n.content === 'string' && n.content.includes('[Penyelesaian teknisi]')
+  );
+  if (candidates.length === 0) {
+    return { description: null, photoPath: null, completedAt: null };
+  }
+  candidates.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const n = candidates[0];
+  const lines = String(n.content)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length);
+  let photoPath = null;
+  const descParts = [];
+  for (const line of lines) {
+    if (line.startsWith('[Penyelesaian teknisi]')) continue;
+    const imgMatch = line.match(/(\/img\/field-completion\/[^\s]+\.(?:jpg|jpeg|png|webp))/i);
+    if (imgMatch) {
+      photoPath = imgMatch[1];
+      continue;
+    }
+    if (line.startsWith('📷')) {
+      const m2 = line.match(/(\/img\/[^\s]+)/);
+      if (m2) photoPath = m2[1];
+      continue;
+    }
+    descParts.push(line);
+  }
+  return {
+    description: descParts.join('\n').trim() || null,
+    photoPath,
+    completedAt: n.timestamp || null
+  };
+}
+
 module.exports = {
   getAllTroubleReports,
   getTroubleReportById,
@@ -337,5 +377,6 @@ module.exports = {
   updateTroubleReportStatus,
   sendNotificationToTechnicians,
   sendStatusUpdateToCustomer,
-  setSockInstance
+  setSockInstance,
+  extractTechnicianCompletion
 };

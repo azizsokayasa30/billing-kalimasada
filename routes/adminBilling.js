@@ -2200,6 +2200,139 @@ router.get('/export/customers.xlsx', async (req, res) => {
     }
 });
 
+/** Template impor / restore pelanggan (tanpa .xlsx di path — hindari 404 dari nginx/static). */
+router.get('/import/customers/template', async (req, res) => {
+    try {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Pelanggan');
+        try {
+            ws.views = [{ state: 'frozen', ySplit: 1 }];
+        } catch (_) {
+            /* opsional */
+        }
+
+        const headers = [
+            'name',
+            'phone',
+            'username',
+            'login_password',
+            'email',
+            'address',
+            'latitude',
+            'longitude',
+            'package_id',
+            'odp_id',
+            'area',
+            'area_id',
+            'pppoe_username',
+            'pppoe_password',
+            'pppoe_profile',
+            'router_id',
+            'status',
+            'auto_suspension',
+            'billing_day',
+            'renewal_type',
+            'fix_date',
+            'cable_type',
+            'cable_length',
+            'port_number',
+            'cable_status',
+            'cable_notes'
+        ];
+
+        const headerRow = ws.addRow(headers);
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE8F5E9' }
+        };
+
+        ws.addRow([
+            'Contoh Pelanggan',
+            '6281234567890',
+            '',
+            '',
+            'nama@email.com',
+            'Jl. Contoh No. 1',
+            '-6.253011',
+            '107.923009',
+            '1',
+            '',
+            'Wilayah A',
+            '',
+            'userpppoe',
+            'rahasiaPPP',
+            'default',
+            '',
+            'active',
+            '1',
+            '15',
+            'renewal',
+            '',
+            'Fiber Optic',
+            '85',
+            '1',
+            'connected',
+            'Dari template import'
+        ]);
+
+        for (let c = 1; c <= headers.length; c++) {
+            ws.getColumn(c).width = Math.min(42, Math.max(12, String(headers[c - 1]).length + 8));
+        }
+
+        const help = workbook.addWorksheet('Petunjuk');
+        help.getColumn(1).width = 28;
+        help.getColumn(2).width = 88;
+        const rows = [
+            ['Kolom', 'Penjelasan'],
+            ['name *', 'Nama lengkap pelanggan (wajib). Boleh juga pakai header "Nama" / "nama".'],
+            ['phone *', 'Nomor HP utama (wajib). Dipakai sebagai kunci update jika sudah ada. Format angka/+62.'],
+            ['username', 'Username login portal billing. Kosong = digenerate dari nomor HP.'],
+            ['login_password', 'Password login portal billing (bukan PPPoE). Opsional.'],
+            ['email', 'Email.'],
+            ['address', 'Alamat pemasangan. Boleh header "Alamat" / "alamat".'],
+            ['latitude', 'Garis lintang (desimal). Opsional; kosong saat create = default peta server.'],
+            ['longitude', 'Garis bujur (desimal).'],
+            ['package_id', 'ID paket (angka) dari tabel packages. Wajib untuk tagihan otomatis yang mengikat paket.'],
+            ['odp_id', 'ID ODP (angka) jika sudah terdaftar — memicu pembuatan cable_routes saat pelanggan baru.'],
+            ['area', 'Nama wilayah / cluster (teks).'],
+            ['area_id', 'ID wilayah jika dipakai di database.'],
+            ['pppoe_username', 'Login PPPoE di Mikrotik/RADIUS. Boleh header "PPPoE Username".'],
+            ['pppoe_password', 'Password PPPoE. Jika diisi bersama username, sistem mencoba push ke router/RADIUS.'],
+            ['pppoe_profile', 'Profil PPPoE Mikrotik, default "default".'],
+            ['router_id', 'ID router (angka) dari halaman router, atau kosong / "RADIUS" untuk mode RADIUS.'],
+            ['status', 'active, suspended, register, nonaktif, dll. Default active.'],
+            ['auto_suspension', '1 = ikut auto suspension, 0 = tidak. Default 1.'],
+            ['billing_day', 'Tanggal tagih 1–28. Default 15.'],
+            ['renewal_type', 'renewal atau fix_date (sesuai pengaturan paket pelanggan).'],
+            ['fix_date', 'Jika renewal_type = fix_date, tanggal 1–28.'],
+            ['cable_type', 'Mis. Fiber Optic.'],
+            ['cable_length', 'Panjang kabel (meter), angka.'],
+            ['port_number', 'Port ODP, angka.'],
+            ['cable_status', 'connected atau disconnected.'],
+            ['cable_notes', 'Catatan jalur kabel.'],
+            ['', 'Baris 2 pada sheet Pelanggan adalah CONTOH — hapus atau ganti sebelum import produksi.'],
+            ['', 'Simpan sebagai .xlsx, lalu unggah lewat menu Restore Data Pelanggan (Import).']
+        ];
+        rows.forEach((r, i) => {
+            const row = help.addRow(r);
+            if (i === 0) {
+                row.font = { bold: true };
+            }
+        });
+
+        const buf = await workbook.xlsx.writeBuffer();
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename="template-import-pelanggan.xlsx"');
+        res.setHeader('Content-Length', Buffer.byteLength(buf));
+        res.end(Buffer.from(buf));
+    } catch (error) {
+        logger.error('Error generating customer import template:', error);
+        res.status(500).json({ success: false, message: 'Gagal membuat template', error: error.message });
+    }
+});
+
 // Import customers from XLSX file
 router.post('/import/customers/xlsx', upload.single('file'), async (req, res) => {
     try {
@@ -2222,20 +2355,40 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
             if (key) headerMap[key] = colNumber;
         });
 
-        // Support for Indonesian headers (from new export format)
+        // Support for Indonesian headers (export lama + template restore)
         const indonesianHeaderMap = {
-            'nama': 'name',
-            'phone': 'phone',
+            nama: 'name',
+            phone: 'phone',
             'pppoe username': 'pppoe_username',
             'pppoe password': 'pppoe_password',
-            'email': 'email',
-            'alamat': 'address',
+            email: 'email',
+            alamat: 'address',
             'package id': 'package_id',
             'pppoe profile': 'pppoe_profile',
-            'status': 'status',
+            status: 'status',
             'router id': 'router_id',
             'auto suspension': 'auto_suspension',
-            'billing day': 'billing_day'
+            'billing day': 'billing_day',
+            lintang: 'latitude',
+            bujur: 'longitude',
+            'id paket': 'package_id',
+            'id odp': 'odp_id',
+            wilayah: 'area',
+            'id wilayah': 'area_id',
+            'area id': 'area_id',
+            'odp id': 'odp_id',
+            username: 'username',
+            'login password': 'login_password',
+            'password login': 'login_password',
+            'kata sandi login': 'login_password',
+            'renewal type': 'renewal_type',
+            'fix date': 'fix_date',
+            'tipe kabel': 'cable_type',
+            'panjang kabel': 'cable_length',
+            port: 'port_number',
+            'nomor port': 'port_number',
+            'status kabel': 'cable_status',
+            'catatan kabel': 'cable_notes'
         };
 
         // Create unified header map
@@ -2262,14 +2415,28 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                     failed++; errors.push({ row: rowNumber, error: 'Nama/Phone wajib' }); return;
                 }
 
+                const cellStr = (key) => String(getVal(row, key) ?? '').trim();
+                const cellNum = (key) => {
+                    const v = getVal(row, key);
+                    if (v === '' || v === null || v === undefined) return null;
+                    const n = Number(String(v).replace(',', '.'));
+                    return Number.isFinite(n) ? n : null;
+                };
                 const raw = {
                     name,
                     phone,
+                    username: cellStr('username'),
+                    login_password: cellStr('login_password') || cellStr('billing_password'),
                     pppoe_username: String(getVal(row, 'pppoe_username') || '').trim(),
                     pppoe_password: String(getVal(row, 'pppoe_password') || '').trim(),
                     email: String(getVal(row, 'email') || '').trim(),
                     address: String(getVal(row, 'address') || '').trim(),
+                    latitude: cellNum('latitude'),
+                    longitude: cellNum('longitude'),
                     package_id: getVal(row, 'package_id') ? Number(getVal(row, 'package_id')) : null,
+                    odp_id: cellNum('odp_id'),
+                    area: cellStr('area'),
+                    area_id: cellNum('area_id'),
                     pppoe_profile: String(getVal(row, 'pppoe_profile') || 'default').trim(),
                     status: String(getVal(row, 'status') || 'active').trim(),
                     router_id: getVal(row, 'router_id') ? (isNaN(getVal(row, 'router_id')) ? getVal(row, 'router_id') : Number(getVal(row, 'router_id'))) : null,
@@ -2279,14 +2446,19 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                         return Number.isFinite(n) ? n : 1;
                     })(),
                     billing_day: (() => {
-                        // If the cell is empty or whitespace, default to 1
                         const rawVal = getVal(row, 'billing_day');
                         const rawStr = String(rawVal ?? '').trim();
-                        if (rawStr === '') return 1;
+                        if (rawStr === '') return 15;
                         const v = parseInt(rawStr, 10);
-                        const n = Number.isFinite(v) ? Math.min(Math.max(v, 1), 28) : 1;
-                        return n;
-                    })()
+                        return Number.isFinite(v) ? Math.min(Math.max(v, 1), 28) : 15;
+                    })(),
+                    renewal_type: cellStr('renewal_type') || undefined,
+                    fix_date: cellNum('fix_date'),
+                    cable_type: cellStr('cable_type') || undefined,
+                    cable_length: cellNum('cable_length'),
+                    port_number: cellNum('port_number'),
+                    cable_status: cellStr('cable_status') || undefined,
+                    cable_notes: cellStr('cable_notes') || undefined
                 };
 
                 // Process upsert
@@ -2330,9 +2502,23 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                     package_id: raw.package_id || null,
                     pppoe_profile: raw.pppoe_profile || 'default',
                     status: raw.status || 'active',
-                    auto_suspension: typeof raw.auto_suspension !== 'undefined' ? parseInt(raw.auto_suspension) : 1,
-                    billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day), 1), 28) : 15
+                    auto_suspension: typeof raw.auto_suspension !== 'undefined' ? parseInt(raw.auto_suspension, 10) : 1,
+                    billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day, 10), 1), 28) : 15
                 };
+                if (raw.username) customerData.username = raw.username.trim();
+                if (raw.login_password) customerData.password = raw.login_password;
+                if (raw.latitude != null) customerData.latitude = raw.latitude;
+                if (raw.longitude != null) customerData.longitude = raw.longitude;
+                if (raw.area) customerData.area = raw.area;
+                if (raw.area_id != null) customerData.area_id = raw.area_id;
+                if (raw.odp_id != null) customerData.odp_id = raw.odp_id;
+                if (raw.renewal_type) customerData.renewal_type = raw.renewal_type;
+                if (raw.fix_date != null) customerData.fix_date = raw.fix_date;
+                if (raw.cable_type) customerData.cable_type = raw.cable_type;
+                if (raw.cable_length != null) customerData.cable_length = raw.cable_length;
+                if (raw.port_number != null) customerData.port_number = raw.port_number;
+                if (raw.cable_status) customerData.cable_status = raw.cable_status;
+                if (raw.cable_notes) customerData.cable_notes = raw.cable_notes;
 
                 let result;
                 if (existing) {
@@ -2548,6 +2734,11 @@ router.post('/import/customers/json', upload.single('file'), async (req, res) =>
                 }
 
                 const existing = await billingManager.getCustomerByPhone(phone);
+                const optNum = (v) => {
+                    if (v === undefined || v === null || v === '') return undefined;
+                    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+                    return Number.isFinite(n) ? n : undefined;
+                };
                 const customerData = {
                     name,
                     phone,
@@ -2558,8 +2749,29 @@ router.post('/import/customers/json', upload.single('file'), async (req, res) =>
                     pppoe_profile: raw.pppoe_profile || 'default',
                     status: raw.status || 'active',
                     auto_suspension: raw.auto_suspension !== undefined ? parseInt(raw.auto_suspension, 10) : 1,
-                    billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day), 1), 28) : 1
+                    billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day, 10), 1), 28) : 15
                 };
+                if (raw.username) customerData.username = String(raw.username).trim();
+                if (raw.login_password || raw.password) customerData.password = String(raw.login_password || raw.password).trim();
+                const latJ = optNum(raw.latitude);
+                const lngJ = optNum(raw.longitude);
+                if (latJ !== undefined) customerData.latitude = latJ;
+                if (lngJ !== undefined) customerData.longitude = lngJ;
+                if (raw.area) customerData.area = String(raw.area).trim();
+                const aid = optNum(raw.area_id);
+                if (aid !== undefined) customerData.area_id = aid;
+                const oid = optNum(raw.odp_id);
+                if (oid !== undefined) customerData.odp_id = oid;
+                if (raw.renewal_type) customerData.renewal_type = String(raw.renewal_type).trim();
+                const fd = optNum(raw.fix_date);
+                if (fd !== undefined) customerData.fix_date = fd;
+                if (raw.cable_type) customerData.cable_type = String(raw.cable_type).trim();
+                const clen = optNum(raw.cable_length);
+                if (clen !== undefined) customerData.cable_length = clen;
+                const pnum = optNum(raw.port_number);
+                if (pnum !== undefined) customerData.port_number = pnum;
+                if (raw.cable_status) customerData.cable_status = String(raw.cable_status).trim();
+                if (raw.cable_notes) customerData.cable_notes = String(raw.cable_notes).trim();
 
                 let result;
                 if (existing) {
@@ -4775,24 +4987,38 @@ router.post('/customers', customerPhotoUpload.fields([
         }
 
         if (save_mode === 'save_and_create_task') {
-            req.session.prefillInstallationCustomer = {
+            const prefillInstallationCustomer = {
                 customer_id: result.id,
                 customer_name: result.name || name,
                 customer_phone: result.phone || phone,
-                customer_address: result.address || address || '',
+                customer_address: (result.address != null && result.address !== '') ? result.address : (address || ''),
                 package_id: package_id ? parseInt(package_id, 10) : null,
                 pppoe_username: pppoe_username || '',
                 pppoe_password: (pppoeCreate && pppoeCreate.password) ? pppoeCreate.password : (pppoe_password || '')
             };
+            req.session.prefillInstallationCustomer = prefillInstallationCustomer;
+            req.session.save((err) => {
+                if (err) {
+                    logger.error('Error saving session for prefill:', err);
+                }
+                res.json({
+                    success: true,
+                    message: 'Pelanggan berhasil ditambahkan',
+                    customer: result,
+                    pppoeCreate,
+                    prefill_installation: prefillInstallationCustomer,
+                    redirect_to_task: '/admin/installations/create?prefill_customer=1'
+                });
+            });
+        } else {
+            res.json({
+                success: true,
+                message: 'Pelanggan berhasil ditambahkan',
+                customer: result,
+                pppoeCreate,
+                redirect_to_task: null
+            });
         }
-
-        res.json({
-            success: true,
-            message: 'Pelanggan berhasil ditambahkan',
-            customer: result,
-            pppoeCreate,
-            redirect_to_task: save_mode === 'save_and_create_task' ? '/admin/installations/create?prefill_customer=1' : null
-        });
     } catch (error) {
         logger.error('Error creating customer:', error);
         
@@ -6532,32 +6758,9 @@ router.get('/api/devices', async (req, res) => {
             devices = await getDevicesCached();
             console.log(`📊 Found ${devices.length} devices from GenieACS`);
         } catch (genieacsError) {
-            console.log('⚠️ GenieACS not available, creating fallback data...');
-            // Create fallback data from customers
-            const db = require('../config/billing').db;
-            const customers = await new Promise((resolve, reject) => {
-                db.all(`
-                    SELECT id, name, phone, pppoe_username, latitude, longitude 
-                    FROM customers 
-                    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-                    LIMIT 10
-                `, [], (err, rows) => {
-                    if (err) reject(err);
-                    else resolve(rows || []);
-                });
-            });
-            
-            devices = customers.map((customer, index) => ({
-                _id: `fallback_${customer.id}`,
-                'Device.DeviceInfo.SerialNumber': `SIM${customer.id.toString().padStart(4, '0')}`,
-                'Device.DeviceInfo.ModelName': 'Simulated ONU',
-                'InternetGatewayDevice.DeviceInfo.UpTime': index % 2 === 0 ? '7 days' : null,
-                'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID': `SSID_${customer.id}`,
-                'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username': customer.pppoe_username,
-                _lastInform: new Date().toISOString()
-            }));
-            
-            console.log(`📊 Created ${devices.length} fallback devices from customers`);
+            console.warn('⚠️ GenieACS tidak tersedia:', genieacsError.message);
+            // Jangan buat perangkat simulasi (fallback_*, Simulated ONU) — bukan data DB dan membingungkan.
+            devices = [];
         }
         
         // Process devices with customer information
@@ -8316,10 +8519,15 @@ router.get('/devices', getAppSettings, async (req, res) => {
 // New Mapping page
 router.get('/mapping-new', getAppSettings, async (req, res) => {
     try {
+        const { ensureMapCenterFromCompanyAddress } = require('../config/mapDefaultCenter');
+        const mapCenter = await ensureMapCenterFromCompanyAddress();
         res.render('admin/billing/mapping-new', {
             title: 'Network Mapping - New',
             user: req.user,
-            settings: req.appSettings
+            settings: req.appSettings,
+            defaultMapLat: mapCenter.lat,
+            defaultMapLng: mapCenter.lng,
+            defaultMapZoom: mapCenter.zoom
         });
     } catch (error) {
         console.error('Error rendering new mapping page:', error);

@@ -16,7 +16,9 @@
     "doctor:process": "node scripts/doctor-process.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "echo \"No build process required\"",
-    "setup": "npm install && node scripts/init-database.js"
+    "setup": "npm install && node scripts/init-database.js",
+    "clean:onu-fallback": "node scripts/delete-fallback-onu-devices.js",
+    "clean:onu-fallback:dry": "node scripts/delete-fallback-onu-devices.js --dry-run"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
