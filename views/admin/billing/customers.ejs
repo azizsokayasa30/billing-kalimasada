@@ -1862,6 +1862,14 @@
                 if (typeof generateCredentialsFromName === 'function') generateCredentialsFromName();
             });
 
+            // Hapus tanda autofill agar username/email tidak "macet" saat nama dilengkapi huruf demi huruf
+            $('#username').on('input', function () {
+                delete this.dataset.autofillFromName;
+            });
+            $('#email').on('input', function () {
+                delete this.dataset.autofillFromName;
+            });
+
             $('#toggle_static_ip').on('change', function () {
                 $('#static_ip_fields_wrap').toggle(this.checked);
                 if (!this.checked) {
@@ -1960,6 +1968,7 @@
             // Reset form when modal is hidden
             $('#addCustomerModal').on('hidden.bs.modal', function() {
                 $('#addCustomerForm')[0].reset();
+                $('#username, #email').removeAttr('data-autofill-from-name');
                 $('#toggle_static_ip').prop('checked', false);
                 $('#static_ip_fields_wrap').hide();
                 $('#pppoe_password_row').toggle($('#create_pppoe_user').is(':checked'));
@@ -2144,56 +2153,40 @@
                     const pickJakarta = (t) => (jakartaParts.find((x) => x.type === t) || {}).value || '00';
                     const dateStr = pickJakarta('day') + pickJakarta('month') + pickJakarta('year');
 
-                    // Username: nama lengkap tanpa spasi (hanya huruf/angka) + _DDMMYY — contoh ADE RESTU → aderestu_020526
-                    if (usernameField && !usernameField.value) {
-                        let compact = '';
-                        for (let i = 0; i < fullName.length; i++) {
-                            const char = fullName[i].toLowerCase();
-                            if (char >= 'a' && char <= 'z') {
-                                compact += char;
-                            } else if (char >= '0' && char <= '9') {
-                                compact += char;
-                            }
+                    // Nama pelanggan → huruf/angka saja tanpa spasi (dipakai untuk username & email)
+                    let compact = '';
+                    for (let i = 0; i < fullName.length; i++) {
+                        const char = fullName[i].toLowerCase();
+                        if ((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9')) {
+                            compact += char;
                         }
-                        if (!compact) {
-                            compact = 'user';
-                        }
+                    }
+                    if (!compact) {
+                        compact = 'user';
+                    }
+
+                    // Timpa ulang selama nilai masih dari autofill (nama diketik per huruf — hindari macet di "a_...")
+                    const canAutoUsername =
+                        usernameField &&
+                        (!String(usernameField.value || '').trim() ||
+                            usernameField.dataset.autofillFromName === '1');
+                    if (canAutoUsername) {
                         usernameField.value = compact + '_' + dateStr;
+                        usernameField.dataset.autofillFromName = '1';
                     }
 
                     const passwordField = document.getElementById('password');
                     if (passwordField && !String(passwordField.value || '').trim()) {
                         passwordField.value = '123456';
                     }
-                    
-                    // Generate email if field is empty
-                    if (emailField && !emailField.value) {
-                        // Process character by character for email
-                        let cleanEmail = '';
-                        for (let i = 0; i < fullName.length && i < 30; i++) {
-                            const char = fullName[i].toLowerCase();
-                            if (char >= 'a' && char <= 'z') {
-                                cleanEmail += char;
-                            } else if (char >= '0' && char <= '9') {
-                                cleanEmail += char;
-                            } else if (char === ' ') {
-                                cleanEmail += '.';
-                            } else if (char === '.' && cleanEmail.length > 0 && cleanEmail[cleanEmail.length - 1] !== '.') {
-                                cleanEmail += char;
-                            }
-                            // Skip all other characters
-                        }
-                        
-                        // Remove trailing dots
-                        cleanEmail = cleanEmail.replace(/\.+$/, '');
-                        
-                        // If result is empty, use default
-                        if (!cleanEmail) {
-                            cleanEmail = 'user';
-                        }
-                        
-                        const finalEmail = cleanEmail + '@gmail.com';
-                        emailField.value = finalEmail;
+
+                    const canAutoEmail =
+                        emailField &&
+                        (!String(emailField.value || '').trim() ||
+                            emailField.dataset.autofillFromName === '1');
+                    if (canAutoEmail) {
+                        emailField.value = compact + '@gmail.com';
+                        emailField.dataset.autofillFromName = '1';
                     }
                 }
             } catch (error) {
