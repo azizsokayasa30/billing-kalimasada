@@ -71,6 +71,7 @@
     <%- include('../partials/theme-head') %>
 </head>
 <body>
+<%- include('../partials/format-jakarta-db') %>
 <div class="container-fluid">
     <div class="row">
         <!-- Include Admin Responsive Sidebar -->
@@ -83,14 +84,9 @@
                     <i class="bi bi-tools me-2"></i>Detail Job Instalasi
                 </h1>
                 <div class="btn-toolbar mb-2 mb-md-0">
-                    <div class="btn-group me-2">
-                        <a href="/admin/installations" class="btn btn-outline-secondary">
-                            <i class="bi bi-arrow-left me-2"></i>Kembali
-                        </a>
-                        <a href="/admin/installations/edit/<%= job.id %>" class="btn btn-primary">
-                            <i class="bi bi-pencil me-2"></i>Edit
-                        </a>
-                    </div>
+                    <a href="/admin/installations" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Kembali
+                    </a>
                 </div>
             </div>
 
@@ -197,12 +193,7 @@
                                     </div>
                                     <div class="detail-section">
                                         <strong>Tanggal Instalasi:</strong><br>
-                                        <%= job.installation_date ? new Date(job.installation_date).toLocaleDateString('id-ID', {
-                                            weekday: 'long',
-                                            year: 'numeric',
-                                            month: 'long',
-                                            day: 'numeric'
-                                        }) : 'TBD' %>
+                                        <%= job.installation_date ? formatDbUtcToJakartaDate(job.installation_date) : 'TBD' %>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -262,7 +253,7 @@
                                         </div>
                                         <div class="detail-section">
                                             <strong>Tanggal Penugasan:</strong><br>
-                                            <%= job.assigned_at ? new Date(job.assigned_at).toLocaleDateString('id-ID') : 'Tidak diketahui' %>
+                                            <%= job.assigned_at ? formatDbUtcToJakartaDate(job.assigned_at) : 'Tidak diketahui' %>
                                         </div>
                                     </div>
                                 </div>
@@ -294,7 +285,7 @@
                                                 <strong>Status berubah dari <%= history.old_status %> ke <%= history.new_status %></strong><br>
                                                 <small class="text-muted">
                                                     <i class="bi bi-clock me-1"></i>
-                                                    <%= new Date(history.created_at).toLocaleString('id-ID') %>
+                                                    <%= formatDbUtcToJakartaDateTime(history.created_at) %>
                                                 </small>
                                                 <% if (history.notes) { %>
                                                     <br><small class="text-muted"><%= history.notes %></small>
@@ -331,25 +322,15 @@
                                     </button>
                                 <% } %>
                                 
-                                <% if (job.status === 'assigned') { %>
-                                    <button class="btn btn-info w-100 mb-2" onclick="startInstallation('<%= job.id %>')">
-                                        <i class="bi bi-play-circle me-2"></i>Mulai Instalasi
-                                    </button>
-                                <% } %>
-                                
                                 <% if (job.status === 'in_progress') { %>
                                     <button class="btn btn-success w-100 mb-2" onclick="completeInstallation('<%= job.id %>')">
                                         <i class="bi bi-check-circle me-2"></i>Tandai Selesai
                                     </button>
                                 <% } %>
                                 
-                                <button class="btn btn-warning w-100 mb-2" onclick="editJob('<%= job.id %>')">
+                                <a href="/admin/installations/edit/<%= job.id %>" class="btn btn-warning w-100 mb-2">
                                     <i class="bi bi-pencil me-2"></i>Edit Job
-                                </button>
-                                
-                                <button class="btn btn-danger w-100 mb-2" onclick="cancelJob('<%= job.id %>')">
-                                    <i class="bi bi-x-circle me-2"></i>Batal Job
-                                </button>
+                                </a>
                             </div>
                         </div>
 
@@ -363,16 +344,16 @@
                             <div class="card-body">
                                 <div class="mb-2">
                                     <small class="text-muted">Dibuat pada:</small><br>
-                                    <%= job.created_at ? new Date(job.created_at).toLocaleString('id-ID') : 'Tidak diketahui' %>
+                                    <%= job.created_at ? formatDbUtcToJakartaDateTime(job.created_at) : 'Tidak diketahui' %>
                                 </div>
                                 <div class="mb-2">
                                     <small class="text-muted">Terakhir diupdate:</small><br>
-                                    <%= job.updated_at ? new Date(job.updated_at).toLocaleString('id-ID') : 'Tidak diketahui' %>
+                                    <%= job.updated_at ? formatDbUtcToJakartaDateTime(job.updated_at) : 'Tidak diketahui' %>
                                 </div>
                                 <% if (job.completed_at) { %>
                                     <div class="mb-2">
                                         <small class="text-muted">Selesai pada:</small><br>
-                                        <%= new Date(job.completed_at).toLocaleString('id-ID') %>
+                                        <%= formatDbUtcToJakartaDateTime(job.completed_at) %>
                                     </div>
                                 <% } %>
                             </div>
@@ -420,38 +401,11 @@
         window.location.href = `/admin/installations?assign=${jobId}`;
     }
     
-    function startInstallation(jobId) {
-        if (confirm('Mulai instalasi untuk job ini?')) {
-            // TODO: Implement start installation
-            alert('Fitur mulai instalasi akan tersedia segera');
-        }
-    }
-    
     function completeInstallation(jobId) {
         if (confirm('Tandai instalasi ini sebagai selesai?')) {
             // TODO: Implement complete installation
             alert('Fitur tandai selesai akan tersedia segera');
         }
-    }
-    
-    function editJob(jobId) {
-        window.location.href = `/admin/installations/edit/${jobId}`;
-    }
-    
-    function cancelJob(jobId) {
-        if (!confirm('Apakah Anda yakin ingin membatalkan job instalasi ini?')) return;
-        const reason = prompt('Alasan pembatalan (opsional):', 'Dibatalkan oleh admin');
-        fetch(`/admin/installations/cancel/${jobId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ reason })
-        }).then(r => r.json()).then(res => {
-            if (res.success) {
-                window.location.reload();
-            } else {
-                alert(res.message || 'Gagal membatalkan job');
-            }
-        }).catch(() => alert('Gagal membatalkan job'));
     }
     
     function sendCustomerNotification(phone, jobNumber) {

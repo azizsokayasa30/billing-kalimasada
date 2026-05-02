@@ -219,8 +219,10 @@
                         </span>
                     </td>
                     <td class="text-end">
-                        <button class="btn btn-sm btn-outline-secondary" onclick='editData(${JSON.stringify(e).replace(/'/g, "&apos;")})'>Edit</button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteData(${e.id})">Hapus</button>
+                        <div class="admin-action-btns">
+                            <button type="button" class="btn btn-sm btn-primary" onclick='editData(${JSON.stringify(e).replace(/'/g, "&apos;")})' title="Ubah data karyawan" aria-label="Ubah data karyawan">Edit</button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="deleteData(${e.id})" title="Hapus data karyawan" aria-label="Hapus data karyawan">Hapus</button>
+                        </div>
                     </td>
                 </tr>
             `).join('');

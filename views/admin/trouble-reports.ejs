@@ -355,7 +355,7 @@
                             </thead>
                             <tbody id="reportTableBody">
                                 <% if (reports && reports.length > 0) { %>
-                                    <% reports.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).forEach(report => { %>
+                                    <% reports.sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0)).forEach(report => { %>
                                         <tr class="report-row" 
                                             data-status="<%= report.status %>" 
                                             data-category="<%= report.category %>"
@@ -389,8 +389,8 @@
                                                 </span>
                                             </td>
                                             <td>
-                                                <div><i class="bi bi-calendar-event me-1"></i><%= new Date(report.createdAt).toLocaleDateString('id-ID') %></div>
-                                                <small class="text-muted"><%= new Date(report.createdAt).toLocaleTimeString('id-ID') %></small>
+                                                <div><i class="bi bi-calendar-event me-1"></i><%= new Date(report.created_at || report.createdAt).toLocaleDateString('id-ID') %></div>
+                                                <small class="text-muted"><%= new Date(report.created_at || report.createdAt).toLocaleTimeString('id-ID') %></small>
                                             </td>
                                             <td>
                                                 <span class="badge <%= 
@@ -417,25 +417,27 @@
                                                 </span>
                                             </td>
                                             <td>
-                                                <div><i class="bi bi-clock-history me-1"></i><%= new Date(report.updatedAt).toLocaleDateString('id-ID') %></div>
-                                                <small class="text-muted"><%= new Date(report.updatedAt).toLocaleTimeString('id-ID') %></small>
+                                                <div><i class="bi bi-clock-history me-1"></i><%= new Date(report.updated_at || report.updatedAt).toLocaleDateString('id-ID') %></div>
+                                                <small class="text-muted"><%= new Date(report.updated_at || report.updatedAt).toLocaleTimeString('id-ID') %></small>
                                             </td>
                                             <td class="text-end pe-4">
+                                                <div class="admin-action-btns justify-content-end">
                                                 <% if (typeof isTechnicianView !== 'undefined' && isTechnicianView) { %>
-                                                    <a href="/technician/troubletickets/detail/<%= report.id %>" class="btn btn-primary btn-action me-1" title="Lihat Detail">
+                                                    <a href="/technician/troubletickets/detail/<%= report.id %>" class="btn btn-sm btn-primary" title="Lihat detail tiket gangguan" aria-label="Lihat tiket">
                                                         <i class="bi bi-eye"></i>
                                                     </a>
                                                 <% } else { %>
-                                                    <a href="/admin/trouble/detail/<%= report.id %>" class="btn btn-primary btn-action me-1" title="Lihat Detail">
+                                                    <a href="/admin/trouble/detail/<%= report.id %>" class="btn btn-sm btn-primary" title="Lihat detail laporan gangguan" aria-label="Lihat laporan">
                                                         <i class="bi bi-eye"></i>
                                                     </a>
                                                 <% } %>
-                                                <a href="https://wa.me/<%= report.phone.replace(/^0/, '62') %>" target="_blank" class="btn btn-success btn-action" title="Hubungi via WhatsApp">
+                                                <a href="https://wa.me/<%= report.phone.replace(/^0/, '62') %>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-success" title="Hubungi pelapor lewat WhatsApp" aria-label="WhatsApp pelapor">
                                                     <i class="bi bi-whatsapp"></i>
                                                 </a>
-                                                <button onclick="deleteTroubleReport('<%= report.id %>')" class="btn btn-danger btn-action ms-1" title="Hapus Laporan">
+                                                <button type="button" onclick="deleteTroubleReport('<%= report.id %>')" class="btn btn-sm btn-danger" title="Hapus laporan gangguan dari daftar" aria-label="Hapus laporan">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     <% }); %>
@@ -589,6 +591,17 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const quickAction = new URLSearchParams(window.location.search).get('quickAction');
+        if (quickAction === 'create-ticket') {
+            const modalEl = document.getElementById('createTicketModal');
+            if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+                new bootstrap.Modal(modalEl).show();
+                const url = new URL(window.location.href);
+                url.searchParams.delete('quickAction');
+                window.history.replaceState({}, '', url.toString());
+            }
+        }
+
         const searchInputCustomer = document.getElementById('searchCustomer');
         const searchResultsCustomer = document.getElementById('customerSearchResults');
         let searchTimeout;

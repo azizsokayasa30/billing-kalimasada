@@ -14,6 +14,7 @@
     <%- include('../../partials/theme-head') %>
 </head>
 <body>
+    <%- include('../../partials/format-jakarta-db') %>
     <div class="container-fluid">
         <div class="row">
             <!-- Include Billing Sidebar -->
@@ -127,7 +128,7 @@
                                     <% } %>
                                 </div>
                                 <div class="mb-3">
-                                    <strong>Bergabung:</strong> <%= customer && customer.join_date ? new Date(customer.join_date).toLocaleDateString('id-ID') : 'N/A' %>
+                                    <strong>Bergabung:</strong> <%= customer && customer.join_date ? formatDbUtcToJakartaDate(customer.join_date) : 'N/A' %>
                                 </div>
                             </div>
                         </div>
@@ -326,33 +327,36 @@
                                                                 N/A
                                                             <% } %>
                                                         </td>
-                                                        <td><%= invoice && invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('id-ID') : 'N/A' %></td>
+                                                        <td><%= invoice && invoice.created_at ? formatDbUtcToJakartaDate(invoice.created_at) : 'N/A' %></td>
                                                         <td>
                                                             <% if (invoice) { %>
-                                                                <div class="btn-group" role="group">
-                                                                    <button type="button" class="btn btn-sm btn-outline-primary view-invoice-btn"
+                                                                <div class="admin-action-btns">
+                                                                    <button type="button" class="btn btn-sm btn-primary view-invoice-btn"
                                                                             data-id="<%= invoice.id %>"
                                                                             data-bs-toggle="tooltip" 
                                                                             data-bs-placement="top" 
-                                                                            title="Lihat Detail">
+                                                                            title="Buka detail tagihan di tab baru"
+                                                                            aria-label="Lihat detail tagihan">
                                                                         <i class="bi bi-file-earmark-text-fill"></i>
                                                                     </button>
                                                                     <% if (invoice.status === 'unpaid') { %>
-                                                                        <button type="button" class="btn btn-sm btn-outline-success mark-paid-btn"
+                                                                        <button type="button" class="btn btn-sm btn-success mark-paid-btn"
                                                                                 data-id="<%= invoice.id %>"
                                                                                 data-invoice-number="<%= invoice.invoice_number %>"
                                                                                 data-amount="<%= invoice.amount %>"
                                                                                 data-bs-toggle="tooltip" 
                                                                                 data-bs-placement="top" 
-                                                                                title="Tandai Lunas">
+                                                                                title="Tandai tagihan sebagai lunas"
+                                                                                aria-label="Tandai lunas">
                                                                             <i class="bi bi-check-circle-fill"></i>
                                                                         </button>
                                                                     <% } %>
-                                                                    <button type="button" class="btn btn-sm btn-outline-info print-invoice-btn"
+                                                                    <button type="button" class="btn btn-sm btn-info print-invoice-btn"
                                                                             data-id="<%= invoice.id %>"
                                                                             data-bs-toggle="tooltip" 
                                                                             data-bs-placement="top" 
-                                                                            title="Cetak Invoice">
+                                                                            title="Buka halaman cetak tagihan"
+                                                                            aria-label="Cetak tagihan">
                                                                         <i class="bi bi-printer-fill"></i>
                                                                     </button>
                                                                 </div>
@@ -403,7 +407,7 @@
                                                 <% troubleReports.slice().reverse().forEach(function(rep) { %>
                                                     <tr>
                                                         <td>#<%= rep.id %></td>
-                                                        <td><%= rep.created_at ? new Date(rep.created_at).toLocaleString('id-ID') : '-' %></td>
+                                                        <td><%= rep.created_at ? formatDbUtcToJakartaDateTime(rep.created_at) : '-' %></td>
                                                         <td><%= rep.category || '-' %></td>
                                                         <td><%= rep.location || '-' %></td>
                                                         <td>

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setelan Absensi - <%= typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Admin Panel' %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/theme.css" rel="stylesheet">
+    <link href="/css/responsive-admin.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <%- include('../../partials/admin-responsive-sidebar') %>
+        <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content py-4">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h1 class="h4 m-0">Setelan Absensi</h1>
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent"><strong>1) Lokasi/Branch + Generate QR Code</strong></div>
+                <div class="card-body">
+                    <form id="branchForm" class="row g-2 mb-3">
+                        <input type="hidden" id="branch_id">
+                        <div class="col-md-3"><input id="branch_name" class="form-control" placeholder="Nama branch" required></div>
+                        <div class="col-md-3"><input id="branch_address" class="form-control" placeholder="Alamat"></div>
+                        <div class="col-md-2"><input id="branch_lat" type="number" step="any" class="form-control" placeholder="Latitude" required></div>
+                        <div class="col-md-2"><input id="branch_lng" type="number" step="any" class="form-control" placeholder="Longitude" required></div>
+                        <div class="col-md-2 d-flex gap-2">
+                            <button class="btn btn-primary w-100" type="submit">Simpan</button>
+                            <button class="btn btn-outline-secondary w-100" type="button" onclick="resetBranchForm()">Reset</button>
+                        </div>
+                    </form>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead><tr><th>Branch</th><th>Koordinat</th><th>QR Code</th><th class="text-end">Aksi</th></tr></thead>
+                            <tbody id="branchTableBody"><tr><td colspan="4" class="text-center text-muted">Memuat...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-transparent"><strong>2 & 3) Lock GPS dan Metode Absen</strong></div>
+                <div class="card-body">
+                    <form id="configForm" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Lock GPS Absen</label>
+                            <select class="form-select" id="lock_gps_enabled">
+                                <option value="1">ON</option>
+                                <option value="0">OFF</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Radius Jarak (meter)</label>
+                            <input type="number" min="1" id="lock_gps_radius_meters" class="form-control" value="100">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label d-block mb-2">Metode Absen (on/off)</label>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="method_selfie">
+                                <label class="form-check-label" for="method_selfie">Foto Selfie</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="method_qrcode">
+                                <label class="form-check-label" for="method_qrcode">Scan QR Code</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="method_gps_tag">
+                                <label class="form-check-label" for="method_gps_tag">Tag GPS</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-primary" type="submit">Simpan Setelan</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-transparent"><strong>4) Daftar Shift</strong></div>
+                <div class="card-body">
+                    <form id="shiftForm" class="row g-2 mb-3">
+                        <input type="hidden" id="shift_id">
+                        <div class="col-md-4"><input id="shift_name" class="form-control" placeholder="Nama shift (Pagi/Malam)" required></div>
+                        <div class="col-md-3"><input id="check_in_time" type="time" class="form-control" required></div>
+                        <div class="col-md-3"><input id="check_out_time" type="time" class="form-control" required></div>
+                        <div class="col-md-2 d-flex gap-2">
+                            <button class="btn btn-primary w-100" type="submit">Simpan</button>
+                            <button class="btn btn-outline-secondary w-100" type="button" onclick="resetShiftForm()">Reset</button>
+                        </div>
+                    </form>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead><tr><th>Shift</th><th>Check-In</th><th>Check-Out</th><th class="text-end">Aksi</th></tr></thead>
+                            <tbody id="shiftTableBody"><tr><td colspan="4" class="text-center text-muted">Memuat...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>
+let branchData = [];
+let shiftData = [];
+
+function toast(msg) { alert(msg); }
+
+function qrUrlForBranch(branch) {
+    const payload = JSON.stringify({
+        type: 'attendance_branch',
+        id: branch.id,
+        branch_name: branch.branch_name,
+        latitude: branch.latitude,
+        longitude: branch.longitude
+    });
+    return `https://quickchart.io/qr?size=150&text=${encodeURIComponent(payload)}`;
+}
+
+async function loadBranches() {
+    const res = await fetch('/admin/employees/api/attendance-settings/branches');
+    const json = await res.json();
+    branchData = json.data || [];
+    const body = document.getElementById('branchTableBody');
+    if (!branchData.length) {
+        body.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Belum ada branch.</td></tr>';
+        return;
+    }
+    body.innerHTML = branchData.map(b => `
+        <tr>
+            <td><strong>${b.branch_name}</strong><div class="small text-muted">${b.address || '-'}</div></td>
+            <td><code>${b.latitude}, ${b.longitude}</code></td>
+            <td><a href="${qrUrlForBranch(b)}" target="_blank" class="btn btn-sm btn-outline-primary" title="Buka atau unduh QR absensi lokasi ini" aria-label="Generate atau lihat QR absensi">Generate/Lihat QR</a></td>
+            <td class="text-end">
+                <div class="admin-action-btns">
+                    <button type="button" class="btn btn-sm btn-primary" onclick='editBranch(${JSON.stringify(b).replace(/'/g, "&apos;")})' title="Ubah data cabang / lokasi absensi" aria-label="Ubah cabang absensi">Edit</button>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteBranch(${b.id})" title="Hapus cabang absensi" aria-label="Hapus cabang absensi">Hapus</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function resetBranchForm() {
+    document.getElementById('branch_id').value = '';
+    document.getElementById('branchForm').reset();
+}
+
+function editBranch(b) {
+    document.getElementById('branch_id').value = b.id;
+    document.getElementById('branch_name').value = b.branch_name || '';
+    document.getElementById('branch_address').value = b.address || '';
+    document.getElementById('branch_lat').value = b.latitude;
+    document.getElementById('branch_lng').value = b.longitude;
+}
+
+async function deleteBranch(id) {
+    if (!confirm('Hapus branch ini?')) return;
+    const res = await fetch(`/admin/employees/api/attendance-settings/branches/${id}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (!json.success) return toast(json.error || 'Gagal hapus branch');
+    await loadBranches();
+}
+
+async function saveBranch(e) {
+    e.preventDefault();
+    const id = document.getElementById('branch_id').value;
+    const payload = {
+        branch_name: document.getElementById('branch_name').value,
+        address: document.getElementById('branch_address').value,
+        latitude: document.getElementById('branch_lat').value,
+        longitude: document.getElementById('branch_lng').value
+    };
+    const url = id ? `/admin/employees/api/attendance-settings/branches/${id}` : '/admin/employees/api/attendance-settings/branches';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (!json.success) return toast(json.error || 'Gagal simpan branch');
+    resetBranchForm();
+    await loadBranches();
+}
+
+async function loadConfig() {
+    const res = await fetch('/admin/employees/api/attendance-settings/config');
+    const json = await res.json();
+    const c = json.data || {};
+    document.getElementById('lock_gps_enabled').value = c.lock_gps_enabled ? '1' : '0';
+    document.getElementById('lock_gps_radius_meters').value = c.lock_gps_radius_meters || 100;
+    document.getElementById('method_selfie').checked = !!c.method_selfie;
+    document.getElementById('method_qrcode').checked = !!c.method_qrcode;
+    document.getElementById('method_gps_tag').checked = !!c.method_gps_tag;
+}
+
+async function saveConfig(e) {
+    e.preventDefault();
+    const payload = {
+        lock_gps_enabled: document.getElementById('lock_gps_enabled').value === '1',
+        lock_gps_radius_meters: document.getElementById('lock_gps_radius_meters').value,
+        method_selfie: document.getElementById('method_selfie').checked,
+        method_qrcode: document.getElementById('method_qrcode').checked,
+        method_gps_tag: document.getElementById('method_gps_tag').checked
+    };
+    const res = await fetch('/admin/employees/api/attendance-settings/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!json.success) return toast(json.error || 'Gagal simpan setelan');
+    toast('Setelan absensi disimpan');
+}
+
+async function loadShifts() {
+    const res = await fetch('/admin/employees/api/attendance-settings/shifts');
+    const json = await res.json();
+    shiftData = json.data || [];
+    const body = document.getElementById('shiftTableBody');
+    if (!shiftData.length) {
+        body.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Belum ada shift.</td></tr>';
+        return;
+    }
+    body.innerHTML = shiftData.map(s => `
+        <tr>
+            <td>${s.shift_name}</td>
+            <td>${s.check_in_time}</td>
+            <td>${s.check_out_time}</td>
+            <td class="text-end">
+                <div class="admin-action-btns">
+                    <button type="button" class="btn btn-sm btn-primary" onclick='editShift(${JSON.stringify(s).replace(/'/g, "&apos;")})' title="Ubah jam shift kerja" aria-label="Ubah shift">Edit</button>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteShift(${s.id})" title="Hapus shift dari daftar" aria-label="Hapus shift">Hapus</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function resetShiftForm() {
+    document.getElementById('shift_id').value = '';
+    document.getElementById('shiftForm').reset();
+}
+
+function editShift(s) {
+    document.getElementById('shift_id').value = s.id;
+    document.getElementById('shift_name').value = s.shift_name || '';
+    document.getElementById('check_in_time').value = s.check_in_time || '';
+    document.getElementById('check_out_time').value = s.check_out_time || '';
+}
+
+async function deleteShift(id) {
+    if (!confirm('Hapus shift ini?')) return;
+    const res = await fetch(`/admin/employees/api/attendance-settings/shifts/${id}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (!json.success) return toast(json.error || 'Gagal hapus shift');
+    await loadShifts();
+}
+
+async function saveShift(e) {
+    e.preventDefault();
+    const id = document.getElementById('shift_id').value;
+    const payload = {
+        shift_name: document.getElementById('shift_name').value,
+        check_in_time: document.getElementById('check_in_time').value,
+        check_out_time: document.getElementById('check_out_time').value,
+        is_active: true
+    };
+    const url = id ? `/admin/employees/api/attendance-settings/shifts/${id}` : '/admin/employees/api/attendance-settings/shifts';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (!json.success) return toast(json.error || 'Gagal simpan shift');
+    resetShiftForm();
+    await loadShifts();
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    document.getElementById('branchForm').addEventListener('submit', saveBranch);
+    document.getElementById('configForm').addEventListener('submit', saveConfig);
+    document.getElementById('shiftForm').addEventListener('submit', saveShift);
+    await Promise.all([loadBranches(), loadConfig(), loadShifts()]);
+});
+</script>
+</body>
+</html>

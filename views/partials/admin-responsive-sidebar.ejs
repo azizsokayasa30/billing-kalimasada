@@ -308,7 +308,7 @@ const FORCED_APP_VERSION = 'v5.4';
         </div>
         
         <!-- KARYAWAN -->
-        <% const karyawanPages = ['employees', 'employee-attendance', 'employee-payroll', 'employee-reports']; %>
+        <% const karyawanPages = ['employees', 'employee-attendance', 'employee-attendance-settings', 'employee-leave-requests', 'employee-payroll', 'employee-reports']; %>
         <% const karyawanExpanded = typeof page !== 'undefined' && karyawanPages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -329,6 +329,14 @@ const FORCED_APP_VERSION = 'v5.4';
                 <a href="/admin/employees/attendance" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'employee-attendance' ? 'active' : '' %>">
                     <i class="bi bi-calendar2-check"></i>
                     <span class="sb-item-text">Absensi</span>
+                </a>
+                <a href="/admin/employees/attendance-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'employee-attendance-settings' ? 'active' : '' %>">
+                    <i class="bi bi-sliders2-vertical"></i>
+                    <span class="sb-item-text">Setelan Absensi</span>
+                </a>
+                <a href="/admin/employees/leave-requests" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'employee-leave-requests' ? 'active' : '' %>">
+                    <i class="bi bi-calendar2-event"></i>
+                    <span class="sb-item-text">Permintaan Izin/Cuti</span>
                 </a>
                 <a href="/admin/employees/payroll" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'employee-payroll' ? 'active' : '' %>">
                     <i class="bi bi-cash-coin"></i>

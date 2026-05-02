@@ -5,6 +5,7 @@
 // Harus berada di baris PERTAMA untuk efek penuh.
 // ==========================================
 process.env.TZ = 'Asia/Jakarta';
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 // ==========================================
 // GLOBAL CRASH GUARD — harus dipasang sedini mungkin
@@ -52,6 +53,56 @@ process.on('unhandledRejection', (reason, promise) => {
         // TIDAK memanggil process.exit() — server tetap berjalan
     }
 });
+
+// ==========================================
+// PROCESS OWNERSHIP GUARD
+// Cegah proses campuran root/non-root untuk app yang sama.
+// ==========================================
+(() => {
+    try {
+        const { execSync } = require('child_process');
+        const os = require('os');
+        const appPath = require('path').resolve(__filename);
+        const currentPid = process.pid;
+        const currentUser = os.userInfo().username;
+
+        const output = execSync('ps -eo pid,user,args', { encoding: 'utf8' });
+        const lines = output.split('\n').slice(1).filter(Boolean);
+
+        const conflicts = [];
+        for (const line of lines) {
+            const trimmed = line.trim();
+            const match = trimmed.match(/^(\d+)\s+(\S+)\s+(.*)$/);
+            if (!match) continue;
+            const pid = Number(match[1]);
+            const user = match[2];
+            const args = match[3] || '';
+            if (!pid || pid === currentPid) continue;
+
+            // Deteksi proses node app.js yang sama, bukan node -e.
+            const isNode = /\bnode\b/.test(args) || /\bnodemon\b/.test(args);
+            if (!isNode) continue;
+            if (!args.includes(appPath)) continue;
+            if (/\s-e\s/.test(args)) continue;
+
+            if (user !== currentUser) {
+                conflicts.push({ pid, user, args });
+            }
+        }
+
+        if (conflicts.length > 0) {
+            console.error('\n[OWNERSHIP-GUARD] ❌ Ditemukan proses app dengan owner berbeda.');
+            console.error(`[OWNERSHIP-GUARD] Current user: ${currentUser}`);
+            conflicts.forEach((c) => {
+                console.error(`[OWNERSHIP-GUARD] Conflict PID=${c.pid} user=${c.user}`);
+            });
+            console.error('[OWNERSHIP-GUARD] Jalankan aplikasi hanya dari satu jalur owner (root semua ATAU non-root semua).');
+            process.exit(1);
+        }
+    } catch (e) {
+        console.warn('[OWNERSHIP-GUARD] Skip check:', e.message);
+    }
+})();
 
 const express = require('express');
 const path = require('path');
@@ -331,6 +382,50 @@ const employeeSync = {
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(employee_id, period_month, period_year),
                     FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+                )`,
+                `CREATE TABLE IF NOT EXISTS employee_leave_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id INTEGER NOT NULL,
+                    request_type TEXT NOT NULL CHECK(request_type IN ('izin', 'cuti')),
+                    start_date DATE NOT NULL,
+                    end_date DATE NOT NULL,
+                    reason TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+                    requested_by TEXT,
+                    approved_by TEXT,
+                    approved_at DATETIME,
+                    approval_notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+                )`,
+                `CREATE TABLE IF NOT EXISTS attendance_branches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_name TEXT NOT NULL,
+                    address TEXT,
+                    latitude REAL NOT NULL,
+                    longitude REAL NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+                `CREATE TABLE IF NOT EXISTS attendance_settings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    lock_gps_enabled INTEGER DEFAULT 0,
+                    lock_gps_radius_meters INTEGER DEFAULT 100,
+                    method_selfie INTEGER DEFAULT 0,
+                    method_qrcode INTEGER DEFAULT 0,
+                    method_gps_tag INTEGER DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+                `CREATE TABLE IF NOT EXISTS attendance_shifts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    shift_name TEXT NOT NULL,
+                    check_in_time TEXT NOT NULL,
+                    check_out_time TEXT NOT NULL,
+                    is_active INTEGER DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`
             ];
 
@@ -370,6 +465,7 @@ const apiVouchersRouter = require('./routes/api/vouchers');
 const apiSettingsRouter = require('./routes/api/settings');
 const apiCollectorsRouter = require('./routes/api/collectors');
 const apiSystemRouter = require('./routes/api/system');
+const apiPublicEndpointRouter = require('./routes/api/public-endpoint');
 const unifiedAuthRouter = require('./routes/unifiedAuth');
 
 // Import middleware untuk access control (harus diimport sebelum digunakan)
@@ -733,6 +829,7 @@ app.use('/api/vouchers', apiVouchersRouter);
 app.use('/api/settings', apiSettingsRouter);
 app.use('/api/collectors', apiCollectorsRouter);
 app.use('/api/system', apiSystemRouter);
+app.use('/api/public', apiPublicEndpointRouter);
 
 // Import dan gunakan route Wablas webhook
 try {
@@ -1115,6 +1212,12 @@ function startServer(portToUse) {
 // Mulai server dengan prioritas: Environment Variable > settings.json > Default 4555
 const port = process.env.PORT || getSetting('server_port', 4555);
 logger.info(`Attempting to start server on port: ${port} (Source: ${process.env.PORT ? 'Environment' : 'Settings'})`);
+try {
+  const { getPublicAppBaseUrl } = require('./config/public-endpoint');
+  logger.info(`Public base URL (Android / link): ${getPublicAppBaseUrl()} — atur di .env (lihat .env.example)`);
+} catch (e) {
+  logger.warn('Public endpoint config log skipped:', e.message);
+}
 
 // Mulai server dengan port dari konfigurasi
 console.log(`🚀 [BOOTSTRAP] Final port selected: ${port}`);

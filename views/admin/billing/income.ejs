@@ -183,8 +183,10 @@
                                                 <td><%= income.payment_method || '-' %></td>
                                                 <td><%= income.notes || '-' %></td>
                                                 <td>
-                                                    <button class="btn btn-sm btn-warning" onclick="editIncome('<%= income.id %>')">Edit</button>
-                                                    <button class="btn btn-sm btn-danger" onclick="deleteIncome('<%= income.id %>')">Hapus</button>
+                                                    <div class="admin-action-btns">
+                                                        <button type="button" class="btn btn-sm btn-primary" onclick="editIncome('<%= income.id %>')" title="Ubah catatan pemasukan" aria-label="Ubah pemasukan">Edit</button>
+                                                        <button type="button" class="btn btn-sm btn-danger" onclick="deleteIncome('<%= income.id %>')" title="Hapus catatan pemasukan" aria-label="Hapus pemasukan">Hapus</button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <% }); %>

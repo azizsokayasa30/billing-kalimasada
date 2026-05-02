@@ -25,6 +25,9 @@ async function syncCustomerToRadius(customer, options = {}) {
     const pppoePassword = String(options.pppoe_password || options.password || '').trim();
     const groupname = normalizeGroupName(options.pppoe_profile || customer?.pppoe_profile || null);
     const framedIp = sanitizeIp(options.static_ip || options.assigned_ip || customer?.static_ip || customer?.assigned_ip || null);
+    /** Jangan timpa radusergroup ke profil paket saat pelanggan isolir — grup 'isolir' diatur suspendUserRadius / serviceSuspension */
+    const effectiveStatus = String(customer?.status || options?.status || '').toLowerCase();
+    const skipGroupAssign = effectiveStatus === 'suspended';
 
     if (!pppoeUsername) {
         return { success: false, skipped: true, message: 'PPPoE username kosong, skip sync RADIUS' };
@@ -58,12 +61,14 @@ async function syncCustomerToRadius(customer, options = {}) {
             }
         }
 
-        if (groupname) {
+        if (groupname && !skipGroupAssign) {
             await conn.execute("DELETE FROM radusergroup WHERE username = ?", [pppoeUsername]);
             await conn.execute(
                 "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
                 [pppoeUsername, groupname]
             );
+        } else if (groupname && skipGroupAssign) {
+            logger.info(`[RADIUS-SYNC] Skip radusergroup untuk ${pppoeUsername} (status suspended, biarkan grup isolir)`);
         }
 
         if (framedIp) {

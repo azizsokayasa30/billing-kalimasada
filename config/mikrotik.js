@@ -531,16 +531,20 @@ async function getRadiusStatistics() {
         const [totalRows] = await conn.execute(totalQuery, params);
         const totalUsers = totalRows[0]?.total || 0;
         
-        // Active PPPoE connections (dari radacct, exclude vouchers DAN members)
+        // Active PPPoE connections (dari radacct), tapi hanya hitung yang username-nya masih ada di radcheck
+        // Ini mencegah "data yatim" (orphan) di radacct membuat statistik jadi ngaco.
         let activeQuery = `
-            SELECT COUNT(DISTINCT username) as active
-            FROM radacct
-            WHERE acctstoptime IS NULL
+            SELECT COUNT(DISTINCT ra.username) as active
+            FROM radacct ra
+            JOIN radcheck rc
+              ON rc.username = ra.username
+             AND rc.attribute = 'Cleartext-Password'
+            WHERE ra.acctstoptime IS NULL
         `;
         const activeParams = [];
         if (excludeUsernames.length > 0) {
             const placeholders = excludeUsernames.map(() => '?').join(',');
-            activeQuery += ` AND username NOT IN (${placeholders})`;
+            activeQuery += ` AND ra.username NOT IN (${placeholders})`;
             activeParams.push(...excludeUsernames);
         }
         
@@ -1279,6 +1283,19 @@ async function unsuspendUserRadius(username) {
 async function deletePPPoEUserRadius(username) {
     const conn = await getRadiusConnection();
     try {
+        // Best-effort: kick sesi PPPoE aktif supaya user yang sudah dihapus dari RADIUS langsung berhenti internet.
+        try {
+            await disconnectPPPoEUser(username);
+        } catch (disconnectErr) {
+            logger.warn(`[RADIUS] Failed to disconnect PPPoE sessions for ${username}: ${disconnectErr.message}`);
+        }
+
+        // Mark accounting sessions that are still "active" as ended so statistics menjadi konsisten
+        await conn.execute(
+            "UPDATE radacct SET acctstoptime = datetime('now','localtime') WHERE username = ? AND (acctstoptime IS NULL OR acctstoptime = '' OR acctstoptime = '0' OR acctstoptime = '0000-00-00 00:00:00')",
+            [username]
+        );
+
         // Hapus dari radcheck
         await conn.execute("DELETE FROM radcheck WHERE username = ?", [username]);
         
@@ -3305,10 +3322,13 @@ async function disconnectPPPoEUser(username, routerObj = null) {
             return { success: false, message: 'Koneksi ke Mikrotik gagal', disconnected: 0 };
         }
         
-        // Cari sesi aktif user
-        const activeSessions = await conn.write('/ppp/active/print', [
-            `?name=${username}`
-        ]);
+        // Cari sesi aktif user.
+        // Jangan pakai filter `?name=` karena saat tidak ada match Mikrotik bisa mengirim reply `!empty`
+        // yang kadang memicu exception dari node-routeros.
+        // Jadi: print semua sesi, lalu filter di sisi aplikasi.
+        const allActiveSessions = await conn.write('/ppp/active/print');
+        const activeSessions = (Array.isArray(allActiveSessions) ? allActiveSessions : [])
+            .filter(s => String(s.name || '') === String(username));
         
         if (!activeSessions || activeSessions.length === 0) {
             return { success: true, message: `User ${username} tidak sedang online`, disconnected: 0 };
@@ -3326,31 +3346,7 @@ async function disconnectPPPoEUser(username, routerObj = null) {
                 logger.warn(`Failed to remove session ${session['.id']} for ${username}: ${removeError.message}`);
             }
         }
-        
-        // Verifikasi bahwa semua session sudah terputus
-        // Tunggu sebentar untuk memastikan disconnect selesai
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Cek lagi apakah masih ada session aktif
-        const remainingSessions = await conn.write('/ppp/active/print', [
-            `?name=${username}`
-        ]);
-        
-        if (remainingSessions && remainingSessions.length > 0) {
-            logger.warn(`Some sessions still active for ${username} after disconnect attempt, retrying...`);
-            // Retry disconnect untuk session yang masih aktif
-            for (const session of remainingSessions) {
-                try {
-                    await conn.write('/ppp/active/remove', [
-                        `=.id=${session['.id']}`
-                    ]);
-                    disconnected++;
-                } catch (retryError) {
-                    logger.warn(`Failed to remove remaining session ${session['.id']} for ${username}: ${retryError.message}`);
-                }
-            }
-        }
-        
+
         logger.info(`Disconnected ${disconnected} active PPPoE session(s) for ${username}`);
         return { success: true, message: `User ${username} berhasil diputus dari ${disconnected} sesi aktif`, disconnected: disconnected };
     } catch (error) {

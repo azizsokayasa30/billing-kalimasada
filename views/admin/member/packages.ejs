@@ -101,12 +101,14 @@
                                                     <% } %>
                                                 </td>
                                                 <td>
-                                                    <button class="btn btn-sm btn-primary" onclick="editPackage(<%= pkg.id %>)" title="Edit">
-                                                        <i class="bi bi-pencil"></i>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-danger" onclick="deletePackage(<%= pkg.id %>)" title="Hapus">
-                                                        <i class="bi bi-trash"></i>
-                                                    </button>
+                                                    <div class="admin-action-btns">
+                                                        <button type="button" class="btn btn-sm btn-primary" onclick="editPackage(<%= pkg.id %>)" title="Ubah paket member / hotspot" aria-label="Ubah paket member">
+                                                            <i class="bi bi-pencil"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-sm btn-danger" onclick="deletePackage(<%= pkg.id %>)" title="Hapus paket member dari sistem" aria-label="Hapus paket member">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <% }); %>

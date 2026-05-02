@@ -74,12 +74,12 @@
                                                 Group: <%= technician.whatsapp_group_id || 'Tidak ada' %>
                                             </small>
                                         </p>
-                                        <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-primary" onclick="openEditModal('<%- technician.id %>')">Edit</button>
-                                            <button class="btn btn-outline-secondary" onclick="toggleStatus('<%- technician.id %>', '<%- technician.is_active ? 1 : 0 %>')">
+                                        <div class="admin-action-btns">
+                                            <button type="button" class="btn btn-sm btn-primary" onclick="openEditModal('<%- technician.id %>')" title="Ubah data teknisi" aria-label="Ubah data teknisi">Edit</button>
+                                            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleStatus('<%- technician.id %>', '<%- technician.is_active ? 1 : 0 %>')" title="<%= technician.is_active ? 'Nonaktifkan akun teknisi' : 'Aktifkan kembali teknisi' %>" aria-label="<%= technician.is_active ? 'Nonaktifkan teknisi' : 'Aktifkan teknisi' %>">
                                                 <%= technician.is_active ? 'Nonaktifkan' : 'Aktifkan' %>
                                             </button>
-                                            <button class="btn btn-outline-danger" onclick="deleteTechnician('<%- technician.id %>')">Hapus</button>
+                                            <button type="button" class="btn btn-sm btn-danger" onclick="deleteTechnician('<%- technician.id %>')" title="Hapus teknisi dari daftar" aria-label="Hapus teknisi dari daftar">Hapus</button>
                                         </div>
                                     </div>
                                 </div>

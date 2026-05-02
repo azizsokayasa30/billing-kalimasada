@@ -197,19 +197,19 @@
             <% const bs = typeof billingStats !== 'undefined' ? billingStats : {}; %>
             <div class="db-section-label"><i class="bi bi-lightning-charge-fill me-2"></i>Akses Cepat Operasional</div>
             <div class="quick-action-grid mb-4">
-                <a href="/admin/billing/customers/new" class="qa-card qa-indigo" id="qa-add-customer">
+                <a href="/admin/billing/customers?quickAction=add-pppoe-customer" class="qa-card qa-indigo" id="qa-add-customer">
                     <div class="qa-icon"><i class="bi bi-person-plus-fill"></i></div>
                     <div class="qa-label">Tambah Pelanggan</div>
                 </a>
-                <a href="/admin/installation-jobs/new" class="qa-card qa-green" id="qa-add-job">
+                <a href="/admin/installations/create" class="qa-card qa-green" id="qa-add-job">
                     <div class="qa-icon"><i class="bi bi-tools"></i></div>
                     <div class="qa-label">Tambah Job Teknisi</div>
                 </a>
-                <a href="/admin/trouble" class="qa-card qa-orange" id="qa-add-ticket">
+                <a href="/admin/trouble?quickAction=create-ticket" class="qa-card qa-orange" id="qa-add-ticket">
                     <div class="qa-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
                     <div class="qa-label">Tambah Tiket Gangguan</div>
                 </a>
-                <a href="/admin/billing/payments" class="qa-card qa-blue" id="qa-payment">
+                <a href="/admin/billing/payments?quickAction=input-pembayaran" class="qa-card qa-blue" id="qa-payment">
                     <div class="qa-icon"><i class="bi bi-cash-coin"></i></div>
                     <div class="qa-label">Input Pembayaran</div>
                 </a>
@@ -255,7 +255,7 @@
                         <span class="sc-label">Total Tagihan</span>
                         <span class="sc-badge"><i class="bi bi-receipt me-1"></i> Bln Ini</span>
                     </div>
-                    <div class="sc-value">Rp <%= (bs.monthly_revenue || 0).toLocaleString('id-ID') %></div>
+                    <div class="sc-value">Rp <%= ((bs.monthly_revenue || 0) + (bs.monthly_unpaid || 0)).toLocaleString('id-ID') %></div>
                     <div class="sc-sub">Akumulasi tagihan bulan ini</div>
                 </a>
                 <a href="/admin/billing/invoices?status=unpaid" class="stat-card-big stat-amber" id="sc-unpaid">
@@ -280,12 +280,16 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div class="db-section-label m-0"><i class="bi bi-router-fill me-2"></i>Monitoring NAS & Traffic</div>
                 <div class="d-flex align-items-center gap-2">
-                    <select id="nasSelect1" class="form-select form-select-sm" style="width:180px;font-size:0.85rem; border-color:var(--border);">
-                        <option value="">-- Pilih NAS 1 --</option>
-                    </select>
-                    <select id="nasSelect2" class="form-select form-select-sm" style="width:180px;font-size:0.85rem; border-color:var(--border);">
-                        <option value="">-- Pilih NAS 2 --</option>
-                    </select>
+                    <div id="nasSelect1Container" class="d-flex align-items-center gap-1">
+                        <select id="nasSelect1" class="form-select form-select-sm" style="width:180px;font-size:0.85rem; border-color:var(--border);">
+                            <option value="">-- Pilih NAS 1 --</option>
+                        </select>
+                    </div>
+                    <div id="nasSelect2Container" class="d-flex align-items-center gap-1">
+                        <select id="nasSelect2" class="form-select form-select-sm" style="width:180px;font-size:0.85rem; border-color:var(--border);">
+                            <option value="">-- Pilih NAS 2 --</option>
+                        </select>
+                    </div>
                     <button id="refreshMonitoring" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></button>
                     <span id="lastUpdate" class="text-muted" style="font-size:0.75rem;"></span>
                 </div>

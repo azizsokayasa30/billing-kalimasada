@@ -61,9 +61,11 @@
                     <% } %>
                   </td>
                   <td>
-                    <button class="btn btn-sm btn-outline-secondary" onclick='openEdit(<%- JSON.stringify(r) %>)'><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-sm btn-outline-info" onclick='testRouter(<%= r.id %>)'><i class="bi bi-activity"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" onclick='deleteRouter(<%= r.id %>)'><i class="bi bi-trash"></i></button>
+                    <div class="admin-action-btns">
+                      <button type="button" class="btn btn-sm btn-primary" onclick='openEdit(<%- JSON.stringify(r) %>)' title="Ubah data NAS / router" aria-label="Ubah NAS"><i class="bi bi-pencil"></i></button>
+                      <button type="button" class="btn btn-sm btn-info" onclick='testRouter(<%= r.id %>)' title="Tes koneksi API MikroTik" aria-label="Tes koneksi MikroTik"><i class="bi bi-activity"></i></button>
+                      <button type="button" class="btn btn-sm btn-danger" onclick='deleteRouter(<%= r.id %>)' title="Hapus NAS dari daftar" aria-label="Hapus NAS"><i class="bi bi-trash"></i></button>
+                    </div>
                   </td>
                 </tr>
               <% }) %>

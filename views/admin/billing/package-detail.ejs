@@ -103,19 +103,21 @@
                                                         </td>
                                                         <td><%= new Date(customer.join_date).toLocaleDateString('id-ID') %></td>
                                                         <td>
-                                                            <div class="btn-group" role="group">
+                                                            <div class="admin-action-btns">
                                                                 <a href="/admin/billing/customers/<%= customer.username %>" 
-                                                                   class="btn btn-sm btn-outline-primary"
+                                                                   class="btn btn-sm btn-primary"
                                                                    data-bs-toggle="tooltip" 
                                                                    data-bs-placement="top" 
-                                                                   title="Detail Pelanggan">
+                                                                   title="Lihat detail pelanggan paket ini"
+                                                                   aria-label="Lihat detail pelanggan">
                                                                     <i class="bi bi-person-fill-detail"></i>
                                                                 </a>
                                                                 <a href="/admin/billing/invoices?customer_username=<%= customer.username %>" 
-                                                                   class="btn btn-sm btn-outline-info"
+                                                                   class="btn btn-sm btn-info"
                                                                    data-bs-toggle="tooltip" 
                                                                    data-bs-placement="top" 
-                                                                   title="Lihat Tagihan">
+                                                                   title="Lihat daftar tagihan pelanggan ini"
+                                                                   aria-label="Lihat tagihan pelanggan">
                                                                     <i class="bi bi-receipt"></i>
                                                                 </a>
                                                             </div>

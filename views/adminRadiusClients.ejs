@@ -88,21 +88,25 @@
                         </span>
                       </td>
                       <td>
-                        <button class="btn btn-sm btn-warning edit-client-btn" 
-                                data-name="<%= client.name %>"
-                                data-ipaddr="<%= client.ipaddr %>"
-                                data-secret="<%= client.secret %>"
-                                data-nas-type="<%= client.nas_type %>"
-                                data-msg-auth="<%= client.require_message_authenticator %>"
-                                data-comment="<%= client.comment || '' %>"
-                                title="Edit">
-                          <i class="bi bi-pencil"></i>
-                        </button>
-                        <button class="btn btn-sm btn-danger delete-client-btn" 
-                                data-name="<%= client.name %>"
-                                title="Hapus">
-                          <i class="bi bi-trash"></i>
-                        </button>
+                        <div class="admin-action-btns">
+                          <button type="button" class="btn btn-sm btn-primary edit-client-btn" 
+                                  data-name="<%= client.name %>"
+                                  data-ipaddr="<%= client.ipaddr %>"
+                                  data-secret="<%= client.secret %>"
+                                  data-nas-type="<%= client.nas_type %>"
+                                  data-msg-auth="<%= client.require_message_authenticator %>"
+                                  data-comment="<%= client.comment || '' %>"
+                                  title="Ubah data klien RADIUS / NAS"
+                                  aria-label="Ubah klien RADIUS">
+                            <i class="bi bi-pencil"></i>
+                          </button>
+                          <button type="button" class="btn btn-sm btn-danger delete-client-btn" 
+                                  data-name="<%= client.name %>"
+                                  title="Hapus klien RADIUS dari daftar"
+                                  aria-label="Hapus klien RADIUS">
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   <% }); %>

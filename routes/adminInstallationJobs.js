@@ -3,7 +3,7 @@ const router = express.Router();
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const { adminAuth } = require('./adminAuth');
-const { getSetting } = require('../config/settingsManager');
+const { getSetting, getLocalTimestamp } = require('../config/settingsManager');
 const logger = require('../config/logger');
 
 // Database connection
@@ -165,11 +165,17 @@ router.get('/create', adminAuth, async (req, res) => {
             });
         });
 
+        const prefillCustomer = req.session.prefillInstallationCustomer || null;
+        if (prefillCustomer) {
+            delete req.session.prefillInstallationCustomer;
+        }
+
         res.render('admin/installation-job-form', {
             title: 'Buat Jadwal Instalasi Baru',
             packages,
             technicians,
             job: null, // null for create mode
+            prefillCustomer,
             settings: {
                 logo_filename: getSetting('logo_filename', 'logo.png'),
                 company_header: getSetting('company_header', 'GEMBOK')
@@ -202,6 +208,8 @@ router.post('/create', adminAuth, async (req, res) => {
             customer_name: raw_customer_name,
             customer_phone: raw_customer_phone,
             customer_address: raw_customer_address,
+            customer_pppoe_username,
+            customer_pppoe_password,
             newCustomerName,
             newCustomerPhone,
             newCustomerAddress,
@@ -237,9 +245,9 @@ router.post('/create', adminAuth, async (req, res) => {
             });
         }
 
-        // Generate job number
-        const now = new Date();
-        const datePrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+        // Generate job number (prefix bulan sesuai WIB / timezone aplikasi, bukan UTC)
+        const localTs = getLocalTimestamp();
+        const datePrefix = localTs.slice(0, 7);
         
         const lastJobNumber = await new Promise((resolve, reject) => {
             db.get(
@@ -272,10 +280,9 @@ router.post('/create', adminAuth, async (req, res) => {
             `;
             const initialStatus = assigned_technician_id ? 'assigned' : 'scheduled';
 
-            // Pastikan installation_date tidak NULL jika kolom NOT NULL di DB
-            const today = new Date();
-            const defaultDate = today.toISOString().slice(0, 10); // YYYY-MM-DD
-            const defaultTime = '00:00';
+            // Pastikan installation_date tidak NULL jika kolom NOT NULL di DB (tanggal lokal WIB, bukan UTC)
+            const defaultDate = localTs.slice(0, 10);
+            const defaultTime = localTs.slice(11, 16);
             const safeInstallationDate = installation_date || defaultDate;
             const safeInstallationTime = installation_time || defaultTime;
 
@@ -331,7 +338,9 @@ router.post('/create', adminAuth, async (req, res) => {
                     const customer = {
                         name: customer_name,
                         phone: customer_phone,
-                        address: customer_address
+                        address: customer_address,
+                        pppoe_username: customer_pppoe_username || null,
+                        pppoe_password: customer_pppoe_password || null
                     };
                     const pkg = { name: job.package_name, price: job.package_price };
 

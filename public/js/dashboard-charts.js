@@ -32,32 +32,30 @@
                             select2.appendChild(opt2);
                         });
                         
-                        // Jika <= 2 NAS, auto-select semua dan sembunyikan dropdown
-                        // Jika > 2 NAS, tampilkan dropdown untuk pilihan manual
-                        if (data.routers.length <= 2) {
-                            // Hide dropdown containers
-                            document.getElementById('nasSelect1Container').style.display = 'none';
-                            document.getElementById('nasSelect2Container').style.display = 'none';
-                            
-                            // Auto-select semua NAS yang ada berdasarkan urutan
-                            if (data.routers.length >= 1) {
-                                selectedNAS1 = data.routers[0].id;
-                            }
-                            if (data.routers.length >= 2) {
-                                selectedNAS2 = data.routers[1].id;
-                            }
-                            
-                            // Update monitoring dengan auto-selected NAS
-                            updateMonitoring(true);
-                        } else {
-                            // Show dropdown containers untuk pilihan manual
-                            document.getElementById('nasSelect1Container').style.display = 'flex';
-                            document.getElementById('nasSelect2Container').style.display = 'flex';
-                            document.getElementById('nasSelect1Container').style.alignItems = 'center';
-                            document.getElementById('nasSelect2Container').style.alignItems = 'center';
-                            document.getElementById('nasSelect1Container').style.gap = '5px';
-                            document.getElementById('nasSelect2Container').style.gap = '5px';
-                        }
+                        // Selector statis: selalu pakai urutan NAS pertama & kedua
+                        // agar tampilan konsisten walau halaman di-refresh.
+                        const defaultNas1 = data.routers.length >= 1 ? Number(data.routers[0].id) : null;
+                        const defaultNas2 = data.routers.length >= 2 ? Number(data.routers[1].id) : null;
+
+                        selectedNAS1 = defaultNas1;
+                        selectedNAS2 = defaultNas2;
+
+                        select1.value = defaultNas1 ? String(defaultNas1) : '';
+                        select2.value = defaultNas2 ? String(defaultNas2) : '';
+
+                        // Lock selector supaya tetap statis sesuai urutan router.
+                        select1.disabled = true;
+                        select2.disabled = true;
+                        select1.title = 'NAS selector dibuat statis (router urutan pertama)';
+                        select2.title = 'NAS selector dibuat statis (router urutan kedua)';
+
+                        // Tampilkan hanya selector yang relevan.
+                        const c1 = document.getElementById('nasSelect1Container');
+                        const c2 = document.getElementById('nasSelect2Container');
+                        if (c1) c1.style.display = defaultNas1 ? 'flex' : 'none';
+                        if (c2) c2.style.display = defaultNas2 ? 'flex' : 'none';
+
+                        updateMonitoring(true);
                     }
                 } catch (e) {
                     console.error('Error loading routers:', e);
@@ -226,8 +224,8 @@
                                             </div>
                                         </div>
                                         <div class="col-md-9">
-                                            <div style="position: relative; height: 320px; background-color: transparent;">
-                                                <canvas id="rxBytesChart${routerId}" style="max-height: 320px;"></canvas>
+                                            <div style="position: relative; height: clamp(220px, 42vw, 360px); background-color: transparent;">
+                                                <canvas id="rxBytesChart${routerId}" style="max-height: 100%;"></canvas>
                                                 <div id="noInterfaceSelected${routerId}" class="text-center text-muted py-5" style="display: none;">
                                                     <i class="bi bi-graph-up" style="font-size: 2rem;"></i>
                                                     <p class="mt-2">Pilih interface untuk melihat trafik</p>
@@ -949,11 +947,15 @@
                         return;
                     }
                     
-                    // Use same light blue/teal color as Stats History: rgb(23, 162, 184)
-                    const chartColor = 'rgb(23, 162, 184)'; // Light blue/teal
-                    const chartColorDark = 'rgb(18, 130, 147)'; // Slightly darker for TX
-                    const chartBg = 'rgba(23, 162, 184, 0.2)'; // Translucent fill like Stats History
-                    const chartBgDark = 'rgba(18, 130, 147, 0.2)';
+                    // TX biru, RX hijau
+                    const rxColor = '#22c55e';
+                    const txColor = '#3b82f6';
+                    const gradientRx = ctx.getContext('2d').createLinearGradient(0, 0, 0, 320);
+                    gradientRx.addColorStop(0, 'rgba(34, 197, 94, 0.40)');
+                    gradientRx.addColorStop(1, 'rgba(34, 197, 94, 0.03)');
+                    const gradientTx = ctx.getContext('2d').createLinearGradient(0, 0, 0, 320);
+                    gradientTx.addColorStop(0, 'rgba(59, 130, 246, 0.40)');
+                    gradientTx.addColorStop(1, 'rgba(59, 130, 246, 0.03)');
                     
                     const chart = new Chart(ctx, {
                         type: 'line',
@@ -963,24 +965,26 @@
                                 {
                                     label: 'rx',
                                     data: tsData.rxData,
-                                    borderColor: chartColor,
-                                    backgroundColor: chartBg,
-                                    borderWidth: 1.5,
+                                    borderColor: rxColor,
+                                    backgroundColor: gradientRx,
+                                    borderWidth: 2,
                                     fill: true,
-                                    tension: 0.3,
+                                    tension: 0.35,
                                     pointRadius: 0,
-                                    pointHoverRadius: 4
+                                    pointHoverRadius: 5,
+                                    pointHitRadius: 12
                                 },
                                 {
                                     label: 'tx',
                                     data: tsData.txData,
-                                    borderColor: chartColorDark,
-                                    backgroundColor: chartBgDark,
-                                    borderWidth: 1.5,
+                                    borderColor: txColor,
+                                    backgroundColor: gradientTx,
+                                    borderWidth: 2,
                                     fill: true,
-                                    tension: 0.3,
+                                    tension: 0.35,
                                     pointRadius: 0,
-                                    pointHoverRadius: 4
+                                    pointHoverRadius: 5,
+                                    pointHitRadius: 12
                                 }
                             ]
                         },
@@ -998,7 +1002,7 @@
                                 }
                             },
                             interaction: {
-                                mode: 'nearest',
+                                mode: 'index',
                                 axis: 'x',
                                 intersect: false
                             },
@@ -1015,9 +1019,17 @@
                                     }
                                 },
                                 tooltip: {
+                                    displayColors: true,
+                                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                                    borderColor: 'rgba(148, 163, 184, 0.35)',
+                                    borderWidth: 1,
+                                    padding: 12,
                                     callbacks: {
                                         label: function(context) {
-                                            return `${context.dataset.label}: ${context.parsed.y.toFixed(2)} Mb/s`;
+                                            const name = String(context.dataset.label || '').toUpperCase();
+                                            const mbps = Number(context.parsed.y || 0);
+                                            const gbps = mbps / 1000;
+                                            return `${name}: ${gbps.toFixed(2)} Gbps (${mbps.toFixed(1)} Mbps)`;
                                         }
                                     }
                                 },
@@ -1038,7 +1050,7 @@
                             scales: {
                                 x: {
                                     grid: {
-                                        color: 'rgba(0,0,0,0.1)',
+                                        color: 'rgba(148,163,184,0.20)',
                                         lineWidth: 1
                                     },
                                     ticks: {
@@ -1063,29 +1075,23 @@
                                     beginAtZero: true,
                                     title: {
                                         display: true,
-                                        text: 'Mb/s',
+                                        text: 'Gbps',
                                         font: {
                                             size: 11
                                         }
                                     },
                                     ticks: {
                                         callback: function(value) {
-                                            if (value === 0) {
-                                                return '0 b/s';
-                                            }
-                                            if (value >= 1000) {
-                                                return (value / 1000).toFixed(1) + ' Gb/s';
-                                            }
-                                            return value.toFixed(0) + ' Mb/s';
+                                            return (Number(value) / 1000).toFixed(1) + ' Gbps';
                                         },
                                         font: {
                                             size: 10
                                         },
                                         color: '#666',
-                                        stepSize: 10
+                                        stepSize: 100
                                     },
                                     grid: {
-                                        color: 'rgba(0,0,0,0.1)',
+                                        color: 'rgba(148,163,184,0.20)',
                                         lineWidth: 1,
                                         drawBorder: false
                                     }

@@ -4584,7 +4584,7 @@ router.post('/customers', customerPhotoUpload.fields([
     { name: 'house_photo', maxCount: 1 }
 ]), async (req, res) => {
     try {
-        const { name, username, password, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, auto_suspension, billing_day, renewal_type, fix_date, create_pppoe_user, pppoe_password, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, router_id } = req.body;
+        const { name, username, password, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, status: bodyStatus, auto_suspension, billing_day, renewal_type, fix_date, create_pppoe_user, pppoe_password, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, router_id, save_mode } = req.body;
         
         // Validate required fields
         if (!name || !username || !phone || !package_id) {
@@ -4621,6 +4621,10 @@ router.post('/customers', customerPhotoUpload.fields([
             });
         }
 
+        const allowedNewStatus = ['active', 'inactive', 'suspended'];
+        const statusFromForm = (bodyStatus && String(bodyStatus).trim()) || '';
+        const initialStatus = allowedNewStatus.includes(statusFromForm) ? statusFromForm : 'active';
+
         const customerData = {
             name,
             username,
@@ -4634,7 +4638,7 @@ router.post('/customers', customerPhotoUpload.fields([
             package_id,
             odp_id: odp_id || null,
             pppoe_profile: profileToUse,
-            status: 'active',
+            status: initialStatus,
             auto_suspension: auto_suspension !== undefined ? parseInt(auto_suspension) : 1,
             billing_day: (() => {
                 const v = parseInt(billing_day, 10);
@@ -4770,11 +4774,24 @@ router.post('/customers', customerPhotoUpload.fields([
             pppoeCreate.message = e.message;
         }
 
+        if (save_mode === 'save_and_create_task') {
+            req.session.prefillInstallationCustomer = {
+                customer_id: result.id,
+                customer_name: result.name || name,
+                customer_phone: result.phone || phone,
+                customer_address: result.address || address || '',
+                package_id: package_id ? parseInt(package_id, 10) : null,
+                pppoe_username: pppoe_username || '',
+                pppoe_password: (pppoeCreate && pppoeCreate.password) ? pppoeCreate.password : (pppoe_password || '')
+            };
+        }
+
         res.json({
             success: true,
             message: 'Pelanggan berhasil ditambahkan',
             customer: result,
-            pppoeCreate
+            pppoeCreate,
+            redirect_to_task: save_mode === 'save_and_create_task' ? '/admin/installations/create?prefill_customer=1' : null
         });
     } catch (error) {
         logger.error('Error creating customer:', error);
@@ -6195,7 +6212,7 @@ router.get('/all-payments', getAppSettings, async (req, res) => {
 
 router.post('/payments', async (req, res) => {
     try {
-        const { invoice_id, amount, payment_method, reference_number, notes } = req.body;
+        const { invoice_id, amount, payment_method, reference_number, notes, payment_date } = req.body;
         
         // Validate required fields first
         if (!invoice_id || !amount || !payment_method) {
@@ -6205,12 +6222,17 @@ router.post('/payments', async (req, res) => {
             });
         }
         
+        const normalizedPaymentMethod = payment_method.trim();
+        const normalizedNotes = (notes ? notes.trim() : '') ||
+            (normalizedPaymentMethod === 'manual_admin' ? 'Pelunasan oleh Admin Kantor' : '');
+
         const paymentData = {
             invoice_id: parseInt(invoice_id),
             amount: parseFloat(amount),
-            payment_method: payment_method.trim(),
+            payment_method: normalizedPaymentMethod,
             reference_number: reference_number ? reference_number.trim() : '',
-            notes: notes ? notes.trim() : ''
+            notes: normalizedNotes,
+            payment_date: payment_date ? String(payment_date).trim() : ''
         };
 
         const newPayment = await billingManager.recordPayment(paymentData);

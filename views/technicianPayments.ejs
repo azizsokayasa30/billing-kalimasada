@@ -342,13 +342,15 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-primary" title="Lihat Detail" 
+                                        <div class="admin-action-btns">
+                                            <button type="button" class="btn btn-sm btn-info" title="Lihat detail pembayaran / komisi"
+                                                    aria-label="Lihat pembayaran"
                                                     onclick="viewPayment(<%= payment.id %>)">
                                                 <i class="bi bi-eye"></i>
                                             </button>
                                             <% if (payment.status === 'pending') { %>
-                                            <button class="btn btn-outline-secondary" title="Edit" 
+                                            <button type="button" class="btn btn-sm btn-primary" title="Ubah data pembayaran (status pending)"
+                                                    aria-label="Ubah pembayaran"
                                                     onclick="editPayment(<%= payment.id %>)">
                                                 <i class="bi bi-pencil"></i>
                                             </button>

@@ -163,15 +163,17 @@
                                                     <% } %>
                                                 </td>
                                                 <td>
-                                                    <button class="btn btn-sm btn-info" onclick="viewMemberProfile(<%= member.id %>)" title="Lihat Profile">
-                                                        <i class="bi bi-eye"></i>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-primary" onclick="editMember(<%= member.id %>)" title="Edit">
-                                                        <i class="bi bi-pencil"></i>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-danger" onclick="deleteMember(<%= member.id %>)" title="Hapus">
-                                                        <i class="bi bi-trash"></i>
-                                                    </button>
+                                                    <div class="admin-action-btns">
+                                                        <button type="button" class="btn btn-sm btn-info" onclick="viewMemberProfile(<%= member.id %>)" title="Lihat profil dan detail member" aria-label="Lihat profil member">
+                                                            <i class="bi bi-eye"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-sm btn-primary" onclick="editMember(<%= member.id %>)" title="Ubah data member" aria-label="Ubah member">
+                                                            <i class="bi bi-pencil"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-sm btn-danger" onclick="deleteMember(<%= member.id %>)" title="Hapus member dari sistem" aria-label="Hapus member">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <% }); %>

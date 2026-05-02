@@ -54,9 +54,11 @@
                     <% } %>
                   </td>
                   <td>
-                    <button class="btn btn-sm btn-outline-secondary" onclick='openEditServer(<%- JSON.stringify(s) %>)'><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-sm btn-outline-info" onclick='testServer(<%= s.id %>)'><i class="bi bi-activity"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" onclick='deleteServer(<%= s.id %>)'><i class="bi bi-trash"></i></button>
+                    <div class="admin-action-btns">
+                      <button type="button" class="btn btn-sm btn-primary" onclick='openEditServer(<%- JSON.stringify(s) %>)' title="Ubah pengaturan server GenieACS" aria-label="Ubah server GenieACS"><i class="bi bi-pencil"></i></button>
+                      <button type="button" class="btn btn-sm btn-info" onclick='testServer(<%= s.id %>)' title="Tes koneksi ke server GenieACS" aria-label="Tes koneksi GenieACS"><i class="bi bi-activity"></i></button>
+                      <button type="button" class="btn btn-sm btn-danger" onclick='deleteServer(<%= s.id %>)' title="Hapus server GenieACS" aria-label="Hapus server GenieACS"><i class="bi bi-trash"></i></button>
+                    </div>
                   </td>
                 </tr>
               <% }) %>

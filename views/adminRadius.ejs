@@ -101,6 +101,16 @@
               <i class="bi bi-arrow-repeat"></i> Test Koneksi ke RADIUS
             </button>
             <div id="testResult" class="mt-3"></div>
+
+            <div class="mt-3">
+              <button type="button" id="syncOrphanUsersBtn" class="btn btn-warning">
+                <i class="bi bi-shuffle"></i> Sinkronisasi & Hapus User Fiktif
+              </button>
+              <div id="orphanSyncResult" class="mt-3"></div>
+              <div class="text-muted small mt-2">
+                Menghapus user yang ada di RADIUS tapi tidak ada di data aplikasi (customers/members/vouchers), lalu mengakhiri sesi aktifnya.
+              </div>
+            </div>
           </div>
         </div>
         <div class="col-md-6">
@@ -350,6 +360,65 @@ $(document).ready(function() {
         resultDiv.html(`
           <div class="alert alert-danger">
             <h6><i class="bi bi-x-circle"></i> Error!</h6>
+            <p>${errorMsg}</p>
+          </div>
+        `);
+      }
+    });
+  });
+
+  // Orphan user sync / cleanup
+  $('#syncOrphanUsersBtn').on('click', function() {
+    const btn = $(this);
+    const resultDiv = $('#orphanSyncResult');
+
+    if (!confirm('Sinkronisasi & hapus user fiktif ini akan menghapus data autentikasi yang tidak ada di aplikasi. Lanjutkan?')) {
+      return;
+    }
+
+    btn.prop('disabled', true);
+    btn.html('<span class="spinner-border spinner-border-sm"></span> Proses...');
+    resultDiv.html('<div class="alert alert-info">Sedang menghapus user fiktif di RADIUS, mohon tunggu...</div>');
+
+    $.ajax({
+      url: '/admin/radius/sync-orphan-users',
+      method: 'POST',
+      cache: 'no-store',
+      success: function(response) {
+        btn.prop('disabled', false);
+        btn.html('<i class="bi bi-shuffle"></i> Sinkronisasi & Hapus User Fiktif');
+
+        if (response && response.success) {
+          const msg = response.message || 'Sinkronisasi selesai';
+          const details = response.details || {};
+          resultDiv.html(`
+            <div class="alert alert-success">
+              <h6><i class="bi bi-check-circle"></i> ${msg}</h6>
+              <hr>
+              <ul>
+                <li>User orphans ditemukan: <strong>${details.orphanUsersFound ?? '-'}</strong></li>
+                <li>User orphans dihapus: <strong>${details.orphanUsersDeleted ?? '-'}</strong></li>
+                <li>Sesi radacct aktif diakhiri: <strong>${details.endedRadacctActive ?? '-'}</strong></li>
+                <li>Upaya disconnect PPPoE: <strong>${details.pppoeDisconnectAttempts ?? '-'}</strong></li>
+              </ul>
+            </div>
+          `);
+        } else {
+          resultDiv.html(`
+            <div class="alert alert-danger">
+              <h6><i class="bi bi-x-circle"></i> Gagal</h6>
+              <p>${response && response.message ? response.message : 'Unknown error'}</p>
+            </div>
+          `);
+        }
+      },
+      error: function(xhr) {
+        btn.prop('disabled', false);
+        btn.html('<i class="bi bi-shuffle"></i> Sinkronisasi & Hapus User Fiktif');
+        const errorMsg = xhr.responseJSON?.message || xhr.responseText || 'Unknown error';
+        resultDiv.html(`
+          <div class="alert alert-danger">
+            <h6><i class="bi bi-x-circle"></i> Error</h6>
             <p>${errorMsg}</p>
           </div>
         `);

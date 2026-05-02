@@ -487,17 +487,17 @@
                                 ${agent.status === 'active' ? 'Aktif' : agent.status === 'inactive' ? 'Tidak Aktif' : 'Suspended'}
                             </span>
                             <br>
-                              <div class="btn-group" role="group">
-                                  <a href="/admin/agents/${agent.id}" class="btn btn-outline-primary btn-sm">
+                              <div class="admin-action-btns">
+                                  <a href="/admin/agents/${agent.id}" class="btn btn-sm btn-info" title="Lihat detail agen" aria-label="Lihat detail agen">
                                       <i class="fas fa-eye me-1"></i>Detail
                                   </a>
-                                  <button class="btn btn-outline-warning btn-sm" onclick="editAgent(${agent.id})">
+                                  <button type="button" class="btn btn-sm btn-primary" onclick="editAgent(${agent.id})" title="Ubah data agen" aria-label="Ubah agen">
                                       <i class="fas fa-edit me-1"></i>Edit
                                   </button>
-                                  <button class="btn btn-outline-${agent.status === 'active' ? 'danger' : 'success'} btn-sm" onclick="toggleAgentStatus(${agent.id}, '${agent.status}')">
+                                  <button type="button" class="btn btn-sm ${agent.status === 'active' ? 'btn-warning' : 'btn-success'}" onclick="toggleAgentStatus(${agent.id}, '${agent.status}')" title="${agent.status === 'active' ? 'Nonaktifkan agen' : 'Aktifkan kembali agen'}" aria-label="${agent.status === 'active' ? 'Nonaktifkan agen' : 'Aktifkan agen'}">
                                       <i class="fas fa-${agent.status === 'active' ? 'pause' : 'play'} me-1"></i>${agent.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}
                                   </button>
-                                  <button class="btn btn-outline-danger btn-sm" onclick="deleteAgent(${agent.id}, '${agent.name}')">
+                                  <button type="button" class="btn btn-sm btn-danger" onclick="deleteAgent(${agent.id}, '${agent.name}')" title="Hapus agen dari sistem" aria-label="Hapus agen">
                                       <i class="fas fa-trash me-1"></i>Hapus
                                   </button>
                               </div>

@@ -139,15 +139,47 @@ function getServerTimezone() {
 
 // Helper function untuk mendapatkan timestamp lokal WIB yang benar
 // Gunakan fungsi ini sebagai pengganti new Date().toISOString() di seluruh aplikasi
+// Format: YYYY-MM-DD HH:mm:ss — zona: settings app_timezone, lalu server (bukan UTC murni), default Asia/Jakarta
 function getLocalTimestamp(date = null) {
     const d = date ? new Date(date) : new Date();
-    // Konversi ke Asia/Jakarta menggunakan Intl API (tersedia di semua platform)
-    const jakartaOffsetMs = 7 * 60 * 60 * 1000; // UTC+7
-    const utcMs = d.getTime();
-    const jakartaMs = utcMs + jakartaOffsetMs;
-    const jakartaDate = new Date(jakartaMs);
-    // Return dalam format ISO-like yang kompatibel dengan SQLite
-    return jakartaDate.toISOString().replace('Z', '+07:00');
+    let tz = 'Asia/Jakarta';
+    try {
+        const fromSettings = getSetting('app_timezone', '');
+        if (fromSettings && typeof fromSettings === 'string' && fromSettings.trim()) {
+            tz = fromSettings.trim();
+        } else {
+            const serverTz = getServerTimezone() || 'Asia/Jakarta';
+            const lower = serverTz.toLowerCase();
+            if (lower === 'utc' || lower === 'etc/utc' || lower.endsWith('/utc')) {
+                tz = 'Asia/Jakarta';
+            } else {
+                tz = serverTz;
+            }
+        }
+    } catch (e) {
+        tz = 'Asia/Jakarta';
+    }
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).formatToParts(d);
+    const pick = (type) => {
+        const p = parts.find((x) => x.type === type);
+        return p ? p.value : '00';
+    };
+    const y = pick('year');
+    const mo = pick('month');
+    const da = pick('day');
+    const h = pick('hour');
+    const mi = pick('minute');
+    const se = pick('second');
+    return `${y}-${mo}-${da} ${h}:${mi}:${se}`;
 }
 
 module.exports = { 

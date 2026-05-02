@@ -707,10 +707,10 @@
                                     <td class="text-center"><%= device.tag || '-' %></td>
                                     <td class="text-center"><%= typeof device.rxPower !== 'undefined' ? device.rxPower : '-' %></td>
                                     <td>
-                                        <div class="btn-group btn-group-sm" role="group">
-                                            <button class="btn btn-warning edit-btn" data-id="<%= device.id %>" data-ssid="<%= device.ssid %>" data-password="<%= device.password %>" data-server-id="<%= device.genieacsServerId || 'default' %>" title="Edit SSID & Password"><i class="bi bi-pencil"></i> Edit SSID</button>
-                                            <button class="btn btn-info edit-tag-btn" data-id="<%= device.id %>" data-tag="<%= device.tag || '' %>" data-server-id="<%= device.genieacsServerId || 'default' %>" title="Edit Tag"><i class="bi bi-tag"></i> Edit Tag</button>
-                                            <button class="btn btn-danger restart-onu-btn" data-id="<%= device.id %>" data-serial="<%= device.serial %>" data-server-id="<%= device.genieacsServerId || 'default' %>" title="Restart ONU"><i class="bi bi-arrow-clockwise"></i> Restart</button>
+                                        <div class="admin-action-btns">
+                                            <button type="button" class="btn btn-sm btn-primary edit-btn" data-id="<%= device.id %>" data-ssid="<%= device.ssid %>" data-password="<%= device.password %>" data-server-id="<%= device.genieacsServerId || 'default' %>" title="Ubah SSID dan kata sandi WiFi perangkat" aria-label="Ubah SSID dan sandi WiFi"><i class="bi bi-pencil"></i> Edit SSID</button>
+                                            <button type="button" class="btn btn-sm btn-info edit-tag-btn" data-id="<%= device.id %>" data-tag="<%= device.tag || '' %>" data-server-id="<%= device.genieacsServerId || 'default' %>" title="Ubah tag / label perangkat" aria-label="Ubah tag perangkat"><i class="bi bi-tag"></i> Edit Tag</button>
+                                            <button type="button" class="btn btn-sm btn-danger restart-onu-btn" data-id="<%= device.id %>" data-serial="<%= device.serial %>" data-server-id="<%= device.genieacsServerId || 'default' %>" title="Restart ONU / perangkat jarak jauh" aria-label="Restart ONU"><i class="bi bi-arrow-clockwise"></i> Restart</button>
                                         </div>
                                     </td>
                                 </tr>

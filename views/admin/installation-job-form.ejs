@@ -123,7 +123,7 @@
                 <div class="col-lg-8">
                     <div class="card form-card">
                         <div class="card-body">
-                            <form id="installationForm" method="POST" action="/admin/installations/create" onsubmit="return false;">
+                            <form id="installationForm" method="POST" action="<%= job ? ('/admin/installations/update/' + job.id) : '/admin/installations/create' %>" onsubmit="return false;">
                                 <!-- Customer Information Section -->
                                 <div class="form-section">
                                     <h5><i class="bi bi-person me-2"></i>Informasi Pelanggan</h5>
@@ -195,7 +195,7 @@
                                                 <option value="">Pilih Paket</option>
                                                 <% if (Array.isArray(packages)) { %>
                                                     <% packages.forEach(p => { %>
-                                                        <option value="<%= p.id %>"><%= p.name %><% if (p.speed) { %> - <%= p.speed %><% } %><% if (p.price) { %> - Rp <%= Number(p.price).toLocaleString('id-ID') %><% } %></option>
+                                                        <option value="<%= p.id %>" <%= job && String(job.package_id) === String(p.id) ? 'selected' : '' %>><%= p.name %><% if (p.speed) { %> - <%= p.speed %><% } %><% if (p.price) { %> - Rp <%= Number(p.price).toLocaleString('id-ID') %><% } %></option>
                                                     <% }) %>
                                                 <% } %>
                                             </select>
@@ -216,7 +216,7 @@
                                                 <option value="">Pilih Teknisi</option>
                                                 <% if (typeof technicians !== 'undefined' && technicians.length > 0) { %>
                                                     <% technicians.forEach(tech => { %>
-                                                        <option value="<%= tech.id %>">
+                                                        <option value="<%= tech.id %>" <%= job && String(job.assigned_technician_id) === String(tech.id) ? 'selected' : '' %>>
                                                             <%= tech.name %> (<%= tech.phone %>)
                                                         </option>
                                                     <% }); %>
@@ -226,9 +226,9 @@
                                         <div class="col-md-6">
                                             <label for="priority" class="form-label">Prioritas</label>
                                             <select class="form-select" id="priority" name="priority">
-                                                <option value="normal">Normal</option>
-                                                <option value="high">Tinggi</option>
-                                                <option value="urgent">Urgent</option>
+                                                <option value="normal" <%= job && job.priority === 'normal' ? 'selected' : '' %>>Normal</option>
+                                                <option value="high" <%= job && job.priority === 'high' ? 'selected' : '' %>>Tinggi</option>
+                                                <option value="urgent" <%= job && job.priority === 'urgent' ? 'selected' : '' %>>Urgent</option>
                                             </select>
                                         </div>
                                     </div>
@@ -240,7 +240,7 @@
                                     <div class="row">
                                         <div class="col-md-12">
                                             <label for="notes" class="form-label">Catatan</label>
-                                            <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Catatan tambahan"></textarea>
+                                            <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Catatan tambahan"><%= job && job.notes ? job.notes : '' %></textarea>
                                         </div>
                                     </div>
                                 </div>
@@ -287,6 +287,9 @@
 
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script>
+    const prefillCustomer = <%- JSON.stringify(typeof prefillCustomer !== 'undefined' ? prefillCustomer : null) %>;
+    const editJob = <%- JSON.stringify(typeof job !== 'undefined' ? job : null) %>;
+
     // Optional: set minimum date to today if field exists
     if (document.getElementById('installationDate')) {
         document.getElementById('installationDate').min = new Date().toISOString().split('T')[0];
@@ -344,7 +347,7 @@
             <div class="list-group">
                 ${customers.map(customer => `
                     <a href="#" class="list-group-item list-group-item-action" 
-                       onclick="selectCustomerFromSearch(${customer.id}, '${customer.name}', '${customer.phone}', '${customer.email || ''}', '${customer.address || ''}', '${customer.pppoe_username || ''}')">
+                       onclick="selectCustomerFromSearch(${customer.id}, '${customer.name}', '${customer.phone}', '${customer.email || ''}', '${customer.address || ''}', '${customer.pppoe_username || ''}', '')">
                         <div class="d-flex w-100 justify-content-between">
                             <h6 class="mb-1">${customer.name}</h6>
                             <small class="text-primary">${customer.phone}</small>
@@ -379,7 +382,7 @@
         `;
     }
     
-    function selectCustomerFromSearch(id, name, phone, email, address, pppoeUsername) {
+    function selectCustomerFromSearch(id, name, phone, email, address, pppoeUsername, pppoePassword) {
         // Hide search results
         document.getElementById('customerSearchResult').style.display = 'none';
         
@@ -404,6 +407,8 @@
                 <input type="hidden" name="customer_name" value="${name}">
                 <input type="hidden" name="customer_phone" value="${phone}">
                 <input type="hidden" name="customer_address" value="${address || ''}">
+                <input type="hidden" name="customer_pppoe_username" value="${pppoeUsername || ''}">
+                <input type="hidden" name="customer_pppoe_password" value="${pppoePassword || ''}">
                 <button type="button" class="btn btn-sm btn-outline-secondary mt-2" onclick="changeCustomer()">
                     <i class="bi bi-arrow-repeat me-1"></i>Ganti Pelanggan
                 </button>
@@ -419,7 +424,7 @@
     
     function selectCustomer(id, name, phone, email, address) {
         // Legacy function - redirect to new function
-        selectCustomerFromSearch(id, name, phone, email, address, '');
+        selectCustomerFromSearch(id, name, phone, email, address, '', '');
     }
     
     function changeCustomer() {
@@ -520,16 +525,22 @@
     }
     
     // Auto-search packages when typing
-    document.getElementById('packageSearch').addEventListener('input', function() {
-        if (this.value.length >= 2) {
-            searchPackages();
-        }
-    });
+    const packageSearchEl = document.getElementById('packageSearch');
+    if (packageSearchEl) {
+        packageSearchEl.addEventListener('input', function() {
+            if (this.value.length >= 2) {
+                searchPackages();
+            }
+        });
+    }
     
     // Auto-search packages when category changes
-    document.getElementById('packageCategory').addEventListener('change', function() {
-        searchPackages();
-    });
+    const packageCategoryEl = document.getElementById('packageCategory');
+    if (packageCategoryEl) {
+        packageCategoryEl.addEventListener('change', function() {
+            searchPackages();
+        });
+    }
     
     // Toast notification function
     function showToast(message, type = 'info') {
@@ -586,15 +597,13 @@
         }
     });
     
-    // Submit handler via button to avoid native submit navigation
-    // Fallback attach if onclick removed by browser
-    const _btn = document.getElementById('submitBtn');
-    if (_btn) {
-        _btn.addEventListener('click', submitInstallation);
-    }
+    let isSubmittingInstallation = false;
 
     function submitInstallation() {
+        if (isSubmittingInstallation) return;
         const form = document.getElementById('installationForm');
+        const submitBtnEl = document.getElementById('submitBtn');
+        const originalSubmitHtml = submitBtnEl ? submitBtnEl.innerHTML : '';
         // Basic validation
         const customerId = document.querySelector('input[name="customer_id"]');
         const packageId = document.getElementById('package_id').value;
@@ -606,10 +615,15 @@
             showToast('Mohon pilih paket internet', 'error');
             return;
         }
+        isSubmittingInstallation = true;
+        if (submitBtnEl) {
+            submitBtnEl.disabled = true;
+            submitBtnEl.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Menyimpan...';
+        }
         const fd = new FormData(form);
         const body = new URLSearchParams([...fd.entries()]);
         fetch(form.action, {
-            method: 'POST',
+            method: editJob && editJob.id ? 'PUT' : 'POST',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
@@ -618,19 +632,71 @@
         }).then(async (res) => {
             const data = await res.json().catch(() => ({ success: false, message: 'Gagal parsing respons server' }));
             if (data && data.success) {
-                form.style.display = 'none';
-                const sc = document.getElementById('successContainer');
-                const msg = document.getElementById('successMessage');
-                const info = document.getElementById('successJobInfo');
-                msg.textContent = data.message || 'Berhasil';
-                info.textContent = `Job Number: ${data.jobNumber} | ID: ${data.jobId}`;
-                sc.style.display = 'block';
+                showToast('Jadwal instalasi berhasil disimpan', 'success');
+                setTimeout(() => {
+                    window.location.href = '/admin/installations';
+                }, 600);
             } else {
                 showToast(data && data.message ? data.message : 'Gagal membuat jadwal instalasi', 'error');
+                isSubmittingInstallation = false;
+                if (submitBtnEl) {
+                    submitBtnEl.disabled = false;
+                    submitBtnEl.innerHTML = originalSubmitHtml;
+                }
             }
         }).catch(() => {
             showToast('Terjadi kesalahan jaringan', 'error');
+            isSubmittingInstallation = false;
+            if (submitBtnEl) {
+                submitBtnEl.disabled = false;
+                submitBtnEl.innerHTML = originalSubmitHtml;
+            }
         });
+    }
+
+    // Prefill customer after redirect from "Simpan + Buat Tugas"
+    if (prefillCustomer && prefillCustomer.customer_id) {
+        showNewCustomerForm(); // switch context from search to direct selected customer
+        document.getElementById('newCustomerForm').style.display = 'none';
+        selectCustomerFromSearch(
+            prefillCustomer.customer_id,
+            prefillCustomer.customer_name || '',
+            prefillCustomer.customer_phone || '',
+            '',
+            prefillCustomer.customer_address || '',
+            prefillCustomer.pppoe_username || '',
+            prefillCustomer.pppoe_password || ''
+        );
+        if (prefillCustomer.package_id) {
+            const pkgSelect = document.getElementById('package_id');
+            pkgSelect.value = String(prefillCustomer.package_id);
+        }
+    }
+
+    // Prefill form in edit mode from current job data
+    if (editJob && editJob.id) {
+        selectCustomerFromSearch(
+            editJob.customer_id || '',
+            editJob.customer_name || '',
+            editJob.customer_phone || '',
+            '',
+            editJob.customer_address || '',
+            editJob.customer_pppoe_username || '',
+            editJob.customer_pppoe_password || ''
+        );
+        if (editJob.package_id) {
+            const pkgSelect = document.getElementById('package_id');
+            pkgSelect.value = String(editJob.package_id);
+        }
+        if (editJob.assigned_technician_id) {
+            document.getElementById('assignedTechnician').value = String(editJob.assigned_technician_id);
+        }
+        if (editJob.priority) {
+            document.getElementById('priority').value = editJob.priority;
+        }
+        if (typeof editJob.notes === 'string') {
+            document.getElementById('notes').value = editJob.notes;
+        }
     }
 </script>
 </body>

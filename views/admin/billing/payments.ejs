@@ -10,6 +10,20 @@
     <link href="/css/admin-mobile.css" rel="stylesheet">
 
     <%- include('../../partials/theme-head') %>
+    <style>
+      html[data-theme="light"] #paymentInputModal .modal-content,
+      html[data-theme="light"] #paymentInputModal .modal-header,
+      html[data-theme="light"] #paymentInputModal .modal-body,
+      html[data-theme="light"] #paymentInputModal .modal-footer {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+      }
+
+      html[data-theme="light"] #paymentInputModal .modal-content {
+        border: 1px solid #dee2e6 !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+      }
+    </style>
 </head>
 <body>
 <% 
@@ -71,6 +85,12 @@
         </div>
     </form>
 
+    <div class="mb-3">
+        <button type="button" class="btn btn-success" id="openPaymentModalBtn">
+            <i class="bi bi-cash-coin me-1"></i> Input Pembayaran Invoice
+        </button>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-hover">
             <thead>
@@ -117,6 +137,69 @@
     </div>
 </div>
 
+<!-- Payment Input Modal -->
+<div class="modal fade" id="paymentInputModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-cash-coin text-success"></i> Input Pembayaran Invoice</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="paymentInputForm">
+        <div class="modal-body">
+          <div class="mb-3 position-relative">
+            <label class="form-label">Nama Pelanggan</label>
+            <input type="text" class="form-control" id="customerSearchInput" placeholder="Ketik nama/telepon pelanggan..." autocomplete="off" required>
+            <input type="hidden" id="selectedCustomerId" required>
+            <div id="customerSuggestions" class="list-group position-absolute w-100" style="z-index:1060; max-height:220px; overflow:auto; display:none;"></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Invoice Belum Lunas</label>
+            <select class="form-select" id="invoiceSelect" required>
+              <option value="">Pilih invoice</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Jumlah Invoice</label>
+            <input type="number" class="form-control" id="invoiceAmount" readonly>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Diskon (Rp)</label>
+            <input type="number" class="form-control" id="discountAmount" min="0" step="1" value="0" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Metode Pembayaran</label>
+            <select class="form-select" id="paymentMethod" required>
+              <option value="">Pilih metode pembayaran</option>
+              <option value="manual_admin" selected>Admin Kantor (Manual)</option>
+              <option value="cash">Tunai</option>
+              <option value="transfer_bank">Transfer Bank</option>
+              <option value="qris">QRIS</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Tanggal Pembayaran</label>
+            <input type="date" class="form-control" id="paymentDate" required>
+          </div>
+
+          <div class="alert alert-info mb-0">
+            Total dibayar: <strong id="finalPaymentText">Rp 0</strong>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-success">Submit Pembayaran</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 
@@ -149,6 +232,171 @@
             a.href = url; a.download = 'payments.csv'; a.click();
             URL.revokeObjectURL(url);
         });
+
+        let paymentModal;
+        let customersCache = [];
+        let currentInvoices = [];
+
+        function openPaymentInputModal() {
+            if (!paymentModal) {
+                paymentModal = new bootstrap.Modal(document.getElementById('paymentInputModal'));
+            }
+            document.getElementById('paymentDate').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('customerSearchInput').value = '';
+            document.getElementById('selectedCustomerId').value = '';
+            document.getElementById('invoiceSelect').innerHTML = '<option value="">Pilih invoice</option>';
+            document.getElementById('invoiceAmount').value = '';
+            document.getElementById('discountAmount').value = 0;
+            updateFinalPayment();
+            paymentModal.show();
+        }
+
+        function updateFinalPayment() {
+            const invoiceAmount = parseFloat(document.getElementById('invoiceAmount').value || '0');
+            const discount = parseFloat(document.getElementById('discountAmount').value || '0');
+            const finalAmount = Math.max(invoiceAmount - discount, 0);
+            document.getElementById('finalPaymentText').textContent = `Rp ${Math.round(finalAmount).toLocaleString('id-ID')}`;
+            return { invoiceAmount, discount, finalAmount };
+        }
+
+        async function ensureCustomersLoaded() {
+            if (customersCache.length > 0) return;
+            const resp = await fetch('/admin/billing/customers/list');
+            const data = await resp.json();
+            customersCache = Array.isArray(data?.customers) ? data.customers : [];
+        }
+
+        function renderCustomerSuggestions(keyword) {
+            const box = document.getElementById('customerSuggestions');
+            const q = String(keyword || '').toLowerCase().trim();
+            if (q.length < 2) {
+                box.style.display = 'none';
+                box.innerHTML = '';
+                return;
+            }
+            const matches = customersCache.filter(c =>
+                String(c.name || '').toLowerCase().includes(q) ||
+                String(c.phone || '').toLowerCase().includes(q) ||
+                String(c.username || '').toLowerCase().includes(q)
+            ).slice(0, 8);
+
+            if (!matches.length) {
+                box.innerHTML = '<div class="list-group-item text-muted">Pelanggan tidak ditemukan</div>';
+                box.style.display = 'block';
+                return;
+            }
+
+            box.innerHTML = matches.map(c => (
+                `<button type="button" class="list-group-item list-group-item-action customer-suggestion" data-id="${c.id}" data-name="${String(c.name || '').replace(/"/g, '&quot;')}" data-phone="${String(c.phone || '').replace(/"/g, '&quot;')}">` +
+                `<strong>${c.name || '-'}</strong><br><small>${c.phone || '-'} | ${c.username || '-'}</small>` +
+                `</button>`
+            )).join('');
+            box.style.display = 'block';
+        }
+
+        async function loadUnpaidInvoices(customerId) {
+            const select = document.getElementById('invoiceSelect');
+            select.innerHTML = '<option value="">Memuat invoice...</option>';
+            const resp = await fetch(`/admin/billing/api/customer-invoices/${customerId}`);
+            const data = await resp.json();
+            currentInvoices = Array.isArray(data?.data) ? data.data : [];
+            if (!currentInvoices.length) {
+                select.innerHTML = '<option value="">Tidak ada invoice belum lunas</option>';
+                document.getElementById('invoiceAmount').value = '';
+                updateFinalPayment();
+                return;
+            }
+            select.innerHTML = '<option value="">Pilih invoice</option>' + currentInvoices.map(inv =>
+                `<option value="${inv.id}">${inv.invoice_number || ('INV-' + inv.id)} - Rp ${Math.round(Number(inv.amount || 0)).toLocaleString('id-ID')}</option>`
+            ).join('');
+        }
+
+        document.getElementById('openPaymentModalBtn').addEventListener('click', async function() {
+            await ensureCustomersLoaded();
+            openPaymentInputModal();
+        });
+
+        document.getElementById('customerSearchInput').addEventListener('input', async function() {
+            await ensureCustomersLoaded();
+            document.getElementById('selectedCustomerId').value = '';
+            document.getElementById('invoiceSelect').innerHTML = '<option value="">Pilih invoice</option>';
+            document.getElementById('invoiceAmount').value = '';
+            renderCustomerSuggestions(this.value);
+            updateFinalPayment();
+        });
+
+        document.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.customer-suggestion');
+            if (btn) {
+                const customerId = btn.getAttribute('data-id');
+                const customerName = btn.getAttribute('data-name') || '';
+                const customerPhone = btn.getAttribute('data-phone') || '';
+                document.getElementById('customerSearchInput').value = `${customerName} (${customerPhone})`;
+                document.getElementById('selectedCustomerId').value = customerId;
+                document.getElementById('customerSuggestions').style.display = 'none';
+                await loadUnpaidInvoices(customerId);
+                return;
+            }
+            if (!e.target.closest('#customerSuggestions') && !e.target.closest('#customerSearchInput')) {
+                document.getElementById('customerSuggestions').style.display = 'none';
+            }
+        });
+
+        document.getElementById('invoiceSelect').addEventListener('change', function() {
+            const id = String(this.value || '');
+            const inv = currentInvoices.find(v => String(v.id) === id);
+            document.getElementById('invoiceAmount').value = inv ? Number(inv.amount || 0) : '';
+            updateFinalPayment();
+        });
+
+        document.getElementById('discountAmount').addEventListener('input', updateFinalPayment);
+
+        document.getElementById('paymentInputForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const customerId = document.getElementById('selectedCustomerId').value;
+            const invoiceId = document.getElementById('invoiceSelect').value;
+            const paymentMethod = document.getElementById('paymentMethod').value;
+            const paymentDate = document.getElementById('paymentDate').value;
+            const { invoiceAmount, discount, finalAmount } = updateFinalPayment();
+
+            if (!customerId) return alert('Silakan pilih pelanggan dari rekomendasi.');
+            if (!invoiceId) return alert('Silakan pilih invoice.');
+            if (!paymentMethod) return alert('Silakan pilih metode pembayaran.');
+            if (!paymentDate) return alert('Silakan pilih tanggal pembayaran.');
+            if (discount > invoiceAmount) return alert('Diskon tidak boleh melebihi jumlah invoice.');
+
+            const notes = `Pelunasan oleh Admin Kantor | Diskon: Rp ${Math.round(discount).toLocaleString('id-ID')} | Tanggal Bayar: ${paymentDate}`;
+
+            const resp = await fetch('/admin/billing/payments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    invoice_id: invoiceId,
+                    amount: finalAmount,
+                    payment_method: paymentMethod,
+                    payment_date: paymentDate,
+                    reference_number: '',
+                    notes
+                })
+            });
+            const result = await resp.json();
+            if (!result?.success) {
+                alert(result?.message || 'Gagal menyimpan pembayaran');
+                return;
+            }
+            if (paymentModal) paymentModal.hide();
+            window.location.href = '/admin/billing/payments';
+        });
+
+        const quickAction = new URLSearchParams(window.location.search).get('quickAction');
+        if (quickAction === 'input-pembayaran') {
+            ensureCustomersLoaded().then(() => {
+                openPaymentInputModal();
+                const url = new URL(window.location.href);
+                url.searchParams.delete('quickAction');
+                window.history.replaceState({}, '', url.toString());
+            });
+        }
     </script>
 
     <!-- Mobile Bottom Navbar -->

@@ -26,14 +26,14 @@
                     <h1 class="h2">
                         <i class="bi bi-receipt"></i> Detail Invoice
                     </h1>
-                    <div class="btn-group" role="group">
-                        <a href="/admin/billing/invoices/<%= invoice.id %>/print" target="_blank" class="btn btn-outline-primary">
+                    <div class="admin-action-btns">
+                        <a href="/admin/billing/invoices/<%= invoice.id %>/print" target="_blank" rel="noopener noreferrer" class="btn btn-info" title="Buka halaman cetak tagihan ini" aria-label="Cetak tagihan">
                             <i class="bi bi-printer-fill"></i> Cetak
                         </a>
-                        <a href="/admin/billing/invoices/<%= invoice.id %>/edit" class="btn btn-outline-secondary">
+                        <a href="/admin/billing/invoices/<%= invoice.id %>/edit" class="btn btn-primary" title="Ubah data tagihan" aria-label="Ubah tagihan">
                             <i class="bi bi-pencil-fill"></i> Edit
                         </a>
-                        <a href="/admin/billing/invoices" class="btn btn-outline-info">
+                        <a href="/admin/billing/invoices" class="btn btn-secondary" title="Kembali ke daftar tagihan" aria-label="Kembali ke daftar tagihan">
                             <i class="bi bi-circle"></i> Kembali
                         </a>
                     </div>

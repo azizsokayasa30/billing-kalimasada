@@ -17,6 +17,33 @@ const { checkLicenseStatus } = require('../config/licenseManager');
 const billingManager = require('../config/billing');
 const sqlite3 = require('sqlite3').verbose();
 
+function resolveBestBillingDbPath() {
+  const candidates = [
+    path.join(process.cwd(), 'data', 'billing.db'),
+    path.join(__dirname, '../data', 'billing.db'),
+    path.join(__dirname, '../../data', 'billing.db')
+  ];
+
+  const existing = Array.from(new Set(candidates)).filter((p) => fs.existsSync(p));
+  if (existing.length === 0) {
+    return path.join(process.cwd(), 'data', 'billing.db');
+  }
+
+  // Prefer the largest DB file to avoid accidentally reading empty nested runtime DB.
+  let best = existing[0];
+  let bestSize = 0;
+  for (const p of existing) {
+    try {
+      const sz = fs.statSync(p).size || 0;
+      if (sz > bestSize) {
+        best = p;
+        bestSize = sz;
+      }
+    } catch (_) {}
+  }
+  return best;
+}
+
 // GET: Dashboard admin
 router.get('/dashboard', adminAuth, async (req, res) => {
   let genieacsTotal = 0, genieacsOnline = 0, genieacsOffline = 0;
@@ -185,7 +212,7 @@ router.get('/dashboard', adminAuth, async (req, res) => {
   let newCustomersThisMonth = 0;
 
   try {
-    const dbPath = path.join(__dirname, '../data/billing.db');
+    const dbPath = resolveBestBillingDbPath();
     const db = new sqlite3.Database(dbPath);
     const now = new Date();
     const monthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -193,26 +220,64 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     await Promise.all([
       // 5 pelanggan terbaru
       new Promise((resolve) => {
-        db.all(`SELECT id, name, phone, area, status, created_at FROM customers ORDER BY created_at DESC LIMIT 5`, [], (err, rows) => {
+        db.all(`SELECT id, name, phone, area, status, join_date
+                FROM customers
+                ORDER BY datetime(COALESCE(join_date, '1970-01-01 00:00:00')) DESC, id DESC
+                LIMIT 5`, [], (err, rows) => {
+          if (err) {
+            console.warn('⚠️ [DASHBOARD] recentCustomers query failed, trying fallback:', err.message);
+            return db.all(`SELECT id, name, phone, area, status, join_date FROM customers ORDER BY id DESC LIMIT 5`, [], (err2, rows2) => {
+              if (err2) {
+                console.warn('⚠️ [DASHBOARD] recentCustomers fallback failed:', err2.message);
+                recentCustomers = [];
+              } else {
+                recentCustomers = rows2 || [];
+              }
+              resolve();
+            });
+          }
           recentCustomers = rows || [];
           resolve();
         });
       }),
       // 5 tagihan lunas terbaru
       new Promise((resolve) => {
-        db.all(`SELECT i.id, i.invoice_number, i.amount, i.paid_at, i.updated_at,
-                  COALESCE(c.name, i.customer_username) as customer_name
+        db.all(`SELECT i.id, i.invoice_number, i.amount, i.payment_date, i.created_at,
+                  COALESCE(c.name, 'Pelanggan') as customer_name
                 FROM invoices i
                 LEFT JOIN customers c ON i.customer_id = c.id
                 WHERE i.status = 'paid'
-                ORDER BY COALESCE(i.paid_at, i.updated_at) DESC LIMIT 5`, [], (err, rows) => {
+                ORDER BY datetime(COALESCE(i.payment_date, i.created_at, '1970-01-01 00:00:00')) DESC, i.id DESC
+                LIMIT 5`, [], (err, rows) => {
+          if (err) {
+            console.warn('⚠️ [DASHBOARD] recentPaidInvoices query failed, trying fallback:', err.message);
+            return db.all(`SELECT i.id, i.invoice_number, i.amount, i.payment_date, i.created_at,
+                              COALESCE(c.name, 'Pelanggan') as customer_name
+                            FROM invoices i
+                            LEFT JOIN customers c ON i.customer_id = c.id
+                            WHERE i.status = 'paid'
+                            ORDER BY i.id DESC LIMIT 5`, [], (err2, rows2) => {
+              if (err2) {
+                console.warn('⚠️ [DASHBOARD] recentPaidInvoices fallback failed:', err2.message);
+                recentPaidInvoices = [];
+              } else {
+                recentPaidInvoices = rows2 || [];
+              }
+              resolve();
+            });
+          }
           recentPaidInvoices = rows || [];
           resolve();
         });
       }),
       // Pelanggan baru bulan ini
       new Promise((resolve) => {
-        db.get(`SELECT COUNT(*) as cnt FROM customers WHERE strftime('%Y-%m', created_at) = ?`, [monthStr], (err, row) => {
+        db.get(`SELECT COUNT(*) as cnt FROM customers WHERE strftime('%Y-%m', COALESCE(join_date, datetime('now'))) = ?`, [monthStr], (err, row) => {
+          if (err) {
+            console.warn('⚠️ [DASHBOARD] newCustomersThisMonth query failed:', err.message);
+            newCustomersThisMonth = 0;
+            return resolve();
+          }
           newCustomersThisMonth = (row && row.cnt) || 0;
           resolve();
         });
@@ -224,7 +289,13 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     try {
       const { getAllTroubleReports } = require('../config/troubleReport');
       const allTickets = await getAllTroubleReports();
-      recentTickets = (allTickets || []).slice(0, 5);
+      recentTickets = (allTickets || [])
+        .sort((a, b) => {
+          const ad = new Date(a.createdAt || a.created_at || 0).getTime();
+          const bd = new Date(b.createdAt || b.created_at || 0).getTime();
+          return bd - ad;
+        })
+        .slice(0, 5);
     } catch(e) {
       recentTickets = [];
     }

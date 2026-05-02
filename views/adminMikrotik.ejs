@@ -59,6 +59,14 @@
             color: #ffffff;
             min-height: auto;
         }
+        .metric-card.stat-filter-card {
+            cursor: pointer;
+        }
+        .metric-card.stat-filter-card.is-selected {
+            outline: 2px solid rgba(255, 255, 255, 0.85);
+            outline-offset: -2px;
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25), 0 10px 15px rgba(0, 0, 0, 0.2);
+        }
         
         .metric-card:hover {
             transform: translateY(-4px);
@@ -199,39 +207,43 @@
             <!-- Statistik User PPPoE -->
             <div class="row mb-4">
                 <div class="col-md-3 mb-3">
-                    <div class="metric-card metric-card-primary">
+                    <div class="metric-card metric-card-primary stat-filter-card" data-filter="all" title="Klik untuk tampilkan semua user">
                         <div class="metric-card-icon">
                             <i class="bi bi-people"></i>
                         </div>
                         <div class="metric-card-value" id="totalUsers">-</div>
                         <div class="metric-card-label">Total User PPPoE</div>
+                        <div class="metric-card-subtext">Klik untuk tampilkan semua</div>
                     </div>
                 </div>
                 <div class="col-md-3 mb-3">
-                    <div class="metric-card metric-card-success">
+                    <div class="metric-card metric-card-success stat-filter-card" data-filter="active" title="Klik untuk filter user aktif">
                         <div class="metric-card-icon">
                             <i class="bi bi-person-check"></i>
                         </div>
                         <div class="metric-card-value" id="activeUsers">-</div>
                         <div class="metric-card-label">User Aktif</div>
+                        <div class="metric-card-subtext">Klik untuk filter user aktif</div>
                     </div>
                 </div>
                 <div class="col-md-3 mb-3">
-                    <div class="metric-card metric-card-danger">
+                    <div class="metric-card metric-card-danger stat-filter-card" data-filter="offline" title="Klik untuk filter user offline">
                         <div class="metric-card-icon">
                             <i class="bi bi-person-x"></i>
                         </div>
                         <div class="metric-card-value" id="offlineUsers">-</div>
                         <div class="metric-card-label">User Offline</div>
+                        <div class="metric-card-subtext">Klik untuk filter user offline</div>
                     </div>
                 </div>
                 <div class="col-md-3 mb-3">
-                    <div class="metric-card metric-card-info">
+                    <div class="metric-card metric-card-info stat-filter-card" data-filter="profiles" title="Klik untuk buka menu profile PPPoE">
                         <div class="metric-card-icon">
                             <i class="bi bi-sliders"></i>
                         </div>
                         <div class="metric-card-value" id="profileCount">-</div>
                         <div class="metric-card-label">Total Profile</div>
+                        <div class="metric-card-subtext">Klik untuk buka list profile</div>
                     </div>
                 </div>
             </div>
@@ -399,6 +411,43 @@ function showToast(type, message, duration) {
 }
 
 $(function() {
+  function setActiveFilterCard(filterKey) {
+    $('.stat-filter-card').removeClass('is-selected');
+    $(`.stat-filter-card[data-filter="${filterKey}"]`).addClass('is-selected');
+  }
+
+  function filterUsersByCard(filterKey) {
+    if (filterKey === 'profiles') {
+      window.location.href = '/admin/mikrotik/profiles';
+      return;
+    }
+
+    const $table = $('#pppoeTable');
+    if (!$table.length || !$.fn.DataTable) return;
+    const table = $table.DataTable();
+
+    // Status selalu berada di kolom ke-5 (index 4)
+    const statusColumnIndex = 4;
+
+    if (filterKey === 'active') {
+      table.column(statusColumnIndex).search('^Aktif$', true, false).draw();
+    } else if (filterKey === 'offline') {
+      table.column(statusColumnIndex).search('^Offline$', true, false).draw();
+    } else {
+      table.search('').columns().search('').draw();
+    }
+
+    setActiveFilterCard(filterKey);
+  }
+
+  $(document).on('click', '.stat-filter-card', function() {
+    const filterKey = $(this).data('filter') || 'all';
+    filterUsersByCard(filterKey);
+  });
+
+  // Default state: tampilkan semua user
+  setActiveFilterCard('all');
+
   // Load profiles ke select
   function loadProfiles(selectedProfile) {
     const isRadiusMode = <%= typeof authMode !== 'undefined' && authMode === 'radius' ? 'true' : 'false' %>;
@@ -691,4 +740,3 @@ $(function() {
   });
 });
 </script>
-<%- include('partials/footer') %>

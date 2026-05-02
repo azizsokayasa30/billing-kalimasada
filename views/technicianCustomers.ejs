@@ -279,17 +279,20 @@
                                         </small>
                                     </td>
                                     <td>
-                                        <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-primary" title="Lihat Detail" 
+                                        <div class="admin-action-btns">
+                                            <button type="button" class="btn btn-sm btn-info" title="Lihat detail pelanggan Anda"
+                                                    aria-label="Lihat pelanggan"
                                                     data-action="view" data-customer-id="<%= customer.id %>">
                                                 <i class="bi bi-eye"></i>
                                             </button>
-                                            <button class="btn btn-outline-secondary" title="Edit" 
+                                            <button type="button" class="btn btn-sm btn-primary" title="Ubah data pelanggan"
+                                                    aria-label="Ubah pelanggan"
                                                     data-action="edit" data-customer-id="<%= customer.id %>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-outline-danger" title="Hapus" 
-                                                    data-action="delete" data-customer-id="<%= customer.id %>" 
+                                            <button type="button" class="btn btn-sm btn-danger" title="Hapus pelanggan dari daftar Anda"
+                                                    aria-label="Hapus pelanggan"
+                                                    data-action="delete" data-customer-id="<%= customer.id %>"
                                                     data-customer-name="<%- customer.name %>">
                                                 <i class="bi bi-trash"></i>
                                             </button>

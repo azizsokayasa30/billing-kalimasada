@@ -5,7 +5,7 @@
     const logger = require('./logger'); // Added logger import
     const { syncCustomerToRadius } = require('../utils/radiusCustomerSync');
     const { getCompanyHeader } = require('./message-templates');
-    const { getSetting } = require('./settingsManager');
+    const { getSetting, getLocalTimestamp } = require('./settingsManager');
 
     class BillingManager {
         constructor() {
@@ -1432,14 +1432,18 @@
             // Jika status sudah diset (termasuk 'register'), gunakan itu
             // Jika tidak, default ke 'active'
             const finalStatus = (status !== undefined && status !== null && status !== '') ? status : 'active';
+
+            // join_date eksplisit WIB (offset +07:00) agar tampilan detail selaras dengan waktu bisnis Indonesia,
+            // bukan hanya DEFAULT SQLite UTC yang sering membingungkan saat server timezone-nya UTC.
+            const joinDateStored = `${getLocalTimestamp().replace(/ /, 'T')}+07:00`;
             
-            const sql = `INSERT INTO customers (customer_id, username, password, name, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const sql = `INSERT INTO customers (customer_id, username, password, name, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path, join_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
             // Default coordinates untuk Jakarta jika tidak ada koordinat
             const finalLatitude = latitude !== undefined ? parseFloat(latitude) : -6.2088;
             const finalLongitude = longitude !== undefined ? parseFloat(longitude) : 106.8456;
             
-            db.run(sql, [generatedCustomerId, finalUsername, password || null, name, phone, autoPPPoEUsername, email, address, area || null, area_id ? parseInt(area_id) : null, package_id, customerData.odp_id || null, pppoe_profile, finalStatus, auto_suspension !== undefined ? auto_suspension : 1, normBillingDay, static_ip || null, assigned_ip || null, mac_address || null, finalLatitude, finalLongitude, cable_type || null, cable_length || null, port_number || null, cable_status || 'connected', cable_notes || null, ktp_photo_path || null, house_photo_path || null], async function(err) {
+            db.run(sql, [generatedCustomerId, finalUsername, password || null, name, phone, autoPPPoEUsername, email, address, area || null, area_id ? parseInt(area_id) : null, package_id, customerData.odp_id || null, pppoe_profile, finalStatus, auto_suspension !== undefined ? auto_suspension : 1, normBillingDay, static_ip || null, assigned_ip || null, mac_address || null, finalLatitude, finalLongitude, cable_type || null, cable_length || null, port_number || null, cable_status || 'connected', cable_notes || null, ktp_photo_path || null, house_photo_path || null, joinDateStored], async function(err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -3534,10 +3538,16 @@ ${year && month ? `
     async recordPayment(paymentData) {
         return new Promise(async (resolve, reject) => {
             try {
-                const { invoice_id, amount, payment_method, reference_number, notes } = paymentData;
-                const sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes) VALUES (?, ?, ?, ?, ?)`;
-                
-                this.db.run(sql, [invoice_id, amount, payment_method, reference_number, notes], function(err) {
+                const { invoice_id, amount, payment_method, reference_number, notes, payment_date } = paymentData;
+                let sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes) VALUES (?, ?, ?, ?, ?)`;
+                let params = [invoice_id, amount, payment_method, reference_number, notes];
+
+                if (payment_date) {
+                    sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes, payment_date) VALUES (?, ?, ?, ?, ?, ?)`;
+                    params = [invoice_id, amount, payment_method, reference_number, notes, payment_date];
+                }
+
+                this.db.run(sql, params, function(err) {
                     if (err) {
                         reject(err);
                     } else {

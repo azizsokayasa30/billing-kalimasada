@@ -360,17 +360,17 @@
                                                     <%= new Date(invoice.due_date).toLocaleDateString('id-ID') %>
                                                 </td>
                                                 <td>
-                                                    <div class="btn-group btn-group-sm">
+                                                    <div class="admin-action-btns">
                                                         <a href="/admin/billing/invoices/<%= invoice.id %>" 
-                                                           class="btn btn-outline-primary" title="Lihat Detail">
+                                                           class="btn btn-sm btn-info" title="Lihat detail tagihan" aria-label="Lihat tagihan">
                                                             <i class="bi bi-eye-fill"></i>
                                                         </a>
                                                         <a href="/admin/billing/invoices/<%= invoice.id %>/edit" 
-                                                           class="btn btn-outline-warning" title="Edit">
+                                                           class="btn btn-sm btn-primary" title="Ubah data tagihan" aria-label="Ubah tagihan">
                                                             <i class="bi bi-pencil-fill"></i>
                                                         </a>
                                                         <a href="/admin/billing/invoices/<%= invoice.id %>/print" 
-                                                           class="btn btn-outline-info" title="Print" target="_blank">
+                                                           class="btn btn-sm btn-secondary" title="Buka halaman cetak tagihan" aria-label="Cetak tagihan" target="_blank" rel="noopener noreferrer">
                                                             <i class="bi bi-printer-fill"></i>
                                                         </a>
                                                     </div>

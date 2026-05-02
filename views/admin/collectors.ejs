@@ -167,10 +167,9 @@
                                                 <% } %>
                                             </td>
                                             <td class="text-end">
-                                                <div class="btn-group">
-                                                    <button class="btn btn-sm btn-outline-primary" onclick="manageAreas('<%= collector.id %>', '<%= collector.name %>')">Area</button>
-                                                    <button class="btn btn-sm btn-outline-secondary" onclick="editCollector('<%= collector.id %>')">Edit</button>
-                                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCollector('<%= collector.id %>')">Hapus</button>
+                                                <div class="admin-action-btns">
+                                                    <button type="button" class="btn btn-sm btn-primary" onclick="editCollector('<%= collector.id %>')" title="Ubah data kolektor" aria-label="Ubah data kolektor">Edit</button>
+                                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteCollector('<%= collector.id %>')" title="Hapus kolektor dari tim" aria-label="Hapus kolektor dari tim">Hapus</button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -190,35 +189,6 @@
         </div>
     </div>
 
-    <!-- Area Mapping Modal -->
-    <div class="modal fade" id="areaMappingModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content border-0 shadow">
-                <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold">Mapping Area: <span id="modalCollectorName"></span></h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body pt-3">
-                    <input type="hidden" id="modalCollectorId">
-                    <p class="text-muted small mb-3">Tugaskan area (desa) ke kolektor ini.</p>
-                    
-                    <div id="areaCheckboxes" class="mb-3 p-2 border rounded" style="max-height: 250px; overflow-y: auto;">
-                        <div class="text-center py-3 text-muted small">Memuat area...</div>
-                    </div>
-                    
-                    <div class="input-group input-group-sm mb-3">
-                        <input type="text" id="newAreaInput" class="form-control" placeholder="Nama area baru...">
-                        <button class="btn btn-dark" type="button" id="addNewAreaBtn">Tambah</button>
-                    </div>
-                </div>
-                <div class="modal-footer border-top-0 pt-0">
-                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Tutup</button>
-                    <button type="button" class="btn btn-sm btn-primary px-4" id="saveAreasBtn">Simpan</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
         function addCollector() { window.location.href = '/admin/collectors/add'; }
@@ -231,23 +201,10 @@
             }
         }
 
-        let areaMappingModal;
         document.addEventListener('DOMContentLoaded', () => {
-            const modalEl = document.getElementById('areaMappingModal');
-            if (modalEl) areaMappingModal = new bootstrap.Modal(modalEl);
-            
-            document.getElementById('addNewAreaBtn')?.addEventListener('click', () => {
-                const input = document.getElementById('newAreaInput');
-                const areaName = input.value.trim();
-                if (areaName) { addAreaCheckbox(areaName, true); input.value = ''; }
-            });
-            
-            document.getElementById('saveAreasBtn')?.addEventListener('click', saveAssignedAreas);
-            
-            // Search & Filter
             const searchInput = document.getElementById('searchInput');
             const statusFilter = document.getElementById('statusFilter');
-            
+
             const handleFilter = () => {
                 const term = searchInput.value.toLowerCase();
                 const status = statusFilter.value;
@@ -260,66 +217,10 @@
                     row.style.display = matchesSearch && matchesStatus ? '' : 'none';
                 });
             };
-            
+
             searchInput?.addEventListener('input', handleFilter);
             statusFilter?.addEventListener('change', handleFilter);
         });
-
-        async function manageAreas(id, name) {
-            document.getElementById('modalCollectorId').value = id;
-            document.getElementById('modalCollectorName').textContent = name;
-            const container = document.getElementById('areaCheckboxes');
-            container.innerHTML = '<div class="text-center py-3 text-muted small">Memuat...</div>';
-            
-            try {
-                const [uniqueRes, currentAreas] = await Promise.all([
-                    fetch('/admin/collectors/unique-areas').then(r => r.json()),
-                    Array.from(document.querySelectorAll(`#areas-${id} .area-badge`)).map(el => el.textContent.trim())
-                ]);
-                
-                container.innerHTML = '';
-                if (uniqueRes.success && uniqueRes.areas.length > 0) {
-                    uniqueRes.areas.forEach(area => addAreaCheckbox(area, currentAreas.includes(area)));
-                } else if (currentAreas.length === 0) {
-                    container.innerHTML = '<div class="text-center py-3 text-muted small">Belum ada data area.</div>';
-                }
-                
-                currentAreas.forEach(area => {
-                    if (!uniqueRes.areas.includes(area)) addAreaCheckbox(area, true);
-                });
-                
-                areaMappingModal.show();
-            } catch (e) { alert('Gagal memuat area'); }
-        }
-
-        function addAreaCheckbox(name, checked) {
-            const container = document.getElementById('areaCheckboxes');
-            const existing = Array.from(container.querySelectorAll('label')).find(el => el.textContent.trim() === name);
-            if (existing) { if (checked) existing.previousElementSibling.checked = true; return; }
-            if (container.querySelector('.text-muted')) container.innerHTML = '';
-            const div = document.createElement('div');
-            div.className = 'form-check small mb-1';
-            div.innerHTML = `<input class="form-check-input area-checkbox" type="checkbox" value="${name}" id="area-${Date.now()}-${Math.random().toString(36).substr(2, 5)}" ${checked ? 'checked' : ''}><label class="form-check-label">${name}</label>`;
-            container.appendChild(div);
-        }
-
-        async function saveAssignedAreas() {
-            const id = document.getElementById('modalCollectorId').value;
-            const areas = Array.from(document.querySelectorAll('.area-checkbox:checked')).map(cb => cb.value);
-            const btn = document.getElementById('saveAreasBtn');
-            btn.disabled = true; btn.textContent = 'Menyimpan...';
-            
-            try {
-                const res = await fetch(`/admin/collectors/${id}/areas`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ areas })
-                });
-                if ((await res.json()).success) { alert('Berhasil!'); location.reload(); }
-                else alert('Gagal menyimpan');
-            } catch (e) { alert('Terjadi kesalahan'); }
-            finally { btn.disabled = false; btn.textContent = 'Simpan'; }
-        }
     </script>
 </body>
 </html>

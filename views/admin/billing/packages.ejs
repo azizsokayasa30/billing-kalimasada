@@ -151,14 +151,14 @@
                                                     <span class="badge bg-success">Aktif</span>
                                                 </td>
                                                 <td>
-                                                    <div class="btn-group" role="group">
-                                                        <button class="btn btn-sm btn-primary" onclick="editPackage('<%= package.id %>')">
+                                                    <div class="admin-action-btns">
+                                                        <button type="button" class="btn btn-sm btn-primary" onclick="editPackage('<%= package.id %>')" title="Ubah data paket internet" aria-label="Ubah paket">
                                                             <i class="bi bi-pencil-fill"></i>
                                                         </button>
-                                                        <button class="btn btn-sm btn-info" onclick="viewPackage('<%= package.id %>')">
+                                                        <button type="button" class="btn btn-sm btn-info" onclick="viewPackage('<%= package.id %>')" title="Lihat detail paket" aria-label="Lihat detail paket">
                                                             <i class="bi bi-eye-fill"></i>
                                                         </button>
-                                                        <button class="btn btn-sm btn-danger" onclick="deletePackage('<%= package.id %>')">
+                                                        <button type="button" class="btn btn-sm btn-danger" onclick="deletePackage('<%= package.id %>')" title="Hapus paket dari sistem" aria-label="Hapus paket">
                                                             <i class="bi bi-trash3-fill"></i>
                                                         </button>
                                                     </div>

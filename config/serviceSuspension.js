@@ -17,6 +17,84 @@ async function getUserAuthMode() {
     return getSetting('user_auth_mode', 'mikrotik');
 }
 
+/** Jeda singkat setelah disconnect agar NAS sempat membersihkan sesi (dulu 1s — terlalu memperlambat admin). */
+const POST_DISCONNECT_SETTLE_MS = 400;
+const GENIEACS_WAN_MS = 5000;
+
+function withTimeout(promise, ms, label = 'operation') {
+    let timer;
+    const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} (${ms}ms)`)), ms);
+    });
+    return Promise.race([
+        promise.finally(() => clearTimeout(timer)),
+        timeoutPromise
+    ]);
+}
+
+/**
+ * Router untuk disconnect PPPoE. Tanpa mapping: pindai router dengan timeout per-router + budget total
+ * agal request admin tidak hang menunggu NAS yang tidak merespons.
+ */
+async function findRouterForPppDisconnect(customer, pppUser) {
+    const { getRouterForCustomer, getMikrotikConnectionForRouter } = require('./mikrotik');
+    const PER_ROUTER_MS = 2800;
+    const GET_ROUTER_MS = 4000;
+    const SCAN_BUDGET_MS = 12000;
+    const scanStart = Date.now();
+
+    try {
+        return await withTimeout(
+            getRouterForCustomer(customer),
+            GET_ROUTER_MS,
+            'getRouterForCustomer'
+        );
+    } catch (e) {
+        logger.warn(`RADIUS: getRouterForCustomer gagal untuk ${pppUser}: ${e.message} — pindai router (waktu terbatas)`);
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = require('path').join(__dirname, '../data/billing.db');
+    const db = new sqlite3.Database(dbPath);
+    const routers = await new Promise((resolve) =>
+        db.all('SELECT * FROM routers ORDER BY id', (err, rows) => {
+            db.close();
+            resolve(rows || []);
+        })
+    );
+
+    for (const router of routers) {
+        if (Date.now() - scanStart > SCAN_BUDGET_MS) {
+            logger.warn(`RADIUS: Batas pindaian router ${SCAN_BUDGET_MS}ms untuk ${pppUser}`);
+            break;
+        }
+        try {
+            const conn = await withTimeout(
+                getMikrotikConnectionForRouter(router),
+                PER_ROUTER_MS,
+                `mikrotik connect ${router.name}`
+            );
+            const activeSessions = await withTimeout(
+                conn.write('/ppp/active/print', [`?name=${pppUser}`]),
+                PER_ROUTER_MS,
+                `ppp active ${router.name}`
+            );
+            if (activeSessions && activeSessions.length > 0) {
+                logger.info(`RADIUS: Found active session for ${pppUser} on router ${router.name}`);
+                return router;
+            }
+        } catch (_) {
+            // router berikutnya
+        }
+    }
+
+    if (routers.length > 0) {
+        logger.warn(`RADIUS: Tidak ada sesi aktif terdeteksi dalam batas waktu, fallback router pertama: ${routers[0].name}`);
+        return routers[0];
+    }
+    return null;
+}
+
 class ServiceSuspensionManager {
     constructor() {
         this.isRunning = false;
@@ -93,53 +171,25 @@ class ServiceSuspensionManager {
                         // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah group
                         // Agar saat reconnect, langsung dapat IP isolir
                         try {
-                            const { disconnectPPPoEUser, getRouterForCustomer, getMikrotikConnectionForRouter } = require('./mikrotik');
-                            let routerObj = null;
-                            
-                            // Coba dapatkan router dari customer mapping
-                            try {
-                                routerObj = await getRouterForCustomer(customer);
-                            } catch (routerError) {
-                                // Jika customer tidak punya router mapping, cari di semua router
-                                logger.warn(`RADIUS: Customer tidak punya router mapping, mencari di semua router untuk ${pppUser}`);
-                                const sqlite3 = require('sqlite3').verbose();
-                                const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
-                                const routers = await new Promise((resolve) => 
-                                    db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []))
-                                );
-                                db.close();
-                                
-                                // Cari router yang memiliki user aktif
-                                for (const router of routers) {
-                                    try {
-                                        const conn = await getMikrotikConnectionForRouter(router);
-                                        const activeSessions = await conn.write('/ppp/active/print', [`?name=${pppUser}`]);
-                                        if (activeSessions && activeSessions.length > 0) {
-                                            routerObj = router;
-                                            logger.info(`RADIUS: Found active session for ${pppUser} on router ${router.name}`);
-                                            break;
-                                        }
-                                    } catch (e) {
-                                        // Continue to next router
-                                    }
-                                }
-                                
-                                // Jika tidak ditemukan, gunakan router pertama sebagai fallback
-                                if (!routerObj && routers.length > 0) {
-                                    routerObj = routers[0];
-                                    logger.warn(`RADIUS: No active session found, using first router as fallback: ${routerObj.name}`);
-                                }
-                            }
-                            
+                            const { disconnectPPPoEUser } = require('./mikrotik');
+                            const routerObj = await findRouterForPppDisconnect(customer, pppUser);
+
                             if (routerObj) {
-                                // Disconnect active session TERLEBIH DAHULU menggunakan helper function
-                                const disconnectResult = await disconnectPPPoEUser(pppUser, routerObj);
-                                
+                                let disconnectResult;
+                                try {
+                                    disconnectResult = await withTimeout(
+                                        disconnectPPPoEUser(pppUser, routerObj),
+                                        8000,
+                                        `disconnect PPPoE ${pppUser}`
+                                    );
+                                } catch (e) {
+                                    disconnectResult = { success: false, disconnected: 0, message: e.message };
+                                    logger.warn(`RADIUS: disconnect timeout/error untuk ${pppUser}: ${e.message}`);
+                                }
+
                                 if (disconnectResult.success && disconnectResult.disconnected > 0) {
                                     logger.info(`RADIUS: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${pppUser} before changing to isolir group`);
-                                    
-                                    // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
-                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                    await new Promise((resolve) => setTimeout(resolve, POST_DISCONNECT_SETTLE_MS));
                                 } else if (disconnectResult.disconnected === 0) {
                                     logger.info(`RADIUS: User ${pppUser} tidak sedang online, langsung ubah group ke isolir`);
                                 } else {
@@ -150,7 +200,6 @@ class ServiceSuspensionManager {
                             }
                         } catch (disconnectError) {
                             logger.warn(`RADIUS: Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
-                            // Continue dengan perubahan group meskipun disconnect gagal
                         }
                         
                         // Setelah disconnect, baru ubah group ke isolir
@@ -178,13 +227,21 @@ class ServiceSuspensionManager {
                         // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah profile
                         // Agar saat reconnect, langsung dapat IP isolir
                         const { disconnectPPPoEUser } = require('./mikrotik');
-                        const disconnectResult = await disconnectPPPoEUser(pppUser, mikrotik);
-                        
+                        let disconnectResult;
+                        try {
+                            disconnectResult = await withTimeout(
+                                disconnectPPPoEUser(pppUser, mikrotik),
+                                8000,
+                                `disconnect PPPoE API ${pppUser}`
+                            );
+                        } catch (e) {
+                            disconnectResult = { success: false, disconnected: 0, message: e.message };
+                            logger.warn(`Mikrotik: disconnect timeout/error untuk ${pppUser}: ${e.message}`);
+                        }
+
                         if (disconnectResult.success && disconnectResult.disconnected > 0) {
                             logger.info(`Mikrotik: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${customer.pppoe_username} before changing to isolir profile`);
-                            
-                            // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
-                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            await new Promise((resolve) => setTimeout(resolve, POST_DISCONNECT_SETTLE_MS));
                         } else if (disconnectResult.disconnected === 0) {
                             logger.info(`Mikrotik: User ${customer.pppoe_username} tidak sedang online, langsung ubah profile ke isolir`);
                         } else {
@@ -250,54 +307,53 @@ class ServiceSuspensionManager {
                 logger.warn(`Customer ${customer.username} has no PPPoE username or static IP, trying WAN disable method`);
             }
 
-            // 2. Suspend via GenieACS (disable WAN connection)
+            // 2. Suspend via GenieACS (disable WAN connection) — batasi waktu agar tidak mengganjal response admin
             if (customer.phone || customer.pppoe_username) {
                 try {
-                    let device = null;
-                    
-                    // Coba cari device by phone number dulu
-                    if (customer.phone) {
-                        try {
-                            device = await findDeviceByPhoneNumber(customer.phone);
-                        } catch (phoneError) {
-                            logger.warn(`Device not found by phone ${customer.phone}, trying PPPoE...`);
-                        }
-                    }
-                    
-                    // Jika tidak ketemu, coba by PPPoE username
-                    if (!device && customer.pppoe_username) {
-                        try {
-                            device = await findDeviceByPPPoE(customer.pppoe_username);
-                        } catch (pppoeError) {
-                            logger.warn(`Device not found by PPPoE ${customer.pppoe_username}`);
-                        }
-                    }
-
-                    if (device) {
-                        // Disable WAN connection di modem
-                        const parameters = [
-                            ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Enable", false, "xsd:boolean"],
-                            ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.Enable", false, "xsd:boolean"]
-                        ];
-
-                        await setParameterValues(device._id, parameters);
-                        results.genieacs = true;
-                        logger.info(`GenieACS: Successfully suspended device ${device._id} for customer ${customer.username}`);
-                    } else {
-                        logger.warn(`GenieACS: No device found for customer ${customer.username}`);
-                    }
+                    await Promise.race([
+                        (async () => {
+                            let device = null;
+                            if (customer.phone) {
+                                try {
+                                    device = await findDeviceByPhoneNumber(customer.phone);
+                                } catch (phoneError) {
+                                    logger.warn(`Device not found by phone ${customer.phone}, trying PPPoE...`);
+                                }
+                            }
+                            if (!device && customer.pppoe_username) {
+                                try {
+                                    device = await findDeviceByPPPoE(customer.pppoe_username);
+                                } catch (pppoeError) {
+                                    logger.warn(`Device not found by PPPoE ${customer.pppoe_username}`);
+                                }
+                            }
+                            if (device) {
+                                const parameters = [
+                                    ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Enable", false, "xsd:boolean"],
+                                    ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.Enable", false, "xsd:boolean"]
+                                ];
+                                await setParameterValues(device._id, parameters);
+                                results.genieacs = true;
+                                logger.info(`GenieACS: Successfully suspended device ${device._id} for customer ${customer.username}`);
+                            } else {
+                                logger.warn(`GenieACS: No device found for customer ${customer.username}`);
+                            }
+                        })(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('GenieACS suspend timeout')), GENIEACS_WAN_MS))
+                    ]);
                 } catch (genieacsError) {
                     logger.error(`GenieACS suspension failed for ${customer.username}:`, genieacsError.message);
                 }
             }
 
-            // 3. Update status di billing database
+            // 3. Update status di billing database (skip jika billing sudah suspended — mis. setelah updateCustomerByPhone)
+            const alreadySuspended = String(customer?.status || '').toLowerCase() === 'suspended';
             try {
-                if (customer.id) {
+                if (!alreadySuspended && customer.id) {
                     logger.info(`[SUSPEND] Updating billing status by id=${customer.id} to 'suspended' (username=${customer.username||customer.pppoe_username||'-'})`);
                     await billingManager.setCustomerStatusById(customer.id, 'suspended');
                     results.billing = true;
-                } else {
+                } else if (!alreadySuspended) {
                     // Resolve by username first, then phone, to obtain reliable id
                     let resolved = null;
                     if (customer.pppoe_username) {
@@ -320,26 +376,30 @@ class ServiceSuspensionManager {
                     } else {
                         logger.error(`[SUSPEND] Unable to resolve customer identifier for status update`);
                     }
+                } else if (alreadySuspended && customer.id) {
+                    results.billing = true;
                 }
             } catch (billingError) {
                 logger.error(`Billing update failed for ${customer.username}:`, billingError.message);
             }
 
-            // 4. Send WhatsApp notification
-            try {
-                const whatsappNotifications = require('./whatsapp-notifications');
-                await whatsappNotifications.sendServiceSuspensionNotification(customer, reason);
-            } catch (notificationError) {
-                logger.error(`WhatsApp notification failed for ${customer.username}:`, notificationError.message);
-            }
-            
-            // 5. Send Email notification
-            try {
-                const emailNotifications = require('./email-notifications');
-                await emailNotifications.sendServiceSuspensionNotification(customer, reason);
-            } catch (notificationError) {
-                logger.error(`Email notification failed for ${customer.username}:`, notificationError.message);
-            }
+            // 4–5. Notifikasi di background agar PUT /customers tidak menunggu lama
+            void (async () => {
+                try {
+                    const whatsappNotifications = require('./whatsapp-notifications');
+                    await whatsappNotifications.sendServiceSuspensionNotification(customer, reason);
+                } catch (notificationError) {
+                    logger.error(`WhatsApp notification failed for ${customer.username}:`, notificationError.message);
+                }
+            })();
+            void (async () => {
+                try {
+                    const emailNotifications = require('./email-notifications');
+                    await emailNotifications.sendServiceSuspensionNotification(customer, reason);
+                } catch (notificationError) {
+                    logger.error(`Email notification failed for ${customer.username}:`, notificationError.message);
+                }
+            })();
 
             return {
                 success: results.mikrotik || results.genieacs || results.billing,
@@ -386,53 +446,25 @@ class ServiceSuspensionManager {
                         // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah group
                         // Agar saat reconnect, langsung dapat IP dari package yang benar
                         try {
-                            const { disconnectPPPoEUser, getRouterForCustomer, getMikrotikConnectionForRouter } = require('./mikrotik');
-                            let routerObj = null;
-                            
-                            // Coba dapatkan router dari customer mapping
-                            try {
-                                routerObj = await getRouterForCustomer(customer);
-                            } catch (routerError) {
-                                // Jika customer tidak punya router mapping, cari di semua router
-                                logger.warn(`RADIUS: Customer tidak punya router mapping, mencari di semua router untuk ${pppUser}`);
-                                const sqlite3 = require('sqlite3').verbose();
-                                const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
-                                const routers = await new Promise((resolve) => 
-                                    db.all('SELECT * FROM routers ORDER BY id', (err, rows) => resolve(rows || []))
-                                );
-                                db.close();
-                                
-                                // Cari router yang memiliki user aktif
-                                for (const router of routers) {
-                                    try {
-                                        const conn = await getMikrotikConnectionForRouter(router);
-                                        const activeSessions = await conn.write('/ppp/active/print', [`?name=${pppUser}`]);
-                                        if (activeSessions && activeSessions.length > 0) {
-                                            routerObj = router;
-                                            logger.info(`RADIUS: Found active session for ${pppUser} on router ${router.name}`);
-                                            break;
-                                        }
-                                    } catch (e) {
-                                        // Continue to next router
-                                    }
-                                }
-                                
-                                // Jika tidak ditemukan, gunakan router pertama sebagai fallback
-                                if (!routerObj && routers.length > 0) {
-                                    routerObj = routers[0];
-                                    logger.warn(`RADIUS: No active session found, using first router as fallback: ${routerObj.name}`);
-                                }
-                            }
-                            
+                            const { disconnectPPPoEUser } = require('./mikrotik');
+                            const routerObj = await findRouterForPppDisconnect(customer, pppUser);
+
                             if (routerObj) {
-                                // Disconnect active session TERLEBIH DAHULU menggunakan helper function
-                                const disconnectResult = await disconnectPPPoEUser(pppUser, routerObj);
-                                
+                                let disconnectResult;
+                                try {
+                                    disconnectResult = await withTimeout(
+                                        disconnectPPPoEUser(pppUser, routerObj),
+                                        8000,
+                                        `disconnect PPPoE ${pppUser}`
+                                    );
+                                } catch (e) {
+                                    disconnectResult = { success: false, disconnected: 0, message: e.message };
+                                    logger.warn(`RADIUS: disconnect timeout/error untuk ${pppUser}: ${e.message}`);
+                                }
+
                                 if (disconnectResult.success && disconnectResult.disconnected > 0) {
                                     logger.info(`RADIUS: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${pppUser} before restoring to previous package`);
-                                    
-                                    // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
-                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                    await new Promise((resolve) => setTimeout(resolve, POST_DISCONNECT_SETTLE_MS));
                                 } else if (disconnectResult.disconnected === 0) {
                                     logger.info(`RADIUS: User ${pppUser} tidak sedang online, langsung ubah group ke package sebelumnya`);
                                 } else {
@@ -443,7 +475,6 @@ class ServiceSuspensionManager {
                             }
                         } catch (disconnectError) {
                             logger.warn(`RADIUS: Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
-                            // Continue dengan perubahan group meskipun disconnect gagal
                         }
                         
                         // Setelah disconnect, baru ubah group kembali ke package sebelumnya
@@ -474,13 +505,21 @@ class ServiceSuspensionManager {
                         // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah profile
                         // Agar saat reconnect, langsung dapat IP dari package yang benar
                         const { disconnectPPPoEUser } = require('./mikrotik');
-                        const disconnectResult = await disconnectPPPoEUser(pppUser, mikrotik);
-                        
+                        let disconnectResult;
+                        try {
+                            disconnectResult = await withTimeout(
+                                disconnectPPPoEUser(pppUser, mikrotik),
+                                8000,
+                                `disconnect PPPoE API ${pppUser}`
+                            );
+                        } catch (e) {
+                            disconnectResult = { success: false, disconnected: 0, message: e.message };
+                            logger.warn(`Mikrotik: disconnect timeout/error untuk ${pppUser}: ${e.message}`);
+                        }
+
                         if (disconnectResult.success && disconnectResult.disconnected > 0) {
                             logger.info(`Mikrotik: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${customer.pppoe_username} before restoring to ${profileToUse} profile`);
-                            
-                            // Tunggu sebentar untuk memastikan disconnect benar-benar selesai
-                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            await new Promise((resolve) => setTimeout(resolve, POST_DISCONNECT_SETTLE_MS));
                         } else if (disconnectResult.disconnected === 0) {
                             logger.info(`Mikrotik: User ${customer.pppoe_username} tidak sedang online, langsung ubah profile ke ${profileToUse}`);
                         } else {
@@ -539,54 +578,53 @@ class ServiceSuspensionManager {
                 logger.warn(`Customer ${customer.username} has no PPPoE username or static IP, trying WAN enable method`);
             }
 
-            // 2. Restore via GenieACS (enable WAN connection)
+            // 2. Restore via GenieACS (enable WAN connection) — batas waktu sama seperti suspend
             if (customer.phone || customer.pppoe_username) {
                 try {
-                    let device = null;
-                    
-                    // Coba cari device by phone number dulu
-                    if (customer.phone) {
-                        try {
-                            device = await findDeviceByPhoneNumber(customer.phone);
-                        } catch (phoneError) {
-                            logger.warn(`Device not found by phone ${customer.phone}, trying PPPoE...`);
-                        }
-                    }
-                    
-                    // Jika tidak ketemu, coba by PPPoE username
-                    if (!device && customer.pppoe_username) {
-                        try {
-                            device = await findDeviceByPPPoE(customer.pppoe_username);
-                        } catch (pppoeError) {
-                            logger.warn(`Device not found by PPPoE ${customer.pppoe_username}`);
-                        }
-                    }
-
-                    if (device) {
-                        // Enable WAN connection di modem
-                        const parameters = [
-                            ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Enable", true, "xsd:boolean"],
-                            ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.Enable", true, "xsd:boolean"]
-                        ];
-
-                        await setParameterValues(device._id, parameters);
-                        results.genieacs = true;
-                        logger.info(`GenieACS: Successfully restored device ${device._id} for customer ${customer.username}`);
-                    } else {
-                        logger.warn(`GenieACS: No device found for customer ${customer.username}`);
-                    }
+                    await Promise.race([
+                        (async () => {
+                            let device = null;
+                            if (customer.phone) {
+                                try {
+                                    device = await findDeviceByPhoneNumber(customer.phone);
+                                } catch (phoneError) {
+                                    logger.warn(`Device not found by phone ${customer.phone}, trying PPPoE...`);
+                                }
+                            }
+                            if (!device && customer.pppoe_username) {
+                                try {
+                                    device = await findDeviceByPPPoE(customer.pppoe_username);
+                                } catch (pppoeError) {
+                                    logger.warn(`Device not found by PPPoE ${customer.pppoe_username}`);
+                                }
+                            }
+                            if (device) {
+                                const parameters = [
+                                    ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Enable", true, "xsd:boolean"],
+                                    ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.Enable", true, "xsd:boolean"]
+                                ];
+                                await setParameterValues(device._id, parameters);
+                                results.genieacs = true;
+                                logger.info(`GenieACS: Successfully restored device ${device._id} for customer ${customer.username}`);
+                            } else {
+                                logger.warn(`GenieACS: No device found for customer ${customer.username}`);
+                            }
+                        })(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('GenieACS restore timeout')), GENIEACS_WAN_MS))
+                    ]);
                 } catch (genieacsError) {
                     logger.error(`GenieACS restoration failed for ${customer.username}:`, genieacsError.message);
                 }
             }
 
-            // 3. Update status di billing database
+            // 3. Update status di billing database (skip jika billing sudah active — mis. setelah updateCustomerByPhone)
+            const alreadyActive = String(customer?.status || '').toLowerCase() === 'active';
             try {
-                if (customer.id) {
+                if (!alreadyActive && customer.id) {
                     logger.info(`[RESTORE] Updating billing status by id=${customer.id} to 'active' (username=${customer.username||customer.pppoe_username||'-'})`);
                     await billingManager.setCustomerStatusById(customer.id, 'active');
                     results.billing = true;
-                } else {
+                } else if (!alreadyActive) {
                     // Resolve by username first, then phone
                     let resolved = null;
                     if (customer.pppoe_username) {
@@ -609,26 +647,30 @@ class ServiceSuspensionManager {
                     } else {
                         logger.error(`[RESTORE] Unable to resolve customer identifier for status update`);
                     }
+                } else if (alreadyActive && customer.id) {
+                    results.billing = true;
                 }
             } catch (billingError) {
                 logger.error(`Billing restore update failed for ${customer.username}:`, billingError.message);
             }
 
-            // 4. Send WhatsApp notification
-            try {
-                const whatsappNotifications = require('./whatsapp-notifications');
-                await whatsappNotifications.sendServiceRestorationNotification(customer, reason);
-            } catch (notificationError) {
-                logger.error(`WhatsApp notification failed for ${customer.username}:`, notificationError.message);
-            }
-            
-            // 5. Send Email notification
-            try {
-                const emailNotifications = require('./email-notifications');
-                await emailNotifications.sendServiceRestorationNotification(customer, reason);
-            } catch (notificationError) {
-                logger.error(`Email notification failed for ${customer.username}:`, notificationError.message);
-            }
+            // 4–5. Notifikasi di background
+            void (async () => {
+                try {
+                    const whatsappNotifications = require('./whatsapp-notifications');
+                    await whatsappNotifications.sendServiceRestorationNotification(customer, reason);
+                } catch (notificationError) {
+                    logger.error(`WhatsApp notification failed for ${customer.username}:`, notificationError.message);
+                }
+            })();
+            void (async () => {
+                try {
+                    const emailNotifications = require('./email-notifications');
+                    await emailNotifications.sendServiceRestorationNotification(customer, reason);
+                } catch (notificationError) {
+                    logger.error(`Email notification failed for ${customer.username}:`, notificationError.message);
+                }
+            })();
 
             return {
                 success: results.mikrotik || results.genieacs || results.billing,

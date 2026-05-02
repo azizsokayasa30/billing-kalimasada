@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Permintaan Izin/Cuti - <%= typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Admin Panel' %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/theme.css" rel="stylesheet">
+    <link href="/css/responsive-admin.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <style>
+        .main-content { min-height: 100vh; }
+        .page-header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--sb-border, #dee2e6); }
+        .table-container { background: var(--panel-bg, #fff); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+        .table th { background-color: var(--table-head-bg, #f1f3f5); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; border-top: none; padding: 12px 15px; }
+        .table td { vertical-align: middle; padding: 12px 15px; font-size: 0.9rem; }
+        .badge-status { font-size: 0.75rem; }
+    </style>
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <%- include('../../partials/admin-responsive-sidebar') %>
+        <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
+            <div class="page-header d-flex justify-content-between align-items-center mt-4">
+                <h1 class="h4 m-0">Permintaan Izin/Cuti Karyawan</h1>
+            </div>
+
+            <div class="card mb-4 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-3">
+                            <label class="form-label mb-1">Filter Status</label>
+                            <select id="statusFilter" class="form-select" onchange="loadData()">
+                                <option value="">Semua Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Disetujui</option>
+                                <option value="rejected">Ditolak</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 ms-auto">
+                            <label class="form-label mb-1">Cari Karyawan</label>
+                            <input type="text" id="searchInput" class="form-control" placeholder="Ketik nama atau NIK..." oninput="renderTable()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container shadow-sm">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                        <tr>
+                            <th>Karyawan</th>
+                            <th>Jenis</th>
+                            <th>Periode</th>
+                            <th>Alasan</th>
+                            <th>Status</th>
+                            <th class="text-end">Aksi</th>
+                        </tr>
+                        </thead>
+                        <tbody id="dataTableBody">
+                        <tr><td colspan="6" class="text-center py-4">Memuat data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>
+    let allData = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadData();
+    });
+
+    function formatDateRange(startDate, endDate) {
+        const start = new Date(startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+        const end = new Date(endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+        return startDate === endDate ? start : `${start} - ${end}`;
+    }
+
+    function statusBadge(status) {
+        if (status === 'approved') return '<span class="badge bg-success-subtle text-success border badge-status">DISETUJUI</span>';
+        if (status === 'rejected') return '<span class="badge bg-danger-subtle text-danger border badge-status">DITOLAK</span>';
+        return '<span class="badge bg-warning-subtle text-warning border badge-status">PENDING</span>';
+    }
+
+    async function loadData() {
+        const status = document.getElementById('statusFilter').value;
+        const query = status ? `?status=${encodeURIComponent(status)}` : '';
+        try {
+            const res = await fetch(`/admin/employees/api/leave-requests${query}`);
+            const json = await res.json();
+            allData = json.data || [];
+            renderTable();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('dataTableBody');
+        const term = document.getElementById('searchInput').value.toLowerCase().trim();
+        const filtered = allData.filter(item =>
+            (item.nama_lengkap || '').toLowerCase().includes(term) ||
+            (item.nik || '').toLowerCase().includes(term)
+        );
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Belum ada permintaan izin/cuti.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(item => `
+            <tr>
+                <td>
+                    <div class="fw-bold">${item.nama_lengkap || '-'}</div>
+                    <div class="small text-muted">NIK: ${item.nik || '-'}</div>
+                </td>
+                <td><span class="badge bg-info-subtle text-info border">${(item.request_type || '').toUpperCase()}</span></td>
+                <td><div class="small">${formatDateRange(item.start_date, item.end_date)}</div></td>
+                <td><div class="small text-muted">${item.reason || '-'}</div></td>
+                <td>${statusBadge(item.status)}</td>
+                <td class="text-end">
+                    ${item.status === 'pending' ? `
+                        <button class="btn btn-sm btn-success" onclick="approveRequest(${item.id})"><i class="bi bi-check-lg me-1"></i>ACC</button>
+                        <button class="btn btn-sm btn-outline-danger ms-1" onclick="rejectRequest(${item.id})"><i class="bi bi-x-lg me-1"></i>Tolak</button>
+                    ` : `<span class="text-muted small">Selesai diproses</span>`}
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function approveRequest(id) {
+        const approvalNotes = prompt('Catatan approval (opsional):', '') || '';
+        if (!confirm('Setujui permintaan ini? Data akan disimpan ke absensi.')) return;
+        await processRequest(id, 'approve', approvalNotes);
+    }
+
+    async function rejectRequest(id) {
+        const approvalNotes = prompt('Alasan penolakan (opsional):', '') || '';
+        if (!confirm('Tolak permintaan ini?')) return;
+        await processRequest(id, 'reject', approvalNotes);
+    }
+
+    async function processRequest(id, action, approvalNotes) {
+        try {
+            const res = await fetch(`/admin/employees/api/leave-requests/${id}/${action}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ approval_notes: approvalNotes, approved_by: 'admin' })
+            });
+            const json = await res.json();
+            if (!json.success) {
+                alert('Gagal: ' + (json.error || 'Unknown error'));
+                return;
+            }
+            await loadData();
+            alert(json.message || 'Berhasil diproses');
+        } catch (e) {
+            alert('Terjadi kesalahan saat memproses permintaan');
+        }
+    }
+</script>
+</body>
+</html>

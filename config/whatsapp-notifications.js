@@ -179,6 +179,8 @@ Anda telah ditugaskan untuk instalasi baru:
 🛠️ *Peralatan:* {equipment_needed}
 
 📍 *Lokasi:* {customer_address}
+🔐 *PPPoE Username:* {pppoe_username}
+🔑 *PPPoE Password:* {pppoe_password}
 
 *Status:* Ditugaskan
 *Prioritas:* {priority}
@@ -1441,6 +1443,8 @@ Internet Tanpa Batas`;
                     customer_name: customer.name || installationJob.customer_name || 'N/A',
                     customer_phone: customer.phone || installationJob.customer_phone || 'N/A',
                     customer_address: customer.address || installationJob.customer_address || 'N/A',
+                    pppoe_username: customer.pppoe_username || 'N/A',
+                    pppoe_password: customer.pppoe_password || 'N/A',
                     package_name: packageData.name || installationJob.package_name || 'N/A',
                     package_price: packageData.price ? new Intl.NumberFormat('id-ID').format(packageData.price) : 
                                   installationJob.package_price ? new Intl.NumberFormat('id-ID').format(installationJob.package_price) : 'N/A',

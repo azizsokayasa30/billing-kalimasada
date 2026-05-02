@@ -332,11 +332,15 @@ router.get('/radius/test', adminAuth, async (req, res) => {
     `);
     const totalUsers = userCount[0]?.total || 0;
     
-    // Get active connections
+    // Get active connections (hitung hanya untuk username yang memang ada di radcheck sebagai user aktif)
+    // Ini mencegah "data yatim" di radacct membuat statistik jadi tidak konsisten.
     const [activeCount] = await conn.execute(`
-      SELECT COUNT(DISTINCT username) as active
-      FROM radacct
-      WHERE acctstoptime IS NULL
+      SELECT COUNT(DISTINCT ra.username) as active
+      FROM radacct ra
+      JOIN radcheck rc
+        ON rc.username = ra.username
+       AND rc.attribute = 'Cleartext-Password'
+      WHERE (ra.acctstoptime IS NULL OR ra.acctstoptime = '' OR ra.acctstoptime = '0' OR ra.acctstoptime = '0000-00-00 00:00:00')
     `);
     const activeConnections = activeCount[0]?.active || 0;
     
@@ -367,6 +371,167 @@ router.get('/radius/test', adminAuth, async (req, res) => {
       connection: {
         status: 'failed'
       }
+    });
+  }
+});
+
+// POST: Sinkronisasi & hapus user yatim (orphan users) di RADIUS (root version)
+router.post('/radius/sync-orphan-users', adminAuth, async (req, res) => {
+  let conn = null;
+  try {
+    const settings = await getRadiusConfig();
+    if (settings.user_auth_mode !== 'radius') {
+      return res.json({
+        success: false,
+        message: 'Mode bukan RADIUS. Sync/hapus orphan hanya untuk mode RADIUS.',
+        mode: settings.user_auth_mode
+      });
+    }
+
+    conn = await getRadiusConnection();
+
+    const sqlite3 = require('sqlite3').verbose();
+    const billingDbPath = path.join(process.cwd(), 'data', 'billing.db');
+
+    // Ambil daftar username yang "ada di aplikasi"
+    const allowedUsernames = new Set();
+    const billingDb = new sqlite3.Database(billingDbPath);
+
+    const customersPromise = new Promise((resolve) => {
+      billingDb.all(`
+        SELECT DISTINCT pppoe_username
+        FROM customers
+        WHERE pppoe_username IS NOT NULL
+          AND pppoe_username != ''
+      `, [], (err, rows) => {
+        if (!err && Array.isArray(rows)) {
+          rows.forEach(r => { if (r.pppoe_username) allowedUsernames.add(String(r.pppoe_username).trim()); });
+        }
+        resolve();
+      });
+    });
+
+    const membersPromise = new Promise((resolve) => {
+      billingDb.all(`
+        SELECT DISTINCT hotspot_username
+        FROM members
+        WHERE hotspot_username IS NOT NULL
+          AND hotspot_username != ''
+      `, [], (err, rows) => {
+        if (!err && Array.isArray(rows)) {
+          rows.forEach(r => { if (r.hotspot_username) allowedUsernames.add(String(r.hotspot_username).trim()); });
+        }
+        resolve();
+      });
+    });
+
+    const memberNormalPromise = new Promise((resolve) => {
+      billingDb.all(`
+        SELECT DISTINCT username
+        FROM members
+        WHERE (hotspot_username IS NULL OR hotspot_username = '')
+          AND username IS NOT NULL
+          AND username != ''
+      `, [], (err, rows) => {
+        if (!err && Array.isArray(rows)) {
+          rows.forEach(r => { if (r.username) allowedUsernames.add(String(r.username).trim()); });
+        }
+        resolve();
+      });
+    });
+
+    const vouchersPromise = new Promise((resolve) => {
+      billingDb.all(`
+        SELECT DISTINCT username
+        FROM voucher_revenue
+        WHERE username IS NOT NULL
+          AND username != ''
+      `, [], (err, rows) => {
+        if (!err && Array.isArray(rows)) {
+          rows.forEach(r => { if (r.username) allowedUsernames.add(String(r.username).trim()); });
+        }
+        resolve();
+      });
+    });
+
+    await Promise.all([customersPromise, membersPromise, memberNormalPromise, vouchersPromise]);
+    billingDb.close();
+
+    // Ambil orphan dari radcheck
+    const [radcheckRows] = await conn.execute(`
+      SELECT DISTINCT username
+      FROM radcheck
+      WHERE attribute = 'Cleartext-Password'
+    `);
+
+    const orphanUsers = (radcheckRows || []).map(r => String(r.username).trim())
+      .filter(u => u && !allowedUsernames.has(u));
+
+    let orphanUsersFound = orphanUsers.length;
+    let orphanUsersDeleted = 0;
+    let endedRadacctActive = 0;
+    let pppoeDisconnectAttempts = 0;
+
+    await conn.execute('BEGIN');
+    try {
+      for (const u of orphanUsers) {
+        const [updateRow] = await conn.execute(
+          "UPDATE radacct SET acctstoptime = datetime('now','localtime') WHERE username = ? AND (acctstoptime IS NULL OR acctstoptime = '' OR acctstoptime = '0' OR acctstoptime = '0000-00-00 00:00:00')",
+          [u]
+        );
+        endedRadacctActive += updateRow?.affectedRows || 0;
+
+        await conn.execute("DELETE FROM radusergroup WHERE username = ?", [u]);
+        await conn.execute("DELETE FROM radreply WHERE username = ?", [u]);
+        await conn.execute("DELETE FROM radcheck WHERE username = ?", [u]);
+
+        orphanUsersDeleted += 1;
+      }
+      await conn.execute('COMMIT');
+    } catch (txErr) {
+      await conn.execute('ROLLBACK');
+      throw txErr;
+    }
+
+    // Best-effort disconnect PPPoE on Mikrotik
+    try {
+      const routersDb = new sqlite3.Database(billingDbPath);
+      const routers = await new Promise((resolve) => {
+        routersDb.all('SELECT * FROM routers ORDER BY id', [], (err, rows) => resolve(rows || []));
+      });
+      routersDb.close();
+
+      const listToDisconnect = orphanUsers.slice(0, 30);
+      for (const u of listToDisconnect) {
+        pppoeDisconnectAttempts += 1;
+        for (const r of routers) {
+          try {
+            const { disconnectPPPoEUser } = require('../config/mikrotik');
+            await disconnectPPPoEUser(u, r);
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    await conn.end();
+
+    return res.json({
+      success: true,
+      message: 'Orphan users sync/cleanup berhasil',
+      details: {
+        orphanUsersFound,
+        orphanUsersDeleted,
+        endedRadacctActive,
+        pppoeDisconnectAttempts
+      }
+    });
+  } catch (error) {
+    logger.error('Error sync-orphan-users:', error);
+    try { if (conn) await conn.end(); } catch (_) {}
+    return res.status(500).json({
+      success: false,
+      message: 'Gagal sync/hapus orphan users: ' + error.message,
+      error: error.message
     });
   }
 });
