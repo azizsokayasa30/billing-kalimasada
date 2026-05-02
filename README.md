@@ -6,4 +6,4 @@ Monorepo aplikasi ISP (billing, GenieACS, MikroTik, dll.); sumber kode hanya di 
 
 **URL untuk klien (Android, dll.):** salin `.env.example` → `.env`, isi `PUBLIC_APP_BASE_URL` (atau `PUBLIC_APP_HOST` + `PUBLIC_APP_PORT`); endpoint baca konfigurasi: `GET /api/public/client`.
 
-**Alur Git ke depan:** `main` dan branch fitur (mis. `cursor/radius-db-audit-f5427`) dijaga **ujung commit sama**—kerja bisa **hanya di `main`**, atau di branch fitur lalu sebelum selesai jalankan `git checkout <branch-fitur> && git merge main --ff-only` (setelah `main` di-update) dan `git push`; setelah PR/merge ke `main`, fast-forward branch fitur ke `main` lagi. Hindari dua pohon yang saling menyimpang lama.
+**Alur Git ke depan:** `main` dan branch fitur (mis. `kalimasada-billing-cursor`) dijaga **ujung commit sama**—kerja bisa **hanya di `main`**, atau di branch fitur lalu sebelum selesai jalankan `git checkout <branch-fitur> && git merge main --ff-only` (setelah `main` di-update) dan `git push`; setelah PR/merge ke `main`, fast-forward branch fitur ke `main` lagi. Hindari dua pohon yang saling menyimpang lama.
