@@ -8,6 +8,7 @@ FreeRADIUS tetap membaca **`clients.conf`**. Tabel **`nas`** dipakai aplikasi da
 - **Baca**: daftar di UI = gabungan **`nas`** + isi **`clients.conf`** (dedupe per IP).
 - **Tulis** (tambah/ubah/hapus dari admin): memperbarui **`clients.conf`** dan **`nas`** agar keduanya sama.
 - Jika **`nas`** kosong (mis. setelah reset SQLite) tetapi **`clients.conf`** masih berisi NAS, pembukaan halaman NAS mengisi ulang **`nas`** dari file (sekali).
+- Proses Node/PM2 sering **tidak bisa membaca** `/etc/freeradius/.../clients.conf`. Gunakan salinan **`data/clients.conf.mirror`**: jalankan di server **`npm run radius:mirror-clients`** (perlu sudo), lalu restart PM2. Opsional: env **`RADIUS_CLIENTS_CONF_MIRROR`** ke path salinan lain.
 
 ## Problem Solved
 **Original Issue**: `EACCES: permission denied, open '/etc/freeradius/3.0/clients.conf'`

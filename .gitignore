@@ -13,6 +13,8 @@ data/radius.db
 data/radius.db-wal
 data/radius.db-shm
 data/test-*.db
+# Salinan clients.conf agar PM2 bisa baca (berisi secret — jangan commit)
+data/clients.conf.mirror
 
 # Logs
 logs/*.log

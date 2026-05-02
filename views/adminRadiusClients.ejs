@@ -44,9 +44,17 @@
 
       <div class="alert alert-secondary small mb-4">
         <i class="bi bi-info-circle me-1"></i>
-        Daftar NAS menggabungkan <strong>tabel <code>nas</code></strong> (SQLite RADIUS) dan <strong><code>/etc/freeradius/3.0/clients.conf</code></strong>.
-        Menyimpan perubahan menulis <strong>keduanya</strong> agar sama dengan FreeRADIUS. Jika <code>nas</code> sempat kosong setelah reset DB, pembukaan halaman ini mengisi ulang <code>nas</code> dari file (sekali).
+        Daftar NAS menggabungkan <strong>tabel <code>nas</code></strong> (SQLite) dan isi <strong><code>clients.conf</code></strong>.
+        Proses billing (PM2) biasanya <strong>tidak bisa membaca</strong> <code>/etc/freeradius/3.0/clients.conf</code> — gunakan salinan <code>data/clients.conf.mirror</code> (perintah <code>npm run radius:mirror-clients</code> di server).
+        Simpan perubahan menulis <strong>file asli + nas</strong>. Jika <code>nas</code> kosong, halaman ini mengisi <code>nas</code> dari file yang berhasil dibaca.
       </div>
+
+      <% if (typeof clientsConfDiag !== 'undefined' && clientsConfDiag && !clientsConfDiag.ok && (!clients || clients.length === 0)) { %>
+        <div class="alert alert-danger small mb-4">
+          <strong>Tidak ada daftar NAS yang terbaca.</strong>
+          <pre class="small bg-light p-2 rounded mt-2 mb-0" style="white-space: pre-wrap;"><%= clientsConfDiag.hint || 'Set mirror atau sudoers NOPASSWD untuk sudo -n cat clients.conf.' %></pre>
+        </div>
+      <% } %>
 
       <!-- Add Client Button -->
       <div class="card p-3 shadow-sm mb-4">

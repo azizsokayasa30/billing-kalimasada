@@ -1,10 +1,25 @@
 // Functions untuk manage FreeRADIUS clients.conf
 // Sekarang menggunakan RADIUS SQLite database sebagai primary storage
 const fs = require('fs');
+const path = require('path');
 const { execSync } = require('child_process');
 const logger = require('./logger');
 
 const CLIENTS_CONF_PATH = '/etc/freeradius/3.0/clients.conf';
+const APP_ROOT = path.join(__dirname, '..');
+const CLIENTS_CONF_MIRROR = path.join(APP_ROOT, 'data', 'clients.conf.mirror');
+
+/** Terakhir hasil baca clients.conf (untuk pesan di UI) */
+let _clientsConfReadDiag = {
+    ok: false,
+    sourcePath: null,
+    attempted: [],
+    hint: null
+};
+
+function getRadiusClientsConfReadDiagnostics() {
+    return { ..._clientsConfReadDiag };
+}
 
 // Import RADIUS connection
 const { getRadiusConnection } = require('./radiusSQLite');
@@ -77,124 +92,169 @@ async function parseClientsConfFromDB() {
 }
 
 /**
- * Parse clients.conf file (fallback/compatibility)
+ * Baca teks clients.conf: mirror (bisa dibaca PM2) → /etc → sudo -n cat.
+ * Proses Node biasanya bukan root sehingga /etc/... sering EACCES tanpa mirror atau NOPASSWD sudo.
+ */
+function readRadiusClientsConfTextWithMeta() {
+    const attempted = [];
+    const candidates = [];
+    const envMirror = process.env.RADIUS_CLIENTS_CONF_MIRROR && String(process.env.RADIUS_CLIENTS_CONF_MIRROR).trim();
+    if (envMirror) {
+        candidates.push(path.resolve(envMirror));
+    }
+    candidates.push(CLIENTS_CONF_MIRROR);
+    candidates.push(CLIENTS_CONF_PATH);
+
+    for (const p of candidates) {
+        if (!p) continue;
+        attempted.push(p);
+        try {
+            if (fs.existsSync(p)) {
+                fs.accessSync(p, fs.constants.R_OK);
+                const content = fs.readFileSync(p, 'utf8');
+                if (content && content.includes('client ')) {
+                    _clientsConfReadDiag = {
+                        ok: true,
+                        sourcePath: p,
+                        attempted: [...attempted],
+                        hint: null
+                    };
+                    return { content, diag: _clientsConfReadDiag };
+                }
+            }
+        } catch (e) {
+            logger.debug(`[RADIUS-CLIENTS] Lewati baca ${p}: ${e.message}`);
+        }
+    }
+
+    try {
+        const out = execSync(`sudo -n cat ${CLIENTS_CONF_PATH}`, {
+            encoding: 'utf8',
+            maxBuffer: 2 * 1024 * 1024,
+            timeout: 5000
+        });
+        if (out && out.includes('client ')) {
+            _clientsConfReadDiag = {
+                ok: true,
+                sourcePath: `${CLIENTS_CONF_PATH} (sudo -n)`,
+                attempted: [...attempted, 'sudo -n cat'],
+                hint: null
+            };
+            return { content: out, diag: _clientsConfReadDiag };
+        }
+    } catch (e) {
+        attempted.push(`sudo -n cat (${e.message})`);
+    }
+
+    const hint =
+        'Billing (PM2) tidak bisa membaca /etc/freeradius/3.0/clients.conf. Salin mirror ke folder aplikasi (sekali setelah ubah FR), lalu restart PM2:\n' +
+        `  npm run radius:mirror-clients\n` +
+        'atau manual:\n' +
+        `  sudo cp ${CLIENTS_CONF_PATH} ${CLIENTS_CONF_MIRROR} && sudo chown $(whoami):$(whoami) ${CLIENTS_CONF_MIRROR} && chmod 640 ${CLIENTS_CONF_MIRROR}\n` +
+        'Opsi: set env RADIUS_CLIENTS_CONF_MIRROR ke path file salinan yang bisa dibaca user proses Node.';
+    _clientsConfReadDiag = { ok: false, sourcePath: null, attempted, hint };
+    logger.warn(`[RADIUS-CLIENTS] clients.conf tidak terbaca oleh proses Node. ${hint.split('\n')[0]}`);
+    return { content: null, diag: _clientsConfReadDiag };
+}
+
+function parseClientsConfContent(content) {
+    if (!content || typeof content !== 'string') return [];
+
+    const clients = [];
+    let currentClient = null;
+    let inClientBlock = false;
+    const lines = content.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (line.startsWith('#') || line === '') {
+            continue;
+        }
+
+        const clientMatch = line.match(/^client\s+([^\s{]+)\s*\{/);
+        if (clientMatch) {
+            if (currentClient) {
+                clients.push(currentClient);
+            }
+            currentClient = {
+                name: clientMatch[1],
+                ipaddr: null,
+                addrType: 'ipaddr',
+                secret: null,
+                nas_type: 'other',
+                require_message_authenticator: 'no',
+                comment: null,
+                rawLines: []
+            };
+            inClientBlock = true;
+            currentClient.rawLines.push(lines[i]);
+            continue;
+        }
+
+        if (line === '}' && inClientBlock) {
+            if (currentClient) {
+                currentClient.rawLines.push(lines[i]);
+                clients.push(currentClient);
+                currentClient = null;
+                inClientBlock = false;
+            }
+            continue;
+        }
+
+        if (inClientBlock && currentClient) {
+            currentClient.rawLines.push(lines[i]);
+
+            const addrMatch = line.match(/(ipaddr|ipv4addr|ipv6addr)\s*=\s*(.+)/);
+            if (addrMatch) {
+                currentClient.addrType = addrMatch[1].trim();
+                currentClient.ipaddr = addrMatch[2].trim();
+            }
+
+            const secretMatch = line.match(/secret\s*=\s*(.+)/);
+            if (secretMatch) {
+                currentClient.secret = secretMatch[1].trim();
+            }
+
+            const nasTypeMatch = line.match(/nas_type\s*=\s*(.+)/);
+            if (nasTypeMatch) {
+                currentClient.nas_type = nasTypeMatch[1].trim();
+            }
+
+            const msgAuthMatch = line.match(/require_message_authenticator\s*=\s*(.+)/);
+            if (msgAuthMatch) {
+                currentClient.require_message_authenticator = msgAuthMatch[1].trim();
+            }
+
+            if (line.startsWith('#')) {
+                currentClient.comment = line.substring(1).trim();
+            }
+        }
+    }
+
+    if (currentClient) {
+        clients.push(currentClient);
+    }
+
+    return clients.map((c) => ({
+        name: c.name,
+        ipaddr: c.ipaddr,
+        addrType: c.addrType || 'ipaddr',
+        secret: c.secret,
+        nas_type: c.nas_type || 'other',
+        require_message_authenticator: c.require_message_authenticator || 'no',
+        comment: c.comment
+    }));
+}
+
+/**
+ * Parse clients.conf (isi dari mirror atau /etc atau sudo -n).
  */
 async function parseClientsConfFromFile() {
     try {
-        if (!fs.existsSync(CLIENTS_CONF_PATH)) {
-            logger.warn(`clients.conf not found at ${CLIENTS_CONF_PATH}`);
-            return [];
-        }
-
-        // Try to read file directly first
-        let content;
-        try {
-            content = fs.readFileSync(CLIENTS_CONF_PATH, 'utf8');
-        } catch (readError) {
-            // If direct read fails, try with sudo
-            try {
-                content = execSync(`sudo cat ${CLIENTS_CONF_PATH}`, { encoding: 'utf8' });
-            } catch (sudoError) {
-                logger.error(`Cannot read clients.conf: ${readError.message}`);
-                throw new Error(`Tidak dapat membaca file clients.conf: ${readError.message}`);
-            }
-        }
-        
-        const clients = [];
-        let currentClient = null;
-        let inClientBlock = false;
-        const lines = content.split('\n');
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            
-            // Skip comments and empty lines
-            if (line.startsWith('#') || line === '') {
-                continue;
-            }
-
-            // Detect client block start: "client name {" or "client ipaddr {"
-            const clientMatch = line.match(/^client\s+([^\s{]+)\s*\{/);
-            if (clientMatch) {
-                if (currentClient) {
-                    clients.push(currentClient);
-                }
-                currentClient = {
-                    name: clientMatch[1],
-                    ipaddr: null,
-                    addrType: 'ipaddr', // Default type
-                    secret: null,
-                    nas_type: 'other',
-                    require_message_authenticator: 'no',
-                    comment: null,
-                    rawLines: []
-                };
-                inClientBlock = true;
-                currentClient.rawLines.push(lines[i]);
-                continue;
-            }
-
-            // Detect client block end
-            if (line === '}' && inClientBlock) {
-                if (currentClient) {
-                    currentClient.rawLines.push(lines[i]);
-                    clients.push(currentClient);
-                    currentClient = null;
-                    inClientBlock = false;
-                }
-                continue;
-            }
-
-            // Parse client attributes
-            if (inClientBlock && currentClient) {
-                currentClient.rawLines.push(lines[i]);
-                
-                // Parse ipaddr, ipv4addr, or ipv6addr
-                const addrMatch = line.match(/(ipaddr|ipv4addr|ipv6addr)\s*=\s*(.+)/);
-                if (addrMatch) {
-                    currentClient.addrType = addrMatch[1].trim();
-                    currentClient.ipaddr = addrMatch[2].trim();
-                }
-
-                // Parse secret
-                const secretMatch = line.match(/secret\s*=\s*(.+)/);
-                if (secretMatch) {
-                    currentClient.secret = secretMatch[1].trim();
-                }
-
-                // Parse nas_type
-                const nasTypeMatch = line.match(/nas_type\s*=\s*(.+)/);
-                if (nasTypeMatch) {
-                    currentClient.nas_type = nasTypeMatch[1].trim();
-                }
-
-                // Parse require_message_authenticator
-                const msgAuthMatch = line.match(/require_message_authenticator\s*=\s*(.+)/);
-                if (msgAuthMatch) {
-                    currentClient.require_message_authenticator = msgAuthMatch[1].trim();
-                }
-
-                // Parse comment (if exists)
-                if (line.startsWith('#')) {
-                    currentClient.comment = line.substring(1).trim();
-                }
-            }
-        }
-
-        // Add last client if exists
-        if (currentClient) {
-            clients.push(currentClient);
-        }
-
-        return clients.map((c) => ({
-            name: c.name,
-            ipaddr: c.ipaddr,
-            addrType: c.addrType || 'ipaddr',
-            secret: c.secret,
-            nas_type: c.nas_type || 'other',
-            require_message_authenticator: c.require_message_authenticator || 'no',
-            comment: c.comment
-        }));
+        const { content } = readRadiusClientsConfTextWithMeta();
+        if (!content) return [];
+        return parseClientsConfContent(content);
     } catch (error) {
         logger.error(`Error parsing clients.conf: ${error.message}`);
         return [];
@@ -585,6 +645,8 @@ module.exports = {
     writeClientsConfToDB,
     restartFreeRADIUS,
     validateClient,
-    CLIENTS_CONF_PATH
+    getRadiusClientsConfReadDiagnostics,
+    CLIENTS_CONF_PATH,
+    CLIENTS_CONF_MIRROR
 };
 

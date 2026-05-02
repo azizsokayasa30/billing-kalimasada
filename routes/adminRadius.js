@@ -11,7 +11,15 @@ const logger = require('../config/logger');
 const { getRadiusConnection } = require('../config/mikrotik');
 const { getRadiusSqliteFileDiagnostics } = require('../config/radiusSQLite');
 const { getRadiusConsistencyReport } = require('../config/radiusConsistency');
-const { parseClientsConf, parseClientsConfFromDB, writeClientsConf, writeClientsConfToDB, restartFreeRADIUS, validateClient } = require('../config/radiusClients');
+const {
+  parseClientsConf,
+  parseClientsConfFromDB,
+  writeClientsConf,
+  writeClientsConfToDB,
+  restartFreeRADIUS,
+  validateClient,
+  getRadiusClientsConfReadDiagnostics
+} = require('../config/radiusClients');
 const { backupRadius, restoreRadius, listBackups } = require('../utils/radiusBackup');
 
 // Configure multer for file upload
@@ -564,10 +572,12 @@ router.post('/radius/sync-orphan-users', adminAuth, async (req, res) => {
 router.get('/radius/clients', adminAuth, async (req, res) => {
   try {
     const clients = await parseClientsConfFromDB();
+    const clientsConfDiag = getRadiusClientsConfReadDiagnostics();
     const settings = await getRadiusConfig();
     
     res.render('adminRadiusClients', {
       clients,
+      clientsConfDiag,
       settings,
       page: 'setting-radius-clients',
       error: req.query.error || null,
@@ -577,6 +587,7 @@ router.get('/radius/clients', adminAuth, async (req, res) => {
     logger.error('Error loading RADIUS clients:', error);
     res.render('adminRadiusClients', {
       clients: [],
+      clientsConfDiag: getRadiusClientsConfReadDiagnostics(),
       settings: {},
       page: 'setting-radius-clients',
       error: 'Gagal memuat daftar clients: ' + error.message,
@@ -589,7 +600,7 @@ router.get('/radius/clients', adminAuth, async (req, res) => {
 router.get('/radius/clients/api', adminAuth, async (req, res) => {
   try {
     const clients = await parseClientsConfFromDB();
-    res.json({ success: true, clients });
+    res.json({ success: true, clients, clientsConfDiag: getRadiusClientsConfReadDiagnostics() });
   } catch (error) {
     logger.error('Error getting clients:', error);
     res.status(500).json({ success: false, message: error.message });
