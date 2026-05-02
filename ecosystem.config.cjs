@@ -1,6 +1,8 @@
 const path = require('path');
 
-// cwd = folder repo (sama dengan lokasi ecosystem.config.cjs), jangan hardcode path mesin dev
+// cwd = folder repo (sama dengan lokasi ecosystem.config.cjs). app.js memuat .env dari sini.
+// Path SQLite RADIUS: isi RADIUS_SQLITE_PATH di .env (path penuh sama file modul sql FreeRADIUS),
+// atau path absolut / data/... di Pengaturan RADIUS — lihat .env.example.
 module.exports = {
   apps: [
     {

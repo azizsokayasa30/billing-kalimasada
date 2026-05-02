@@ -15,7 +15,7 @@ const execAsync = promisify(exec);
 async function backupRadius() {
     try {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const backupDir = path.join(process.cwd(), 'backups', 'radius');
+        const backupDir = path.join(__dirname, '../backups/radius');
         const backupFileName = `radius-backup-${timestamp}.tar.gz`;
         const backupFilePath = path.join(backupDir, backupFileName);
         
@@ -141,7 +141,7 @@ async function restoreRadius(backupFilePath) {
         const dbUser = config.radius_user || 'radius';
         const dbPassword = config.radius_password || '';
         // Create temporary directory for extraction
-        const tempDir = path.join(process.cwd(), 'backups', 'radius', `restore-temp-${Date.now()}`);
+        const tempDir = path.join(__dirname, '../backups/radius', `restore-temp-${Date.now()}`);
         await fs.mkdir(tempDir, { recursive: true });
         
         try {
@@ -285,7 +285,7 @@ async function restoreRadius(backupFilePath) {
  */
 async function listBackups() {
     try {
-        const backupDir = path.join(process.cwd(), 'backups', 'radius');
+        const backupDir = path.join(__dirname, '../backups/radius');
         await fs.mkdir(backupDir, { recursive: true });
         
         const files = await fs.readdir(backupDir);

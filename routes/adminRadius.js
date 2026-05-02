@@ -15,7 +15,7 @@ const { backupRadius, restoreRadius, listBackups } = require('../utils/radiusBac
 
 // Configure multer for file upload
 const upload = multer({
-    dest: path.join(process.cwd(), 'temp', 'uploads'),
+    dest: path.join(__dirname, '../temp/uploads'),
     limits: {
         fileSize: 500 * 1024 * 1024 // 500MB max
     },
@@ -406,7 +406,7 @@ router.post('/radius/sync-orphan-users', adminAuth, async (req, res) => {
     conn = await getRadiusConnection();
 
     const sqlite3 = require('sqlite3').verbose();
-    const billingDbPath = path.join(process.cwd(), 'data', 'billing.db');
+    const billingDbPath = path.join(__dirname, '../data/billing.db');
 
     // Ambil daftar username yang "ada di aplikasi"
     const allowedUsernames = new Set();

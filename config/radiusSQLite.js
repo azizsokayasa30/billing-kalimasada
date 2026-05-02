@@ -13,7 +13,8 @@ let _singletonPath = null;
 
 /**
  * Path file SQLite yang dipakai FreeRADIUS harus sama dengan yang dibaca aplikasi.
- * Prioritas: env RADIUS_SQLITE_PATH → path absolut di app_settings → data/<nama>.db
+ * Prioritas: env RADIUS_SQLITE_PATH → path absolut → path relatif data/... dari akar proyek
+ * → nama file saja di folder data/ (mis. radius → data/radius.db).
  */
 async function resolveRadiusSqliteDbPath() {
     const { getRadiusConfig } = require('./radiusConfig');
@@ -30,6 +31,13 @@ async function resolveRadiusSqliteDbPath() {
         return {
             dbPath: path.join(__dirname, '..', 'data', 'radius.db'),
             source: 'default:data/radius.db'
+        };
+    }
+    const rawSlash = raw.replace(/\\/g, '/');
+    if (rawSlash.startsWith('data/')) {
+        return {
+            dbPath: path.normalize(path.join(__dirname, '..', raw)),
+            source: `app_settings:${rawSlash}`
         };
     }
     if (path.isAbsolute(raw)) {
