@@ -4609,17 +4609,16 @@ router.post('/customers', customerPhotoUpload.fields([
             profileToUse = packageData?.pppoe_profile || 'default';
         }
 
-        // Handle password hashing if provided
-        let hashedPassword = undefined;
-        if (password && password.trim().length >= 6) {
-            const bcrypt = require('bcrypt');
-            hashedPassword = await bcrypt.hash(password.trim(), 10);
-        } else if (password) {
+        // Password portal: default 123456 jika kosong (sesuai kebijakan form tambah pelanggan)
+        const bcrypt = require('bcrypt');
+        const pwdPlain = (password && String(password).trim()) || '123456';
+        if (pwdPlain.length < 6) {
             return res.status(400).json({
                 success: false,
                 message: 'Password portal harus minimal 6 karakter'
             });
         }
+        const hashedPassword = await bcrypt.hash(pwdPlain, 10);
 
         const allowedNewStatus = ['active', 'inactive', 'suspended'];
         const statusFromForm = (bodyStatus && String(bodyStatus).trim()) || '';

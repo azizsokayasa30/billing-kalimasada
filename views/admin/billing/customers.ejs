@@ -1039,13 +1039,13 @@
                         </div>
                         <div class="mb-3">
                             <label for="username" class="form-label">Username login *</label>
-                            <input type="text" class="form-control" id="username" name="username" required placeholder="Login portal (bukan PPPoE); otomatis dari nama + tanggal + sufiks acak">
-                            <small class="text-muted">Ini untuk login pelanggan ke portal/tagihan — terpisah dari <strong>PPPoE Username</strong> di bawah.</small>
+                            <input type="text" class="form-control" id="username" name="username" required placeholder="Contoh: aderestu_020526 (nama tanpa spasi + _DDMMYY WIB)">
+                            <small class="text-muted">Login portal/tagihan (bukan PPPoE). Otomatis dari nama: huruf/angka saja tanpa spasi, lalu tanggal WIB (DDMMYY).</small>
                             <small class="form-text text-muted">Username akan digunakan untuk login pelanggan dan payment gateway. Format otomatis: nama_DDMMYY</small>
                         </div>
                         <div class="mb-3">
                             <label for="password" class="form-label">Password Portal</label>
-                            <input type="text" class="form-control" id="password" name="password" placeholder="Minimal 6 karakter (Opsional)">
+                            <input type="text" class="form-control" id="password" name="password" placeholder="Default 123456 jika dikosongkan (minimal 6 karakter)">
                             <small class="form-text text-muted">Password untuk login pelanggan ke portal. Biarkan kosong jika tidak ingin diset sekarang.</small>
                         </div>
                         <div class="mb-3">
@@ -2134,45 +2134,36 @@
                 if (nameField && nameField.value) {
                     const fullName = nameField.value;
                     
-                    // Generate username if field is empty
+                    // Tanggal WIB (satu kali untuk username)
+                    const jakartaParts = new Intl.DateTimeFormat('en-GB', {
+                        timeZone: 'Asia/Jakarta',
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: '2-digit'
+                    }).formatToParts(new Date());
+                    const pickJakarta = (t) => (jakartaParts.find((x) => x.type === t) || {}).value || '00';
+                    const dateStr = pickJakarta('day') + pickJakarta('month') + pickJakarta('year');
+
+                    // Username: nama lengkap tanpa spasi (hanya huruf/angka) + _DDMMYY — contoh ADE RESTU → aderestu_020526
                     if (usernameField && !usernameField.value) {
-                        // Process character by character for username
-                        let cleanUsername = '';
-                        for (let i = 0; i < fullName.length && i < 15; i++) {
+                        let compact = '';
+                        for (let i = 0; i < fullName.length; i++) {
                             const char = fullName[i].toLowerCase();
                             if (char >= 'a' && char <= 'z') {
-                                cleanUsername += char;
+                                compact += char;
                             } else if (char >= '0' && char <= '9') {
-                                cleanUsername += char;
-                            } else if (char === ' ') {
-                                cleanUsername += '_';
-                            } else if (char === '_' && cleanUsername.length > 0 && cleanUsername[cleanUsername.length - 1] !== '_') {
-                                cleanUsername += char;
+                                compact += char;
                             }
-                            // Skip all other characters
                         }
-                        
-                        // Remove trailing underscores
-                        cleanUsername = cleanUsername.replace(/_+$/, '');
-                        
-                        // If result is empty, use default
-                        if (!cleanUsername) {
-                            cleanUsername = 'user';
+                        if (!compact) {
+                            compact = 'user';
                         }
-                        
-                        // Add date (WIB — konsisten dengan server, bukan zona browser)
-                        const jakartaParts = new Intl.DateTimeFormat('en-GB', {
-                            timeZone: 'Asia/Jakarta',
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: '2-digit'
-                        }).formatToParts(new Date());
-                        const pickJakarta = (t) => (jakartaParts.find((x) => x.type === t) || {}).value || '00';
-                        const dateStr = pickJakarta('day') + pickJakarta('month') + pickJakarta('year');
-                        const rand = Math.random().toString(36).substring(2, 6);
-                        const finalUsername = cleanUsername + '_' + dateStr + '_' + rand;
-                        
-                        usernameField.value = finalUsername;
+                        usernameField.value = compact + '_' + dateStr;
+                    }
+
+                    const passwordField = document.getElementById('password');
+                    if (passwordField && !String(passwordField.value || '').trim()) {
+                        passwordField.value = '123456';
                     }
                     
                     // Generate email if field is empty
