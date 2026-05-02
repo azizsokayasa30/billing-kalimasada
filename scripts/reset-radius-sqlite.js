@@ -38,9 +38,12 @@ function openDb(dbPath) {
     return new sqlite3.Database(dbPath);
 }
 
-function run(db, sql) {
+function run(db, sql, params = []) {
     return new Promise((resolve, reject) => {
-        db.run(sql, (err) => (err ? reject(err) : resolve()));
+        db.run(sql, params, function (err) {
+            if (err) reject(err);
+            else resolve(this.changes);
+        });
     });
 }
 
@@ -106,9 +109,8 @@ Contoh:
         await run(db, 'BEGIN IMMEDIATE');
         for (const t of TABLES_IN_DELETE_ORDER) {
             if (await tableExists(db, t)) {
-                await run(db, `DELETE FROM "${t}"`);
-                const row = await get(db, `SELECT changes() AS c`);
-                console.log(`  DELETE FROM ${t}  →  ${row.c} baris`);
+                const n = await run(db, `DELETE FROM "${t}"`);
+                console.log(`  DELETE FROM ${t}  →  ${n} baris`);
             } else {
                 console.log(`  (lewati ${t} — tabel tidak ada)`);
             }
