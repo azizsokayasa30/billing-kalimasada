@@ -4806,8 +4806,10 @@ router.post('/customers', customerPhotoUpload.fields([
                 errorMessage = 'Nomor telepon sudah terdaftar';
                 errorDetails = 'Nomor telepon yang Anda masukkan sudah digunakan oleh pelanggan lain. Silakan gunakan nomor telepon yang berbeda atau cek data pelanggan yang sudah ada.';
             } else if (error.message.includes('customers.username')) {
-                errorMessage = 'Username sudah digunakan';
-                errorDetails = 'Username yang Anda masukkan sudah digunakan oleh pelanggan lain. Silakan gunakan username yang berbeda.';
+                errorMessage = 'Username login sudah digunakan';
+                errorDetails =
+                    'Kolom Username (login portal / billing) bentrok dengan pelanggan lain — ini bukan username PPPoE. ' +
+                    'Ubah kolom Username di form, atau kosongkan lalu simpan lagi. Username PPPoE (mis. rumah-ato) terpisah dan boleh unik sendiri.';
             } else if (error.message.includes('customers.customer_id')) {
                 errorMessage = 'ID Pelanggan duplikat';
                 errorDetails = 'Terjadi konflik ID Pelanggan. Silakan coba lagi atau hubungi administrator.';

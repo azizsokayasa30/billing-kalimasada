@@ -1038,8 +1038,9 @@
                             <small class="form-text text-muted">Username &amp; email tetap diisi otomatis dari nama</small>
                         </div>
                         <div class="mb-3">
-                            <label for="username" class="form-label">Username *</label>
-                            <input type="text" class="form-control" id="username" name="username" required placeholder="Akan otomatis terisi dari nama + tanggal (contoh: test_280825)">
+                            <label for="username" class="form-label">Username login *</label>
+                            <input type="text" class="form-control" id="username" name="username" required placeholder="Login portal (bukan PPPoE); otomatis dari nama + tanggal + sufiks acak">
+                            <small class="text-muted">Ini untuk login pelanggan ke portal/tagihan — terpisah dari <strong>PPPoE Username</strong> di bawah.</small>
                             <small class="form-text text-muted">Username akan digunakan untuk login pelanggan dan payment gateway. Format otomatis: nama_DDMMYY</small>
                         </div>
                         <div class="mb-3">
@@ -2168,7 +2169,8 @@
                         }).formatToParts(new Date());
                         const pickJakarta = (t) => (jakartaParts.find((x) => x.type === t) || {}).value || '00';
                         const dateStr = pickJakarta('day') + pickJakarta('month') + pickJakarta('year');
-                        const finalUsername = cleanUsername + '_' + dateStr;
+                        const rand = Math.random().toString(36).substring(2, 6);
+                        const finalUsername = cleanUsername + '_' + dateStr + '_' + rand;
                         
                         usernameField.value = finalUsername;
                     }

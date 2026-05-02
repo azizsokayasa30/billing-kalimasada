@@ -1412,8 +1412,8 @@
             
             const { name, username, password, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path } = customerData;
             
-            // Use provided username, fallback to auto-generate if not provided
-            const finalUsername = username || this.generateUsername(phone);
+            // Username = login portal (UNIQUE). PPPoE = terpisah. Bentrok sering terjadi bila pola nama+tanggal sama.
+            let finalUsername = (username && String(username).trim()) || this.generateUsername(phone);
             const autoPPPoEUsername = pppoe_username || this.generatePPPoEUsername(phone);
             
             // Generate customer_id (6 digit numerik)
@@ -1442,12 +1442,73 @@
             // Default coordinates untuk Jakarta jika tidak ada koordinat
             const finalLatitude = latitude !== undefined ? parseFloat(latitude) : -6.2088;
             const finalLongitude = longitude !== undefined ? parseFloat(longitude) : 106.8456;
-            
-            db.run(sql, [generatedCustomerId, finalUsername, password || null, name, phone, autoPPPoEUsername, email, address, area || null, area_id ? parseInt(area_id) : null, package_id, customerData.odp_id || null, pppoe_profile, finalStatus, auto_suspension !== undefined ? auto_suspension : 1, normBillingDay, static_ip || null, assigned_ip || null, mac_address || null, finalLatitude, finalLongitude, cable_type || null, cable_length || null, port_number || null, cable_status || 'connected', cable_notes || null, ktp_photo_path || null, house_photo_path || null, joinDateStored], async function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    const customer = { id: this.lastID, ...customerData };
+
+            const insertParams = (loginUser) => [
+                generatedCustomerId,
+                loginUser,
+                password || null,
+                name,
+                phone,
+                autoPPPoEUsername,
+                email,
+                address,
+                area || null,
+                area_id ? parseInt(area_id) : null,
+                package_id,
+                customerData.odp_id || null,
+                pppoe_profile,
+                finalStatus,
+                auto_suspension !== undefined ? auto_suspension : 1,
+                normBillingDay,
+                static_ip || null,
+                assigned_ip || null,
+                mac_address || null,
+                finalLatitude,
+                finalLongitude,
+                cable_type || null,
+                cable_length || null,
+                port_number || null,
+                cable_status || 'connected',
+                cable_notes || null,
+                ktp_photo_path || null,
+                house_photo_path || null,
+                joinDateStored
+            ];
+
+            let lastInsertErr = null;
+            let lastID = null;
+            for (let attempt = 0; attempt < 10; attempt++) {
+                try {
+                    lastID = await new Promise((res, rej) => {
+                        db.run(sql, insertParams(finalUsername), function (err) {
+                            if (err) rej(err);
+                            else res(this.lastID);
+                        });
+                    });
+                    lastInsertErr = null;
+                    break;
+                } catch (err) {
+                    lastInsertErr = err;
+                    const uqLogin =
+                        err.message &&
+                        err.message.includes('UNIQUE') &&
+                        (err.message.includes('customers.username') || err.message.includes('idx_customers_username'));
+                    if (uqLogin && attempt < 9) {
+                        const prev = finalUsername;
+                        finalUsername = this.generateUsername(phone);
+                        logger.warn(
+                            `[BILLING] Bentrok username login portal "${prev}" → "${finalUsername}" (bukan PPPoE; percobaan ${attempt + 2}/10)`
+                        );
+                        continue;
+                    }
+                    return reject(err);
+                }
+            }
+            if (lastInsertErr || lastID == null) {
+                return reject(lastInsertErr || new Error('Gagal insert pelanggan'));
+            }
+
+            const customer = { id: lastID, ...customerData, username: finalUsername };
                     
                     // Jika ada data ODP, buat cable route otomatis
                     if (odp_id) {
@@ -1460,7 +1521,7 @@
                             `;
                             
                             db.run(cableRouteSql, [
-                                this.lastID,
+                                lastID,
                                 odp_id,
                                 cable_type || 'Fiber Optic',
                                 cable_length || 0,
@@ -1557,9 +1618,7 @@
                         logger.warn(`[BILLING] RADIUS sync create error for ${autoPPPoEUsername}: ${radiusSyncError.message}`);
                     }
 
-                    resolve(customer);
-                }
-            });
+            resolve(customer);
         });
     }
 
