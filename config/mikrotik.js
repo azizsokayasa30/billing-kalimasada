@@ -16,15 +16,20 @@ const routerConnections = new Map();
 
 /**
  * Username yang dikecualikan dari daftar PPPoE admin / query radcheck terkait:
- * - voucher_revenue
- * - member hotspot dengan hotspot_username eksplisit
- * Tidak lagi mengecualikan semua members.username (bila hotspot_username kosong) —
- * nilai itu sering sama dengan PPPoE pelanggan ISP sehingga seluruh baris radcheck ikut terfilter.
+ * - voucher_revenue (hotspot voucher)
+ * - members.hotspot_username (login hotspot member)
+ * Selalu mengembalikan daftar untuk NOT IN di query RADIUS.
+ *
+ * Penting: jika string yang sama dipakai sebagai PPPoE billing (customers.pppoe_username),
+ * jangan ikut mengecualikan — bentrok nama sering terjadi (PPPoE "skynet" vs hotspot "skynet"),
+ * dan menyembunyikan pelanggan ISP padahal baris radcheck ada.
  */
 async function getPppoeRadcheckExcludeUsernames() {
     const sqlite3 = require('sqlite3').verbose();
     const dbPath = path.join(__dirname, '../data/billing.db');
     const db = new sqlite3.Database(dbPath);
+    const norm = (u) => String(u || '').trim().toLowerCase();
+
     try {
         const vouchers = await new Promise((resolve) => {
             db.all('SELECT DISTINCT username AS u FROM voucher_revenue', [], (err, rows) => {
@@ -43,8 +48,33 @@ async function getPppoeRadcheckExcludeUsernames() {
                 }
             );
         });
-        const merged = [...new Set([...vouchers, ...hotspotOnly])];
-        logger.info(`[PPPoE-exclude] voucher + hotspot_username: ${merged.length} username`);
+        const customerPppoe = await new Promise((resolve) => {
+            db.all(
+                `SELECT DISTINCT TRIM(pppoe_username) AS u FROM customers
+                 WHERE pppoe_username IS NOT NULL AND TRIM(pppoe_username) != ''`,
+                [],
+                (err, rows) => {
+                    if (err) {
+                        logger.warn(`[PPPoE-exclude] customers.pppoe_username: ${err.message}`);
+                        return resolve([]);
+                    }
+                    if (!rows) return resolve([]);
+                    resolve(rows.map((r) => String(r.u).trim()).filter(Boolean));
+                }
+            );
+        });
+
+        const protect = new Set(customerPppoe.map(norm));
+        const mergedRaw = [...new Set([...vouchers, ...hotspotOnly])];
+        const merged = mergedRaw.filter((u) => !protect.has(norm(u)));
+        const unblocked = mergedRaw.length - merged.length;
+        if (unblocked > 0) {
+            logger.info(
+                `[PPPoE-exclude] ${mergedRaw.length} voucher/hotspot raw → ${merged.length} setelah jeda bentrok dengan customers.pppoe_username (${unblocked} tidak dikecualikan)`
+            );
+        } else {
+            logger.info(`[PPPoE-exclude] voucher + hotspot_username: ${merged.length} username (tanpa bentrok pelanggan PPPoE)`);
+        }
         return merged;
     } finally {
         db.close();
@@ -238,6 +268,7 @@ async function getPPPoEUsersRadius() {
         const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
 
         // Atribut sandi di radcheck (jangan sertakan NT-Password: dipakai app untuk metadata isolir PREVGROUP:…)
+        // Satu baris per username: MIN(id) agar tidak dobel jika ada >1 tipe sandi di radcheck.
         let query = `
             SELECT 
                 rc.username, 
@@ -250,19 +281,23 @@ async function getPPPoEUsersRadius() {
                     'default'
                 ) as profile
             FROM radcheck rc
-            WHERE rc.attribute IN (
-                'Cleartext-Password',
-                'User-Password',
-                'Crypt-Password',
-                'MD5-Password',
-                'SHA-Password',
-                'SMD5-Password'
-            )
+            INNER JOIN (
+                SELECT username, MIN(id) AS pick_id
+                FROM radcheck
+                WHERE attribute IN (
+                    'Cleartext-Password',
+                    'User-Password',
+                    'Crypt-Password',
+                    'MD5-Password',
+                    'SHA-Password',
+                    'SMD5-Password'
+                )
+                GROUP BY username
+            ) cred ON rc.id = cred.pick_id
         `;
-        
+
         const params = [];
         if (excludeUsernames.length > 0) {
-            // Exclude voucher usernames DAN member usernames
             const placeholders = excludeUsernames.map(() => '?').join(',');
             query += ` AND rc.username NOT IN (${placeholders})`;
             params.push(...excludeUsernames);
@@ -311,17 +346,24 @@ async function getPPPoEUsersRadius() {
 
             const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
 
-            let fallbackQuery = `SELECT username, value as password FROM radcheck WHERE attribute IN (
-                'Cleartext-Password','User-Password','Crypt-Password','MD5-Password','SHA-Password',
-                'SMD5-Password'
-            )`;
+            let fallbackQuery = `
+                SELECT r.username, r.value as password FROM radcheck r
+                INNER JOIN (
+                    SELECT username, MIN(id) AS pick_id FROM radcheck
+                    WHERE attribute IN (
+                        'Cleartext-Password','User-Password','Crypt-Password','MD5-Password','SHA-Password',
+                        'SMD5-Password'
+                    )
+                    GROUP BY username
+                ) c ON r.id = c.pick_id
+                WHERE 1=1`;
             const params = [];
             if (excludeUsernames.length > 0) {
                 const placeholders = excludeUsernames.map(() => '?').join(',');
-                fallbackQuery += ` AND username NOT IN (${placeholders})`;
+                fallbackQuery += ` AND r.username NOT IN (${placeholders})`;
                 params.push(...excludeUsernames);
             }
-            fallbackQuery += " ORDER BY username";
+            fallbackQuery += ' ORDER BY r.username';
             
             const [fbRows] = await conn2.execute(fallbackQuery, params);
             const fbList = Array.isArray(fbRows) ? fbRows : [];
