@@ -113,7 +113,17 @@ console.log(`🚀 [BOOTSTRAP] Current working directory: ${process.cwd()}`);
 console.log(`🚀 [BOOTSTRAP] NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`🚀 [BOOTSTRAP] PORT from ENV: ${process.env.PORT}`);
 console.log(`⏰ [BOOTSTRAP] Timezone locked to: ${process.env.TZ} (WIB UTC+7)`);
-const whatsapp = require('./config/whatsapp');
+const whatsapp = (() => {
+  try {
+    return require('./config/whatsapp');
+  } catch (err) {
+    console.error('[WHATSAPP] Disabled at startup:', err.message);
+    return {
+      connectToWhatsApp: async () => null,
+      setSock: () => {}
+    };
+  }
+})();
 const { monitorPPPoEConnections } = require('./config/mikrotik');
 const fs = require('fs');
 const session = require('express-session');
@@ -710,7 +720,7 @@ const adminCableNetworkRouter = require('./routes/adminCableNetwork');
 app.use('/admin/cable-network', blockTechnicianAccess, adminAuth, adminCableNetworkRouter);
 
 // Import dan gunakan route adminCollectors
-const adminCollectorsRouter = require('./routes/adminCollectors');
+const adminCollectorsRouter = require('./billing-kalimasada/routes/adminCollectors');
 app.use('/admin/collectors', blockTechnicianAccess, adminCollectorsRouter);
 
 // Import dan gunakan route cache management

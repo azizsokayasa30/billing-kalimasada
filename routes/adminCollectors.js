@@ -79,6 +79,7 @@ router.get('/add', adminAuth, async (req, res) => {
 router.get('/:id/edit', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
+
         const dbPath = path.join(__dirname, '../data/billing.db');
         const db = new sqlite3.Database(dbPath);
         
@@ -189,6 +190,7 @@ router.post('/', adminAuth, async (req, res) => {
 router.put('/:id', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
+
         const { name, phone, email, address, commission_rate, status, password } = req.body;
         
         if (!name || !phone) {
@@ -272,48 +274,45 @@ router.put('/:id', adminAuth, async (req, res) => {
 
 // Delete collector
 router.delete('/:id', adminAuth, async (req, res) => {
+    let db;
     try {
         const { id } = req.params;
         const dbPath = path.join(__dirname, '../data/billing.db');
-        const db = new sqlite3.Database(dbPath);
-        
-        // Check if collector has payments
-        const paymentCount = await new Promise((resolve, reject) => {
-            db.get('SELECT COUNT(*) as count FROM collector_payments WHERE collector_id = ?', [id], (err, row) => {
-                if (err) reject(err);
-                else resolve(row ? row.count : 0);
-            });
+        db = new sqlite3.Database(dbPath);
+
+        const runGet = (sql, params = []) => new Promise((resolve, reject) => {
+            db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || {})));
         });
-        
-        if (paymentCount > 0) {
-            db.close();
-            return res.status(400).json({
-                success: false,
-                message: 'Tidak dapat menghapus tukang tagih yang sudah memiliki riwayat pembayaran'
-            });
+        const runExec = (sql, params = []) => new Promise((resolve, reject) => {
+            db.run(sql, params, function(err) { (err ? reject(err) : resolve(this.changes || 0)); });
+        });
+
+        const removedPayments = await runExec('DELETE FROM collector_payments WHERE collector_id = ?', [id]);
+        let removedAssignments = 0;
+        try {
+            removedAssignments = await runExec('DELETE FROM collector_assignments WHERE collector_id = ?', [id]);
+        } catch (e) {
+            if (!String(e.message || '').includes('no such table')) throw e;
         }
-        
-        // Delete collector
-        await new Promise((resolve, reject) => {
-            db.run('DELETE FROM collectors WHERE id = ?', [id], (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
-        });
-        
+        const removedAreas = await runExec('DELETE FROM collector_areas WHERE collector_id = ?', [id]);
+        const removedCollector = await runExec('DELETE FROM collectors WHERE id = ?', [id]);
+
         db.close();
-        
-        res.json({
+        db = null;
+
+        if (removedCollector === 0) {
+            return res.status(404).json({ success: false, message: 'Tukang tagih tidak ditemukan' });
+        }
+
+        return res.json({
             success: true,
             message: 'Tukang tagih berhasil dihapus'
         });
-        
     } catch (error) {
-        console.error('Error deleting collector:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error deleting collector: ' + error.message
-        });
+        if (db) {
+            try { db.close(); } catch (_) {}
+        }
+        return res.status(500).json({ success: false, message: 'Error deleting collector: ' + error.message });
     }
 });
 
@@ -321,6 +320,7 @@ router.delete('/:id', adminAuth, async (req, res) => {
 router.post('/:id/areas', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
+
         const { areas } = req.body; // Array of area names
         const billingManager = require('../config/billing');
         
