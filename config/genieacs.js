@@ -787,9 +787,13 @@ async function monitorRXPower(threshold = -27) {
 
             message += `Mohon segera dicek untuk menghindari koneksi terputus.`;
 
-            // Kirim pesan ke grup teknisi dengan prioritas tinggi
-            await sendTechnicianMessage(message, 'high');
-            console.log(`Pesan peringatan RXPower terkirim untuk ${criticalDevices.length} perangkat`);
+            const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+            if (!isWaSystemMonitorEnabled('genieacs_rx_recap_wa')) {
+                console.log('Master switch genieacs_rx_recap_wa off — skip WA rekap RX GenieACS');
+            } else {
+                await sendTechnicianMessage(message, 'high');
+                console.log(`Pesan peringatan RXPower terkirim untuk ${criticalDevices.length} perangkat`);
+            }
         } else {
             console.log('Tidak ada perangkat dengan nilai RXPower di bawah threshold');
         }
@@ -940,9 +944,13 @@ async function monitorOfflineDevices(thresholdHours = null) {
 
             message += `Mohon segera ditindaklanjuti.`;
 
-            // Kirim pesan ke grup teknisi dengan prioritas medium
-            await sendTechnicianMessage(message, 'medium');
-            console.log(`Pesan peringatan perangkat offline terkirim untuk ${offlineDevices.length} perangkat`);
+            const { isWaSystemMonitorEnabled: waMonOff } = require('./whatsappMonitoringSettings');
+            if (!waMonOff('genieacs_offline_digest_wa')) {
+                console.log('Master switch genieacs_offline_digest_wa off — skip WA digest offline');
+            } else {
+                await sendTechnicianMessage(message, 'medium');
+                console.log(`Pesan peringatan perangkat offline terkirim untuk ${offlineDevices.length} perangkat`);
+            }
         } else {
             console.log('Tidak ada perangkat yang offline lebih dari threshold');
         }

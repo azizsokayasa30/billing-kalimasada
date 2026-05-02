@@ -1563,7 +1563,45 @@
         });
     }
 
+    /** Tabel master `areas` (admin) dipakai untuk cocokkan area_id pelanggan dengan teks di collector_areas. */
+    async _hasAreasReferenceTable() {
+        return new Promise((resolve) => {
+            this.db.all(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='areas'",
+                [],
+                (err, rows) => resolve(!err && rows && rows.length > 0)
+            );
+        });
+    }
+
+    /**
+     * SQL boolean: pelanggan c berada di wilayah yang sama dengan baris collector_areas (alias).
+     * Mendukung c.area (teks) dan c.area_id → areas.nama_area / kode_area.
+     */
+    _sqlCustomerMatchesCollectorAreaRow(hasAreas, areaAlias = 'cra') {
+        const a = areaAlias;
+        const byCustomerAreaText = `(TRIM(IFNULL(c.area, '')) != '' AND LOWER(TRIM(c.area)) = LOWER(TRIM(${a}.area)))`;
+        if (!hasAreas) {
+            return byCustomerAreaText;
+        }
+        return `(
+            ${byCustomerAreaText}
+            OR (
+                c.area_id IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM areas ar
+                    WHERE ar.id = c.area_id
+                    AND (
+                        (TRIM(IFNULL(ar.nama_area, '')) != '' AND LOWER(TRIM(ar.nama_area)) = LOWER(TRIM(${a}.area)))
+                        OR (TRIM(IFNULL(ar.kode_area, '')) != '' AND LOWER(TRIM(ar.kode_area)) = LOWER(TRIM(${a}.area)))
+                    )
+                )
+            )
+        )`;
+    }
+
     async getCollectorCustomers(collectorId, month = null, year = null) {
+        const hasAreas = await this._hasAreasReferenceTable();
+        const areaRowMatch = this._sqlCustomerMatchesCollectorAreaRow(hasAreas, 'cra');
         return new Promise(async (resolve, reject) => {
             // Kita gabungkan customer yang di-mapping area-nya DAN yang di-mapping manual
             const sql = `
@@ -1604,8 +1642,11 @@ ${year && month ? `
                 LEFT JOIN packages p ON c.package_id = p.id
                 LEFT JOIN customer_router_map m ON m.customer_id = c.id
                 LEFT JOIN routers r ON r.id = m.router_id
-                -- Filter Area: Ambil customer yang areanya sesuai dengan area yang di-assign ke collector
-                LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != "" AND c.area = cra.area AND cra.collector_id = ?)
+                -- Area: teks customers.area ATAU area_id → areas.nama_area/kode_area (sama seperti filter admin)
+                LEFT JOIN collector_areas cra ON (
+                    cra.collector_id = ?
+                    AND ${areaRowMatch}
+                )
                 -- Filter Manual: Ambil customer yang di-mapping manual ke collector
                 LEFT JOIN collector_assignments ca ON (c.id = ca.customer_id AND ca.collector_id = ?)
                 WHERE cra.collector_id IS NOT NULL OR ca.collector_id IS NOT NULL
@@ -3295,6 +3336,62 @@ ${year && month ? `
         });
     }
 
+    /** Satu query untuk cek duplikat bulanan — hindari N× getInvoicesByCustomerAndDateRange saat bulk generate */
+    async getDistinctCustomerUsernamesWithInvoicesBetween(startDate, endDate) {
+        return new Promise((resolve, reject) => {
+            const sql = `
+                SELECT DISTINCT c.username
+                FROM invoices i
+                JOIN customers c ON i.customer_id = c.id
+                WHERE i.created_at BETWEEN ? AND ?
+            `;
+            this.db.all(sql, [startDate.toISOString(), endDate.toISOString()], (err, rows) => {
+                if (err) reject(err);
+                else resolve(new Set((rows || []).map((r) => r.username).filter(Boolean)));
+            });
+        });
+    }
+
+    /** Kunci yang dipakai scheduler member (hotspot_username || username) jika ada invoice di rentang tanggal */
+    async getMemberIdentityKeysWithInvoicesBetween(startDate, endDate) {
+        return new Promise((resolve, reject) => {
+            const sql = `
+                SELECT m.hotspot_username, m.username
+                FROM invoices i
+                JOIN members m ON i.member_id = m.id
+                WHERE i.created_at BETWEEN ? AND ?
+            `;
+            this.db.all(sql, [startDate.toISOString(), endDate.toISOString()], (err, rows) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                const keys = new Set();
+                for (const r of rows || []) {
+                    const u = r.hotspot_username != null && String(r.hotspot_username).trim()
+                        ? String(r.hotspot_username).trim()
+                        : '';
+                    const n = r.username != null && String(r.username).trim()
+                        ? String(r.username).trim()
+                        : '';
+                    if (u) keys.add(u);
+                    if (n) keys.add(n);
+                }
+                resolve(keys);
+            });
+        });
+    }
+
+    /** Semua baris packages untuk cache id → row (termasuk non-aktif) */
+    async getAllPackagesByIdMap() {
+        return new Promise((resolve, reject) => {
+            this.db.all('SELECT * FROM packages', [], (err, rows) => {
+                if (err) reject(err);
+                else resolve(new Map((rows || []).map((p) => [p.id, p])));
+            });
+        });
+    }
+
     async getInvoiceById(id) {
         return new Promise((resolve, reject) => {
             // Check if members table exists
@@ -3726,11 +3823,16 @@ ${year && month ? `
     }
 
     async getCollectorAssignedCustomerCount(collectorId) {
+        const hasAreas = await this._hasAreasReferenceTable();
+        const areaRowMatch = this._sqlCustomerMatchesCollectorAreaRow(hasAreas, 'cra');
         return new Promise((resolve, reject) => {
             const sql = `
                 SELECT COUNT(DISTINCT c.id) as count 
                 FROM customers c 
-                LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != "" AND c.area = cra.area AND cra.collector_id = ?)
+                LEFT JOIN collector_areas cra ON (
+                    cra.collector_id = ?
+                    AND ${areaRowMatch}
+                )
                 LEFT JOIN collector_assignments ca ON (c.id = ca.customer_id AND ca.collector_id = ?)
                 WHERE cra.collector_id IS NOT NULL OR ca.collector_id IS NOT NULL
             `;
@@ -3803,13 +3905,30 @@ ${year && month ? `
         const todayStr = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
 
         try {
-            const qTagihan = `
-                SELECT COUNT(i.id) as count, COALESCE(SUM(i.amount), 0) as total
+            const hasAreas = await this._hasAreasReferenceTable();
+            const areaRowMatch = this._sqlCustomerMatchesCollectorAreaRow(hasAreas, 'cra');
+            /** Sama pool pelanggan dengan getCollectorCustomers: area kolektor ATAU penugasan manual. */
+            const poolWhere = `
+                (cra.collector_id IS NOT NULL OR casm.collector_id IS NOT NULL)
+                AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ?
+            `;
+            const poolJoin = `
                 FROM invoices i
                 INNER JOIN customers c ON i.customer_id = c.id
-                INNER JOIN collector_areas ca ON c.area = ca.area
-                WHERE ca.collector_id = ? 
-                AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ?
+                LEFT JOIN collector_areas cra ON cra.collector_id = ? AND ${areaRowMatch}
+                LEFT JOIN collector_assignments casm ON casm.customer_id = c.id AND casm.collector_id = ?
+            `;
+            const qTagihan = `
+                SELECT COUNT(i.id) as count, COALESCE(SUM(i.amount), 0) as total
+                ${poolJoin}
+                WHERE ${poolWhere}
+            `;
+
+            /** Sama kohort dengan qTagihan, hanya invoice sudah lunas (admin / portal / kolektor). Untuk progress dashboard. */
+            const qTagihanLunas = `
+                SELECT COUNT(i.id) as count, COALESCE(SUM(i.amount), 0) as total
+                ${poolJoin}
+                WHERE i.status = 'paid' AND ${poolWhere}
             `;
             
             const qLunas = `
@@ -3822,11 +3941,8 @@ ${year && month ? `
             
             const qBelumLunas = `
                 SELECT COUNT(DISTINCT i.customer_id) as count, COALESCE(SUM(i.amount), 0) as total
-                FROM invoices i
-                INNER JOIN customers c ON i.customer_id = c.id
-                INNER JOIN collector_areas ca ON c.area = ca.area
-                WHERE ca.collector_id = ? AND i.status = 'unpaid'
-                AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ?
+                ${poolJoin}
+                WHERE i.status = 'unpaid' AND ${poolWhere}
             `;
             
             const qLunasHariIni = `
@@ -3850,15 +3966,17 @@ ${year && month ? `
                 this.db.get(sql, params, (err, row) => err ? reject(err) : resolve(row || {}));
             });
 
-            const [tagihan, lunas, belumLunas, hariIni, setoran] = await Promise.all([
-                runGet(qTagihan, [collectorId, filterMonth, filterYear]),
+            const poolParams = [collectorId, collectorId, filterMonth, filterYear];
+            const [tagihan, tagihanLunas, lunas, belumLunas, hariIni, setoran] = await Promise.all([
+                runGet(qTagihan, poolParams),
+                runGet(qTagihanLunas, poolParams),
                 runGet(qLunas, [collectorId, filterMonth, filterYear]),
-                runGet(qBelumLunas, [collectorId, filterMonth, filterYear]),
+                runGet(qBelumLunas, poolParams),
                 runGet(qLunasHariIni, [collectorId, todayStr]),
                 runGet(qSetoran, [collectorId, filterMonth, filterYear])
             ]);
 
-            return { tagihan, lunas, belumLunas, hariIni, setoran };
+            return { tagihan, tagihanLunas, lunas, belumLunas, hariIni, setoran };
         } catch (error) {
             console.error("Error getCollectorDashboardStats:", error);
             throw error;

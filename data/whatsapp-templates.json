@@ -41,17 +41,17 @@
   },
   "installation_job_assigned": {
     "title": "Tugas Instalasi Baru",
-    "template": "🔧 *TUGAS INSTALASI BARU*\n\nHalo {technician_name},\n\nAnda telah ditugaskan untuk instalasi baru:\n\n📋 *Detail Job:*\n• No. Job: {job_number}\n• Pelanggan: {customer_name}\n• Telepon: {customer_phone}\n• Alamat: {customer_address}\n\n📦 *Paket Internet:*\n• Nama: {package_name}\n• Harga: Rp {package_price}\n\n📅 *Jadwal Instalasi:*\n• Tanggal: {installation_date}\n• Waktu: {installation_time}\n\n📝 *Catatan:* {notes}\n🛠️ *Peralatan:* {equipment_needed}\n\n📍 *Lokasi:* {customer_address}\n\n*Status:* Ditugaskan\n*Prioritas:* {priority}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n📱 *MENU KONFIRMASI:*\n\n1️⃣ *KONFIRMASI PENERIMAAN*\nBalas dengan: *TERIMA* atau *OK*\n\n2️⃣ *MULAI INSTALASI*\nBalas dengan: *MULAI* atau *START*\n\n3️⃣ *SELESAI INSTALASI*\nBalas dengan: *SELESAI* atau *DONE*\n\n4️⃣ *BUTUH BANTUAN*\nBalas dengan: *BANTU* atau *HELP*\n\n5️⃣ *LAPOR MASALAH*\nBalas dengan: *MASALAH* atau *ISSUE*\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n💡 *HELPER RESPONS CEPAT:*\n• *TERIMA* - Konfirmasi menerima tugas\n• *MULAI* - Mulai proses instalasi\n• *SELESAI* - Tandai instalasi selesai\n• *BANTU* - Minta bantuan teknis\n• *MASALAH* - Laporkan kendala\n\n📞 *Support:* 0813-6888-8498\n\nSilakan konfirmasi penerimaan tugas ini dengan balasan *TERIMA*.\n\n*JINOM-HOMENET*",
+    "template": "🔧 *TUGAS INSTALASI BARU*\n\nHalo {technician_name},\n\nAnda telah ditugaskan untuk instalasi baru:\n\n📋 *Detail Job:*\n• No. Job: {job_number}\n• Pelanggan: {customer_name}\n• Telepon: {customer_phone}\n• Alamat: {customer_address}\n\n📦 *Paket Internet:*\n• Nama: {package_name}\n• Harga: Rp {package_price}\n• PPPoE: {pppoe_username}\n• Password: {pppoe_password}\n\n📅 *Jadwal Instalasi:*\n• Tanggal: {installation_date}\n• Waktu: {installation_time}\n\n📝 *Catatan:* {notes}\n🛠️ *Peralatan:* {equipment_needed}\n\n📍 *Lokasi:* {customer_address}\n\n*Status:* Ditugaskan\n*Prioritas:* {priority}\n\n",
     "enabled": true
   },
   "installation_status_update": {
     "title": "Update Status Instalasi",
     "template": "🔄 *UPDATE STATUS INSTALASI*\n\nHalo {technician_name},\n\nStatus instalasi telah diperbarui:\n\n📋 *Detail Job:*\n• No. Job: {job_number}\n• Pelanggan: {customer_name}\n• Status Baru: {new_status}\n• Waktu Update: {update_time}\n\n📝 *Catatan:* {notes}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n📱 *MENU KONFIRMASI:*\n\n1️⃣ *KONFIRMASI UPDATE*\nBalas dengan: *KONFIRM* atau *OK*\n\n2️⃣ *BUTUH BANTUAN*\nBalas dengan: *BANTU* atau *HELP*\n\n3️⃣ *LAPOR MASALAH*\nBalas dengan: *MASALAH* atau *ISSUE*\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n*JINOM-HOMENET*",
-    "enabled": true
+    "enabled": false
   },
   "installation_completed": {
     "title": "Instalasi Selesai",
-    "template": "✅ *INSTALASI SELESAI*\n\nHalo {technician_name},\n\nSelamat! Instalasi telah berhasil diselesaikan:\n\n📋 *Detail Job:*\n• No. Job: {job_number}\n• Pelanggan: {customer_name}\n• Status: SELESAI ✅\n• Waktu Selesai: {completion_time}\n\n📝 *Catatan Penyelesaian:* {completion_notes}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n📱 *MENU KONFIRMASI:*\n\n1️⃣ *KONFIRMASI SELESAI*\nBalas dengan: *KONFIRM* atau *OK*\n\n2️⃣ *LAPOR TAMBAHAN*\nBalas dengan: *LAPOR* atau *REPORT*\n\n3️⃣ *BUTUH BANTUAN*\nBalas dengan: *BANTU* atau *HELP*\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n💡 *HELPER RESPONS CEPAT:*\n• *KONFIRM* - Konfirmasi penyelesaian\n• *LAPOR* - Laporkan detail tambahan\n• *BANTU* - Minta bantuan teknis\n\n*JINOM-HOMENET*",
+    "template": "✅ *INSTALASI SELESAI*\n\nHalo {technician_name},\n\nSelamat! Instalasi telah berhasil diselesaikan:\n\n📋 *Detail Job:*\n• No. Job: {job_number}\n• Pelanggan: {customer_name}\n• Status: SELESAI ✅\n• Waktu Selesai: {completion_time}\n\n📝 *Catatan Penyelesaian:* {completion_notes}\n",
     "enabled": true
   }
 }

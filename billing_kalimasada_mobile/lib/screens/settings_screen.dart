@@ -141,30 +141,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 height: 80,
                                 fit: BoxFit.cover,
                                 gaplessPlayback: true,
-                                errorBuilder: (_, __, ___) => Icon(
+                                errorBuilder: (_, _, _) => Icon(
                                   Icons.person,
                                   size: 40,
                                   color: primaryContainer,
                                 ),
-                                loadingBuilder: (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Center(
-                                    child: SizedBox(
-                                      width: 28,
-                                      height: 28,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: primaryContainer,
-                                        value: loadingProgress.expectedTotalBytes != null
-                                            ? loadingProgress.cumulativeBytesLoaded /
-                                                loadingProgress.expectedTotalBytes!
-                                            : null,
-                                      ),
-                                    ),
-                                  );
-                                },
+                                loadingBuilder:
+                                    (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Center(
+                                        child: SizedBox(
+                                          width: 28,
+                                          height: 28,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: primaryContainer,
+                                            value:
+                                                loadingProgress
+                                                        .expectedTotalBytes !=
+                                                    null
+                                                ? loadingProgress
+                                                          .cumulativeBytesLoaded /
+                                                      loadingProgress
+                                                          .expectedTotalBytes!
+                                                : null,
+                                          ),
+                                        ),
+                                      );
+                                    },
                               )
-                            : Icon(Icons.person, size: 40, color: primaryContainer),
+                            : Icon(
+                                Icons.person,
+                                size: 40,
+                                color: primaryContainer,
+                              ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -251,12 +261,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSectionTitle('APP PREFERENCES'),
             const SizedBox(height: 8),
             _buildSettingsGroup([
-
               _buildSettingsTile(
                 icon: Icons.notifications,
                 title: 'Notifications',
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pengaturan notifikasi sedang dikembangkan.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Pengaturan notifikasi sedang dikembangkan.',
+                      ),
+                    ),
+                  );
                 },
               ),
             ]),
@@ -275,7 +290,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: textOnSurfaceVariant,
                 ),
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Menyinkronkan data offline...')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Menyinkronkan data offline...'),
+                    ),
+                  );
                 },
               ),
               _buildSettingsTile(
@@ -283,7 +302,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Check for Updates',
                 subtitle: 'Version 2.4.1',
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aplikasi Anda sudah versi terbaru.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Aplikasi Anda sudah versi terbaru.'),
+                    ),
+                  );
                 },
               ),
             ]),
@@ -310,7 +333,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildSettingsTile(
                 icon: Icons.privacy_tip,
                 title: 'Privacy Policy',
-                onTap: () => launchUrl(Uri.parse('https://example.com/privacy')),
+                onTap: () =>
+                    launchUrl(Uri.parse('https://example.com/privacy')),
                 isLast: true,
               ),
             ]),

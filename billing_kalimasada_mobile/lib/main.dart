@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'theme/colors.dart';
@@ -6,13 +7,19 @@ import 'store/auth_provider.dart';
 import 'store/customer_provider.dart';
 import 'store/task_provider.dart';
 import 'store/notification_provider.dart';
+import 'store/collector_provider.dart';
 import 'screens/customer_list_screen.dart';
 import 'navigation/root_navigator.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
-  print('Loaded API_URL: ${dotenv.env['API_URL']}');
+  await initializeDateFormatting('id_ID');
+  try {
+    await dotenv.load(fileName: ".env");
+    print('Loaded API_URL: ${dotenv.env['API_URL']}');
+  } catch (e) {
+    print('dotenv load skipped: $e');
+  }
 
   runApp(
     MultiProvider(
@@ -21,6 +28,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => CustomerProvider()),
         ChangeNotifierProvider(create: (_) => TaskProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => CollectorProvider()),
       ],
       child: const MyApp(),
     ),

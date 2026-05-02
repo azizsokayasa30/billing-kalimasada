@@ -1,0 +1,544 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../services/api_client.dart';
+import '../../theme/collector_colors.dart';
+
+String _rupiah(num? v) {
+  final n = (v ?? 0).round();
+  return 'Rp ${NumberFormat.decimalPattern('id_ID').format(n)}';
+}
+
+num? _coerceNum(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v;
+  if (v is String) return num.tryParse(v);
+  return num.tryParse(v.toString());
+}
+
+String _fmtIdDate(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return '—';
+  final s = raw.trim();
+  final d = DateTime.tryParse(s.length >= 10 ? s.substring(0, 10) : s);
+  if (d == null) {
+    if (s.length >= 10) return s.substring(0, 10);
+    return s;
+  }
+  return DateFormat.yMMMd('id_ID').format(d);
+}
+
+String _methodLabel(String? m) {
+  switch ((m ?? '').toLowerCase()) {
+    case 'cash':
+      return 'Tunai';
+    case 'transfer':
+      return 'Transfer bank';
+    default:
+      return m == null || m.isEmpty ? '—' : m;
+  }
+}
+
+/// Resi / bukti invoice — isi setara halaman cetak admin, tema Field Collector (teks gelap).
+class CollectorInvoiceReceiptScreen extends StatefulWidget {
+  const CollectorInvoiceReceiptScreen({
+    super.key,
+    required this.customerId,
+    this.invoiceId,
+  });
+
+  final int customerId;
+  final int? invoiceId;
+
+  @override
+  State<CollectorInvoiceReceiptScreen> createState() => _CollectorInvoiceReceiptScreenState();
+}
+
+class _CollectorInvoiceReceiptScreenState extends State<CollectorInvoiceReceiptScreen> {
+  bool _loading = true;
+  String? _error;
+  Map<String, dynamic>? _invoice;
+  Map<String, dynamic>? _settings;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fetch());
+  }
+
+  Future<void> _fetch() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      var path = '/api/mobile-adapter/collector/customers/${widget.customerId}/receipt';
+      if (widget.invoiceId != null) {
+        path += '?invoice_id=${widget.invoiceId}';
+      }
+      final r = await ApiClient.get(path);
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/receipt');
+      if (r.statusCode == 200 && body['success'] == true && body['data'] is Map) {
+        final d = Map<String, dynamic>.from(body['data'] as Map);
+        final inv = d['invoice'];
+        final st = d['settings'];
+        if (mounted) {
+          setState(() {
+            _invoice = inv is Map ? Map<String, dynamic>.from(inv) : null;
+            _settings = st is Map ? Map<String, dynamic>.from(st) : null;
+            _loading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _error = body['message']?.toString() ?? 'Gagal memuat resi';
+            _loading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const bg = FieldCollectorColors.background;
+
+    return Theme(
+      data: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: bg,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: FieldCollectorColors.primaryContainer,
+          brightness: Brightness.light,
+        ).copyWith(
+          surface: Colors.white,
+          onSurface: FieldCollectorColors.onSurface,
+          onSurfaceVariant: FieldCollectorColors.onSurfaceVariant,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: FieldCollectorColors.primaryContainer,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          titleTextStyle: TextStyle(
+            color: FieldCollectorColors.primaryContainer,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+          iconTheme: IconThemeData(color: FieldCollectorColors.primaryContainer),
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(
+          title: const Text('Resi / Invoice'),
+          actions: [
+            if (!_loading)
+              IconButton(
+                tooltip: 'Muat ulang',
+                onPressed: _fetch,
+                icon: const Icon(Icons.refresh),
+              ),
+          ],
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator(color: FieldCollectorColors.primaryContainer))
+            : _error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: FieldCollectorColors.onSurface)),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: _fetch,
+                            style: FilledButton.styleFrom(backgroundColor: FieldCollectorColors.primaryContainer),
+                            child: const Text('Coba lagi'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : _invoice == null || _settings == null
+                    ? const Center(child: Text('Data tidak tersedia', style: TextStyle(color: FieldCollectorColors.onSurface)))
+                    : _ReceiptBody(invoice: _invoice!, settings: _settings!),
+      ),
+    );
+  }
+}
+
+class _ReceiptBody extends StatelessWidget {
+  const _ReceiptBody({required this.invoice, required this.settings});
+
+  final Map<String, dynamic> invoice;
+  final Map<String, dynamic> settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final company = settings['companyHeader']?.toString() ?? 'ISP';
+    final slogan = settings['company_slogan']?.toString() ?? '';
+    final invNo = invoice['invoice_number']?.toString() ?? '—';
+    final amount = _coerceNum(invoice['amount']) ?? 0;
+    final base = _coerceNum(invoice['base_amount']);
+    final taxRate = _coerceNum(invoice['tax_rate']);
+    final notes = invoice['notes']?.toString().trim() ?? '';
+    final invoiceNotes = settings['invoice_notes']?.toString().trim() ?? '';
+
+    num taxAmount = 0;
+    if (base != null && base > 0) {
+      final tr = taxRate ?? 11;
+      taxAmount = base * (tr / 100);
+    }
+
+    final logoName = settings['logoFilename']?.toString().trim().isNotEmpty == true
+        ? settings['logoFilename'].toString().trim()
+        : 'logo.png';
+    final logoUri = Uri.parse(ApiClient.apiOrigin).replace(path: '/public/img/$logoName');
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: FieldCollectorColors.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.network(
+                            logoUri.toString(),
+                            height: 40,
+                            fit: BoxFit.contain,
+                            // Parameter error/stackTrace wajib ada untuk signature Image.errorBuilder.
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.business, size: 40, color: FieldCollectorColors.primaryContainer),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(company, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: FieldCollectorColors.onSurface)),
+                        if (slogan.isNotEmpty)
+                          Text(slogan, style: const TextStyle(fontSize: 11, color: FieldCollectorColors.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'INVOICE',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                          color: FieldCollectorColors.primaryContainer,
+                        ),
+                      ),
+                      Text(invNo, style: const TextStyle(fontWeight: FontWeight.w700, color: FieldCollectorColors.onSurface)),
+                    ],
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              const Text('Informasi pelanggan', style: TextStyle(fontWeight: FontWeight.w800, color: FieldCollectorColors.primaryContainer)),
+              const SizedBox(height: 8),
+              _kv('Nama', invoice['customer_name']?.toString() ?? '—'),
+              _kv('Username', invoice['customer_username']?.toString() ?? '—'),
+              _kv('Telepon', invoice['customer_phone']?.toString() ?? '—'),
+              _kv('Alamat', (invoice['customer_address']?.toString().trim().isNotEmpty ?? false)
+                  ? invoice['customer_address'].toString()
+                  : 'Alamat tidak tersedia'),
+              const SizedBox(height: 16),
+              const Text('Informasi invoice', style: TextStyle(fontWeight: FontWeight.w800, color: FieldCollectorColors.primaryContainer)),
+              const SizedBox(height: 8),
+              _kv('Tanggal dibuat', _fmtIdDate(invoice['created_at']?.toString())),
+              _kv('Jatuh tempo', _fmtIdDate(invoice['due_date']?.toString())),
+              _kv('Status', 'Lunas', valueColor: const Color(0xFF0D5A16)),
+              if ((invoice['payment_date']?.toString() ?? '').trim().isNotEmpty)
+                _kv('Tanggal bayar', _fmtIdDate(invoice['payment_date']?.toString())),
+              _kv('Metode', _methodLabel(invoice['payment_method']?.toString())),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+          decoration: BoxDecoration(
+            color: FieldCollectorColors.primaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            'Total tagihan: ${_rupiah(amount)}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: FieldCollectorColors.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Detail layanan', style: TextStyle(fontWeight: FontWeight.w800, color: FieldCollectorColors.primaryContainer)),
+              const SizedBox(height: 10),
+              Table(
+                border: TableBorder.all(color: FieldCollectorColors.outlineVariant),
+                children: [
+                  TableRow(
+                    decoration: const BoxDecoration(color: Color(0xFFF1F5F9)),
+                    children: ['Layanan', 'Kecepatan', 'Dasar', 'PPN', 'Total']
+                        .map(
+                          (h) => Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Text(h, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: FieldCollectorColors.onSurface)),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  TableRow(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(
+                          invoice['package_name']?.toString() ?? '—',
+                          style: const TextStyle(fontSize: 12, color: FieldCollectorColors.onSurface),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(
+                          invoice['package_speed']?.toString().isNotEmpty == true
+                              ? invoice['package_speed'].toString()
+                              : '—',
+                          style: const TextStyle(fontSize: 12, color: FieldCollectorColors.onSurface),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(
+                          _rupiah(base != null && base > 0 ? base.round() : amount.round()),
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(fontSize: 12, color: FieldCollectorColors.onSurface),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(
+                          taxRate != null && taxRate == 0 ? '0%' : '${(taxRate ?? 11).toStringAsFixed(0)}%',
+                          style: const TextStyle(fontSize: 12, color: FieldCollectorColors.onSurface),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(
+                          _rupiah(amount),
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: FieldCollectorColors.onSurface),
+                        ),
+                      ),
+                    ],
+                  ),
+                  TableRow(
+                    decoration: const BoxDecoration(color: Color(0xFFE8EDF5)),
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.all(6),
+                        child: Text('Subtotal', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, color: FieldCollectorColors.onSurface)),
+                      ),
+                      const Padding(padding: EdgeInsets.all(6), child: SizedBox.shrink()),
+                      Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(
+                          _rupiah(base != null && base > 0 ? base.round() : amount.round()),
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(fontSize: 11, color: FieldCollectorColors.onSurface),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(
+                          _rupiah(taxAmount.round()),
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(fontSize: 11, color: FieldCollectorColors.onSurface),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(
+                          _rupiah(amount),
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: FieldCollectorColors.onSurface),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        if (notes.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE3F2FD),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF90CAF9)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Catatan', style: TextStyle(fontWeight: FontWeight.w800, color: FieldCollectorColors.primaryContainer)),
+                const SizedBox(height: 6),
+                Text(notes, style: const TextStyle(fontSize: 13, color: FieldCollectorColors.onSurface, height: 1.35)),
+              ],
+            ),
+          ),
+        ],
+        if (invoiceNotes.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF8E1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFFE082)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Informasi penting', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF856404))),
+                const SizedBox(height: 6),
+                Text(invoiceNotes, style: const TextStyle(fontSize: 13, color: FieldCollectorColors.onSurface, height: 1.35)),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        const Text('Cara pembayaran', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: FieldCollectorColors.onSurface)),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _PayCard(
+                title: 'Transfer bank',
+                child: Text(
+                  'Bank: ${settings['payment_bank_name']}\nNo. rekening: ${settings['payment_account_number']}\nAtas nama: ${settings['payment_account_holder']}',
+                  style: const TextStyle(fontSize: 12, height: 1.4, color: FieldCollectorColors.onSurface),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _PayCard(
+                title: 'Tunai',
+                child: Text(
+                  'Kantor:\n${settings['payment_cash_address']}\nJam: ${settings['payment_cash_hours']}',
+                  style: const TextStyle(fontSize: 12, height: 1.4, color: FieldCollectorColors.onSurface),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Terima kasih telah mempercayai layanan kami.',
+          style: TextStyle(fontWeight: FontWeight.w700, color: FieldCollectorColors.onSurface),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Telp: ${settings['contact_phone']}\nEmail: ${settings['contact_email']}\nAlamat: ${settings['contact_address']}',
+          style: const TextStyle(fontSize: 12, color: FieldCollectorColors.onSurfaceVariant, height: 1.4),
+        ),
+        if ((settings['footerInfo']?.toString().trim().isNotEmpty ?? false)) ...[
+          const SizedBox(height: 8),
+          Text(settings['footerInfo'].toString(), style: const TextStyle(fontSize: 11, color: FieldCollectorColors.onSurfaceVariant)),
+        ],
+        const SizedBox(height: 8),
+        Text(
+          'WA: ${settings['contact_whatsapp']}\nWeb: ${settings['company_website']}',
+          style: const TextStyle(fontSize: 11, color: FieldCollectorColors.onSurfaceVariant, height: 1.4),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Simpan layar ini sebagai bukti pembayaran.',
+          style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: FieldCollectorColors.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+
+  static Widget _kv(String k, String v, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 108,
+            child: Text(k, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: FieldCollectorColors.onSurfaceVariant)),
+          ),
+          Expanded(
+            child: Text(v, style: TextStyle(fontSize: 13, color: valueColor ?? FieldCollectorColors.onSurface, height: 1.3)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PayCard extends StatelessWidget {
+  const _PayCard({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: FieldCollectorColors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: FieldCollectorColors.primaryContainer)),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+}

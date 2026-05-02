@@ -10,7 +10,8 @@ class TechnicianProfileScreen extends StatefulWidget {
   const TechnicianProfileScreen({super.key});
 
   @override
-  State<TechnicianProfileScreen> createState() => _TechnicianProfileScreenState();
+  State<TechnicianProfileScreen> createState() =>
+      _TechnicianProfileScreenState();
 }
 
 class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
@@ -24,10 +25,12 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
   }
 
   Future<void> _load() async {
-    final auth = context.read<AuthProvider>();
-    await auth.refreshTechnicianProfile();
     try {
-      final response = await ApiClient.get('/api/mobile-adapter/tasks?history=1');
+      final auth = context.read<AuthProvider>();
+      await auth.refreshTechnicianProfile();
+      final response = await ApiClient.get(
+        '/api/mobile-adapter/tasks?history=1',
+      );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true && data['data'] is List) {
@@ -87,7 +90,9 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
     final phone = u?['phone']?.toString() ?? '';
     final email = u?['email']?.toString();
     final area = u?['area_coverage']?.toString().trim();
-    final areaDisplay = (area != null && area.isNotEmpty) ? area : 'Belum diatur';
+    final areaDisplay = (area != null && area.isNotEmpty)
+        ? area
+        : 'Belum diatur';
     final photoUrl = (u?['photo_url']?.toString() ?? '').trim();
     final hasPhoto = photoUrl.isNotEmpty;
 
@@ -141,7 +146,9 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF070038)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF070038)),
+            )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -151,7 +158,9 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                     decoration: BoxDecoration(
                       color: bgSurfaceContainerLowest,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: outlineVariant.withValues(alpha: 0.5)),
+                      border: Border.all(
+                        color: outlineVariant.withValues(alpha: 0.5),
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.02),
@@ -171,7 +180,10 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: bgSurfaceContainer,
-                              border: Border.all(color: const Color(0xFFE4DFFF), width: 2),
+                              border: Border.all(
+                                color: const Color(0xFFE4DFFF),
+                                width: 2,
+                              ),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: hasPhoto
@@ -181,7 +193,11 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                                     height: 80,
                                     fit: BoxFit.cover,
                                     gaplessPlayback: true,
-                                    errorBuilder: (_, __, ___) => Icon(Icons.engineering, size: 40, color: secondaryColor),
+                                    errorBuilder: (_, _, _) => Icon(
+                                      Icons.engineering,
+                                      size: 40,
+                                      color: secondaryColor,
+                                    ),
                                     loadingBuilder: (context, child, loadingProgress) {
                                       if (loadingProgress == null) return child;
                                       return Center(
@@ -191,16 +207,25 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
                                             color: secondaryColor,
-                                            value: loadingProgress.expectedTotalBytes != null
-                                                ? loadingProgress.cumulativeBytesLoaded /
-                                                    loadingProgress.expectedTotalBytes!
+                                            value:
+                                                loadingProgress
+                                                        .expectedTotalBytes !=
+                                                    null
+                                                ? loadingProgress
+                                                          .cumulativeBytesLoaded /
+                                                      loadingProgress
+                                                          .expectedTotalBytes!
                                                 : null,
                                           ),
                                         ),
                                       );
                                     },
                                   )
-                                : Icon(Icons.engineering, size: 40, color: secondaryColor),
+                                : Icon(
+                                    Icons.engineering,
+                                    size: 40,
+                                    color: secondaryColor,
+                                  ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -225,16 +250,25 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.green.shade50,
                                     borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: Colors.green.shade200),
+                                    border: Border.all(
+                                      color: Colors.green.shade200,
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.check_circle, size: 14, color: Colors.green.shade700),
+                                      Icon(
+                                        Icons.check_circle,
+                                        size: 14,
+                                        color: Colors.green.shade700,
+                                      ),
                                       const SizedBox(width: 4),
                                       Text(
                                         'Aktif',
@@ -259,7 +293,9 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                     decoration: BoxDecoration(
                       color: bgSurfaceContainerLowest,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: outlineVariant.withValues(alpha: 0.5)),
+                      border: Border.all(
+                        color: outlineVariant.withValues(alpha: 0.5),
+                      ),
                     ),
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -282,7 +318,10 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                           bgSurfaceContainer,
                           onTap: phone.isNotEmpty
                               ? () {
-                                  final digits = phone.replaceAll(RegExp(r'\s'), '');
+                                  final digits = phone.replaceAll(
+                                    RegExp(r'\s'),
+                                    '',
+                                  );
                                   launchUrl(Uri.parse('tel:$digits'));
                                 }
                               : null,
@@ -315,7 +354,9 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                     decoration: BoxDecoration(
                       color: bgSurfaceContainerLowest,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: outlineVariant.withValues(alpha: 0.5)),
+                      border: Border.all(
+                        color: outlineVariant.withValues(alpha: 0.5),
+                      ),
                     ),
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -345,7 +386,9 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                           Column(
                             children: _recentTasks.map((t) {
                               final title = t['title']?.toString() ?? 'Tugas';
-                              final when = _fmtDate(t['activity_at']?.toString());
+                              final when = _fmtDate(
+                                t['activity_at']?.toString(),
+                              );
                               return _buildHistoryItem(title, when, 'Selesai');
                             }).toList(),
                           ),
@@ -366,7 +409,9 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFFF6F1FF),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFC8C4D3).withValues(alpha: 0.5)),
+        border: Border.all(
+          color: const Color(0xFFC8C4D3).withValues(alpha: 0.5),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -377,10 +422,19 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF19163F)),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF19163F),
+                  ),
                 ),
                 const SizedBox(height: 4),
-                Text(date, style: const TextStyle(fontSize: 12, color: Color(0xFF474551))),
+                Text(
+                  date,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF474551),
+                  ),
+                ),
               ],
             ),
           ),
@@ -393,7 +447,11 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
             ),
             child: Text(
               status,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade700,
+              ),
             ),
           ),
         ],
@@ -419,7 +477,10 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
             Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(color: bgIconColor, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: bgIconColor,
+                shape: BoxShape.circle,
+              ),
               child: Icon(icon, color: iconColor, size: 20),
             ),
             const SizedBox(width: 12),
@@ -448,7 +509,12 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                 ],
               ),
             ),
-            if (onTap != null) const Icon(Icons.chevron_right, color: Color(0xFFC8C4D3), size: 20),
+            if (onTap != null)
+              const Icon(
+                Icons.chevron_right,
+                color: Color(0xFFC8C4D3),
+                size: 20,
+              ),
           ],
         ),
       ),
@@ -462,7 +528,10 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
         title: const Text('Keluar'),
         content: const Text('Yakin ingin keluar dari aplikasi?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);

@@ -19,17 +19,30 @@ class AuthProvider extends ChangeNotifier {
   Map<String, dynamic>? get user => _user;
 
   Future<void> initialize() async {
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('token');
-    _role = prefs.getString('role');
-    
-    final userStr = prefs.getString('user');
-    if (userStr != null) {
-      _user = jsonDecode(userStr);
+    try {
+      final prefs = await SharedPreferences.getInstance().timeout(
+        const Duration(seconds: 12),
+      );
+      _token = prefs.getString('token');
+      _role = prefs.getString('role');
+
+      final userStr = prefs.getString('user');
+      if (userStr != null) {
+        try {
+          final decoded = jsonDecode(userStr);
+          if (decoded is Map) {
+            _user = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {
+          _user = null;
+        }
+      }
+    } catch (_) {
+      /* SP lambat / gagal — tetap tampilkan login, bukan splash abadi */
+    } finally {
+      _isInitialized = true;
+      notifyListeners();
     }
-    
-    _isInitialized = true;
-    notifyListeners();
   }
 
   Future<void> login(String phone, String password) async {

@@ -386,6 +386,11 @@ class ServiceSuspensionManager {
             // 4–5. Notifikasi di background agar PUT /customers tidak menunggu lama
             void (async () => {
                 try {
+                    const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+                    if (!isWaSystemMonitorEnabled('isolir_suspension_wa')) {
+                        logger.info('isolir_suspension_wa off — skip WA suspensi');
+                        return;
+                    }
                     const whatsappNotifications = require('./whatsapp-notifications');
                     await whatsappNotifications.sendServiceSuspensionNotification(customer, reason);
                 } catch (notificationError) {
@@ -657,6 +662,11 @@ class ServiceSuspensionManager {
             // 4–5. Notifikasi di background
             void (async () => {
                 try {
+                    const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+                    if (!isWaSystemMonitorEnabled('isolir_restore_wa')) {
+                        logger.info('isolir_restore_wa off — skip WA restore');
+                        return;
+                    }
                     const whatsappNotifications = require('./whatsapp-notifications');
                     await whatsappNotifications.sendServiceRestorationNotification(customer, reason);
                 } catch (notificationError) {
@@ -988,8 +998,13 @@ class ServiceSuspensionManager {
 
             // Send notification
             try {
-                const whatsappNotifications = require('./whatsapp-notifications');
-                await whatsappNotifications.sendMemberIsolirNotification(member.id, reason);
+                const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+                if (!isWaSystemMonitorEnabled('member_isolir_wa')) {
+                    logger.info('member_isolir_wa off — skip WA isolir member');
+                } else {
+                    const whatsappNotifications = require('./whatsapp-notifications');
+                    await whatsappNotifications.sendMemberIsolirNotification(member.id, reason);
+                }
             } catch (notifError) {
                 logger.error(`Failed to send isolir notification: ${notifError.message}`);
             }

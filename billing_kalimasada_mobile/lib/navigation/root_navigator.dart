@@ -5,9 +5,13 @@ import '../store/auth_provider.dart';
 import '../store/notification_provider.dart';
 import '../screens/login_screen.dart';
 import '../screens/technician_dashboard.dart';
-import '../screens/collector_dashboard.dart';
+import '../screens/collector/collector_home_tab.dart';
+import '../screens/collector/collector_settlement_tab.dart';
+import '../screens/collector/collector_profile_tab.dart';
+import '../store/collector_provider.dart';
 import '../screens/attendance_screen.dart';
 import '../screens/customer_list_screen.dart';
+import '../screens/collector/collector_customers_screen.dart';
 
 import '../screens/technician_profile_screen.dart';
 import '../screens/task_list_screen.dart';
@@ -199,35 +203,156 @@ class _CollectorTabs extends StatefulWidget {
 class _CollectorTabsState extends State<_CollectorTabs> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [
-    const CollectorDashboard(),
-    const AttendanceScreen(),
-  ];
+  Future<void> _syncAll() async {
+    final col = context.read<CollectorProvider>();
+    await Future.wait([
+      col.fetchOverview(),
+      col.fetchSettlement(),
+      col.fetchMe(),
+      col.fetchCustomers(status: '', q: ''),
+    ]);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncAll();
+    });
+  }
+
+  void _goCustomersTab() {
+    setState(() => _currentIndex = 1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CollectorProvider>().fetchCustomers(status: '', q: '');
+    });
+  }
+
+  void _onNavTap(int i) {
+    setState(() => _currentIndex = i);
+    final col = context.read<CollectorProvider>();
+    if (i == 0) col.fetchOverview();
+    if (i == 1) col.fetchCustomers(status: '', q: '');
+    if (i == 2) col.fetchSettlement();
+    if (i == 3) col.fetchMe();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textSecondary,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: 'Pelanggan',
+    const bg = Color(0xFFF8F9FA);
+    final titles = ['Field Collector', 'Pelanggan', 'Setoran', 'Profil'];
+
+    final body = IndexedStack(
+      index: _currentIndex,
+      children: [
+        CollectorHomeTab(onGoCustomersTab: _goCustomersTab),
+        CollectorCustomersScreen(
+          onOpenMenu: () {
+            setState(() => _currentIndex = 3);
+            context.read<CollectorProvider>().fetchMe();
+          },
+          onSync: _syncAll,
+        ),
+        const CollectorSettlementTab(),
+        const CollectorProfileTab(),
+      ],
+    );
+
+    // ThemeData lengkap (bukan hanya colorScheme) agar FilterChip/M3 tidak null di runtime.
+    return Theme(
+      data: ThemeData.light(useMaterial3: true).copyWith(
+        scaffoldBackgroundColor: bg,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF001F3F), brightness: Brightness.light),
+      ),
+      child: Scaffold(
+        backgroundColor: bg,
+        // Tab Pelanggan = layar penuh seperti teknisi (CustomerListScreen punya AppBar sendiri).
+        appBar: _currentIndex == 1
+            ? null
+            : AppBar(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF001F3F),
+                elevation: 0,
+                surfaceTintColor: Colors.transparent,
+                title: Text(
+                  titles[_currentIndex],
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+                ),
+                leading: IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () {
+                    setState(() => _currentIndex = 3);
+                    context.read<CollectorProvider>().fetchMe();
+                  },
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.sync),
+                    onPressed: () => _syncAll(),
+                  ),
+                ],
+                bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider(height: 1)),
+              ),
+        body: body,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Colors.grey.shade200)),
+            boxShadow: const [BoxShadow(color: Color(0x0D000000), blurRadius: 10, offset: Offset(0, -2))],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.fingerprint),
-            label: 'Absen',
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _collectorNavItem(0, Icons.dashboard, 'Dashboard'),
+                  _collectorNavItem(1, Icons.group, 'Pelanggan'),
+                  _collectorNavItem(2, Icons.payments, 'Setoran'),
+                  _collectorNavItem(3, Icons.account_circle, 'Profil'),
+                ],
+              ),
+            ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _collectorNavItem(int index, IconData icon, String label) {
+    final sel = _currentIndex == index;
+    const active = Color(0xFF001F3F);
+    const inactive = Color(0xFF94A3B8);
+    return InkWell(
+      onTap: () => _onNavTap(index),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: sel ? const Color(0xFFF1F5F9) : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: sel ? active : inactive, size: 24),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+                color: sel ? active : inactive,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

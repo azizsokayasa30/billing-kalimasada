@@ -414,7 +414,7 @@ const FORCED_APP_VERSION = 'v5.4';
         </div>
 
         <!-- SETTINGAN -->
-        <% const settingPages = ['setting', 'whatsapp-settings', 'email-settings', 'setting-radius', 'setting-radius-clients', 'connection-settings', 'genieacs-setting', 'cache']; %>
+        <% const settingPages = ['setting', 'whatsapp-settings', 'whatsapp-monitoring', 'email-settings', 'setting-radius', 'setting-radius-clients', 'connection-settings', 'genieacs-setting', 'cache']; %>
         <% const settingExpanded = typeof page !== 'undefined' && settingPages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -439,6 +439,10 @@ const FORCED_APP_VERSION = 'v5.4';
                 <a href="/admin/billing/whatsapp-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'whatsapp-settings' ? 'active' : '' %>">
                     <i class="bi bi-whatsapp"></i>
                     <span class="sb-item-text">Pengaturan WhatsApp</span>
+                </a>
+                <a href="/admin/billing/whatsapp-monitoring" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'whatsapp-monitoring' ? 'active' : '' %>">
+                    <i class="bi bi-activity"></i>
+                    <span class="sb-item-text">Monitoring WhatsApp</span>
                 </a>
                 <a href="/admin/billing/email-settings" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'email-settings' ? 'active' : '' %>">
                     <i class="bi bi-envelope-at-fill"></i>

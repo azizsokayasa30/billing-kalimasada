@@ -228,6 +228,14 @@ async function sendWarningNotification(device, rxPowerValue, threshold) {
 // Fungsi untuk mengirim pesan ke teknisi
 async function sendToTechnicians(message, priority = 'normal') {
   try {
+    try {
+      const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+      if (!isWaSystemMonitorEnabled('rx_power_threshold_wa')) {
+        console.log('Master switch rx_power_threshold_wa off — skip RX power WA ke teknisi');
+        return;
+      }
+    } catch (_) { /* ignore */ }
+
     // Ambil nomor teknisi dari adminControl helper agar kompatibel semua format
     const { getTechnicianNumbers } = require('./adminControl');
     const technicianNumbers = getTechnicianNumbers();

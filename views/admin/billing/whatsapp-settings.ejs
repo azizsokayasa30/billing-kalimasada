@@ -519,6 +519,7 @@
                                     <div class="variable-list">
                                         <strong>Available Variables:</strong>
                                         <span class="variable-item">{customer_name}</span>
+                                        <span class="variable-item">{reason}</span>
                                         <span class="variable-item">{username}</span>
                                         <span class="variable-item">{package_name}</span>
                                         <span class="variable-item">{due_date}</span>
@@ -547,8 +548,10 @@
                                     <div class="variable-list">
                                         <strong>Available Variables:</strong>
                                         <span class="variable-item">{customer_name}</span>
-                                        <span class="variable-item">{username}</span>
                                         <span class="variable-item">{package_name}</span>
+                                        <span class="variable-item">{package_speed}</span>
+                                        <span class="variable-item">{reason}</span>
+                                        <span class="variable-item">{username}</span>
                                         <span class="variable-item">{payment_date}</span>
                                         <span class="variable-item">{amount}</span>
                                         <span class="variable-item">{payment_method}</span>
@@ -588,6 +591,159 @@
                                         </button>
                                     </div>
                                 </div>
+
+                                <hr class="my-4">
+                                <h5 class="text-muted mb-3"><i class="bi bi-tools"></i> Teknisi &amp; PSB</h5>
+
+                                <!-- Installation job assigned -->
+                                <div class="mb-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5>Tugas instalasi (ditugaskan ke teknisi)</h5>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="installation_job_assigned_enabled" checked>
+                                            <label class="form-check-label" for="installation_job_assigned_enabled"><strong>Enable</strong></label>
+                                        </div>
+                                    </div>
+                                    <div class="variable-list">
+                                        <span class="variable-item">{technician_name}</span>
+                                        <span class="variable-item">{job_number}</span>
+                                        <span class="variable-item">{customer_name}</span>
+                                        <span class="variable-item">{customer_phone}</span>
+                                        <span class="variable-item">{customer_address}</span>
+                                        <span class="variable-item">{package_name}</span>
+                                        <span class="variable-item">{package_price}</span>
+                                        <span class="variable-item">{installation_date}</span>
+                                        <span class="variable-item">{installation_time}</span>
+                                        <span class="variable-item">{notes}</span>
+                                        <span class="variable-item">{equipment_needed}</span>
+                                        <span class="variable-item">{priority}</span>
+                                        <span class="variable-item">{pppoe_username}</span>
+                                        <span class="variable-item">{pppoe_password}</span>
+                                    </div>
+                                    <textarea class="form-control" id="installation_job_assigned_template" rows="8" placeholder="Template..."></textarea>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-warning btn-sm" onclick="testTemplate('installation_job_assigned')"><i class="bi bi-send"></i> Test</button>
+                                    </div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5>Update status instalasi</h5>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="installation_status_update_enabled" checked>
+                                            <label class="form-check-label" for="installation_status_update_enabled"><strong>Enable</strong></label>
+                                        </div>
+                                    </div>
+                                    <div class="variable-list">
+                                        <span class="variable-item">{technician_name}</span>
+                                        <span class="variable-item">{job_number}</span>
+                                        <span class="variable-item">{customer_name}</span>
+                                        <span class="variable-item">{new_status}</span>
+                                        <span class="variable-item">{update_time}</span>
+                                        <span class="variable-item">{notes}</span>
+                                    </div>
+                                    <textarea class="form-control" id="installation_status_update_template" rows="8"></textarea>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-warning btn-sm" onclick="testTemplate('installation_status_update')"><i class="bi bi-send"></i> Test</button>
+                                    </div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5>Instalasi selesai</h5>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="installation_completed_enabled" checked>
+                                            <label class="form-check-label" for="installation_completed_enabled"><strong>Enable</strong></label>
+                                        </div>
+                                    </div>
+                                    <div class="variable-list">
+                                        <span class="variable-item">{technician_name}</span>
+                                        <span class="variable-item">{job_number}</span>
+                                        <span class="variable-item">{customer_name}</span>
+                                        <span class="variable-item">{completion_time}</span>
+                                        <span class="variable-item">{completion_notes}</span>
+                                    </div>
+                                    <textarea class="form-control" id="installation_completed_template" rows="8"></textarea>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-warning btn-sm" onclick="testTemplate('installation_completed')"><i class="bi bi-send"></i> Test</button>
+                                    </div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5>Sales order pelanggan baru (ke semua teknisi aktif)</h5>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="sales_order_new_customer_enabled" checked>
+                                            <label class="form-check-label" for="sales_order_new_customer_enabled"><strong>Enable</strong></label>
+                                        </div>
+                                    </div>
+                                    <div class="variable-list">
+                                        <span class="variable-item">{customer_id}</span>
+                                        <span class="variable-item">{customer_name}</span>
+                                        <span class="variable-item">{customer_phone}</span>
+                                        <span class="variable-item">{customer_email}</span>
+                                        <span class="variable-item">{customer_address}</span>
+                                        <span class="variable-item">{package_name}</span>
+                                        <span class="variable-item">{package_speed}</span>
+                                        <span class="variable-item">{pppoe_username}</span>
+                                        <span class="variable-item">{pppoe_password}</span>
+                                        <span class="variable-item">{pppoe_profile}</span>
+                                    </div>
+                                    <textarea class="form-control" id="sales_order_new_customer_template" rows="8"></textarea>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-warning btn-sm" onclick="testTemplate('sales_order_new_customer')"><i class="bi bi-send"></i> Test</button>
+                                    </div>
+                                </div>
+
+                                <hr class="my-4">
+                                <h5 class="text-muted mb-3"><i class="bi bi-exclamation-octagon"></i> Laporan gangguan</h5>
+
+                                <div class="mb-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5>Laporan baru ke grup / teknisi</h5>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="trouble_report_new_technician_enabled" checked>
+                                            <label class="form-check-label" for="trouble_report_new_technician_enabled"><strong>Enable</strong></label>
+                                        </div>
+                                    </div>
+                                    <div class="variable-list">
+                                        <span class="variable-item">{company_header}</span>
+                                        <span class="variable-item">{report_id}</span>
+                                        <span class="variable-item">{customer_name}</span>
+                                        <span class="variable-item">{phone}</span>
+                                        <span class="variable-item">{location}</span>
+                                        <span class="variable-item">{category}</span>
+                                        <span class="variable-item">{created_at}</span>
+                                        <span class="variable-item">{description}</span>
+                                        <span class="variable-item">{status}</span>
+                                    </div>
+                                    <textarea class="form-control" id="trouble_report_new_technician_template" rows="10"></textarea>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-warning btn-sm" onclick="testTemplate('trouble_report_new_technician')"><i class="bi bi-send"></i> Test</button>
+                                    </div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5>Update status ke pelanggan (nomor WA pelapor)</h5>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="trouble_report_customer_update_enabled" checked>
+                                            <label class="form-check-label" for="trouble_report_customer_update_enabled"><strong>Enable</strong></label>
+                                        </div>
+                                    </div>
+                                    <div class="variable-list">
+                                        <span class="variable-item">{company_header}</span>
+                                        <span class="variable-item">{report_id}</span>
+                                        <span class="variable-item">{updated_at}</span>
+                                        <span class="variable-item">{status_label}</span>
+                                        <span class="variable-item">{technician_note_section}</span>
+                                        <span class="variable-item">{status_message}</span>
+                                    </div>
+                                    <textarea class="form-control" id="trouble_report_customer_update_template" rows="10"></textarea>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-warning btn-sm" onclick="testTemplate('trouble_report_customer_update')"><i class="bi bi-send"></i> Test</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -615,6 +771,12 @@
                                             <option value="service_suspension">Service Suspension</option>
                                             <option value="service_restoration">Service Restoration</option>
                                             <option value="welcome_message">Welcome Message</option>
+                                            <option value="installation_job_assigned">Instalasi: tugas baru</option>
+                                            <option value="installation_status_update">Instalasi: update status</option>
+                                            <option value="installation_completed">Instalasi: selesai</option>
+                                            <option value="sales_order_new_customer">Sales order (teknisi)</option>
+                                            <option value="trouble_report_new_technician">Gangguan: ke teknisi</option>
+                                            <option value="trouble_report_customer_update">Gangguan: update ke pelanggan</option>
                                         </select>
                                     </div>
                                 </div>
@@ -732,6 +894,7 @@
                         toggle.checked = templates[key].enabled !== false; // Default to true if not specified
                     }
                 });
+                updateTemplateStatus();
             }
         } catch (error) {
             console.error('Error loading templates:', error);
@@ -937,27 +1100,18 @@
     
     // Function to update template status display
     function updateTemplateStatus() {
-        const templateKeys = [
-            'invoice_created', 'due_date_reminder', 'payment_received', 
-            'service_disruption', 'service_announcement', 'service_suspension',
-            'service_restoration', 'welcome_message'
-        ];
-        
-        templateKeys.forEach(key => {
+        document.querySelectorAll('#templateForms textarea[id$="_template"]').forEach(textarea => {
+            const key = textarea.id.replace(/_template$/, '');
             const toggle = document.getElementById(`${key}_enabled`);
-            const textarea = document.getElementById(`${key}_template`);
-            
-            if (toggle && textarea) {
-                // Update textarea style based on toggle state
-                if (toggle.checked) {
-                    textarea.classList.remove('template-disabled');
-                    textarea.classList.add('template-enabled');
-                    textarea.disabled = false;
-                } else {
-                    textarea.classList.remove('template-enabled');
-                    textarea.classList.add('template-disabled');
-                    textarea.disabled = true;
-                }
+            if (!toggle) return;
+            if (toggle.checked) {
+                textarea.classList.remove('template-disabled');
+                textarea.classList.add('template-enabled');
+                textarea.disabled = false;
+            } else {
+                textarea.classList.remove('template-enabled');
+                textarea.classList.add('template-disabled');
+                textarea.disabled = true;
             }
         });
     }

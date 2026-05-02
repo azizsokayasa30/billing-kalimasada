@@ -820,13 +820,6 @@ const rxPowerMonitor = require('./config/rxPowerMonitor');
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
-// Placeholder icons to avoid 404 before real assets are uploaded
-try {
-  const staticIcons = require('./routes/staticIcons');
-  app.use('/', staticIcons);
-} catch (e) {
-  logger.warn('staticIcons route not loaded:', e.message);
-}
 
 // Import dan gunakan route API dashboard traffic
 const apiDashboardRouter = require('./routes/apiDashboard');

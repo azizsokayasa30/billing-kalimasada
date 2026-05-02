@@ -204,6 +204,12 @@ class InvoiceScheduler {
 
     async sendDueDateReminders() {
         try {
+            const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+            if (!isWaSystemMonitorEnabled('billing_daily_due_wa')) {
+                logger.info('Master switch billing_daily_due_wa off — skip pengingat jatuh tempo harian');
+                return;
+            }
+
             const whatsappNotifications = require('./whatsapp-notifications');
             const invoices = await billingManager.getInvoices();
             const today = new Date();
@@ -240,6 +246,58 @@ class InvoiceScheduler {
         }
     }
 
+    /**
+     * WA + email lambat (jaringan); jangan blokir loop generate ratusan invoice.
+     * Tetap dijalankan setelah commit DB; error hanya di-log.
+     */
+    _enqueueCustomerInvoiceNotifications(customerId, invoiceId) {
+        void (async () => {
+            try {
+                const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+                if (isWaSystemMonitorEnabled('billing_scheduler_invoice_wa')) {
+                    const whatsappNotifications = require('./whatsapp-notifications');
+                    await whatsappNotifications.sendInvoiceCreatedNotification(customerId, invoiceId);
+                    logger.info(`WhatsApp notification queued/sent for invoice id ${invoiceId}`);
+                } else {
+                    logger.info('billing_scheduler_invoice_wa off — skip WA tagihan baru (async)');
+                }
+            } catch (notificationError) {
+                logger.error(`Async WhatsApp notification failed for invoice id ${invoiceId}:`, notificationError);
+            }
+            try {
+                const emailNotifications = require('./email-notifications');
+                await emailNotifications.sendInvoiceCreatedNotification(customerId, invoiceId);
+                logger.info(`Email notification queued/sent for invoice id ${invoiceId}`);
+            } catch (notificationError) {
+                logger.error(`Async Email notification failed for invoice id ${invoiceId}:`, notificationError);
+            }
+        })().catch((e) => logger.error('Unhandled async customer invoice notifications:', e));
+    }
+
+    _enqueueMemberInvoiceNotifications(memberId, invoiceId) {
+        void (async () => {
+            try {
+                const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+                if (isWaSystemMonitorEnabled('billing_scheduler_invoice_wa')) {
+                    const whatsappNotifications = require('./whatsapp-notifications');
+                    await whatsappNotifications.sendMemberInvoiceCreatedNotification(memberId, invoiceId);
+                    logger.info(`WhatsApp notification queued/sent for member invoice id ${invoiceId}`);
+                } else {
+                    logger.info('billing_scheduler_invoice_wa off — skip WA tagihan member (async)');
+                }
+            } catch (notificationError) {
+                logger.error(`Async WhatsApp notification failed for member invoice id ${invoiceId}:`, notificationError);
+            }
+            try {
+                const emailNotifications = require('./email-notifications');
+                await emailNotifications.sendMemberInvoiceCreatedNotification(memberId, invoiceId);
+                logger.info(`Email notification queued/sent for member invoice id ${invoiceId}`);
+            } catch (notificationError) {
+                logger.error(`Async Email notification failed for member invoice id ${invoiceId}:`, notificationError);
+            }
+        })().catch((e) => logger.error('Unhandled async member invoice notifications:', e));
+    }
+
     async generateMonthlyInvoices() {
         try {
             // Get all active customers
@@ -250,27 +308,24 @@ class InvoiceScheduler {
 
             logger.info(`Found ${activeCustomers.length} active customers for invoice generation`);
 
+            const currentDate = new Date();
+            const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+            const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+            const [packageById, customersWithInvoiceThisMonth] = await Promise.all([
+                billingManager.getAllPackagesByIdMap(),
+                billingManager.getDistinctCustomerUsernamesWithInvoicesBetween(startOfMonth, endOfMonth)
+            ]);
+
             for (const customer of activeCustomers) {
                 try {
-                                            // Get customer's package
-                        const packageData = await billingManager.getPackageById(customer.package_id);
-                        if (!packageData) {
-                            logger.warn(`Package not found for customer ${customer.username}`);
-                            continue;
-                        }
+                    const packageData = packageById.get(customer.package_id);
+                    if (!packageData) {
+                        logger.warn(`Package not found for customer ${customer.username}`);
+                        continue;
+                    }
 
-                    // Check if invoice already exists for this month
-                    const currentDate = new Date();
-                    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-                    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-
-                    const existingInvoices = await billingManager.getInvoicesByCustomerAndDateRange(
-                        customer.username,
-                        startOfMonth,
-                        endOfMonth
-                    );
-
-                    if (existingInvoices.length > 0) {
+                    if (customersWithInvoiceThisMonth.has(customer.username)) {
                         logger.info(`Invoice already exists for customer ${customer.username} this month`);
                         continue;
                     }
@@ -320,26 +375,8 @@ class InvoiceScheduler {
                     // Create the invoice
                     const newInvoice = await billingManager.createInvoice(invoiceData);
                     logger.info(`Created invoice ${newInvoice.invoice_number} for customer ${customer.username}`);
-
-                    // Kirim notifikasi WhatsApp setelah invoice berhasil dibuat
-                    try {
-                        const whatsappNotifications = require('./whatsapp-notifications');
-                        await whatsappNotifications.sendInvoiceCreatedNotification(customer.id, newInvoice.id);
-                        logger.info(`WhatsApp notification sent for invoice ${newInvoice.invoice_number} to customer ${customer.username}`);
-                    } catch (notificationError) {
-                        logger.error(`Failed to send WhatsApp notification for invoice ${newInvoice.invoice_number}:`, notificationError);
-                        // Jangan stop proses invoice generation jika notifikasi gagal
-                    }
-                    
-                    // Kirim notifikasi Email setelah invoice berhasil dibuat
-                    try {
-                        const emailNotifications = require('./email-notifications');
-                        await emailNotifications.sendInvoiceCreatedNotification(customer.id, newInvoice.id);
-                        logger.info(`Email notification sent for invoice ${newInvoice.invoice_number} to customer ${customer.username}`);
-                    } catch (notificationError) {
-                        logger.error(`Failed to send Email notification for invoice ${newInvoice.invoice_number}:`, notificationError);
-                        // Jangan stop proses invoice generation jika notifikasi gagal
-                    }
+                    customersWithInvoiceThisMonth.add(customer.username);
+                    this._enqueueCustomerInvoiceNotifications(customer.id, newInvoice.id);
 
                 } catch (error) {
                     logger.error(`Error creating invoice for customer ${customer.username}:`, error);
@@ -365,19 +402,23 @@ class InvoiceScheduler {
 
             logger.info(`Found ${activeMembers.length} active members for invoice generation`);
 
+            const currentDate = new Date();
+            const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+            const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+            const [allMemberPackages, memberKeysWithInvoice] = await Promise.all([
+                billingManager.getAllMemberPackages(false),
+                billingManager.getMemberIdentityKeysWithInvoicesBetween(startOfMonth, endOfMonth)
+            ]);
+            const memberPackageById = new Map(allMemberPackages.map((p) => [p.id, p]));
+
             for (const member of activeMembers) {
                 try {
-                    // Get member's package
-                    const packageData = await billingManager.getMemberPackageById(member.package_id);
+                    const packageData = memberPackageById.get(member.package_id);
                     if (!packageData) {
                         logger.warn(`Package not found for member ${member.hotspot_username || member.name}`);
                         continue;
                     }
-
-                    // Check if invoice already exists for this month
-                    const currentDate = new Date();
-                    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-                    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
                     const memberUsername = member.hotspot_username || member.username;
                     if (!memberUsername) {
@@ -385,13 +426,7 @@ class InvoiceScheduler {
                         continue;
                     }
 
-                    const existingInvoices = await billingManager.getInvoicesByMemberAndDateRange(
-                        memberUsername,
-                        startOfMonth,
-                        endOfMonth
-                    );
-
-                    if (existingInvoices.length > 0) {
+                    if (memberKeysWithInvoice.has(String(memberUsername).trim())) {
                         logger.info(`Invoice already exists for member ${memberUsername} this month`);
                         continue;
                     }
@@ -429,24 +464,8 @@ class InvoiceScheduler {
                     // Create the invoice
                     const newInvoice = await billingManager.createInvoice(invoiceData);
                     logger.info(`Created invoice ${newInvoice.invoice_number} for member ${memberUsername}`);
-
-                    // Kirim notifikasi WhatsApp setelah invoice berhasil dibuat
-                    try {
-                        const whatsappNotifications = require('./whatsapp-notifications');
-                        await whatsappNotifications.sendMemberInvoiceCreatedNotification(member.id, newInvoice.id);
-                        logger.info(`WhatsApp notification sent for invoice ${newInvoice.invoice_number} to member ${memberUsername}`);
-                    } catch (notificationError) {
-                        logger.error(`Failed to send WhatsApp notification for invoice ${newInvoice.invoice_number}:`, notificationError);
-                    }
-                    
-                    // Kirim notifikasi Email setelah invoice berhasil dibuat
-                    try {
-                        const emailNotifications = require('./email-notifications');
-                        await emailNotifications.sendMemberInvoiceCreatedNotification(member.id, newInvoice.id);
-                        logger.info(`Email notification sent for invoice ${newInvoice.invoice_number} to member ${memberUsername}`);
-                    } catch (notificationError) {
-                        logger.error(`Failed to send Email notification for invoice ${newInvoice.invoice_number}:`, notificationError);
-                    }
+                    memberKeysWithInvoice.add(String(memberUsername).trim());
+                    this._enqueueMemberInvoiceNotifications(member.id, newInvoice.id);
 
                 } catch (error) {
                     logger.error(`Error creating invoice for member ${member.hotspot_username || member.name}:`, error);
@@ -533,26 +552,7 @@ class InvoiceScheduler {
 
                     const newInvoice = await billingManager.createInvoice(invoiceData);
                     logger.info(`(Daily) Created invoice ${newInvoice.invoice_number} for customer ${customer.username}`);
-
-                    // Kirim notifikasi WhatsApp setelah invoice berhasil dibuat (untuk daily generation juga)
-                    try {
-                        const whatsappNotifications = require('./whatsapp-notifications');
-                        await whatsappNotifications.sendInvoiceCreatedNotification(customer.id, newInvoice.id);
-                        logger.info(`(Daily) WhatsApp notification sent for invoice ${newInvoice.invoice_number} to customer ${customer.username}`);
-                    } catch (notificationError) {
-                        logger.error(`(Daily) Failed to send WhatsApp notification for invoice ${newInvoice.invoice_number}:`, notificationError);
-                        // Jangan stop proses invoice generation jika notifikasi gagal
-                    }
-                    
-                    // Kirim notifikasi Email setelah invoice berhasil dibuat
-                    try {
-                        const emailNotifications = require('./email-notifications');
-                        await emailNotifications.sendInvoiceCreatedNotification(customer.id, newInvoice.id);
-                        logger.info(`(Daily) Email notification sent for invoice ${newInvoice.invoice_number} to customer ${customer.username}`);
-                    } catch (notificationError) {
-                        logger.error(`(Daily) Failed to send Email notification for invoice ${newInvoice.invoice_number}:`, notificationError);
-                        // Jangan stop proses invoice generation jika notifikasi gagal
-                    }
+                    this._enqueueCustomerInvoiceNotifications(customer.id, newInvoice.id);
 
                 } catch (error) {
                     logger.error(`(Daily) Error creating invoice for customer ${customer.username}:`, error);

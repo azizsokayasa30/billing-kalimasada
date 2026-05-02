@@ -1,324 +1,88 @@
 ﻿<!DOCTYPE html>
-<html lang="id">
+<html lang="id" class="h-full">
 <head>
-    <%- include('../partials/hard-reload') %>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- PWA Meta Tags -->
-    <meta name="description" content="Dashboard tukang tagih untuk sistem billing GEMBOK-BILL">
-    <meta name="theme-color" content="#28a745">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Collector">
-    <meta name="msapplication-TileColor" content="#28a745">
-    <meta name="msapplication-tap-highlight" content="no">
-    
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="/manifest-collector.json">
-    
-    <!-- PWA Icons -->
-    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
-    <title>Riwayat Pembayaran - <%= appSettings.companyHeader %></title>
-    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">    
-    <link href="/css/theme.css" rel="stylesheet">    <link href="/css/collector-pwa.css" rel="stylesheet">
-    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        body {
-            background: #f5f6fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding-bottom: 70px; /* Space for bottom navigation */
-        }
-        
-        .navbar {
-            background: var(--panel-bg, #ffffff);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            padding: 1rem 0;
-        }
-        
-        .navbar-brand {
-            font-weight: 600;
-            color: #28a745;
-        }
-        
-        .logout-btn {
-            background: #dc3545;
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 1rem;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        
-        .logout-btn:hover {
-            background: #c82333;
-            transform: translateY(-2px);
-        }
-        
-        .payment-card {
-            background: var(--panel-bg, #ffffff);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
-        }
-        
-        .payment-card:hover {
-            transform: translateY(-2px);
-        }
-        
-        .payment-header {
-            display: flex;
-            justify-content: between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        
-        .payment-amount {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #28a745;
-        }
-        
-        .payment-date {
-            color: #6c757d;
-            font-size: 0.9rem;
-        }
-        
-        .payment-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-        
-        .info-item {
-            display: flex;
-            align-items: center;
-        }
-        
-        .info-item i {
-            margin-right: 0.5rem;
-            color: #6c757d;
-        }
-        
-        .commission-badge {
-            background: #fff3cd;
-            color: #856404;
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-        
-        .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-        
-        .status-completed {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .back-btn {
-            background: #6c757d;
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 1rem;
-            color: white;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-        }
-        
-        .back-btn:hover {
-            background: #5a6268;
-            transform: translateY(-2px);
-            color: white;
-            text-decoration: none;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 3rem;
-            color: #6c757d;
-        }
-        
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-        
-        @media (max-width: 768px) {
-            .payment-info {
-                grid-template-columns: 1fr;
-            }
-            
-            .payment-card {
-                padding: 1rem;
-                margin: 0 0.5rem 1rem;
-            }
-            
-            .payment-amount {
-                font-size: 1.2rem;
-            }
-            
-            .navbar {
-                padding: 0.75rem 0;
-            }
-            
-            .navbar-brand {
-                font-size: 1.1rem;
-            }
-            
-            .logout-btn {
-                padding: 0.4rem 0.8rem;
-                font-size: 0.9rem;
-            }
-            
-            .back-btn {
-                padding: 0.4rem 0.8rem;
-                font-size: 0.9rem;
-            }
-            
-            .container {
-                padding: 0 0.5rem;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .payment-card {
-                padding: 0.75rem;
-            }
-            
-            .payment-amount {
-                font-size: 1.1rem;
-            }
-            
-            .payment-date {
-                font-size: 0.8rem;
-            }
-            
-            .info-item {
-                font-size: 0.9rem;
-            }
-            
-            .commission-badge {
-                font-size: 0.75rem;
-                padding: 0.2rem 0.5rem;
-            }
-        }
-    </style>
-
-    <%- include('../partials/theme-head') %>
+  <%- include('../partials/collector-field-head', { pageTitle: 'Setoran', appSettings: appSettings }) %>
 </head>
-<body>
-    <!-- Navigation -->
-    <nav class="navbar">
-        <div class="container">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="navbar-brand">
-                    <i class="bi bi-person-check me-2"></i>Tukang Tagih
-                </div>
-                <div>
-                    <span class="me-3">Selamat datang, <%= collector.name %></span>
-                </div>
-            </div>
+<body class="bg-background text-on-background font-body-md h-full min-h-screen w-full flex flex-col pb-24">
+  <%- include('../partials/collector-field-topbar', { topbarTitle: 'Field Collector' }) %>
+
+  <main class="flex-1 overflow-y-auto pt-[72px] pb-4 px-margin-page flex flex-col gap-stack-lg w-full max-w-md mx-auto">
+    <section class="bg-surface rounded-xl p-stack-md shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-outline-variant flex flex-col gap-stack-md relative overflow-hidden">
+      <div class="absolute -top-10 -right-10 w-32 h-32 bg-primary-fixed opacity-30 rounded-full blur-2xl pointer-events-none"></div>
+      <div class="flex flex-col gap-1 z-10">
+        <h2 class="font-label-caps text-label-caps text-outline uppercase">Total harus disetor (neto bulan ini)</h2>
+        <p class="font-numeric-data text-[28px] leading-tight text-primary-container tracking-tight">Rp <%= setoranUi.totalHarusSetor.toLocaleString('id-ID') %></p>
+      </div>
+      <div class="flex flex-col gap-base z-10 pt-stack-sm">
+        <div class="flex justify-between items-end">
+          <span class="font-label-caps text-[10px] text-primary-container uppercase font-bold">Progress setoran</span>
+          <span class="font-numeric-data text-body-md text-primary-container"><%= setoranUi.setoranProgressPct %>%</span>
         </div>
-    </nav>
-
-    <div class="container">
-        <div class="row">
-            <div class="col-md-8 mx-auto">
-                <!-- Header -->
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2><i class="bi bi-list-ul me-2"></i>Riwayat Pembayaran</h2>
-                </div>
-
-                <!-- Payments List -->
-                <div id="paymentsList">
-                    <% if (payments && payments.length > 0) { %>
-                        <% payments.forEach(function(payment) { %>
-                            <div class="payment-card">
-                                <div class="payment-header">
-                                    <div>
-                                        <div class="payment-amount">Rp <%= parseFloat(payment.payment_amount || 0).toLocaleString('id-ID') %></div>
-                                        <div class="payment-date">
-                                            <i class="bi bi-calendar me-1"></i>
-                                            <%= payment.collected_at ? new Date(payment.collected_at).toLocaleString('id-ID') : 'Tidak diketahui' %>
-                                        </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="status-badge status-completed">Selesai</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="payment-info">
-                                    <div class="info-item">
-                                        <i class="bi bi-person"></i>
-                                        <span><%= payment.customer_name || 'Pelanggan' %></span>
-                                    </div>
-                                    <div class="info-item">
-                                        <i class="bi bi-telephone"></i>
-                                        <span><%= payment.customer_phone || 'Tidak diketahui' %></span>
-                                    </div>
-                                    <div class="info-item">
-                                        <i class="bi bi-credit-card"></i>
-                                        <span><%= payment.payment_method === 'cash' ? 'Tunai' : payment.payment_method === 'transfer' ? 'Transfer' : 'Lainnya' %></span>
-                                    </div>
-                                    <div class="info-item">
-                                        <i class="bi bi-percent"></i>
-                                        <span class="commission-badge">
-                                            Komisi: Rp <%= parseFloat(payment.commission_amount || 0).toLocaleString('id-ID') %>
-                                        </span>
-                                    </div>
-                                </div>
-                                
-                                <% if (payment.notes) { %>
-                                    <div class="mt-2">
-                                        <small class="text-muted">
-                                            <i class="bi bi-chat-text me-1"></i>
-                                            <%= payment.notes %>
-                                        </small>
-                                    </div>
-                                <% } %>
-                            </div>
-                        <% }); %>
-                    <% } else { %>
-                        <div class="empty-state">
-                            <i class="bi bi-credit-card"></i>
-                            <h4>Belum ada pembayaran</h4>
-                            <p>Riwayat pembayaran Anda akan muncul di sini.</p>
-                            <a href="/collector/payment" class="btn btn-primary">
-                                <i class="bi bi-plus me-2"></i>Input Pembayaran
-                            </a>
-                        </div>
-                    <% } %>
-                </div>
-            </div>
+        <div class="h-2.5 w-full bg-surface-container-highest rounded-full overflow-hidden shadow-inner">
+          <div class="h-full bg-primary-container rounded-full transition-all" style="width: <%= setoranUi.setoranProgressPct %>%"></div>
         </div>
-    </div>
+      </div>
+      <div class="flex justify-between items-center border-t border-surface-variant pt-stack-sm mt-stack-sm z-10">
+        <div class="flex flex-col gap-1">
+          <span class="font-label-caps text-[10px] text-outline uppercase flex items-center gap-1">
+            <span class="material-symbols-outlined text-[12px] text-secondary">arrow_downward</span>
+            Sudah disetor
+          </span>
+          <span class="font-numeric-data text-body-lg text-secondary">Rp <%= setoranUi.sudahSetor.toLocaleString('id-ID') %></span>
+        </div>
+        <div class="w-px h-8 bg-surface-variant"></div>
+        <div class="flex flex-col gap-1 items-end">
+          <span class="font-label-caps text-[10px] text-outline uppercase flex items-center gap-1">
+            Sisa setoran
+            <span class="material-symbols-outlined text-[12px] text-error">priority_high</span>
+          </span>
+          <span class="font-numeric-data text-body-lg text-error">Rp <%= setoranUi.belumSetor.toLocaleString('id-ID') %></span>
+        </div>
+      </div>
+    </section>
 
-    <!-- Bottom Navigation -->
-    <%- include('../partials/collector-bottom-nav', { currentPage: 'payments' }) %>
+    <section class="flex flex-col w-full">
+      <button type="button" onclick="alert('Serahkan uang tunai ke kasir dan minta konfirmasi setoran di sistem admin.')" class="w-full bg-primary-container text-on-primary-container py-padding-interactive rounded-xl font-h2 text-[16px] flex items-center justify-center gap-stack-sm shadow-[0_8px_16px_rgba(0,31,63,0.15)] active:scale-[0.98] active:shadow-sm transition-all duration-200">
+        <span class="material-symbols-outlined fill">account_balance_wallet</span>
+        Setor sekarang
+      </button>
+    </section>
 
-    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function logout() {
-            if (confirm('Apakah Anda yakin ingin logout?')) {
-                window.location.href = '/collector/logout';
-            }
-        }
-    </script>
-    <script src="/js/collector-pwa.js"></script>
+    <section class="flex flex-col gap-stack-sm pb-stack-lg">
+      <div class="flex justify-between items-end mb-stack-sm px-1">
+        <h3 class="font-h2 text-h2 text-on-surface">Riwayat pembayaran</h3>
+      </div>
+      <div class="flex flex-col gap-gutter-card">
+        <% const plist = (payments || []).slice(0, 30); %>
+        <% if (!plist.length) { %>
+          <p class="text-center text-on-surface-variant py-6">Belum ada riwayat.</p>
+        <% } %>
+        <% plist.forEach(function(p) {
+             const done = (p.status || '') === 'completed';
+             const when = p.collected_at ? new Date(p.collected_at) : null;
+             const whenStr = when ? when.toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+        %>
+          <div class="bg-surface p-stack-md rounded-xl border border-surface-variant flex justify-between items-center shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+            <div class="flex items-center gap-stack-md min-w-0">
+              <div class="w-12 h-12 rounded-full shrink-0 <%= done ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container-high text-on-surface-variant' %> flex items-center justify-center">
+                <span class="material-symbols-outlined fill text-[22px]"><%= done ? 'check' : 'schedule' %></span>
+              </div>
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="font-numeric-data text-body-lg text-on-surface truncate">Rp <%= (p.payment_amount || 0).toLocaleString('id-ID') %></span>
+                <span class="font-body-md text-[13px] text-on-surface-variant truncate"><%= p.customer_name || 'Pelanggan' %> · <%= whenStr %></span>
+              </div>
+            </div>
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="font-label-caps text-[10px] uppercase <%= done ? 'text-secondary' : 'text-on-surface-variant' %>"><%= done ? 'Selesai' : 'Pending' %></span>
+              <span class="material-symbols-outlined text-outline text-[18px]">chevron_right</span>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    </section>
+  </main>
+
+  <%- include('../partials/collector-bottom-nav', { currentPage: 'payments' }) %>
+  <script src="/js/collector-pwa.js"></script>
 </body>
 </html>
-

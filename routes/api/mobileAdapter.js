@@ -15,6 +15,155 @@ require('../../config/technicianFieldNotifications');
 const dbPath = path.join(__dirname, '../../data/billing.db');
 const db = new sqlite3.Database(dbPath);
 const CableNetworkUtils = require('../../utils/cableNetworkUtils');
+const billingManager = require('../../config/billing');
+const { submitCollectorPayment, collectorPaymentMulter } = require('../../utils/collectorPaymentSubmit');
+
+function requireCollector(req, res, next) {
+    if (!req.user || String(req.user.role) !== 'collector') {
+        return res.status(403).json({ success: false, message: 'Hanya kolektor' });
+    }
+    next();
+}
+
+function parseCollectorId(req) {
+    const u = req.user || {};
+    const raw = u.id != null && u.id !== '' ? u.id : u.sub != null && u.sub !== '' ? u.sub : u.user_id;
+    const id = parseInt(String(raw), 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function collectorCustomerIsIsolir(c) {
+    return String(c.status || '')
+        .toLowerCase()
+        .trim() === 'suspended';
+}
+
+/**
+ * Sama dengan filter "Belum Lunas" di admin getCustomersPaginated (mode default, tanpa filter bulan):
+ * ada invoice unpaid ATAU belum pernah ada invoice paid.
+ */
+function matchesAdminBelumLunasFromPaymentStatus(c) {
+    const ps = c.payment_status || '';
+    return ps === 'unpaid' || ps === 'overdue' || ps === 'no_invoice';
+}
+
+/** Sama dengan filter "Lunas" di admin: tidak ada unpaid & pernah paid (direfleksikan di CASE SQL sebagai 'paid'). */
+function matchesAdminLunasFromPaymentStatus(c) {
+    return (c.payment_status || '') === 'paid';
+}
+
+/** Join date jatuh di bulan kalender berjalan (sesuai filter "baru" admin / pelanggan baru bulan ini). */
+function joinDateThisCalendarMonth(c) {
+    if (!c.join_date) return false;
+    const jd = String(c.join_date).slice(0, 10);
+    const now = new Date();
+    const y = now.getFullYear();
+    const mo = now.getMonth();
+    const pad = (n) => String(n).padStart(2, '0');
+    const startStr = `${y}-${pad(mo + 1)}-01`;
+    const lastD = new Date(y, mo + 1, 0).getDate();
+    const endStr = `${y}-${pad(mo + 1)}-${pad(lastD)}`;
+    return jd >= startStr && jd <= endStr;
+}
+
+/**
+ * Filter daftar kolektor: pool = area + assignment kolektor (getCollectorCustomers).
+ * Semua = seluruh pelanggan di pool (seperti admin /customers, dibatasi area tim).
+ * unpaid = Belum Lunas admin; paid = Lunas admin; baru = join_date bulan ini.
+ */
+function filterCollectorCustomersForMobile(allMappedCustomers, statusFilter, q) {
+    const validFilters = new Set(['paid', 'unpaid', 'overdue', 'no_invoice', 'isolir', 'baru']);
+    const sf = (statusFilter || '').toString().toLowerCase();
+    const qLower = (q || '').toString().trim().toLowerCase();
+    let customers = allMappedCustomers || [];
+
+    if (sf === 'isolir') {
+        customers = customers.filter((c) => collectorCustomerIsIsolir(c));
+    } else if (sf === 'baru') {
+        customers = customers.filter((c) => joinDateThisCalendarMonth(c));
+    } else if (sf === 'unpaid') {
+        customers = customers.filter((c) => matchesAdminBelumLunasFromPaymentStatus(c));
+    } else if (sf === 'paid') {
+        customers = customers.filter((c) => matchesAdminLunasFromPaymentStatus(c));
+    } else if (validFilters.has(sf) && sf !== '') {
+        customers = customers.filter((c) => (c.payment_status || '') === sf);
+    }
+    // sf === '' (Semua): tidak filter status / pembayaran
+
+    if (qLower) {
+        customers = customers.filter((c) => {
+            const name = (c.name || '').toLowerCase();
+            const idStr = String(c.id || '');
+            const phone = (c.phone || '').toLowerCase();
+            const ppp = (c.pppoe_username || '').toString().toLowerCase();
+            const user = (c.username || '').toString().toLowerCase();
+            return (
+                name.includes(qLower) ||
+                idStr.includes(qLower) ||
+                phone.includes(qLower) ||
+                ppp.includes(qLower) ||
+                user.includes(qLower)
+            );
+        });
+    }
+    return customers;
+}
+
+/** Angka aman untuk JSON (hindari BigInt / nilai aneh dari SQLite). */
+function toFiniteNumber(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+}
+
+/** Statistik dashboard kolektor — hanya angka, aman untuk res.json. */
+function sanitizeCollectorDashboardStats(stats) {
+    if (!stats || typeof stats !== 'object') {
+        return {
+            tagihan: { count: 0, total: 0 },
+            tagihanLunas: { count: 0, total: 0 },
+            lunas: { count: 0, total: 0 },
+            belumLunas: { count: 0, total: 0 },
+            hariIni: { count: 0, total: 0 },
+            setoran: { sudah_setor: 0, belum_setor: 0 }
+        };
+    }
+    const pair = (k) => ({
+        count: toFiniteNumber(stats[k] && stats[k].count),
+        total: toFiniteNumber(stats[k] && stats[k].total)
+    });
+    return {
+        tagihan: pair('tagihan'),
+        tagihanLunas: pair('tagihanLunas'),
+        lunas: pair('lunas'),
+        belumLunas: pair('belumLunas'),
+        hariIni: pair('hariIni'),
+        setoran: {
+            sudah_setor: toFiniteNumber(stats.setoran && stats.setoran.sudah_setor),
+            belum_setor: toFiniteNumber(stats.setoran && stats.setoran.belum_setor)
+        }
+    };
+}
+
+/** Baris kolektor untuk API publik (tanpa password). */
+function sanitizeCollectorRow(row) {
+    if (!row || typeof row !== 'object') return null;
+    const out = { ...row };
+    if (out.password !== undefined) delete out.password;
+    if (out.password_hash !== undefined) delete out.password_hash;
+    return out;
+}
+
+/** Satu baris pembayaran kolektor — BigInt → number. */
+function sanitizeCollectorPaymentRow(p) {
+    if (!p || typeof p !== 'object') return p;
+    const out = {};
+    for (const k of Object.keys(p)) {
+        let v = p[k];
+        if (typeof v === 'bigint') v = Number(v);
+        out[k] = v;
+    }
+    return out;
+}
 
 // Kolom untuk timer tugas perbaikan (idempotent)
 db.run(
@@ -1243,6 +1392,397 @@ router.post('/odps/:odpId/assign', verifyToken, requireTechnician, (req, res) =>
             });
         }
     );
+});
+
+// --- Kolektor (Field Collector app) ---
+router.get('/collector/overview', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    const month = req.query.month != null && req.query.month !== '' ? String(req.query.month) : null;
+    const year = req.query.year != null && req.query.year !== '' ? String(req.query.year) : null;
+    try {
+        const [collector, dashboardStats, allMappedCustomers] = await Promise.all([
+            billingManager.getCollectorById(collectorId),
+            billingManager.getCollectorDashboardStats(collectorId, month, year),
+            billingManager.getCollectorCustomers(collectorId)
+        ]);
+        const list = allMappedCustomers || [];
+        const totalPelangganAktif = list.length;
+        const belumBayarCount = list.filter((c) => matchesAdminBelumLunasFromPaymentStatus(c)).length;
+        const lunasCount = list.filter((c) => matchesAdminLunasFromPaymentStatus(c)).length;
+        const isolirCount = list.filter((c) => collectorCustomerIsIsolir(c)).length;
+        const priorityCustomers = list
+            .filter((c) => matchesAdminBelumLunasFromPaymentStatus(c) && !collectorCustomerIsIsolir(c))
+            .slice(0, 5)
+            .map((c) => ({
+                id: c.id,
+                name: c.name,
+                address: c.address || '-',
+                amount: Math.round(parseFloat(c.package_price || 0)),
+                payment_status: c.payment_status
+            }));
+
+        const targetMonth = Math.round(parseFloat(dashboardStats.tagihan?.total || 0));
+        const terkumpul = Math.round(
+            parseFloat((dashboardStats.tagihanLunas?.total ?? dashboardStats.lunas?.total) || 0)
+        );
+        const progressPct = targetMonth > 0 ? Math.min(100, Math.round((terkumpul / targetMonth) * 100)) : 0;
+        const sisaTarget = Math.max(0, targetMonth - terkumpul);
+
+        const areaRows = await new Promise((resolve, reject) => {
+            db.all(
+                'SELECT DISTINCT area FROM collector_areas WHERE collector_id = ? AND area IS NOT NULL AND area != "" LIMIT 8',
+                [collectorId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                }
+            );
+        });
+        const areaLabel =
+            areaRows.map((r) => r.area).filter(Boolean).join(', ') ||
+            collector?.address ||
+            'Wilayah penugasan';
+
+        res.json({
+            success: true,
+            data: {
+                collector: sanitizeCollectorRow(collector),
+                statistics: sanitizeCollectorDashboardStats(dashboardStats),
+                fieldUi: {
+                    totalPelangganAktif,
+                    belumBayarCount,
+                    lunasCount,
+                    isolirCount,
+                    priorityCustomers,
+                    targetMonth,
+                    terkumpul,
+                    progressPct,
+                    sisaTarget,
+                    areaLabel,
+                    displayDate: new Date().toLocaleDateString('id-ID', {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                    })
+                }
+            }
+        });
+    } catch (error) {
+        logger.error('[mobile-adapter] collector/overview', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+    }
+});
+
+router.get('/collector/customers', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    const statusFilter = (req.query.status || '').toString().toLowerCase();
+    const q = (req.query.q || '').toString();
+    try {
+        const allMappedCustomers = await billingManager.getCollectorCustomers(collectorId);
+        const rows = filterCollectorCustomersForMobile(allMappedCustomers, statusFilter, q);
+        const data = rows.map((c) => ({
+            id: c.id,
+            customer_id: c.customer_id != null && c.customer_id !== '' ? String(c.customer_id) : null,
+            username: c.username != null ? String(c.username) : '',
+            name: c.name,
+            address: c.address || '',
+            phone: c.phone || '',
+            status: c.status,
+            payment_status: c.payment_status,
+            package_price: Math.round(parseFloat(c.package_price || 0)),
+            package_name: c.package_name || ''
+        }));
+        res.json({ success: true, data });
+    } catch (error) {
+        logger.error('[mobile-adapter] collector/customers', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+    }
+});
+
+router.get('/collector/settlement', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    try {
+        const [payments, dashboardStats] = await Promise.all([
+            billingManager.getCollectorAllPayments(collectorId),
+            billingManager.getCollectorDashboardStats(collectorId)
+        ]);
+        const s = dashboardStats.setoran || {};
+        const sudahSetor = Math.round(parseFloat(s.sudah_setor || 0));
+        const belumSetor = Math.round(parseFloat(s.belum_setor || 0));
+        const totalHarusSetor = sudahSetor + belumSetor;
+        const setoranProgressPct =
+            totalHarusSetor > 0 ? Math.min(100, Math.round((sudahSetor / totalHarusSetor) * 100)) : 0;
+        const paymentsSafe = (payments || []).slice(0, 100).map((p) => sanitizeCollectorPaymentRow(p));
+        res.json({
+            success: true,
+            data: {
+                setoranUi: { sudahSetor, belumSetor, totalHarusSetor, setoranProgressPct },
+                payments: paymentsSafe
+            }
+        });
+    } catch (error) {
+        logger.error('[mobile-adapter] collector/settlement', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+    }
+});
+
+router.get('/collector/me', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    try {
+        const row = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT id, name, phone, email, address, commission_rate, status, created_at FROM collectors WHERE id = ?',
+                [collectorId],
+                (err, r) => (err ? reject(err) : resolve(r))
+            );
+        });
+        if (!row) {
+            return res.status(404).json({ success: false, message: 'Kolektor tidak ditemukan' });
+        }
+        const [dashboardStats, allPayments, monthlyCommission] = await Promise.all([
+            billingManager.getCollectorDashboardStats(collectorId),
+            billingManager.getCollectorAllPayments(collectorId),
+            (async () => {
+                const now = new Date();
+                return billingManager.getCollectorMonthlyCommission(
+                    collectorId,
+                    now.getFullYear(),
+                    now.getMonth() + 1
+                );
+            })()
+        ]);
+        const statsSafe = sanitizeCollectorDashboardStats(dashboardStats);
+        const tagCount = parseInt(statsSafe.tagihan?.count || 0, 10) || 0;
+        const paidDistinct = parseInt(statsSafe.lunas?.count || 0, 10) || 0;
+        const successRate = tagCount > 0 ? Math.min(100, Math.round((paidDistinct / tagCount) * 100)) : 0;
+        const totalCollections = (allPayments || []).filter((p) => p.status === 'completed').length;
+        res.json({
+            success: true,
+            data: {
+                ...row,
+                profileStats: {
+                    successRate,
+                    totalCollections,
+                    monthlyCommission: Math.round(parseFloat(monthlyCommission || 0))
+                }
+            }
+        });
+    } catch (error) {
+        logger.error('[mobile-adapter] collector/me', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+    }
+});
+
+async function collectorMappedCustomerIds(collectorId) {
+    const list = await billingManager.getCollectorCustomers(collectorId);
+    return new Set((list || []).map((c) => Number(c.id)));
+}
+
+router.get('/collector/customer-invoices/:customerId', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    const customerId = parseInt(String(req.params.customerId), 10);
+    if (!Number.isFinite(customerId) || customerId <= 0) {
+        return res.status(400).json({ success: false, message: 'ID pelanggan tidak valid' });
+    }
+    try {
+        const allowed = await collectorMappedCustomerIds(collectorId);
+        if (!allowed.has(customerId)) {
+            return res.status(403).json({ success: false, message: 'Pelanggan tidak ada di wilayah Anda' });
+        }
+        const invoices = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT i.*, p.name as package_name
+                 FROM invoices i
+                 LEFT JOIN packages p ON i.package_id = p.id
+                 WHERE i.customer_id = ? AND i.status = 'unpaid'
+                 ORDER BY i.created_at DESC`,
+                [customerId],
+                (err, rows) => (err ? reject(err) : resolve(rows || []))
+            );
+        });
+        res.json({ success: true, data: invoices });
+    } catch (error) {
+        logger.error('[mobile-adapter] collector/customer-invoices', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+    }
+});
+
+router.post(
+    '/collector/payment',
+    verifyToken,
+    requireCollector,
+    collectorPaymentMulter.single('payment_proof'),
+    async (req, res) => {
+        const collectorId = parseCollectorId(req);
+        if (!collectorId) {
+            return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+        }
+        const { customer_id, payment_amount, payment_method, notes, invoice_ids } = req.body || {};
+        const customerIdNum = parseInt(String(customer_id), 10);
+        if (!Number.isFinite(customerIdNum) || customerIdNum <= 0) {
+            return res.status(400).json({ success: false, message: 'ID pelanggan tidak valid' });
+        }
+        const method = (payment_method || '').toString();
+        if (method === 'transfer' && !req.file) {
+            return res.status(400).json({ success: false, message: 'Foto bukti transfer wajib diunggah' });
+        }
+        try {
+            const allowed = await collectorMappedCustomerIds(collectorId);
+            if (!allowed.has(customerIdNum)) {
+                return res.status(403).json({ success: false, message: 'Pelanggan tidak ada di wilayah Anda' });
+            }
+            const paymentProof = req.file ? `/uploads/payments/${req.file.filename}` : null;
+            const result = await submitCollectorPayment({
+                collectorId,
+                customer_id: customerIdNum,
+                payment_amount,
+                payment_method: method,
+                notes,
+                invoice_ids,
+                paymentProofRelativePath: paymentProof
+            });
+            if (!result.ok) {
+                return res.status(result.status || 400).json({ success: false, message: result.message });
+            }
+            res.json({
+                success: true,
+                message: 'Pembayaran berhasil disimpan',
+                payment_id: result.payment_id,
+                commission_amount: result.commission_amount
+            });
+        } catch (error) {
+            logger.error('[mobile-adapter] collector/payment', error);
+            res.status(500).json({ success: false, message: error.message || 'Gagal menyimpan' });
+        }
+    }
+);
+
+function collectorReceiptSettingsForMobile() {
+    return {
+        companyHeader: getSetting('company_header', 'ISP Monitor'),
+        footerInfo: getSetting('footer_info', ''),
+        logoFilename: getSetting('logo_filename', 'logo.png'),
+        company_slogan: getSetting('company_slogan', ''),
+        company_website: getSetting('company_website', ''),
+        invoice_notes: getSetting('invoice_notes', ''),
+        payment_bank_name: getSetting('payment_bank_name', ''),
+        payment_account_number: getSetting('payment_account_number', ''),
+        payment_account_holder: getSetting('payment_account_holder', ''),
+        payment_cash_address: getSetting('payment_cash_address', ''),
+        payment_cash_hours: getSetting('payment_cash_hours', ''),
+        contact_phone: getSetting('contact_phone', ''),
+        contact_email: getSetting('contact_email', ''),
+        contact_address: getSetting('contact_address', ''),
+        contact_whatsapp: getSetting('contact_whatsapp', '')
+    };
+}
+
+function sanitizeInvoiceForCollectorReceipt(inv) {
+    if (!inv || typeof inv !== 'object') return null;
+    const n = (v) => {
+        const x = Number(v);
+        return Number.isFinite(x) ? x : 0;
+    };
+    const s = (v) => (v == null ? '' : String(v));
+    return {
+        id: n(inv.id),
+        invoice_number: s(inv.invoice_number),
+        status: s(inv.status),
+        amount: n(inv.amount),
+        base_amount: inv.base_amount != null && inv.base_amount !== '' ? n(inv.base_amount) : null,
+        tax_rate: inv.tax_rate != null && inv.tax_rate !== '' ? n(inv.tax_rate) : null,
+        created_at: s(inv.created_at),
+        due_date: s(inv.due_date),
+        payment_date: inv.payment_date != null ? s(inv.payment_date) : '',
+        payment_method: s(inv.payment_method),
+        notes: s(inv.notes),
+        package_name: s(inv.package_name),
+        package_speed: s(inv.package_speed),
+        customer_name: s(inv.customer_name),
+        customer_username: s(inv.customer_username),
+        customer_phone: s(inv.customer_phone),
+        customer_address: s(inv.customer_address)
+    };
+}
+
+/** Resi / cetak invoice (setara /admin/billing/invoices/:id/print) untuk pelanggan di wilayah kolektor. */
+router.get('/collector/customers/:customerId/receipt', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    const customerId = parseInt(String(req.params.customerId), 10);
+    if (!Number.isFinite(customerId) || customerId <= 0) {
+        return res.status(400).json({ success: false, message: 'ID pelanggan tidak valid' });
+    }
+    const qInv = req.query.invoice_id != null && req.query.invoice_id !== '' ? parseInt(String(req.query.invoice_id), 10) : null;
+    try {
+        const allowed = await collectorMappedCustomerIds(collectorId);
+        if (!allowed.has(customerId)) {
+            return res.status(403).json({ success: false, message: 'Pelanggan tidak ada di wilayah Anda' });
+        }
+
+        let full = null;
+
+        if (Number.isFinite(qInv) && qInv > 0) {
+            const row = await billingManager.getInvoiceById(qInv);
+            if (!row) {
+                return res.status(404).json({ success: false, message: 'Invoice tidak ditemukan' });
+            }
+            if (Number(row.customer_id) !== customerId) {
+                return res.status(403).json({ success: false, message: 'Invoice bukan milik pelanggan ini' });
+            }
+            if (String(row.status || '').toLowerCase() !== 'paid') {
+                return res.status(400).json({ success: false, message: 'Resi hanya untuk tagihan yang sudah lunas' });
+            }
+            full = row;
+        } else {
+            const list = await billingManager.getInvoicesByCustomer(customerId);
+            const paid = (list || [])
+                .filter((i) => String(i.status || '').toLowerCase() === 'paid')
+                .sort((a, b) => {
+                    const ta = new Date(a.payment_date || a.updated_at || a.created_at || 0).getTime();
+                    const tb = new Date(b.payment_date || b.updated_at || b.created_at || 0).getTime();
+                    return tb - ta;
+                });
+            const pick = paid[0];
+            if (!pick) {
+                return res.status(404).json({ success: false, message: 'Belum ada invoice lunas untuk ditampilkan sebagai resi' });
+            }
+            full = await billingManager.getInvoiceById(pick.id);
+        }
+
+        if (!full) {
+            return res.status(404).json({ success: false, message: 'Data invoice tidak tersedia' });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                invoice: sanitizeInvoiceForCollectorReceipt(full),
+                settings: collectorReceiptSettingsForMobile()
+            }
+        });
+    } catch (error) {
+        logger.error('[mobile-adapter] collector/customers/.../receipt', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+    }
 });
 
 // --- Tagihan (placeholder aman) ---

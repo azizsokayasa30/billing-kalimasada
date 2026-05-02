@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> - Admin Portal</title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <style>
+        .mon-card { background: var(--panel-bg, #fff); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; border: 1px solid #e9ecef; }
+        .mon-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid #f1f5f9; }
+        .mon-row:last-child { border-bottom: none; }
+        .mon-title { font-weight: 600; margin: 0; font-size: 1rem; }
+        .mon-desc { color: #64748b; font-size: 0.875rem; margin: 0.25rem 0 0 0; }
+        .cat-heading { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin: 1rem 0 0.5rem; font-weight: 700; }
+    </style>
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <%- include('../../partials/billing-sidebar', { page: typeof page !== 'undefined' ? page : 'whatsapp-monitoring' }) %>
+            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2"><i class="bi bi-activity"></i> Monitoring WhatsApp</h1>
+                    <button type="button" class="btn btn-primary" id="btnSaveAll"><i class="bi bi-save"></i> Simpan semua</button>
+                </div>
+
+                <div class="alert alert-info">
+                    <strong>Master switch</strong> per sumber notifikasi otomatis. Matikan item yang mengirim WA terus-menerus (interval / scheduler).
+                    Pengaturan template isi pesan tetap di <a href="/admin/billing/whatsapp-settings">Pengaturan WhatsApp</a>.
+                    Setelah simpan, interval GenieACS / PPPoE di-restart otomatis bila tersedia.
+                </div>
+
+                <div id="monitorRoot" class="mon-card">
+                    <p class="text-muted mb-0">Memuat…</p>
+                </div>
+            </main>
+        </div>
+    </div>
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script>
+    let monitors = [];
+    let switches = {};
+
+    function showToast(msg, type) {
+        if (typeof window.showAlert === 'function') window.showAlert(msg, type);
+        else alert(msg);
+    }
+
+    function render() {
+        const root = document.getElementById('monitorRoot');
+        if (!monitors.length) {
+            root.innerHTML = '<p class="text-danger">Gagal memuat daftar monitoring.</p>';
+            return;
+        }
+        const byCat = {};
+        monitors.forEach(m => {
+            if (!byCat[m.category]) byCat[m.category] = [];
+            byCat[m.category].push(m);
+        });
+        let html = '';
+        Object.keys(byCat).forEach(cat => {
+            html += `<div class="cat-heading">${escapeHtml(cat)}</div>`;
+            byCat[cat].forEach(m => {
+                const on = switches[m.id] !== false;
+                html += `<div class="mon-row" data-id="${escapeHtml(m.id)}">
+                    <div>
+                        <p class="mon-title">${escapeHtml(m.title)}</p>
+                        <p class="mon-desc">${escapeHtml(m.description)}</p>
+                        <code class="small text-muted">${escapeHtml(m.id)}</code>
+                    </div>
+                    <div class="form-check form-switch flex-shrink-0">
+                        <input class="form-check-input wa-mon-toggle" type="checkbox" id="sw_${m.id}" data-id="${escapeHtml(m.id)}" ${on ? 'checked' : ''}>
+                        <label class="form-check-label" for="sw_${m.id}">Aktif</label>
+                    </div>
+                </div>`;
+            });
+        });
+        root.innerHTML = html;
+        root.querySelectorAll('.wa-mon-toggle').forEach(el => {
+            el.addEventListener('change', () => {
+                switches[el.getAttribute('data-id')] = el.checked;
+            });
+        });
+    }
+
+    function escapeHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    async function load() {
+        try {
+            const r = await fetch('/admin/billing/whatsapp-monitoring/switches');
+            const d = await r.json();
+            if (!d.success) throw new Error(d.message || 'Error');
+            monitors = d.monitors || [];
+            switches = d.switches || {};
+            render();
+        } catch (e) {
+            document.getElementById('monitorRoot').innerHTML = '<p class="text-danger">Gagal memuat: ' + escapeHtml(e.message) + '</p>';
+        }
+    }
+
+    async function save() {
+        const btn = document.getElementById('btnSaveAll');
+        btn.disabled = true;
+        try {
+            const r = await fetch('/admin/billing/whatsapp-monitoring/switches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ switches })
+            });
+            const d = await r.json();
+            if (!d.success) throw new Error(d.message || 'Gagal simpan');
+            switches = d.switches || switches;
+            showToast('Pengaturan monitoring WhatsApp disimpan.', 'success');
+            render();
+        } catch (e) {
+            showToast(e.message || 'Gagal simpan', 'danger');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('btnSaveAll').addEventListener('click', save);
+    document.addEventListener('DOMContentLoaded', load);
+    </script>
+</body>
+</html>

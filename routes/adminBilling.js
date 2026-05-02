@@ -3098,6 +3098,7 @@ router.get('/whatsapp-settings', getAppSettings, async (req, res) => {
     try {
         res.render('admin/billing/whatsapp-settings', {
             title: 'WhatsApp Notification Settings',
+            page: 'whatsapp-settings',
             appSettings: req.appSettings
         });
     } catch (error) {
@@ -3107,6 +3108,65 @@ router.get('/whatsapp-settings', getAppSettings, async (req, res) => {
             error: error.message,
             appSettings: req.appSettings
         });
+    }
+});
+
+// WhatsApp system monitoring (master on/off per automated WA source)
+router.get('/whatsapp-monitoring', getAppSettings, async (req, res) => {
+    try {
+        res.render('admin/billing/whatsapp-monitoring', {
+            title: 'Monitoring WhatsApp',
+            page: 'whatsapp-monitoring',
+            appSettings: req.appSettings
+        });
+    } catch (error) {
+        logger.error('Error loading WhatsApp monitoring page:', error);
+        res.status(500).render('error', {
+            message: 'Error loading WhatsApp monitoring page',
+            error: error.message,
+            appSettings: req.appSettings
+        });
+    }
+});
+
+router.get('/whatsapp-monitoring/switches', getAppSettings, async (req, res) => {
+    try {
+        const { MONITOR_DEFINITIONS, getMergedMonitors } = require('../config/whatsappMonitoringSettings');
+        res.json({
+            success: true,
+            monitors: MONITOR_DEFINITIONS,
+            switches: getMergedMonitors()
+        });
+    } catch (error) {
+        logger.error('Error reading WA monitoring switches:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+router.post('/whatsapp-monitoring/switches', getAppSettings, async (req, res) => {
+    try {
+        const { setMonitorsPartial, getMergedMonitors } = require('../config/whatsappMonitoringSettings');
+        const incoming = (req.body && req.body.switches) ? req.body.switches : req.body;
+        if (!incoming || typeof incoming !== 'object') {
+            return res.status(400).json({ success: false, message: 'Invalid body' });
+        }
+        setMonitorsPartial(incoming);
+        try {
+            const intervalManager = require('../config/intervalManager');
+            intervalManager.restartAll();
+        } catch (e) {
+            logger.warn('intervalManager.restartAll after WA monitors:', e.message);
+        }
+        try {
+            const pm = require('../config/pppoe-monitor');
+            await pm.restartPPPoEMonitoring();
+        } catch (e) {
+            logger.warn('restartPPPoEMonitoring after WA monitors:', e.message);
+        }
+        res.json({ success: true, switches: getMergedMonitors() });
+    } catch (error) {
+        logger.error('Error saving WA monitoring switches:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -3525,7 +3585,9 @@ router.post('/whatsapp-settings/test', async (req, res) => {
                 amount: '500,000',
                 payment_method: 'Transfer Bank',
                 payment_date: '10 Januari 2024',
-                reference_number: 'TRX123456'
+                reference_number: 'TRX123456',
+                package_name: 'Paket Premium',
+                package_speed: '50 Mbps'
             },
             service_disruption: {
                 disruption_type: 'Gangguan Jaringan',
@@ -3550,11 +3612,76 @@ router.post('/whatsapp-settings/test', async (req, res) => {
                 package_name: 'Paket Premium',
                 package_speed: '50 Mbps',
                 wifi_password: 'test123456',
+                pppoe_username: 'user@test',
+                pppoe_password: 'pass123',
                 support_phone: getSetting('contact_whatsapp', '0813-6888-8498')
+            },
+            installation_job_assigned: {
+                technician_name: 'Teknisi Test',
+                job_number: 'JOB-001',
+                customer_name: 'Pelanggan Test',
+                customer_phone: '081234567890',
+                customer_address: 'Jl. Contoh No. 1',
+                package_name: 'Paket 30 Mbps',
+                package_price: '350.000',
+                installation_date: '5 Mei 2026',
+                installation_time: '09:00',
+                notes: 'Catatan job',
+                equipment_needed: 'ONT, kabel',
+                priority: 'Normal',
+                pppoe_username: 'pppoe_test',
+                pppoe_password: 'rahasia'
+            },
+            installation_status_update: {
+                technician_name: 'Teknisi Test',
+                job_number: 'JOB-001',
+                customer_name: 'Pelanggan Test',
+                new_status: 'Sedang Berlangsung',
+                update_time: '5 Mei 2026 10:00',
+                notes: 'Sedang instalasi'
+            },
+            installation_completed: {
+                technician_name: 'Teknisi Test',
+                job_number: 'JOB-001',
+                customer_name: 'Pelanggan Test',
+                completion_time: '5 Mei 2026 11:30',
+                completion_notes: 'Instalasi OK'
+            },
+            sales_order_new_customer: {
+                customer_id: '12345',
+                customer_name: 'Pelanggan Baru',
+                customer_phone: '081298765432',
+                customer_email: 'test@mail.com',
+                customer_address: 'Alamat contoh',
+                package_name: 'Paket 50 Mbps',
+                package_speed: '50 Mbps',
+                pppoe_username: 'sales_pppoe',
+                pppoe_password: 'salespass',
+                pppoe_profile: 'default'
+            },
+            trouble_report_new_technician: {
+                company_header: getSetting('company_header', 'ISP Test'),
+                report_id: '99',
+                customer_name: 'Budi',
+                phone: '081211112222',
+                location: 'Desa Contoh',
+                category: 'Internet putus',
+                created_at: '05/05/2026 08:00:00',
+                description: 'Kabel putus',
+                status: 'OPEN'
+            },
+            trouble_report_customer_update: {
+                company_header: getSetting('company_header', 'ISP Test'),
+                report_id: '99',
+                updated_at: '05/05/2026 09:00:00',
+                status_label: 'Sedang Ditangani',
+                technician_note_section: '💬 *Catatan Teknisi*:\nTim menuju lokasi.\n\n',
+                status_message: 'Tim teknisi kami sedang menangani laporan Anda.'
             }
         };
-        
-        const result = await whatsappNotifications.testNotification(phoneNumber, templateKey, testData[templateKey]);
+
+        const testPayload = testData[templateKey] || {};
+        const result = await whatsappNotifications.testNotification(phoneNumber, templateKey, testPayload);
         
         if (result.success) {
             res.json({
@@ -5850,8 +5977,8 @@ router.post('/customers/:phone/accept', async (req, res) => {
         // Send notification to technicians (Sales Order)
         let techNotifSent = false;
         try {
-            const { sendSalesOrderNotification } = require('../config/whatsapp-notifications');
-            const techResult = await sendSalesOrderNotification(updatedCustomer);
+            const whatsappNotifications = require('../config/whatsapp-notifications');
+            const techResult = await whatsappNotifications.sendSalesOrderNotification(updatedCustomer);
             if (techResult && techResult.success) {
                 techNotifSent = true;
                 logger.info(`Sales Order notification sent to technicians for ${updatedCustomer.name}`);
@@ -6059,38 +6186,49 @@ router.post('/invoices', async (req, res) => {
 
         const newInvoice = await billingManager.createInvoice(invoiceData);
         logger.info(`Invoice created: ${newInvoice.invoice_number} for ${isMemberInvoice ? 'member' : 'customer'}`);
-        
-        // Send WhatsApp notification
-        try {
-            const whatsappNotifications = require('../config/whatsapp-notifications');
-            if (isMemberInvoice && invoiceData.member_id) {
-                await whatsappNotifications.sendMemberInvoiceCreatedNotification(invoiceData.member_id, newInvoice.id);
-            } else if (invoiceData.customer_id) {
-                await whatsappNotifications.sendInvoiceCreatedNotification(invoiceData.customer_id, newInvoice.id);
-            }
-        } catch (notificationError) {
-            logger.error('Error sending invoice notification:', notificationError);
-            // Don't fail the invoice creation if notification fails
-        }
-        
-        // Send Email notification
-        try {
-            const emailNotifications = require('../config/email-notifications');
-            if (isMemberInvoice && invoiceData.member_id) {
-                // Email notification for members if implemented
-                await emailNotifications.sendInvoiceCreatedNotification(invoiceData.member_id, newInvoice.id);
-            } else if (invoiceData.customer_id) {
-                await emailNotifications.sendInvoiceCreatedNotification(invoiceData.customer_id, newInvoice.id);
-            }
-        } catch (notificationError) {
-            logger.error('Error sending email invoice notification:', notificationError);
-            // Don't fail the invoice creation if notification fails
-        }
-        
+
         res.json({
             success: true,
             message: 'Tagihan berhasil dibuat',
             invoice: newInvoice
+        });
+
+        // WA / email di background — jangan blokir respons (invoice sudah commit).
+        setImmediate(() => {
+            (async () => {
+                try {
+                    const whatsappNotifications = require('../config/whatsapp-notifications');
+                    if (isMemberInvoice && invoiceData.member_id) {
+                        await whatsappNotifications.sendMemberInvoiceCreatedNotification(
+                            invoiceData.member_id,
+                            newInvoice.id
+                        );
+                    } else if (invoiceData.customer_id) {
+                        await whatsappNotifications.sendInvoiceCreatedNotification(
+                            invoiceData.customer_id,
+                            newInvoice.id
+                        );
+                    }
+                } catch (notificationError) {
+                    logger.error('Error sending invoice WhatsApp (background):', notificationError);
+                }
+                try {
+                    const emailNotifications = require('../config/email-notifications');
+                    if (isMemberInvoice && invoiceData.member_id) {
+                        await emailNotifications.sendInvoiceCreatedNotification(
+                            invoiceData.member_id,
+                            newInvoice.id
+                        );
+                    } else if (invoiceData.customer_id) {
+                        await emailNotifications.sendInvoiceCreatedNotification(
+                            invoiceData.customer_id,
+                            newInvoice.id
+                        );
+                    }
+                } catch (notificationError) {
+                    logger.error('Error sending invoice email (background):', notificationError);
+                }
+            })();
         });
     } catch (error) {
         logger.error('Error creating invoice:', error);

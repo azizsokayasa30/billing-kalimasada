@@ -1,0 +1,13 @@
+<%- include('../partials/hard-reload') %>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Field Collector — <%= typeof appSettings !== 'undefined' && appSettings.companyHeader ? appSettings.companyHeader : 'Billing' %>">
+<meta name="theme-color" content="#001f3f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Field Collector">
+<link rel="manifest" href="/manifest-collector.json">
+<link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
+<title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Field Collector' %> — <%= typeof appSettings !== 'undefined' && appSettings.companyHeader ? appSettings.companyHeader : '' %></title>
+<%- include('collector-field-tailwind-bundle') %>
