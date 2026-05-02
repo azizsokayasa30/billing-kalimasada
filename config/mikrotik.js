@@ -237,7 +237,7 @@ async function getPPPoEUsersRadius() {
 
         const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
 
-        // Atribut sandi umum di radcheck (FreeRADIUS / Mikrotik tidak selalu Cleartext-Password)
+        // Atribut sandi di radcheck (jangan sertakan NT-Password: dipakai app untuk metadata isolir PREVGROUP:…)
         let query = `
             SELECT 
                 rc.username, 
@@ -256,9 +256,7 @@ async function getPPPoEUsersRadius() {
                 'Crypt-Password',
                 'MD5-Password',
                 'SHA-Password',
-                'SMD5-Password',
-                'NT-Password',
-                'LM-Password'
+                'SMD5-Password'
             )
         `;
         
@@ -315,7 +313,7 @@ async function getPPPoEUsersRadius() {
 
             let fallbackQuery = `SELECT username, value as password FROM radcheck WHERE attribute IN (
                 'Cleartext-Password','User-Password','Crypt-Password','MD5-Password','SHA-Password',
-                'SMD5-Password','NT-Password','LM-Password'
+                'SMD5-Password'
             )`;
             const params = [];
             if (excludeUsernames.length > 0) {
@@ -419,9 +417,7 @@ async function getRadiusStatistics() {
             'Crypt-Password',
             'MD5-Password',
             'SHA-Password',
-            'SMD5-Password',
-            'NT-Password',
-            'LM-Password'
+            'SMD5-Password'
         )`;
 
         // Total PPPoE users (exclude vouchers DAN hotspot member)
