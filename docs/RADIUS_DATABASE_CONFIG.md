@@ -104,6 +104,8 @@ Jika sebelumnya sudah ada config di `settings.json`, data akan otomatis fallback
 
 ## Setelah `git pull` / update aplikasi (PPPoE tetap konsisten)
 
+0. **Otomatis setelah `git pull`** — sekali `npm install` di repo (ada skrip `prepare`) Git memakai folder **`.githooks/`**; hook **`post-merge`** menjalankan **`scripts/post-git-pull.sh`**: `npm install`, `npm run radius:check`, dan (di server yang punya `/etc/freeradius/3.0/clients.conf`) **`npm run radius:mirror-clients`**. Tanpa sudo untuk mirror, hook hanya mencetak peringatan — jalankan mirror manual. Di laptop dev tanpa FreeRADIUS: export **`SKIP_RADIUS_MIRROR=1`** agar mirror dilewati. Manual kapan saja: **`npm run postpull`**.
+
 1. **Satu file SQLite untuk FR dan billing** — nilai `radius_database` / `RADIUS_SQLITE_PATH` harus sama dengan `filename =` di `/etc/freeradius/3.0/mods-enabled/sql`.
 2. **Jangan isi user PPPoE di `mods-config/files/authorize`** jika pelanggan dikelola lewat billing — modul `files` dan `sql` keduanya aktif di `sites-enabled/default`; user di file tetap bisa login walaupun `radcheck` kosong.
 3. **Cek otomatis setelah deploy** (di server produksi, dari folder aplikasi):
@@ -118,6 +120,6 @@ Jika sebelumnya sudah ada config di `settings.json`, data akan otomatis fallback
 
 ---
 
-**Last Updated:** 2026-05-02 (tambahan checklist deploy)  
-**Version:** 1.1
+**Last Updated:** 2026-05-02 (post-merge / postpull)  
+**Version:** 1.2
 

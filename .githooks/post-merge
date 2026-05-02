@@ -1,0 +1,8 @@
+#!/bin/sh
+# Setelah git pull (merge berhasil), jalankan tugas deploy ringan proyek ini.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" || exit 0
+if [ -f scripts/post-git-pull.sh ]; then
+  exec bash scripts/post-git-pull.sh
+fi
+exit 0
