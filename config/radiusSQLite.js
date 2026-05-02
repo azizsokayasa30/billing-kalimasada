@@ -233,8 +233,12 @@ async function getRadiusConnection() {
     const { getRadiusConfig } = require('./radiusConfig');
     const config = await getRadiusConfig();
 
-    const dbName = config.radius_database || 'radius';
-    const dbPath = path.join(process.cwd(), 'data', dbName.endsWith('.db') ? dbName : `${dbName}.db`);
+    // WAJIB pakai __dirname (akar proyek), BUKAN process.cwd() — kalau cwd salah
+    // (PM2/script dari folder lain), aplikasi buka DB kosong/salah → Daftar PPPoE kosong
+    // sementara FreeRADIUS tetap pakai file DB yang benar.
+    const dbName = String(config.radius_database || 'billing').trim();
+    const baseFile = dbName.endsWith('.db') ? dbName : `${dbName}.db`;
+    const dbPath = path.join(__dirname, '..', 'data', baseFile);
 
     // Reuse singleton if path matches and connection is still alive
     if (_singletonConn && _singletonPath === dbPath && _singletonConn.db) {
