@@ -259,41 +259,74 @@ async function getRadiusConnection() {
     }
 }
 
+// Predikat atribut sandi di radcheck (case-insensitive; dump FR/Mikrotik bervariasi).
+function sqlRadcheckPasswordPredicate(alias) {
+    return `LOWER(TRIM(${alias}.attribute)) IN (
+        'cleartext-password',
+        'user-password',
+        'crypt-password',
+        'md5-password',
+        'sha-password',
+        'smd5-password',
+        'mikrotik-password'
+    )`;
+}
+
+/** Ambil groupname dari radusergroup (opsional — tabel bisa tidak ada di DB minimal). */
+async function getRadusergroupProfileMap(conn, usernames) {
+    const map = new Map();
+    if (!usernames || usernames.length === 0) return map;
+    const unique = [...new Set(usernames.map((u) => String(u || '').trim()).filter(Boolean))];
+    const chunkSize = 400;
+    try {
+        for (let i = 0; i < unique.length; i += chunkSize) {
+            const slice = unique.slice(i, i + chunkSize);
+            const ph = slice.map(() => '?').join(',');
+            const [grows] = await conn.execute(
+                `SELECT username, groupname FROM radusergroup WHERE username IN (${ph})`,
+                slice
+            );
+            const list = Array.isArray(grows) ? grows : [];
+            for (const g of list) {
+                if (g && g.username != null && !map.has(g.username)) {
+                    map.set(g.username, g.groupname || 'default');
+                }
+            }
+        }
+    } catch (e) {
+        logger.warn(`[PPPoE-RADIUS] radusergroup tidak dipakai (tabel hilang atau error): ${e.message}`);
+    }
+    return map;
+}
+
 // Fungsi untuk mendapatkan seluruh user PPPoE dari RADIUS (BUKAN hotspot voucher DAN BUKAN member hotspot)
 async function getPPPoEUsersRadius() {
-    const conn = await getRadiusConnection();
+    let conn;
+    try {
+        conn = await getRadiusConnection();
+    } catch (connErr) {
+        logger.error(`[PPPoE-RADIUS] Koneksi database RADIUS gagal: ${connErr.message}`);
+        return [];
+    }
+
+    const pMain = sqlRadcheckPasswordPredicate('rc');
+    const pSub = sqlRadcheckPasswordPredicate('rc2');
+
     try {
         logger.info('Fetching PPPoE users from RADIUS database (excluding hotspot vouchers and members)...');
 
         const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
 
-        // Atribut sandi di radcheck (jangan sertakan NT-Password: dipakai app untuk metadata isolir PREVGROUP:…)
-        // Satu baris per username: MIN(rowid) — rowid selalu ada di SQLite; beberapa dump FR tidak punya kolom `id`.
+        // Tanpa subquery ke radusergroup di SQL — file RADIUS minimal sering tidak punya radusergroup.
         let query = `
-            SELECT 
-                rc.username, 
-                rc.value as password,
-                COALESCE(
-                    (SELECT rug.groupname 
-                     FROM radusergroup rug 
-                     WHERE rug.username = rc.username 
-                     LIMIT 1),
-                    'default'
-                ) as profile
+            SELECT rc.username, rc.value AS password
             FROM radcheck rc
-            INNER JOIN (
-                SELECT username, MIN(rowid) AS pick_rid
-                FROM radcheck
-                WHERE attribute IN (
-                    'Cleartext-Password',
-                    'User-Password',
-                    'Crypt-Password',
-                    'MD5-Password',
-                    'SHA-Password',
-                    'SMD5-Password'
-                )
-                GROUP BY username
-            ) cred ON rc.rowid = cred.pick_rid
+            WHERE ${pMain}
+            AND rc.rowid IN (
+                SELECT MAX(rc2.rowid) FROM radcheck rc2
+                WHERE ${pSub}
+                GROUP BY LOWER(TRIM(rc2.username))
+            )
         `;
 
         const params = [];
@@ -302,95 +335,96 @@ async function getPPPoEUsersRadius() {
             query += ` AND rc.username NOT IN (${placeholders})`;
             params.push(...excludeUsernames);
         }
-        
-        query += ` ORDER BY rc.username`;
-        
+
+        query += ` ORDER BY LOWER(TRIM(rc.username))`;
+
         const [rows] = await conn.execute(query, params);
         const rowList = Array.isArray(rows) ? rows : [];
 
-        logger.info(`Found ${rowList.length} PPPoE users in radcheck table (excluding ${excludeUsernames.length} voucher/hotspot)`);
+        logger.info(
+            `[PPPoE-RADIUS] radcheck rows (password attrs): ${rowList.length} (exclude list: ${excludeUsernames.length})`
+        );
+
+        const profileMap = await getRadusergroupProfileMap(conn, rowList.map((r) => r.username));
 
         await conn.end();
 
-        // Ambil daftar user yang sedang aktif untuk menandai status
         let activeUsernames = [];
         try {
             const activeConnections = await getActivePPPoEConnectionsRadius();
             if (Array.isArray(activeConnections)) {
-                activeUsernames = activeConnections.map(c => c.name || c.username);
+                activeUsernames = activeConnections.map((c) => c.name || c.username);
             } else if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
-                activeUsernames = activeConnections.data.map(c => c.name || c.username);
+                activeUsernames = activeConnections.data.map((c) => c.name || c.username);
             }
         } catch (activeError) {
             logger.warn(`Failed to get active connections: ${activeError.message}`);
         }
 
-        const users = rowList.map(row => ({ 
-            name: row.username, 
+        const users = rowList.map((row) => ({
+            name: row.username,
             password: row.password,
-            profile: row.profile,
+            profile: profileMap.get(row.username) || 'default',
             active: activeUsernames.includes(row.username)
         }));
-        
+
         logger.info(`Mapped ${users.length} PPPoE users successfully (${activeUsernames.length} active)`);
         return users;
     } catch (error) {
         await conn.end();
         logger.error(`Error getting PPPoE users from RADIUS: ${error.message}`);
         logger.error(`Error stack: ${error.stack}`);
-        
-        // Fallback ke query sederhana jika join gagal
+
         try {
-            logger.info('Trying fallback query without join...');
+            logger.info('[PPPoE-RADIUS] Fallback: query radcheck tanpa subquery rowid...');
             const conn2 = await getRadiusConnection();
-
             const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
-
-            let fallbackQuery = `
-                SELECT r.username, r.value as password FROM radcheck r
-                INNER JOIN (
-                    SELECT username, MIN(rowid) AS pick_rid FROM radcheck
-                    WHERE attribute IN (
-                        'Cleartext-Password','User-Password','Crypt-Password','MD5-Password','SHA-Password',
-                        'SMD5-Password'
-                    )
-                    GROUP BY username
-                ) c ON r.rowid = c.pick_rid
-                WHERE 1=1`;
+            const p = sqlRadcheckPasswordPredicate('r');
+            let fallbackQuery = `SELECT r.username, r.value AS password FROM radcheck r WHERE ${p}`;
             const params = [];
             if (excludeUsernames.length > 0) {
                 const placeholders = excludeUsernames.map(() => '?').join(',');
                 fallbackQuery += ` AND r.username NOT IN (${placeholders})`;
                 params.push(...excludeUsernames);
             }
-            fallbackQuery += ' ORDER BY r.username';
-            
+            fallbackQuery += ' ORDER BY LOWER(TRIM(r.username))';
+
             const [fbRows] = await conn2.execute(fallbackQuery, params);
             const fbList = Array.isArray(fbRows) ? fbRows : [];
 
-            // Ambil daftar user yang sedang aktif untuk fallback juga
             let activeUsernames = [];
             try {
                 const activeConnections = await getActivePPPoEConnectionsRadius();
                 if (Array.isArray(activeConnections)) {
-                    activeUsernames = activeConnections.map(c => c.name || c.username);
+                    activeUsernames = activeConnections.map((c) => c.name || c.username);
                 } else if (activeConnections && activeConnections.success && Array.isArray(activeConnections.data)) {
-                    activeUsernames = activeConnections.data.map(c => c.name || c.username);
+                    activeUsernames = activeConnections.data.map((c) => c.name || c.username);
                 }
             } catch (activeError) {
                 logger.warn(`Failed to get active connections in fallback: ${activeError.message}`);
             }
 
+            const profileMapFb = await getRadusergroupProfileMap(conn2, fbList.map((r) => r.username));
+
             await conn2.end();
-            logger.info(`Fallback query found ${fbList.length} PPPoE users (excluding ${excludeUsernames.length} voucher/hotspot)`);
-            return fbList.map(row => ({ 
-                name: row.username, 
-                password: row.password, 
-                profile: 'default',
+            logger.info(`[PPPoE-RADIUS] Fallback found ${fbList.length} rows`);
+
+            const byName = new Map();
+            for (const row of fbList) {
+                if (!row || row.username == null) continue;
+                const key = String(row.username).trim();
+                if (!byName.has(key)) {
+                    byName.set(key, row);
+                }
+            }
+            return [...byName.values()].map((row) => ({
+                name: row.username,
+                password: row.password,
+                profile: profileMapFb.get(row.username) || 'default',
                 active: activeUsernames.includes(row.username)
             }));
         } catch (fallbackError) {
-            logger.error(`Fallback query also failed: ${fallbackError.message}`);
+            logger.error(`[PPPoE-RADIUS] Fallback query also failed: ${fallbackError.message}`);
             return [];
         }
     }
@@ -453,25 +487,18 @@ async function getRadiusStatistics() {
     try {
         const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
 
-        const pwdAttrs = `(
-            'Cleartext-Password',
-            'User-Password',
-            'Crypt-Password',
-            'MD5-Password',
-            'SHA-Password',
-            'SMD5-Password'
-        )`;
+        const pwdC = sqlRadcheckPasswordPredicate('c');
 
         // Total PPPoE users (exclude vouchers DAN hotspot member)
         let totalQuery = `
-            SELECT COUNT(DISTINCT username) as total
-            FROM radcheck
-            WHERE attribute IN ${pwdAttrs}
+            SELECT COUNT(DISTINCT c.username) as total
+            FROM radcheck c
+            WHERE ${pwdC}
         `;
         const params = [];
         if (excludeUsernames.length > 0) {
             const placeholders = excludeUsernames.map(() => '?').join(',');
-            totalQuery += ` AND username NOT IN (${placeholders})`;
+            totalQuery += ` AND c.username NOT IN (${placeholders})`;
             params.push(...excludeUsernames);
         }
         
@@ -481,24 +508,30 @@ async function getRadiusStatistics() {
 
         // Active PPPoE connections (dari radacct), tapi hanya hitung yang username-nya masih ada di radcheck
         // Ini mencegah "data yatim" (orphan) di radacct membuat statistik jadi ngaco.
-        let activeQuery = `
+        let activeConnections = 0;
+        try {
+            const pwdRc = sqlRadcheckPasswordPredicate('rc');
+            let activeQuery = `
             SELECT COUNT(DISTINCT ra.username) as active
             FROM radacct ra
             JOIN radcheck rc
               ON rc.username = ra.username
-             AND rc.attribute IN ${pwdAttrs}
+             AND ${pwdRc}
             WHERE (ra.acctstoptime IS NULL OR ra.acctstoptime = '' OR ra.acctstoptime = '0' OR ra.acctstoptime = '0000-00-00 00:00:00')
         `;
-        const activeParams = [];
-        if (excludeUsernames.length > 0) {
-            const placeholders = excludeUsernames.map(() => '?').join(',');
-            activeQuery += ` AND ra.username NOT IN (${placeholders})`;
-            activeParams.push(...excludeUsernames);
+            const activeParams = [];
+            if (excludeUsernames.length > 0) {
+                const placeholders = excludeUsernames.map(() => '?').join(',');
+                activeQuery += ` AND ra.username NOT IN (${placeholders})`;
+                activeParams.push(...excludeUsernames);
+            }
+
+            const [activeRows] = await conn.execute(activeQuery, activeParams);
+            const activeRowList = Array.isArray(activeRows) ? activeRows : [];
+            activeConnections = activeRowList[0]?.active || 0;
+        } catch (activeStatErr) {
+            logger.warn(`[RADIUS stats] radacct aktif tidak dihitung (tabel/query): ${activeStatErr.message}`);
         }
-        
-        const [activeRows] = await conn.execute(activeQuery, activeParams);
-        const activeRowList = Array.isArray(activeRows) ? activeRows : [];
-        const activeConnections = activeRowList[0]?.active || 0;
         
         // Offline users
         const offlineUsers = Math.max(totalUsers - activeConnections, 0);

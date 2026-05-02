@@ -257,18 +257,25 @@ async function getRadiusConnection() {
     const conn = new RADIUSDatabase(dbPath);
     conn._isSingleton = true;
     await conn.connect();
-    
-    // ADD THIS: Verify schema exists before returning connection
+
+    // Verifikasi skema: cukup wajibkan radcheck (file SQLite produksi FreeRADIUS sering
+    // tidak punya tabel `nas` atau subset radgroup* — kalau disyaratkan semua, koneksi gagal
+    // dan seluruh UI RADIUS/PPPoE kosong padahal autentikasi di router jalan).
     const [tables] = await conn.execute("SELECT name FROM sqlite_master WHERE type='table'");
-    const requiredTables = ['radcheck', 'radreply', 'radgroupcheck', 'radgroupreply', 'radusergroup', 'radacct', 'nas'];
-    const existingTables = tables.map(t => t.name);
-    const missing = requiredTables.filter(t => !existingTables.includes(t));
-    
-    if (missing.length > 0) {
-        logger.error(`[RADIUS-SQLITE] Missing tables: ${missing.join(', ')}`);
-        throw new Error(`RADIUS database schema incomplete. Missing tables: ${missing.join(', ')}`);
+    const existingTables = Array.isArray(tables) ? tables.map((t) => t.name) : [];
+    const requiredTables = ['radcheck'];
+    const missingRequired = requiredTables.filter((t) => !existingTables.includes(t));
+    if (missingRequired.length > 0) {
+        logger.error(`[RADIUS-SQLITE] Missing required tables: ${missingRequired.join(', ')}`);
+        throw new Error(`RADIUS database unusable. Missing: ${missingRequired.join(', ')}`);
     }
-    
+    const optionalTables = ['radreply', 'radgroupcheck', 'radgroupreply', 'radusergroup', 'radacct', 'nas'];
+    const missingOptional = optionalTables.filter((t) => !existingTables.includes(t));
+    if (missingOptional.length > 0) {
+        logger.warn(`[RADIUS-SQLITE] ${dbPath} — tabel opsional tidak ada (fitur terbatas): ${missingOptional.join(', ')}`);
+    }
+    logger.info(`[RADIUS-SQLITE] Using ${dbPath} (${existingTables.length} tables, radcheck OK)`);
+
     _singletonConn = conn;
     _singletonPath = dbPath;
     return conn;
