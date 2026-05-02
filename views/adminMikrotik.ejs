@@ -278,7 +278,13 @@
           <td><%= user.name %></td>
           <td><%= user.password %></td>
           <td><%= user.profile %></td>
-          <td><%= user.active ? 'Aktif' : 'Offline' %></td>
+          <td>
+            <% if (user.active) { %>
+              <span class="badge rounded-pill bg-success">Aktif</span>
+            <% } else { %>
+              <span class="badge rounded-pill bg-danger">Offline</span>
+            <% } %>
+          </td>
           <% if (typeof authMode === 'undefined' || authMode !== 'radius') { %>
           <td><%= (user.nas_name || '') %> <small class="text-muted"><%= user.nas_ip || '' %></small></td>
           <% } %>
