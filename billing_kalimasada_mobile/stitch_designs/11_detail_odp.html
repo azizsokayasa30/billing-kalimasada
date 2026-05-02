@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Detail ODP</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface": "#19163f",
+                        "secondary-fixed-dim": "#edb1ff",
+                        "on-tertiary-fixed": "#3a0a00",
+                        "secondary": "#7e4990",
+                        "inverse-primary": "#c5c0ff",
+                        "outline": "#787582",
+                        "primary-fixed": "#e4dfff",
+                        "surface": "#fcf8ff",
+                        "on-secondary-container": "#6f3b81",
+                        "surface-variant": "#e4dfff",
+                        "surface-tint": "#5a53ab",
+                        "on-secondary-fixed-variant": "#643177",
+                        "on-background": "#19163f",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#c8c4d3",
+                        "error": "#ba1a1a",
+                        "tertiary-container": "#450e00",
+                        "on-tertiary-fixed-variant": "#76321c",
+                        "surface-container-highest": "#e4dfff",
+                        "on-error": "#ffffff",
+                        "secondary-fixed": "#f9d8ff",
+                        "tertiary": "#1e0300",
+                        "surface-bright": "#fcf8ff",
+                        "primary-fixed-dim": "#c5c0ff",
+                        "tertiary-fixed": "#ffdbd0",
+                        "surface-container": "#f0ebff",
+                        "secondary-container": "#ebaefd",
+                        "on-primary-fixed": "#140166",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-on-surface": "#f3eeff",
+                        "error-container": "#ffdad6",
+                        "on-primary-container": "#857ed9",
+                        "background": "#fcf8ff",
+                        "on-secondary-fixed": "#320046",
+                        "tertiary-fixed-dim": "#ffb59f",
+                        "primary": "#070038",
+                        "surface-container-low": "#f6f1ff",
+                        "on-error-container": "#93000a",
+                        "surface-container-high": "#eae5ff",
+                        "primary-container": "#1b0c6b",
+                        "on-tertiary-container": "#c87257",
+                        "on-surface-variant": "#474551",
+                        "on-secondary": "#ffffff",
+                        "inverse-surface": "#2f2b55",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed-variant": "#423a91",
+                        "surface-dim": "#dad5ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-mobile": "1.25rem",
+                        "stack-lg": "2rem",
+                        "gutter": "1rem",
+                        "touch-target-min": "48px",
+                        "stack-sm": "0.5rem",
+                        "stack-md": "1rem"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "label-caps": ["Public Sans"],
+                        "headline-md": ["Inter"],
+                        "button-text": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "26px", "fontWeight": "400" }],
+                        "headline-lg": ["28px", { "lineHeight": "36px", "fontWeight": "700" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "button-text": ["16px", { "lineHeight": "20px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md antialiased pb-24">
+<!-- TopAppBar -->
+<header class="docked full-width top-0 border-b border-b border-outline-variant flat no shadows flex items-center justify-between px-5 w-full h-14 bg-surface text-primary font-inter text-base font-semibold tracking-tight sticky z-50">
+<button aria-label="Back" class="w-[48px] h-[48px] flex items-center justify-center hover:bg-surface-container-highest transition-colors rounded-full">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">arrow_back</span>
+</button>
+<h1 class="text-lg font-black text-primary uppercase tracking-widest flex-1 text-center pr-[48px]">ODP Information</h1>
+</header>
+<main class="p-margin-mobile max-w-4xl mx-auto space-y-stack-lg">
+<!-- ODP Overview -->
+<section class="bg-surface-container rounded-lg p-gutter border border-outline-variant">
+<div class="flex justify-between items-start mb-stack-sm">
+<div>
+<h2 class="font-headline-md text-headline-md text-primary">ODP-JBG-01</h2>
+<p class="font-body-md text-body-md text-on-surface-variant flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-[18px]">location_on</span>
+                        -6.2088, 106.8456
+                    </p>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-highest px-3 py-1.5 rounded-full border border-outline">
+<span class="material-symbols-outlined text-[16px] text-[#166534]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-caps text-label-caps text-[#166534]">ACTIVE / FULL</span>
+</div>
+</div>
+<div class="h-32 w-full rounded-DEFAULT bg-surface-variant mt-stack-md overflow-hidden relative">
+<img alt="Map View" class="w-full h-full object-cover" data-alt="A highly detailed satellite map view of an urban residential area in a modern city. The map is rendered in a bright, clean light-mode aesthetic with precise street lines and clear architectural footprints. The overall tone is functional and technical, featuring subtle navy and plum UI overlays. A prominent, high-contrast locator pin rests at the center of the frame, indicating a specific infrastructure point. The lighting is even and flat, typical of professional geospatial applications." data-location="Jakarta" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQUYNA92tke4iHvBdsTg2kNok-mV9jNKNtYcrGuzK93H-rN_-j4p7-JmbTGPYPnKLVSBOapoUEJnqgRdosu8mu_Ch9RwLt4uzBV1FKcK3ej0YU2DkRjXBoTxhlyYDh2F1Su0RCSqA-xavlYv7g6gcS6HMXMq5XWQrIIU_-DZ0NPFu3i_s7vbTlIsctw_wtIpsMHnDeOqxFD1T7U_07D7Hei3-0oWTwYnB4CyXsCdU3TTQIKfVzFsuFKXOIvEmD-2c2nnlxh7SP_yo"/>
+</div>
+</section>
+<!-- Hardware Specs -->
+<section class="grid grid-cols-2 gap-gutter">
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-gutter">
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">Model / Type</p>
+<p class="font-body-lg text-body-lg font-semibold text-primary">Huawei FAT</p>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-gutter">
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">Splitter Ratio</p>
+<p class="font-body-lg text-body-lg font-semibold text-primary">1:8</p>
+</div>
+<div class="col-span-2 bg-surface-container-low border border-outline-variant rounded-lg p-gutter flex justify-between items-center">
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">Signal Strength (Rx)</p>
+<p class="font-headline-md text-headline-md text-primary">-18.5 dBm</p>
+</div>
+<button class="bg-primary text-on-primary font-button-text text-button-text h-[48px] px-6 rounded-DEFAULT flex items-center gap-2 hover:bg-primary-container transition-colors">
+<span class="material-symbols-outlined">network_check</span>
+                     Test Signal
+                 </button>
+</div>
+</section>
+<!-- Port Capacity Grid -->
+<section class="space-y-stack-md">
+<div class="flex justify-between items-end">
+<h3 class="font-headline-lg text-body-lg font-semibold text-primary">Port Capacity (8)</h3>
+<div class="flex gap-4">
+<div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-[#166534]"></span><span class="font-label-caps text-[10px] text-on-surface-variant">ACT</span></div>
+<div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-outline-variant"></span><span class="font-label-caps text-[10px] text-on-surface-variant">AVL</span></div>
+<div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-error"></span><span class="font-label-caps text-[10px] text-on-surface-variant">FLT</span></div>
+</div>
+</div>
+<div class="grid grid-cols-4 gap-2">
+<!-- Active Ports -->
+<button class="aspect-square bg-surface border border-outline-variant rounded-DEFAULT flex flex-col items-center justify-center relative overflow-hidden group">
+<div class="absolute top-0 w-full h-1 bg-[#166534]"></div>
+<span class="font-body-lg text-body-lg font-semibold text-primary">P1</span>
+</button>
+<button class="aspect-square bg-surface border border-outline-variant rounded-DEFAULT flex flex-col items-center justify-center relative overflow-hidden group">
+<div class="absolute top-0 w-full h-1 bg-[#166534]"></div>
+<span class="font-body-lg text-body-lg font-semibold text-primary">P2</span>
+</button>
+<button class="aspect-square bg-surface border border-outline-variant rounded-DEFAULT flex flex-col items-center justify-center relative overflow-hidden group">
+<div class="absolute top-0 w-full h-1 bg-[#166534]"></div>
+<span class="font-body-lg text-body-lg font-semibold text-primary">P3</span>
+</button>
+<!-- Faulty Port -->
+<button class="aspect-square bg-error-container border border-error rounded-DEFAULT flex flex-col items-center justify-center relative overflow-hidden group">
+<div class="absolute top-0 w-full h-1 bg-error"></div>
+<span class="font-body-lg text-body-lg font-semibold text-error">P4</span>
+</button>
+<!-- Available Ports -->
+<button class="aspect-square bg-surface-container-lowest border border-dashed border-outline rounded-DEFAULT flex flex-col items-center justify-center group hover:bg-surface-container-low transition-colors">
+<span class="font-body-lg text-body-lg text-outline">P5</span>
+</button>
+<button class="aspect-square bg-surface-container-lowest border border-dashed border-outline rounded-DEFAULT flex flex-col items-center justify-center group hover:bg-surface-container-low transition-colors">
+<span class="font-body-lg text-body-lg text-outline">P6</span>
+</button>
+<button class="aspect-square bg-surface-container-lowest border border-dashed border-outline rounded-DEFAULT flex flex-col items-center justify-center group hover:bg-surface-container-low transition-colors">
+<span class="font-body-lg text-body-lg text-outline">P7</span>
+</button>
+<button class="aspect-square bg-surface-container-lowest border border-dashed border-outline rounded-DEFAULT flex flex-col items-center justify-center group hover:bg-surface-container-low transition-colors">
+<span class="font-body-lg text-body-lg text-outline">P8</span>
+</button>
+</div>
+<button class="w-full bg-surface border-2 border-primary text-primary font-button-text text-button-text h-[56px] rounded-DEFAULT flex items-center justify-center gap-2 hover:bg-surface-container-low transition-colors mt-4">
+<span class="material-symbols-outlined">edit</span>
+                 Update Port Status
+            </button>
+</section>
+<!-- Connected Customers -->
+<section class="space-y-stack-sm">
+<h3 class="font-headline-lg text-body-lg font-semibold text-primary mb-stack-sm">Connected Customers</h3>
+<div class="bg-surface-container-low border border-outline-variant rounded-lg divide-y divide-outline-variant">
+<div class="p-4 flex justify-between items-center hover:bg-surface-container transition-colors min-h-[48px] cursor-pointer">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-label-caps">P1</div>
+<div>
+<p class="font-body-md text-body-md font-semibold text-primary">Budi Santoso</p>
+<p class="font-label-caps text-[11px] text-on-surface-variant">INET-102938</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+<div class="p-4 flex justify-between items-center hover:bg-surface-container transition-colors min-h-[48px] cursor-pointer">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-label-caps">P2</div>
+<div>
+<p class="font-body-md text-body-md font-semibold text-primary">Warung Bu Tejo</p>
+<p class="font-label-caps text-[11px] text-on-surface-variant">INET-102945</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+<div class="p-4 flex justify-between items-center hover:bg-surface-container transition-colors min-h-[48px] cursor-pointer">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-label-caps">P3</div>
+<div>
+<p class="font-body-md text-body-md font-semibold text-primary">Andi Pratama</p>
+<p class="font-label-caps text-[11px] text-on-surface-variant">INET-103001</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+</div>
+</section>
+<!-- Maintenance Log -->
+<section class="space-y-stack-sm">
+<h3 class="font-headline-lg text-body-lg font-semibold text-primary mb-stack-sm">Recent Maintenance</h3>
+<div class="pl-4 border-l-2 border-outline-variant space-y-4 relative">
+<div class="relative">
+<span class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-primary border-2 border-surface"></span>
+<p class="font-body-md text-body-md text-primary font-semibold">Cleaned connector (Port 4)</p>
+<p class="font-label-caps text-[11px] text-on-surface-variant">Jan 15, 2024 - Tech. Rizal</p>
+</div>
+<div class="relative">
+<span class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-outline border-2 border-surface"></span>
+<p class="font-body-md text-body-md text-primary font-semibold">Initial Installation</p>
+<p class="font-label-caps text-[11px] text-on-surface-variant">Nov 10, 2023 - Tech. Agung</p>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 border-t border-t border-outline-variant flat no shadows fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-2 bg-surface">
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 px-3 hover:text-primary transition-colors min-h-[64px]" href="#">
+<span class="material-symbols-outlined mb-1">dashboard</span>
+<span class="font-inter text-[11px] font-bold uppercase tracking-wider">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-surface-container-high text-primary rounded-lg py-1 px-3 Active: scale-95 duration-100 min-h-[64px]" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">assignment</span>
+<span class="font-inter text-[11px] font-bold uppercase tracking-wider">Work Orders</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 px-3 hover:text-primary transition-colors min-h-[64px]" href="#">
+<span class="material-symbols-outlined mb-1">inventory_2</span>
+<span class="font-inter text-[11px] font-bold uppercase tracking-wider">Inventory</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 px-3 hover:text-primary transition-colors min-h-[64px]" href="#">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span class="font-inter text-[11px] font-bold uppercase tracking-wider">Settings</span>
+</a>
+</nav>
+</body></html>

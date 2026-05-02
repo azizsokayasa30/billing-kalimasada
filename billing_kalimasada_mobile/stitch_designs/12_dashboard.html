@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>KalimasadaMobile Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed": "#320046",
+                        "surface-container": "#f0ebff",
+                        "secondary-container": "#ebaefd",
+                        "tertiary-fixed-dim": "#ffb59f",
+                        "on-tertiary-container": "#c87257",
+                        "on-primary-container": "#857ed9",
+                        "outline-variant": "#c8c4d3",
+                        "on-secondary-fixed-variant": "#643177",
+                        "inverse-on-surface": "#f3eeff",
+                        "outline": "#787582",
+                        "on-tertiary-fixed-variant": "#76321c",
+                        "on-primary-fixed-variant": "#423a91",
+                        "secondary-fixed-dim": "#edb1ff",
+                        "on-primary": "#ffffff",
+                        "tertiary": "#1e0300",
+                        "primary-fixed": "#e4dfff",
+                        "surface-tint": "#5a53ab",
+                        "tertiary-container": "#450e00",
+                        "primary-fixed-dim": "#c5c0ff",
+                        "surface-bright": "#fcf8ff",
+                        "primary-container": "#1b0c6b",
+                        "on-secondary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "background": "#f1ecf8",
+                        "on-tertiary-fixed": "#3a0a00",
+                        "on-surface": "#19163f",
+                        "on-primary-fixed": "#140166",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#2f2b55",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed": "#f9d8ff",
+                        "surface-variant": "#e4dfff",
+                        "surface-container-low": "#f6f1ff",
+                        "on-background": "#19163f",
+                        "surface-container-high": "#eae5ff",
+                        "inverse-primary": "#c5c0ff",
+                        "on-secondary-container": "#6f3b81",
+                        "on-surface-variant": "#474551",
+                        "surface": "#fcf8ff",
+                        "tertiary-fixed": "#ffdbd0",
+                        "surface-dim": "#dad5ff",
+                        "primary": "#070038",
+                        "surface-container-highest": "#e4dfff",
+                        "secondary": "#7e4990",
+                        "on-error": "#ffffff",
+                        "on-error-container": "#93000a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "1rem",
+                        "touch-target-min": "48px",
+                        "stack-md": "1rem",
+                        "margin-mobile": "1.25rem",
+                        "stack-lg": "2rem",
+                        "stack-sm": "0.5rem"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Public Sans"],
+                        "headline-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "button-text": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "button-text": ["16px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "26px", "fontWeight": "400" }],
+                        "headline-lg": ["28px", { "lineHeight": "36px", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.35s;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col overflow-x-hidden pb-24">
+<!-- Header Section -->
+<header class="bg-gradient-to-br from-primary to-primary-container text-on-primary rounded-b-2xl px-gutter pt-8 pb-8 flex flex-col gap-2 shadow-lg relative overflow-hidden">
+<div class="absolute -right-10 -top-10 w-40 h-40 bg-surface-tint opacity-20 rounded-full blur-2xl"></div>
+<div class="absolute -left-10 bottom-0 w-32 h-32 bg-secondary opacity-20 rounded-full blur-2xl"></div>
+<div class="flex items-center justify-between min-h-[48px] relative z-10">
+<div>
+<h1 class="font-headline-md m-0 tracking-tight">Dashboard</h1>
+<p class="font-body-md text-inverse-primary text-sm mt-1">Jawa Barat Area</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-on-primary hover:bg-white/20 transition-colors backdrop-blur-sm">
+<span class="material-symbols-outlined hover:animate-spin">refresh</span>
+</button>
+<button class="flex items-center justify-center w-12 h-12 rounded-full bg-white/10 text-on-primary hover:bg-white/20 transition-colors shadow-inner backdrop-blur-sm border border-white/10">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">account_circle</span>
+</button>
+</div>
+</div>
+<div class="flex items-center gap-1 text-xs text-primary-fixed-dim relative z-10 opacity-80 mt-2">
+<span class="material-symbols-outlined text-[14px]">update</span>
+<span>Last Updated: Today, 09:41 AM</span>
+</div>
+</header>
+<main class="flex-1 flex flex-col gap-stack-lg px-margin-mobile py-stack-md -mt-4 relative z-20">
+<!-- Statistics Cards -->
+<section class="flex flex-col gap-4">
+<!-- Main Featured Widget -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 flex flex-col gap-3 shadow-md border border-outline-variant/50 relative overflow-hidden group hover:shadow-lg transition-shadow">
+<div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-primary-fixed to-transparent opacity-30 rounded-bl-full"></div>
+<div class="flex justify-between items-start">
+<h3 class="font-label-caps text-on-surface-variant uppercase tracking-wider">Total Customers</h3>
+<span class="material-symbols-outlined text-surface-tint">group</span>
+</div>
+<div class="flex items-end justify-between">
+<p class="text-4xl font-bold text-on-surface tracking-tight">1,250</p>
+<div class="flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-md text-sm font-semibold">
+<span class="material-symbols-outlined text-[16px]">trending_up</span>
+<span>+12%</span>
+</div>
+</div>
+<!-- Mini sparkline mockup -->
+<div class="w-full h-8 mt-2 flex items-end gap-1 opacity-70">
+<div class="flex-1 bg-surface-tint/20 h-[30%] rounded-t-sm"></div>
+<div class="flex-1 bg-surface-tint/30 h-[45%] rounded-t-sm"></div>
+<div class="flex-1 bg-surface-tint/40 h-[40%] rounded-t-sm"></div>
+<div class="flex-1 bg-surface-tint/50 h-[60%] rounded-t-sm"></div>
+<div class="flex-1 bg-surface-tint/60 h-[55%] rounded-t-sm"></div>
+<div class="flex-1 bg-surface-tint/80 h-[80%] rounded-t-sm"></div>
+<div class="flex-1 bg-surface-tint h-[100%] rounded-t-sm"></div>
+</div>
+</div>
+<!-- Secondary Widgets Grid -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-gradient-to-br from-surface-container-lowest to-surface-container-low rounded-2xl p-4 flex flex-col gap-3 shadow-sm border border-outline-variant/50 hover:shadow-md transition-all">
+<div class="flex justify-between items-center">
+<h3 class="font-label-caps text-on-surface-variant uppercase">Active</h3>
+<div class="w-8 h-8 rounded-full bg-primary-fixed/50 flex items-center justify-center">
+<span class="material-symbols-outlined text-surface-tint text-[18px]">check_circle</span>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<p class="font-headline-lg text-surface-tint">1,100</p>
+<svg class="w-10 h-10" viewbox="0 0 36 36">
+<path class="text-surface-variant" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-surface-tint progress-ring__circle" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="100, 100" stroke-dashoffset="12" stroke-width="3"></path>
+</svg>
+</div>
+</div>
+<div class="flex flex-col gap-4">
+<div class="bg-surface-container-lowest rounded-xl p-3 flex items-center justify-between shadow-sm border border-outline-variant/50 border-l-4 border-l-secondary">
+<div>
+<h3 class="font-label-caps text-on-surface-variant uppercase text-[10px]">Suspended</h3>
+<p class="font-headline-md text-secondary leading-tight">100</p>
+</div>
+<span class="material-symbols-outlined text-secondary opacity-50">pause_circle</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-3 flex items-center justify-between shadow-sm border border-outline-variant/50 border-l-4 border-l-error">
+<div>
+<h3 class="font-label-caps text-on-surface-variant uppercase text-[10px]">Isolated</h3>
+<p class="font-headline-md text-error leading-tight">50</p>
+</div>
+<span class="material-symbols-outlined text-error opacity-50">gpp_bad</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Quick Actions -->
+<section class="flex flex-col gap-3">
+<h2 class="font-label-caps text-on-surface-variant uppercase tracking-widest mb-1">Quick Actions</h2>
+<button class="w-full h-touch-target-min bg-gradient-to-r from-primary-container to-surface-tint text-on-primary rounded-xl font-button-text flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined">person_add</span>
+                Add New Customer
+            </button>
+<div class="flex gap-3">
+<button class="flex-1 h-touch-target-min bg-surface-container-lowest text-on-surface border border-outline-variant/60 rounded-xl font-button-text flex items-center justify-center gap-2 shadow-sm hover:bg-surface-container-low active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined text-surface-tint">add_task</span>
+                    Create Task
+                </button>
+<button class="flex-1 h-touch-target-min bg-surface-container-lowest text-on-surface border border-outline-variant/60 rounded-xl font-button-text flex items-center justify-center gap-2 shadow-sm hover:bg-surface-container-low active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined text-surface-tint">wifi_tethering</span>
+                    Network
+                </button>
+</div>
+</section>
+<!-- Chart Section -->
+<section class="bg-surface-container-lowest shadow-md border border-outline-variant/40 rounded-2xl p-5 flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<h2 class="font-body-lg font-semibold text-on-surface">Weekly Activations</h2>
+<div class="flex items-center gap-1 bg-surface-container-low px-3 py-1.5 rounded-lg border border-outline-variant/50 min-h-[36px] cursor-pointer hover:bg-surface-variant transition-colors">
+<span class="font-label-caps text-on-surface-variant">This Week</span>
+<span class="material-symbols-outlined text-sm text-on-surface-variant">expand_more</span>
+</div>
+</div>
+<!-- Dynamic Bar Chart Representation -->
+<div class="flex items-end justify-between h-48 pt-4 gap-3">
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-gradient-to-t from-primary-container to-surface-tint rounded-t-md relative transition-all group-hover:opacity-80" style="height: 40%;">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-surface text-xs py-1 px-2 rounded transition-opacity">40</div>
+</div>
+<span class="font-label-caps text-on-surface-variant">M</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-gradient-to-t from-primary-container to-surface-tint rounded-t-md relative transition-all group-hover:opacity-80" style="height: 65%;">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-surface text-xs py-1 px-2 rounded transition-opacity">65</div>
+</div>
+<span class="font-label-caps text-on-surface-variant">T</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-gradient-to-t from-primary-container to-surface-tint rounded-t-md relative transition-all group-hover:opacity-80 shadow-[0_-4px_10px_rgba(90,83,171,0.3)]" style="height: 85%;">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-surface text-xs py-1 px-2 rounded transition-opacity">85</div>
+</div>
+<span class="font-label-caps font-bold text-surface-tint">W</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-variant rounded-t-md relative transition-all group-hover:opacity-80" style="height: 30%;">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-surface text-xs py-1 px-2 rounded transition-opacity">30</div>
+</div>
+<span class="font-label-caps text-on-surface-variant">T</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-gradient-to-t from-primary-container to-surface-tint rounded-t-md relative transition-all group-hover:opacity-80" style="height: 90%;">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-surface text-xs py-1 px-2 rounded transition-opacity">90</div>
+</div>
+<span class="font-label-caps text-on-surface-variant">F</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-variant rounded-t-md relative transition-all group-hover:opacity-80" style="height: 50%;">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-surface text-xs py-1 px-2 rounded transition-opacity">50</div>
+</div>
+<span class="font-label-caps text-on-surface-variant">S</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-variant rounded-t-md relative transition-all group-hover:opacity-80" style="height: 20%;">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-surface text-xs py-1 px-2 rounded transition-opacity">20</div>
+</div>
+<span class="font-label-caps text-on-surface-variant">S</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation (Shared Component) -->
+<div class="fixed bottom-0 left-0 right-0 w-full z-50 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.05)] bg-[#f9f8fc]/90 backdrop-blur-md rounded-t-2xl border-t border-outline-variant/30">
+<div class="flex gap-2 bg-transparent px-4 pb-4 pt-3 max-w-md mx-auto">
+<a class="just flex flex-1 flex-col items-center justify-end gap-1 rounded-xl text-[#100e1b] relative" href="#">
+<div class="absolute -top-3 w-8 h-1 bg-surface-tint rounded-b-full"></div>
+<div class="text-[#100e1b] flex h-8 items-center justify-center bg-primary-fixed/40 w-12 rounded-full">
+<span class="material-symbols-outlined text-surface-tint" style="font-variation-settings: 'FILL' 1;">home</span>
+</div>
+<p class="text-surface-tint text-xs font-semibold leading-normal tracking-[0.015em]">Dashboard</p>
+</a>
+<a class="just flex flex-1 flex-col items-center justify-end gap-1 text-[#594e97] hover:text-surface-tint transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">group</span>
+</div>
+<p class="text-xs font-medium leading-normal tracking-[0.015em]">Pelanggan</p>
+</a>
+<a class="just flex flex-1 flex-col items-center justify-end gap-1 text-[#594e97] hover:text-surface-tint transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">assignment</span>
+</div>
+<p class="text-xs font-medium leading-normal tracking-[0.015em]">Tugas</p>
+</a>
+<a class="just flex flex-1 flex-col items-center justify-end gap-1 text-[#594e97] hover:text-surface-tint transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">wifi</span>
+</div>
+<p class="text-xs font-medium leading-normal tracking-[0.015em]">Jaringan</p>
+</a>
+<a class="just flex flex-1 flex-col items-center justify-end gap-1 text-[#594e97] hover:text-surface-tint transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">account_circle</span>
+</div>
+<p class="text-xs font-medium leading-normal tracking-[0.015em]">Profil</p>
+</a>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Customer List - ISP Tech Pro</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary-fixed-variant": "#423a91",
+                    "on-secondary": "#ffffff",
+                    "secondary-container": "#ebaefd",
+                    "on-primary-container": "#857ed9",
+                    "primary-fixed": "#e4dfff",
+                    "tertiary-container": "#450e00",
+                    "error-container": "#ffdad6",
+                    "on-surface": "#19163f",
+                    "outline-variant": "#c8c4d3",
+                    "on-background": "#19163f",
+                    "secondary-fixed": "#f9d8ff",
+                    "on-tertiary-fixed": "#3a0a00",
+                    "primary-container": "#1b0c6b",
+                    "surface-container": "#f0ebff",
+                    "secondary": "#7e4990",
+                    "primary": "#070038",
+                    "on-tertiary-container": "#c87257",
+                    "on-secondary-fixed": "#320046",
+                    "on-primary": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "on-error": "#ffffff",
+                    "inverse-on-surface": "#f3eeff",
+                    "inverse-surface": "#2f2b55",
+                    "tertiary-fixed-dim": "#ffb59f",
+                    "surface-dim": "#dad5ff",
+                    "on-tertiary-fixed-variant": "#76321c",
+                    "surface-container-high": "#eae5ff",
+                    "surface-bright": "#fcf8ff",
+                    "surface-container-low": "#f6f1ff",
+                    "tertiary": "#1e0300",
+                    "primary-fixed-dim": "#c5c0ff",
+                    "tertiary-fixed": "#ffdbd0",
+                    "surface-variant": "#e4dfff",
+                    "background": "#fcf8ff",
+                    "surface-container-highest": "#e4dfff",
+                    "error": "#ba1a1a",
+                    "surface-tint": "#5a53ab",
+                    "outline": "#787582",
+                    "on-surface-variant": "#474551",
+                    "inverse-primary": "#c5c0ff",
+                    "on-primary-fixed": "#140166",
+                    "on-error-container": "#93000a",
+                    "surface-container-lowest": "#ffffff",
+                    "surface": "#fcf8ff",
+                    "secondary-fixed-dim": "#edb1ff",
+                    "on-secondary-container": "#6f3b81",
+                    "on-secondary-fixed-variant": "#643177"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "touch-target-min": "48px",
+                    "stack-md": "1rem",
+                    "margin-mobile": "1.25rem",
+                    "stack-lg": "2rem",
+                    "stack-sm": "0.5rem",
+                    "gutter": "1rem"
+            },
+            "fontFamily": {
+                    "headline-md": [
+                            "Inter"
+                    ],
+                    "body-lg": [
+                            "Inter"
+                    ],
+                    "body-md": [
+                            "Inter"
+                    ],
+                    "label-caps": [
+                            "Public Sans"
+                    ],
+                    "headline-lg": [
+                            "Inter"
+                    ],
+                    "button-text": [
+                            "Inter"
+                    ]
+            },
+            "fontSize": {
+                    "headline-md": [
+                            "22px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "26px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "label-caps": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "headline-lg": [
+                            "28px",
+                            {
+                                    "lineHeight": "36px",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "button-text": [
+                            "16px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "600"
+                            }
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+            -webkit-font-smoothing: antialiased;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="pb-[80px]"> <!-- Padding bottom for BottomNavBar -->
+<!-- TopAppBar (Web) -->
+<header class="hidden md:flex justify-between items-center w-full px-5 h-14 bg-[#1b0c6b] dark:bg-slate-950 border-b border-indigo-800 dark:border-slate-800 fixed top-0 z-50">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-white dark:text-indigo-400 cursor-pointer" data-icon="menu">menu</span>
+<span class="font-['Inter'] text-sm font-bold tracking-wide uppercase text-white dark:text-indigo-400">ISP Tech Pro</span>
+</div>
+<nav class="flex gap-6">
+<a class="text-indigo-200 hover:bg-indigo-800 dark:hover:bg-slate-800 px-3 py-2 rounded-lg font-body-md text-body-md transition-all duration-200" href="#">Dashboard</a>
+<a class="text-white font-bold hover:bg-indigo-800 dark:hover:bg-slate-800 px-3 py-2 rounded-lg font-body-md text-body-md transition-all duration-200 active:opacity-80" href="#">Pelanggan</a>
+<a class="text-indigo-200 hover:bg-indigo-800 dark:hover:bg-slate-800 px-3 py-2 rounded-lg font-body-md text-body-md transition-all duration-200" href="#">Tugas</a>
+<a class="text-indigo-200 hover:bg-indigo-800 dark:hover:bg-slate-800 px-3 py-2 rounded-lg font-body-md text-body-md transition-all duration-200" href="#">Jaringan</a>
+<a class="text-indigo-200 hover:bg-indigo-800 dark:hover:bg-slate-800 px-3 py-2 rounded-lg font-body-md text-body-md transition-all duration-200" href="#">Profil</a>
+</nav>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-indigo-300 flex items-center justify-center overflow-hidden">
+<span class="material-symbols-outlined text-indigo-900 text-sm">person</span>
+</div>
+</div>
+</header>
+<!-- Mobile Header (Contextual) -->
+<header class="md:hidden sticky top-0 z-40 bg-primary-container text-on-primary px-margin-mobile py-stack-md shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<h1 class="font-headline-md text-headline-md">Pelanggan</h1>
+<button class="w-touch-target-min h-touch-target-min flex items-center justify-center rounded-full hover:bg-white/10">
+<span class="material-symbols-outlined" data-icon="filter_list">filter_list</span>
+</button>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full pl-10 pr-4 py-3 rounded-lg bg-white text-on-surface border-none focus:ring-2 focus:ring-secondary-container font-body-md text-body-md shadow-inner placeholder-outline h-touch-target-min" placeholder="Cari ID, Nama, atau Alamat..." type="text"/>
+</div>
+</header>
+<!-- Main Content -->
+<main class="md:mt-16 px-margin-mobile py-stack-md max-w-4xl mx-auto">
+<!-- Filters/Sort (Web) -->
+<div class="hidden md:flex justify-between items-center mb-stack-md">
+<h1 class="font-headline-lg text-headline-lg text-on-background">Daftar Pelanggan</h1>
+<div class="flex gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="pl-10 pr-4 py-2 rounded-lg bg-surface-container border border-outline-variant focus:ring-2 focus:ring-primary h-touch-target-min w-64 font-body-md text-body-md" placeholder="Cari pelanggan..." type="text"/>
+</div>
+<button class="h-touch-target-min px-4 bg-surface-container text-on-surface border border-outline-variant rounded-lg flex items-center gap-2 hover:bg-surface-container-high font-button-text text-button-text">
+<span class="material-symbols-outlined" data-icon="sort">sort</span> Urutkan
+                </button>
+</div>
+</div>
+<!-- Status Summary -->
+<div class="grid grid-cols-3 gap-2 mb-stack-lg">
+<div class="bg-surface-container-high p-3 rounded-lg border border-outline-variant text-center">
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1 uppercase">Aktif</p>
+<p class="font-headline-md text-headline-md text-primary">1,204</p>
+</div>
+<div class="bg-error-container p-3 rounded-lg border border-error/20 text-center">
+<p class="font-label-caps text-label-caps text-on-error-container mb-1 uppercase">Gangguan</p>
+<p class="font-headline-md text-headline-md text-error">12</p>
+</div>
+<div class="bg-surface-container-high p-3 rounded-lg border border-outline-variant text-center">
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1 uppercase">Isolir</p>
+<p class="font-headline-md text-headline-md text-secondary">45</p>
+</div>
+</div>
+<!-- Customer List (Compact Cards) -->
+<div class="space-y-3">
+<!-- Card 1 -->
+<div class="bg-surface-container-lowest rounded-lg border border-outline-variant p-3 flex items-center justify-between shadow-sm active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex items-center gap-3 overflow-hidden">
+<div class="w-2 h-10 bg-[#10b981] rounded-full shrink-0"></div> <!-- Status Indicator -->
+<div class="min-w-0">
+<div class="flex items-center gap-2 mb-0.5">
+<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded">ID: 8840291</span>
+<span class="font-label-caps text-label-caps text-[#10b981] bg-[#10b981]/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]" data-icon="check_circle">check_circle</span> Aktif
+                            </span>
+</div>
+<h3 class="font-body-md text-body-md text-on-background font-semibold truncate">PT Maju Mundur Sentosa</h3>
+<p class="font-body-md text-body-md text-on-surface-variant text-sm truncate flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="location_on">location_on</span> Jl. Sudirman No. 45, Blok C
+                        </p>
+</div>
+</div>
+<div class="shrink-0 flex flex-col items-end gap-1 ml-2">
+<span class="font-label-caps text-label-caps text-primary bg-primary-container/10 px-2 py-1 rounded border border-primary/20">FO - 100M</span>
+<button class="w-8 h-8 flex items-center justify-center rounded-full text-outline hover:bg-surface-container">
+<span class="material-symbols-outlined text-lg" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Card 2 (Error) -->
+<div class="bg-error-container/20 rounded-lg border border-error/30 p-3 flex items-center justify-between shadow-sm active:bg-error-container/40 transition-colors cursor-pointer">
+<div class="flex items-center gap-3 overflow-hidden">
+<div class="w-2 h-10 bg-error rounded-full shrink-0 animate-pulse"></div> <!-- Status Indicator -->
+<div class="min-w-0">
+<div class="flex items-center gap-2 mb-0.5">
+<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded">ID: 8840312</span>
+<span class="font-label-caps text-label-caps text-error bg-error/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]" data-icon="error">error</span> LOS
+                            </span>
+</div>
+<h3 class="font-body-md text-body-md text-on-background font-semibold truncate">Bpk. Budi Santoso</h3>
+<p class="font-body-md text-body-md text-on-surface-variant text-sm truncate flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="location_on">location_on</span> Komp. Pertamina Blok B/12
+                        </p>
+</div>
+</div>
+<div class="shrink-0 flex flex-col items-end gap-1 ml-2">
+<span class="font-label-caps text-label-caps text-primary bg-primary-container/10 px-2 py-1 rounded border border-primary/20">WIFI - 20M</span>
+<button class="w-8 h-8 flex items-center justify-center rounded-full text-outline hover:bg-surface-container">
+<span class="material-symbols-outlined text-lg" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface-container-lowest rounded-lg border border-outline-variant p-3 flex items-center justify-between shadow-sm active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex items-center gap-3 overflow-hidden">
+<div class="w-2 h-10 bg-[#10b981] rounded-full shrink-0"></div> <!-- Status Indicator -->
+<div class="min-w-0">
+<div class="flex items-center gap-2 mb-0.5">
+<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded">ID: 8840105</span>
+<span class="font-label-caps text-label-caps text-[#10b981] bg-[#10b981]/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]" data-icon="check_circle">check_circle</span> Aktif
+                            </span>
+</div>
+<h3 class="font-body-md text-body-md text-on-background font-semibold truncate">Kopi Kenangan Senja</h3>
+<p class="font-body-md text-body-md text-on-surface-variant text-sm truncate flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="location_on">location_on</span> Ruko Boulevard No. 8
+                        </p>
+</div>
+</div>
+<div class="shrink-0 flex flex-col items-end gap-1 ml-2">
+<span class="font-label-caps text-label-caps text-primary bg-primary-container/10 px-2 py-1 rounded border border-primary/20">FO - 50M</span>
+<button class="w-8 h-8 flex items-center justify-center rounded-full text-outline hover:bg-surface-container">
+<span class="material-symbols-outlined text-lg" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Card 4 (Isolir) -->
+<div class="bg-surface-container-lowest opacity-75 rounded-lg border border-outline-variant p-3 flex items-center justify-between shadow-sm active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="flex items-center gap-3 overflow-hidden">
+<div class="w-2 h-10 bg-secondary rounded-full shrink-0"></div> <!-- Status Indicator -->
+<div class="min-w-0">
+<div class="flex items-center gap-2 mb-0.5">
+<span class="font-label-caps text-label-caps text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded">ID: 8840552</span>
+<span class="font-label-caps text-label-caps text-secondary bg-secondary-container/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]" data-icon="block">block</span> Isolir
+                            </span>
+</div>
+<h3 class="font-body-md text-body-md text-on-background font-semibold truncate">Warnet Galaxy</h3>
+<p class="font-body-md text-body-md text-on-surface-variant text-sm truncate flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="location_on">location_on</span> Jl. Merdeka Gg. 3
+                        </p>
+</div>
+</div>
+<div class="shrink-0 flex flex-col items-end gap-1 ml-2">
+<span class="font-label-caps text-label-caps text-primary bg-primary-container/10 px-2 py-1 rounded border border-primary/20">FO - 200M</span>
+<button class="w-8 h-8 flex items-center justify-center rounded-full text-outline hover:bg-surface-container">
+<span class="material-symbols-outlined text-lg" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Load More -->
+<button class="w-full py-4 text-primary font-button-text text-button-text border border-outline-variant rounded-lg hover:bg-surface-container h-touch-target-min flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="refresh">refresh</span> Muat Lebih Banyak
+            </button>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-[0_-1px_3px_0_rgba(0,0,0,0.05)] rounded-t-lg">
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-3 py-1 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="dashboard">dashboard</span>
+<span class="font-['Inter'] text-[11px] font-semibold mt-1">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-indigo-50 dark:bg-indigo-900/30 text-[#1b0c6b] dark:text-indigo-300 rounded-lg px-3 py-1 active:scale-95 transition-transform duration-150 group" href="#">
+<span class="material-symbols-outlined" data-icon="group" style="font-variation-settings: 'FILL' 1;">group</span>
+<span class="font-['Inter'] text-[11px] font-semibold mt-1">Pelanggan</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-3 py-1 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="assignment">assignment</span>
+<span class="font-['Inter'] text-[11px] font-semibold mt-1">Tugas</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-3 py-1 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="settings_ethernet">settings_ethernet</span>
+<span class="font-['Inter'] text-[11px] font-semibold mt-1">Jaringan</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 px-3 py-1 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="person">person</span>
+<span class="font-['Inter'] text-[11px] font-semibold mt-1">Profil</span>
+</a>
+</nav>
+</body></html>

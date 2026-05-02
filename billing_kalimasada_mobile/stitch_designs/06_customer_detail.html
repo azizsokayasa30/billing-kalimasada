@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Customer Detail - Field Ops Executive</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-background": "#19163f",
+                      "on-secondary-fixed": "#320046",
+                      "surface-bright": "#fcf8ff",
+                      "error-container": "#ffdad6",
+                      "surface-variant": "#e4dfff",
+                      "tertiary": "#1e0300",
+                      "on-surface": "#19163f",
+                      "on-primary": "#ffffff",
+                      "secondary-fixed": "#f9d8ff",
+                      "secondary": "#7e4990",
+                      "outline": "#787582",
+                      "on-tertiary-fixed-variant": "#76321c",
+                      "on-primary-fixed": "#140166",
+                      "on-secondary": "#ffffff",
+                      "tertiary-container": "#450e00",
+                      "primary": "#070038",
+                      "error": "#ba1a1a",
+                      "background": "#fcf8ff",
+                      "on-error": "#ffffff",
+                      "surface-container": "#f0ebff",
+                      "on-primary-fixed-variant": "#423a91",
+                      "tertiary-fixed-dim": "#ffb59f",
+                      "surface-container-highest": "#e4dfff",
+                      "inverse-surface": "#2f2b55",
+                      "secondary-container": "#ebaefd",
+                      "on-tertiary-container": "#c87257",
+                      "surface-container-low": "#f6f1ff",
+                      "on-surface-variant": "#474551",
+                      "inverse-on-surface": "#f3eeff",
+                      "surface-tint": "#5a53ab",
+                      "surface-container-lowest": "#ffffff",
+                      "primary-fixed-dim": "#c5c0ff",
+                      "outline-variant": "#c8c4d3",
+                      "on-secondary-container": "#6f3b81",
+                      "surface-container-high": "#eae5ff",
+                      "secondary-fixed-dim": "#edb1ff",
+                      "on-tertiary": "#ffffff",
+                      "primary-container": "#1b0c6b",
+                      "on-tertiary-fixed": "#3a0a00",
+                      "tertiary-fixed": "#ffdbd0",
+                      "on-secondary-fixed-variant": "#643177",
+                      "on-error-container": "#93000a",
+                      "surface-dim": "#dad5ff",
+                      "surface": "#fcf8ff",
+                      "inverse-primary": "#c5c0ff",
+                      "on-primary-container": "#857ed9",
+                      "primary-fixed": "#e4dfff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "stack-sm": "0.5rem",
+                      "margin-mobile": "1.25rem",
+                      "stack-md": "1rem",
+                      "stack-lg": "2rem",
+                      "touch-target-min": "48px",
+                      "gutter": "1rem"
+              },
+              "fontFamily": {
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "label-caps": [
+                              "Public Sans"
+                      ],
+                      "button-text": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "headline-md": [
+                              "22px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-caps": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "button-text": [
+                              "16px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "28px",
+                              {
+                                      "lineHeight": "36px",
+                                      "fontWeight": "700"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+      </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-24 md:pb-0">
+<!-- TopAppBar -->
+<header class="docked full-width top-0 border-b border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flat no shadows flex justify-between items-center px-5 h-16 w-full max-w-7xl mx-auto sticky z-40">
+<button class="w-12 h-12 flex items-center justify-center text-indigo-900 dark:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:opacity-80 transition-opacity rounded-full">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="text-indigo-900 dark:text-indigo-100 font-extrabold font-inter font-bold text-lg tracking-tight">Customer Detail</h1>
+<button class="w-12 h-12 flex items-center justify-center text-indigo-900 dark:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:opacity-80 transition-opacity rounded-full">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</header>
+<main class="max-w-7xl mx-auto px-margin-mobile pt-stack-md space-y-stack-md md:space-y-stack-lg">
+<!-- Profile Header Area -->
+<section class="bg-surface-container rounded-xl p-stack-md border border-outline-variant flex flex-col items-center md:flex-row md:items-start md:space-x-stack-lg text-center md:text-left relative overflow-hidden">
+<!-- Decorative subtle accent background -->
+<div class="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-surface-tint/10 to-transparent"></div>
+<div class="relative z-10 w-24 h-24 rounded-full overflow-hidden border-4 border-surface-container-lowest mb-stack-sm md:mb-0 shadow-sm">
+<img alt="Customer Avatar" class="w-full h-full object-cover" data-alt="A professional headshot of a middle-aged man with short hair and a subtle smile. He is wearing a dark, casual button-down shirt. The background is slightly blurred with soft, natural daylight. The lighting is flattering and clear, suitable for a corporate profile or customer account avatar in a modern, clean UI context." src="https://lh3.googleusercontent.com/aida-public/AB6AXuACeqemsPb1WOZoXhnOeSbvGMuHndpH44hXOVHmNPjGN1izF_mP2DoFwNnCztkfX_5Bg7sy04cCeCQNR73boz36R3BR5zPlHrFoDBdaQlng2Cc8cKKjC4v4QhdxGJqCgzQZMCTJh2Ajpo1YQI2RY-wHN1-Gjpz6lqNyDQK5TnefK5WQDtpa9cRSvluvGaptkUpJ958s5FROJMDufHSw_yD_knOHA9qZBhfZPkSkiSCgj49H5z-gPqBNhoLwVHvYb-TgdpTKSkZ6rPQ"/>
+</div>
+<div class="relative z-10 flex-1 flex flex-col md:justify-center">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-1">Elias Vance</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-stack-sm">ID: CST-8492-AXL</p>
+<div class="flex flex-wrap justify-center md:justify-start gap-2">
+<div class="inline-flex items-center space-x-1 px-3 py-1 bg-[#d3f5e4] text-[#0d5930] rounded-full text-label-caps font-label-caps border border-[#b2e9cd]">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span>Active / Stable</span>
+</div>
+<div class="inline-flex items-center space-x-1 px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-full text-label-caps font-label-caps border border-outline-variant">
+<span class="material-symbols-outlined text-[14px]" data-icon="network_ping">network_ping</span>
+<span>Ping: 14ms</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Primary Actions -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-stack-sm">
+<button class="min-h-[touch-target-min] h-14 bg-primary text-on-primary font-button-text text-button-text rounded-lg flex items-center justify-center space-x-2 shadow-sm hover:opacity-90 active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined" data-icon="power_settings_new">power_settings_new</span>
+<span>Activate Account</span>
+</button>
+<button class="min-h-[touch-target-min] h-14 bg-surface-container-lowest text-on-surface border-2 border-primary font-button-text text-button-text rounded-lg flex items-center justify-center space-x-2 shadow-sm hover:bg-surface-container-low active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined" data-icon="restart_alt">restart_alt</span>
+<span>Reboot</span>
+</button>
+<button class="min-h-[touch-target-min] h-14 bg-error-container text-[#93000a] font-button-text text-button-text rounded-lg flex items-center justify-center space-x-2 shadow-sm hover:opacity-90 active:scale-[0.98] transition-all border border-[#ffb4ab]">
+<span class="material-symbols-outlined" data-icon="block">block</span>
+<span>Isolate</span>
+</button>
+</section>
+<!-- Information Blocks Bento Layout -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">
+<!-- Contact Info -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-md flex flex-col">
+<div class="flex justify-between items-center mb-stack-md border-b border-outline-variant pb-2">
+<h3 class="font-headline-md text-[18px] text-on-surface flex items-center space-x-2">
+<span class="material-symbols-outlined text-surface-tint" data-icon="contact_mail">contact_mail</span>
+<span>Contact Info</span>
+</h3>
+<button class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:bg-surface-container rounded-full transition-colors">
+<span class="material-symbols-outlined" data-icon="edit">edit</span>
+</button>
+</div>
+<div class="space-y-4 flex-1">
+<div class="flex items-start space-x-3">
+<span class="material-symbols-outlined text-outline mt-1" data-icon="call">call</span>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">PRIMARY PHONE</p>
+<p class="font-body-md text-body-md text-on-surface">+1 (555) 293-8471</p>
+</div>
+</div>
+<div class="flex items-start space-x-3">
+<span class="material-symbols-outlined text-outline mt-1" data-icon="mail">mail</span>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">EMAIL ADDRESS</p>
+<p class="font-body-md text-body-md text-on-surface">e.vance@example.com</p>
+</div>
+</div>
+<div class="flex items-start space-x-3">
+<span class="material-symbols-outlined text-outline mt-1" data-icon="location_on">location_on</span>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">SERVICE ADDRESS</p>
+<p class="font-body-md text-body-md text-on-surface">402 Industrial Pkwy, Bldg 3<br/>Seattle, WA 98104</p>
+</div>
+</div>
+</div>
+<button class="mt-stack-md w-full min-h-[touch-target-min] border border-outline-variant text-on-surface font-button-text text-button-text rounded-lg flex items-center justify-center space-x-2 hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-surface-tint" data-icon="my_location">my_location</span>
+<span>Tag Current Location</span>
+</button>
+</div>
+<!-- Network & Hardware -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-md flex flex-col">
+<div class="flex justify-between items-center mb-stack-md border-b border-outline-variant pb-2">
+<h3 class="font-headline-md text-[18px] text-on-surface flex items-center space-x-2">
+<span class="material-symbols-outlined text-surface-tint" data-icon="router">router</span>
+<span>Network &amp; Hardware</span>
+</h3>
+<button class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:bg-surface-container rounded-full transition-colors">
+<span class="material-symbols-outlined" data-icon="edit">edit</span>
+</button>
+</div>
+<div class="space-y-4 flex-1">
+<div class="flex items-start space-x-3 bg-surface-container p-3 rounded-lg border border-outline-variant">
+<span class="material-symbols-outlined text-surface-tint mt-1" data-icon="speed">speed</span>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">SERVICE PLAN</p>
+<p class="font-body-md text-body-md text-on-surface font-semibold">Gigabit Fiber Plus</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 pt-2">
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">ASSIGNED IP</p>
+<p class="font-body-md text-body-md text-on-surface font-mono">192.168.10.45</p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">MAC ADDRESS</p>
+<p class="font-body-md text-body-md text-on-surface font-mono">00:1A:2B:3C:4D:5E</p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">ONT SERIAL</p>
+<p class="font-body-md text-body-md text-on-surface font-mono">ONT-992-KXL-1</p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">PORT STATUS</p>
+<p class="font-body-md text-body-md text-[#0d5930] font-semibold">UP (1000FDX)</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Spacer for mobile scroll -->
+<div class="h-8 md:hidden"></div>
+</main>
+<!-- BottomNavBar -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 px-2 pb-safe bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-lg dark:shadow-none docked full-width bottom-0 border-t">
+<button class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-600 dark:hover:text-indigo-200 active:scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined mb-1 text-[24px]" data-icon="dashboard">dashboard</span>
+<span class="font-inter text-[10px] font-medium uppercase tracking-wider">Dashboard</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-indigo-50 dark:bg-indigo-900/40 text-indigo-900 dark:text-indigo-100 rounded-lg py-1 px-3 hover:text-indigo-600 dark:hover:text-indigo-200 active:scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined mb-1 text-[24px]" data-icon="group" data-weight="fill" style="font-variation-settings: 'FILL' 1;">group</span>
+<span class="font-inter text-[10px] font-medium uppercase tracking-wider">Customers</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-600 dark:hover:text-indigo-200 active:scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined mb-1 text-[24px]" data-icon="assignment_turned_in">assignment_turned_in</span>
+<span class="font-inter text-[10px] font-medium uppercase tracking-wider">Work Orders</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-600 dark:hover:text-indigo-200 active:scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined mb-1 text-[24px]" data-icon="hub">hub</span>
+<span class="font-inter text-[10px] font-medium uppercase tracking-wider">Network</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-600 dark:hover:text-indigo-200 active:scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined mb-1 text-[24px]" data-icon="settings">settings</span>
+<span class="font-inter text-[10px] font-medium uppercase tracking-wider">Settings</span>
+</button>
+</nav>
+</body></html>

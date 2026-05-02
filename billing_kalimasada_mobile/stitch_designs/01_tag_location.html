@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tag Location</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-dim": "#dad5ff",
+                    "primary": "#070038",
+                    "on-primary-container": "#857ed9",
+                    "outline": "#787582",
+                    "surface": "#fcf8ff",
+                    "on-tertiary-fixed-variant": "#76321c",
+                    "on-secondary": "#ffffff",
+                    "background": "#fcf8ff",
+                    "inverse-on-surface": "#f3eeff",
+                    "on-tertiary-container": "#c87257",
+                    "on-secondary-fixed-variant": "#643177",
+                    "surface-container": "#f0ebff",
+                    "on-primary": "#ffffff",
+                    "on-background": "#19163f",
+                    "primary-fixed-dim": "#c5c0ff",
+                    "outline-variant": "#c8c4d3",
+                    "tertiary-fixed": "#ffdbd0",
+                    "surface-container-low": "#f6f1ff",
+                    "secondary": "#7e4990",
+                    "surface-container-high": "#eae5ff",
+                    "error-container": "#ffdad6",
+                    "on-primary-fixed-variant": "#423a91",
+                    "on-tertiary-fixed": "#3a0a00",
+                    "secondary-fixed": "#f9d8ff",
+                    "primary-fixed": "#e4dfff",
+                    "tertiary-fixed-dim": "#ffb59f",
+                    "surface-tint": "#5a53ab",
+                    "on-error": "#ffffff",
+                    "surface-container-lowest": "#ffffff",
+                    "secondary-container": "#ebaefd",
+                    "primary-container": "#1b0c6b",
+                    "inverse-primary": "#c5c0ff",
+                    "tertiary": "#1e0300",
+                    "on-primary-fixed": "#140166",
+                    "on-surface": "#19163f",
+                    "on-secondary-container": "#6f3b81",
+                    "surface-variant": "#e4dfff",
+                    "tertiary-container": "#450e00",
+                    "secondary-fixed-dim": "#edb1ff",
+                    "on-secondary-fixed": "#320046",
+                    "surface-bright": "#fcf8ff",
+                    "on-tertiary": "#ffffff",
+                    "on-surface-variant": "#474551",
+                    "error": "#ba1a1a",
+                    "surface-container-highest": "#e4dfff",
+                    "inverse-surface": "#2f2b55",
+                    "on-error-container": "#93000a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "margin-mobile": "1.25rem",
+                    "stack-md": "1rem",
+                    "stack-lg": "2rem",
+                    "gutter": "1rem",
+                    "touch-target-min": "48px",
+                    "stack-sm": "0.5rem"
+            },
+            "fontFamily": {
+                    "body-lg": [
+                            "Inter"
+                    ],
+                    "headline-md": [
+                            "Inter"
+                    ],
+                    "button-text": [
+                            "Inter"
+                    ],
+                    "label-caps": [
+                            "Public Sans"
+                    ],
+                    "body-md": [
+                            "Inter"
+                    ],
+                    "headline-lg": [
+                            "Inter"
+                    ]
+            },
+            "fontSize": {
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "26px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-md": [
+                            "22px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "button-text": [
+                            "16px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "label-caps": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-lg": [
+                            "28px",
+                            {
+                                    "lineHeight": "36px",
+                                    "fontWeight": "700"
+                            }
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col pt-14 pb-16">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex items-center px-5 h-14 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
+<button aria-label="Go back" class="flex items-center justify-center w-touch-target-min h-touch-target-min -ml-2 text-primary hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors rounded-full">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-md text-headline-md text-primary ml-2 flex-1 text-center pr-10">Tag Location</h1>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto px-margin-mobile py-stack-lg space-y-stack-lg">
+<!-- Map Preview -->
+<section class="rounded-xl overflow-hidden border border-outline-variant shadow-sm relative h-64 w-full">
+<img alt="Map showing current location" class="w-full h-full object-cover" data-location="Industrial Park, Jakarta" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD21ZxA-qFr18t9n2v5M0Hx050JvDFW3UUMqhyfaHPaloAXqU2awmMazjvBvpi86368_PgClTSIh5NgFFmfx3MnmmidARGuytmClgmw_IE2SlTb5fUnItBJYiv949FIZPQOIEB95RA38PJNSeuEJIBT9W_NppKBruvY69mJfyV-vmHB2g3pmahRTr9Q8p8BgeP35566B6qyrzyOySZrdkd2J3J3BgQNtgKAp2rVKWALixlri2xWwzuztU9aRhjqwcXLy7r95LkTzs4"/>
+<!-- Pin -->
+<div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-error">
+<span class="material-symbols-outlined text-4xl drop-shadow-md" data-icon="location_on" data-weight="fill" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+<div class="absolute bottom-stack-sm right-stack-sm">
+<button class="bg-white p-2 rounded-full shadow border border-outline-variant text-primary h-touch-target-min w-touch-target-min flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="my_location">my_location</span>
+</button>
+</div>
+</section>
+<!-- Location Details Card -->
+<section class="bg-surface p-stack-md rounded-xl border border-outline-variant shadow-sm space-y-stack-md">
+<div class="flex items-center justify-between border-b border-outline-variant pb-stack-sm">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant uppercase">Location Details</h2>
+<div class="flex items-center gap-1 text-secondary bg-secondary-container px-2 py-1 rounded">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+<span class="font-label-caps text-[10px] uppercase">High Accuracy - 5m</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-gutter">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-1 uppercase">Latitude</label>
+<div class="font-body-md text-body-md text-on-surface bg-surface-container-low p-2 rounded border border-outline-variant">
+                        -6.2088
+                    </div>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-1 uppercase">Longitude</label>
+<div class="font-body-md text-body-md text-on-surface bg-surface-container-low p-2 rounded border border-outline-variant">
+                        106.8456
+                    </div>
+</div>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-1 uppercase">Address Preview</label>
+<div class="font-body-md text-body-md text-on-surface bg-surface-container-low p-2 rounded border border-outline-variant min-h-[3rem] flex items-center">
+                    Jl. Jend. Sudirman Kav. 52-53, Senayan, Kebayoran Baru, RT.5/RW.3, Senayan, Kec. Kby. Baru, Kota Jakarta Selatan, Daerah Khusus Ibukota Jakarta 12190
+                </div>
+</div>
+</section>
+<!-- Site Photo Section -->
+<section class="bg-surface p-stack-md rounded-xl border border-outline-variant shadow-sm space-y-stack-md">
+<div class="border-b border-outline-variant pb-stack-sm">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant uppercase">Site Photo</h2>
+</div>
+<button class="w-full flex items-center justify-center gap-2 border-2 border-dashed border-primary text-primary rounded-lg h-[120px] hover:bg-primary-container hover:text-on-primary-container transition-colors font-button-text text-button-text">
+<span class="material-symbols-outlined text-3xl" data-icon="photo_camera">photo_camera</span>
+<span>Capture Site Photo</span>
+</button>
+</section>
+<!-- Notes Section -->
+<section class="bg-surface p-stack-md rounded-xl border border-outline-variant shadow-sm space-y-stack-md">
+<div class="border-b border-outline-variant pb-stack-sm">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant uppercase">Notes</h2>
+</div>
+<div>
+<label class="sr-only" for="location-notes">Location Notes</label>
+<textarea class="w-full rounded-lg border border-outline-variant bg-surface-container-low p-stack-sm font-body-md text-body-md text-on-surface focus:ring-2 focus:ring-primary focus:border-primary placeholder-on-surface-variant" id="location-notes" placeholder="Enter any location-specific observations here..." rows="3"></textarea>
+</div>
+</section>
+<!-- Action Buttons -->
+<section class="flex flex-col gap-stack-md pt-stack-sm pb-stack-lg">
+<button class="w-full bg-primary text-on-primary font-button-text text-button-text h-touch-target-min rounded-lg shadow-sm hover:bg-primary-container transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="save">save</span>
+                Save Location
+            </button>
+<button class="w-full bg-transparent text-primary font-button-text text-button-text h-touch-target-min rounded-lg border border-primary hover:bg-surface-dim transition-colors">
+                Cancel
+            </button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 h-16 pb-safe bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
+<!-- Item 1: Jobs (Using "Maps" as active conceptually based on JSON labels mapping closely to "Tag Location") -->
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 w-16 hover:text-indigo-700 dark:hover:text-indigo-200 transition-transform active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span class="font-inter text-[11px] font-semibold uppercase tracking-tighter mt-1">Jobs</span>
+</a>
+<!-- Item 2: Maps (Active - tagging location implies map context) -->
+<a class="flex flex-col items-center justify-center text-indigo-900 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 rounded-lg py-1 w-16 transition-transform active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="location_on" data-weight="fill" style="font-variation-settings: 'FILL' 1;">location_on</span>
+<span class="font-inter text-[11px] font-semibold uppercase tracking-tighter mt-1">Maps</span>
+</a>
+<!-- Item 3: Assets -->
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 w-16 hover:text-indigo-700 dark:hover:text-indigo-200 transition-transform active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-inter text-[11px] font-semibold uppercase tracking-tighter mt-1">Assets</span>
+</a>
+<!-- Item 4: Profile -->
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 w-16 hover:text-indigo-700 dark:hover:text-indigo-200 transition-transform active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-inter text-[11px] font-semibold uppercase tracking-tighter mt-1">Profile</span>
+</a>
+</nav>
+</body></html>
