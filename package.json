@@ -14,6 +14,7 @@
     "pm2:save": "pm2 save",
     "pm2:logs": "pm2 logs billing-kalimasada",
     "doctor:process": "node scripts/doctor-process.js",
+    "radius:check": "node scripts/radius-consistency-check.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "echo \"No build process required\"",
     "setup": "npm install && node scripts/init-database.js"

@@ -326,6 +326,23 @@ $(document).ready(function() {
         btn.html('<i class="bi bi-arrow-repeat"></i> Test Koneksi ke RADIUS');
         
         if (response.success) {
+          const c = response.consistency;
+          let consistencyHtml = '';
+          if (c && Array.isArray(c.warnings) && c.warnings.length) {
+            const lines = c.warnings.map(function(w) { return '<li>' + $('<div>').text(w).html() + '</li>'; }).join('');
+            const samp = (c.filesAuthorizeUsernamesSample && c.filesAuthorizeUsernamesSample.length)
+              ? '<p class="mb-1"><small>Sampel user di <code>files/authorize</code>: <code>' + $('<div>').text(c.filesAuthorizeUsernamesSample.join(', ')).html() + '</code></small></p>'
+              : '';
+            consistencyHtml = `
+              <div class="alert alert-warning mt-3 mb-0">
+                <h6 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Konsistensi RADIUS (periksa setelah git pull)</h6>
+                <ul class="mb-0 small">${lines}</ul>
+                ${samp}
+                <p class="mb-0 mt-2 small text-muted">CLI: <code>npm run radius:check</code> — lihat juga docs/RADIUS_DATABASE_CONFIG.md</p>
+              </div>`;
+          } else if (c && c.ok) {
+            consistencyHtml = '<p class="text-success small mt-2 mb-0"><i class="bi bi-shield-check"></i> Cek konsistensi (path FR, files/authorize, billing.db): tidak ada peringatan.</p>';
+          }
           resultDiv.html(`
             <div class="alert alert-success">
               <h6><i class="bi bi-check-circle"></i> Koneksi Berhasil!</h6>
@@ -343,6 +360,7 @@ $(document).ready(function() {
                 <li>Active Connections: <strong>${response.statistics.activeConnections}</strong></li>
                 <li>Offline Users: <strong>${response.statistics.offlineUsers}</strong></li>
               </ul>
+              ${consistencyHtml}
             </div>
           `);
         } else {

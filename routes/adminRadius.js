@@ -10,6 +10,7 @@ const { getRadiusConfig, saveRadiusConfig } = require('../config/radiusConfig');
 const logger = require('../config/logger');
 const { getRadiusConnection } = require('../config/mikrotik');
 const { getRadiusSqliteFileDiagnostics } = require('../config/radiusSQLite');
+const { getRadiusConsistencyReport } = require('../config/radiusConsistency');
 const { parseClientsConf, parseClientsConfFromDB, writeClientsConf, writeClientsConfToDB, restartFreeRADIUS, validateClient } = require('../config/radiusClients');
 const { backupRadius, restoreRadius, listBackups } = require('../utils/radiusBackup');
 
@@ -319,6 +320,13 @@ router.get('/radius/test', adminAuth, async (req, res) => {
     }
     
     const sqliteDiag = await getRadiusSqliteFileDiagnostics();
+    let consistency = null;
+    try {
+      consistency = await getRadiusConsistencyReport();
+    } catch (ce) {
+      logger.warn('[RADIUS] consistency check failed:', ce.message);
+      consistency = { ok: false, warnings: [`Gagal memuat laporan konsistensi: ${ce.message}`], notes: [] };
+    }
 
     const conn = await getRadiusConnection();
 
@@ -362,6 +370,7 @@ router.get('/radius/test', adminAuth, async (req, res) => {
       success: true,
       message: 'Koneksi ke RADIUS database berhasil!',
       sqlite: sqliteDiag,
+      consistency,
       connection: {
         host: settings.radius_host || 'localhost',
         database: settings.radius_database || 'radius',

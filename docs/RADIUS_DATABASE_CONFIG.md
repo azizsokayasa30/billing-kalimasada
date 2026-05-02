@@ -102,6 +102,22 @@ Jika sebelumnya sudah ada config di `settings.json`, data akan otomatis fallback
 
 ---
 
-**Last Updated:** 2024-11-03  
-**Version:** 1.0
+## Setelah `git pull` / update aplikasi (PPPoE tetap konsisten)
+
+1. **Satu file SQLite untuk FR dan billing** — nilai `radius_database` / `RADIUS_SQLITE_PATH` harus sama dengan `filename =` di `/etc/freeradius/3.0/mods-enabled/sql`.
+2. **Jangan isi user PPPoE di `mods-config/files/authorize`** jika pelanggan dikelola lewat billing — modul `files` dan `sql` keduanya aktif di `sites-enabled/default`; user di file tetap bisa login walaupun `radcheck` kosong.
+3. **Cek otomatis setelah deploy** (di server produksi, dari folder aplikasi):
+
+   ```bash
+   npm run radius:check
+   ```
+
+   Untuk gagalkan skrip CI bila ada masalah: `node scripts/radius-consistency-check.js --strict`
+
+4. Di panel admin, halaman **Setting RADIUS** → **Test Koneksi** — respons JSON sekarang menyertakan blok **`consistency`** (peringatan path, `files/authorize`, duplikat `radcheck` di `billing.db`).
+
+---
+
+**Last Updated:** 2026-05-02 (tambahan checklist deploy)  
+**Version:** 1.1
 
