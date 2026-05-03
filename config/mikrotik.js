@@ -498,6 +498,63 @@ async function getActivePPPoEConnectionsRadius() {
     }
 }
 
+/**
+ * Apakah login PPPoE sedang online — sama dengan kolom "active" di /admin/mikrotik
+ * (nama di /ppp/active per NAS, atau username di sesi RADIUS radacct terbuka).
+ */
+async function getAllRoutersFromBillingDb() {
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = path.join(__dirname, '../data/billing.db');
+    const db = new sqlite3.Database(dbPath);
+    return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM routers ORDER BY id', [], (err, rows) => {
+            db.close();
+            if (err) reject(err);
+            else resolve(rows || []);
+        });
+    });
+}
+
+async function getPppoeLoginOnlineStatus(login) {
+    const name = login != null ? String(login).trim() : '';
+    if (!name) {
+        return { online: false, authMode: null };
+    }
+    const authMode = await getUserAuthModeAsync();
+    if (authMode === 'radius') {
+        const active = await getActivePPPoEConnectionsRadius();
+        const online = (active || []).some((a) => String(a.name) === name);
+        return { online, authMode: 'radius' };
+    }
+    const routers = await getAllRoutersFromBillingDb();
+    if (!routers.length) {
+        try {
+            const conn = await getMikrotikConnection();
+            if (conn) {
+                const active = await conn.write('/ppp/active/print');
+                const online = (active || []).some((a) => String(a.name) === name);
+                return { online, authMode: 'mikrotik' };
+            }
+        } catch (e) {
+            logger.warn(`[getPppoeLoginOnlineStatus] single NAS: ${e.message}`);
+        }
+        return { online: false, authMode: 'mikrotik' };
+    }
+    const results = await Promise.all(
+        routers.map(async (r) => {
+            try {
+                const conn = await getMikrotikConnectionForRouter(r);
+                const active = await conn.write('/ppp/active/print');
+                return (active || []).some((a) => String(a.name) === name);
+            } catch (e) {
+                logger.warn(`[getPppoeLoginOnlineStatus] router ${r.name}: ${e.message}`);
+                return false;
+            }
+        })
+    );
+    return { online: results.some(Boolean), authMode: 'mikrotik' };
+}
+
 // Fungsi untuk mendapatkan statistik RADIUS (total users, active, offline) - HANYA PPPoE, BUKAN voucher DAN BUKAN member
 async function getRadiusStatistics() {
     const conn = await getRadiusConnection();
@@ -835,12 +892,17 @@ async function assignPackageRadius({ username, groupname }) {
 async function ensureIsolirProfileRadius() {
     const conn = await getRadiusConnection();
     try {
-        // Cek apakah group 'isolir' sudah ada di radgroupreply
-        const [existing] = await conn.execute(
+        // Cek group 'isolir' di radgroupreply ATAU radgroupcheck (admin/Mikrotik bisa isi salah satu saja)
+        const [replyExisting] = await conn.execute(
             "SELECT COUNT(*) as count FROM radgroupreply WHERE groupname = 'isolir'"
         );
-        
-        if (existing && existing.length > 0 && existing[0].count > 0) {
+        const [checkExisting] = await conn.execute(
+            "SELECT COUNT(*) as count FROM radgroupcheck WHERE groupname = 'isolir'"
+        );
+        const replyCount = replyExisting && replyExisting[0] ? Number(replyExisting[0].count) : 0;
+        const checkCount = checkExisting && checkExisting[0] ? Number(checkExisting[0].count) : 0;
+
+        if (replyCount > 0 || checkCount > 0) {
             // Profile isolir sudah ada, hapus rate-limit jika ada (biarkan loss untuk redirect web isolir)
             const [rateLimitRows] = await conn.execute(
                 "SELECT value FROM radgroupreply WHERE groupname = 'isolir' AND attribute = 'MikroTik-Rate-Limit'"
@@ -881,9 +943,9 @@ async function ensureIsolirProfileRadius() {
         // Profile isolir belum ada, buat dengan konfigurasi yang benar
         logger.info('Profile isolir belum ada di RADIUS, membuat profile isolir...');
         
-        // 1. Insert Simultaneous-Use (required)
+        // 1. Insert Simultaneous-Use (required); idempoten jika baris sudah ada
         await conn.execute(
-            "INSERT INTO radgroupcheck (groupname, attribute, op, value) VALUES ('isolir', 'Simultaneous-Use', ':=', '1')"
+            "INSERT INTO radgroupcheck (groupname, attribute, op, value) VALUES ('isolir', 'Simultaneous-Use', ':=', '1') ON CONFLICT(groupname, attribute) DO NOTHING"
         );
         
         // 2. JANGAN set Rate-Limit untuk isolir (biarkan loss saja untuk redirect web isolir)
@@ -7225,6 +7287,25 @@ async function getPPPoEProfilesRadius() {
         
         logger.info(`📋 Hasil filter: ${filteredGroupnames.length} profil PPPoE (dari ${groupnames.length} total, ${Object.keys(hotspotMetadataMap).length} adalah hotspot)`);
 
+        // Grup RADIUS untuk suspensi selalu 'isolir' (radusergroup); bisa punya baris hanya di radgroupcheck.
+        // Tanpa ini, profil tidak muncul di halaman PPPoE bila belum ada radgroupreply untuk 'isolir'.
+        const radiusIsolirGroup = 'isolir';
+        if (!filteredGroupnames.includes(radiusIsolirGroup)) {
+            const [isolirReply] = await conn.execute(
+                `SELECT 1 FROM radgroupreply WHERE groupname = ? LIMIT 1`,
+                [radiusIsolirGroup]
+            );
+            const [isolirCheck] = await conn.execute(
+                `SELECT 1 FROM radgroupcheck WHERE groupname = ? LIMIT 1`,
+                [radiusIsolirGroup]
+            );
+            if ((isolirReply && isolirReply.length > 0) || (isolirCheck && isolirCheck.length > 0)) {
+                filteredGroupnames.push(radiusIsolirGroup);
+                filteredGroupnames.sort((a, b) => String(a).localeCompare(String(b)));
+                logger.info(`✅ Menambahkan '${radiusIsolirGroup}' ke daftar profil (ada di RADIUS, sebelumnya tidak dari radgroupreply DISTINCT)`);
+            }
+        }
+
         const metadataMap = await getPPPoEProfilesMetadata(conn, filteredGroupnames);
 
         const profiles = [];
@@ -7240,17 +7321,60 @@ async function getPPPoEProfilesRadius() {
             
             const meta = metadataMap[groupname] || null;
             
-            // Get all attributes for this group
-            const [attrRows] = await conn.execute(`
+            const [attrRowsReply] = await conn.execute(`
                 SELECT attribute, value
                 FROM radgroupreply
                 WHERE groupname = ?
                 ORDER BY attribute
             `, [groupname]);
-            
-            // Jika tidak ada attribute sama sekali, skip profil ini
+            const [attrRowsCheck] = await conn.execute(`
+                SELECT attribute, value
+                FROM radgroupcheck
+                WHERE groupname = ?
+                ORDER BY attribute
+            `, [groupname]);
+
+            let attrRows = attrRowsReply && attrRowsReply.length ? [...attrRowsReply] : [];
+            if (groupname === radiusIsolirGroup && attrRowsCheck && attrRowsCheck.length > 0) {
+                const seen = new Set(attrRows.map((r) => r.attribute));
+                for (const row of attrRowsCheck) {
+                    if (!seen.has(row.attribute)) {
+                        attrRows.push(row);
+                        seen.add(row.attribute);
+                    }
+                }
+            }
+
             if (!attrRows || attrRows.length === 0) {
-                logger.warn(`⚠️ Profile ${groupname} tidak memiliki attribute di radgroupreply, skip`);
+                if (groupname === radiusIsolirGroup) {
+                    const isolirPool = getSetting('isolir_pool', 'isolir-pool');
+                    profiles.push({
+                        name: 'isolir',
+                        '.id': 'isolir',
+                        groupname: 'isolir',
+                        'rate-limit': null,
+                        'session-timeout': null,
+                        'idle-timeout': null,
+                        'limit-uptime': null,
+                        'shared-users': '1',
+                        comment: 'Profile sistem isolir (lengkapi radgroupreply di RADIUS bila perlu)',
+                        localAddress: '',
+                        remoteAddress: isolirPool,
+                        dnsServer: '',
+                        parentQueue: '',
+                        addressList: '',
+                        nas_name: 'RADIUS',
+                        nas_ip: 'RADIUS Server',
+                        is_radius: true,
+                        is_isolir: true,
+                        is_system_profile: true,
+                        'remote-address': isolirPool,
+                        'local-address': ''
+                    });
+                    logger.info(`📌 Profile isolir ditampilkan (placeholder: belum ada atribut di radgroupreply/radgroupcheck)`);
+                } else {
+                    logger.warn(`⚠️ Profile ${groupname} tidak memiliki attribute di radgroupreply, skip`);
+                }
                 continue;
             }
             
@@ -7479,7 +7603,14 @@ async function addPPPoEProfileRadius(profileData) {
         const reservedNames = ['isolir', 'default'];
         if (reservedNames.includes(groupname)) {
             await conn.end();
-            return { success: false, message: `Profile dengan nama "${groupname}" adalah profile sistem yang sudah ada dan tidak dapat dibuat ulang. Profile ini digunakan untuk isolir/suspension.` };
+            const isolirHint =
+                groupname === 'isolir'
+                    ? ' Grup ini dibuat otomatis saat isolir pelanggan (RADIUS) dan muncul di halaman Profile PPPoE bila sudah ada di database — tidak perlu ditambah manual.'
+                    : '';
+            return {
+                success: false,
+                message: `Profile dengan nama "${groupname}" adalah profile sistem yang tidak dapat dibuat dari form ini.${isolirHint}`
+            };
         }
         
         // Check if groupname already exists
@@ -9450,6 +9581,7 @@ module.exports = {
     getRadiusStatistics,
     getPPPoEUsersRadius,
     getActivePPPoEConnectionsRadius,
+    getPppoeLoginOnlineStatus,
     updatePPPoEUserRadiusPassword,
     assignPackageRadius,
     ensureIsolirProfileRadius,

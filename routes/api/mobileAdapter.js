@@ -1494,10 +1494,22 @@ router.get('/collector/customers', verifyToken, requireCollector, async (req, re
             name: c.name,
             address: c.address || '',
             phone: c.phone || '',
+            email: c.email || '',
             status: c.status,
             payment_status: c.payment_status,
             package_price: Math.round(parseFloat(c.package_price || 0)),
-            package_name: c.package_name || ''
+            package_name: c.package_name || '',
+            latitude:
+                c.latitude != null && c.latitude !== '' && !Number.isNaN(parseFloat(c.latitude))
+                    ? parseFloat(c.latitude)
+                    : null,
+            longitude:
+                c.longitude != null && c.longitude !== '' && !Number.isNaN(parseFloat(c.longitude))
+                    ? parseFloat(c.longitude)
+                    : null,
+            pppoe_username: c.pppoe_username != null ? String(c.pppoe_username) : '',
+            pppoe_profile: c.pppoe_profile != null ? String(c.pppoe_profile) : '',
+            router_name: c.router_name != null ? String(c.router_name) : ''
         }));
         res.json({ success: true, data });
     } catch (error) {
@@ -1586,6 +1598,46 @@ router.get('/collector/me', verifyToken, requireCollector, async (req, res) => {
     }
 });
 
+router.put('/collector/me', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    const body = req.body || {};
+    const name = body.name != null ? String(body.name).trim() : '';
+    const phone = body.phone != null ? String(body.phone).trim() : '';
+    const email = body.email != null ? String(body.email).trim() : '';
+    const address = body.address != null ? String(body.address).trim() : '';
+    if (!name) {
+        return res.status(400).json({ success: false, message: 'Nama wajib diisi' });
+    }
+    if (!phone) {
+        return res.status(400).json({ success: false, message: 'Nomor HP wajib diisi' });
+    }
+    try {
+        await new Promise((resolve, reject) => {
+            db.run(
+                `UPDATE collectors
+                 SET name = ?, phone = ?, email = ?, address = ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [name, phone, email || null, address || null, collectorId],
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
+        });
+        res.json({ success: true, message: 'Profil berhasil diperbarui' });
+    } catch (error) {
+        const msg = error && error.message ? String(error.message) : '';
+        if (msg.includes('UNIQUE') && msg.toLowerCase().includes('phone')) {
+            return res.status(400).json({ success: false, message: 'Nomor HP sudah dipakai kolektor lain' });
+        }
+        logger.error('[mobile-adapter] collector/me PUT', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal menyimpan' });
+    }
+});
+
 async function collectorMappedCustomerIds(collectorId) {
     const list = await billingManager.getCollectorCustomers(collectorId);
     return new Set((list || []).map((c) => Number(c.id)));
@@ -1620,6 +1672,139 @@ router.get('/collector/customer-invoices/:customerId', verifyToken, requireColle
     } catch (error) {
         logger.error('[mobile-adapter] collector/customer-invoices', error);
         res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+    }
+});
+
+router.get('/collector/customer-invoice-history/:customerId', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    const customerId = parseInt(String(req.params.customerId), 10);
+    if (!Number.isFinite(customerId) || customerId <= 0) {
+        return res.status(400).json({ success: false, message: 'ID pelanggan tidak valid' });
+    }
+    try {
+        const allowed = await collectorMappedCustomerIds(collectorId);
+        if (!allowed.has(customerId)) {
+            return res.status(403).json({ success: false, message: 'Pelanggan tidak ada di wilayah Anda' });
+        }
+        const rows = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT i.*, p.name as package_name
+                 FROM invoices i
+                 LEFT JOIN packages p ON i.package_id = p.id
+                 WHERE i.customer_id = ?
+                   AND strftime('%Y', i.created_at) = strftime('%Y', 'now')
+                 ORDER BY i.created_at DESC
+                 LIMIT 240`,
+                [customerId],
+                (err, r) => (err ? reject(err) : resolve(r || []))
+            );
+        });
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        logger.error('[mobile-adapter] collector/customer-invoice-history', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+    }
+});
+
+router.get('/collector/customer-ppp-session/:customerId', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    const customerId = parseInt(String(req.params.customerId), 10);
+    if (!Number.isFinite(customerId) || customerId <= 0) {
+        return res.status(400).json({ success: false, message: 'ID pelanggan tidak valid' });
+    }
+    try {
+        const allowed = await collectorMappedCustomerIds(collectorId);
+        if (!allowed.has(customerId)) {
+            return res.status(403).json({ success: false, message: 'Pelanggan tidak ada di wilayah Anda' });
+        }
+        const row = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT pppoe_username, username FROM customers WHERE id = ?',
+                [customerId],
+                (err, r) => (err ? reject(err) : resolve(r || null))
+            );
+        });
+        if (!row) {
+            return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+        }
+        const login =
+            (row.pppoe_username && String(row.pppoe_username).trim()) ||
+            (row.username && String(row.username).trim()) ||
+            '';
+        const { getPppoeLoginOnlineStatus } = require('../../config/mikrotik');
+        const { online, authMode } = await getPppoeLoginOnlineStatus(login);
+        res.json({
+            success: true,
+            data: {
+                online: Boolean(online),
+                auth_mode: authMode || 'unknown',
+                login_checked: login
+            }
+        });
+    } catch (error) {
+        logger.error('[mobile-adapter] collector/customer-ppp-session', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+    }
+});
+
+router.post('/collector/customer-isolir/:customerId', verifyToken, requireCollector, async (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    const customerId = parseInt(String(req.params.customerId), 10);
+    if (!Number.isFinite(customerId) || customerId <= 0) {
+        return res.status(400).json({ success: false, message: 'ID pelanggan tidak valid' });
+    }
+    try {
+        const allowed = await collectorMappedCustomerIds(collectorId);
+        if (!allowed.has(customerId)) {
+            return res.status(403).json({ success: false, message: 'Pelanggan tidak ada di wilayah Anda' });
+        }
+        const customer = await billingManager.getCustomerById(customerId);
+        if (!customer) {
+            return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+        }
+        if (String(customer.status || '')
+            .toLowerCase()
+            .trim() === 'suspended') {
+            return res.status(400).json({ success: false, message: 'Pelanggan sudah dalam status isolir' });
+        }
+        const rawReason = req.body && req.body.reason != null ? String(req.body.reason).trim() : '';
+        const reason =
+            rawReason.length > 0
+                ? rawReason.slice(0, 400)
+                : 'Isolir manual oleh kolektor (peringatan)';
+        const serviceSuspension = require('../../config/serviceSuspension');
+        // Urutan: RADIUS/Mikrotik (profil isolir + putus sesi) → WA → baru update status DB (tanpa GenieACS/email)
+        const result = await serviceSuspension.suspendCustomerService(customer, reason, {
+            skipBillingStatus: true,
+            awaitWhatsApp: true
+        });
+        if (!result || !result.success) {
+            const det = result && result.results ? JSON.stringify(result.results) : '';
+            logger.warn(`[mobile-adapter] isolir: gagal jaringan/WA. ${det}`);
+            return res.status(502).json({
+                success: false,
+                message: 'Gagal menyelesaikan isolir (Mikrotik/RADIUS). Coba lagi atau hubungi admin.',
+                data: { customerId, details: result && result.results }
+            });
+        }
+        await billingManager.setCustomerStatusById(customerId, 'suspended');
+        return res.json({
+            success: true,
+            message: 'Pelanggan diisolir; notifikasi WA dikirim bila diaktifkan.',
+            data: { customerId }
+        });
+    } catch (error) {
+        logger.error('[mobile-adapter] collector/customer-isolir', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal isolir' });
     }
 });
 

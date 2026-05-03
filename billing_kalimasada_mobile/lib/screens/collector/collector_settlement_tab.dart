@@ -152,21 +152,6 @@ class _CollectorSettlementTabState extends State<CollectorSettlementTab> with Au
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: FieldCollectorColors.primaryContainer,
-              foregroundColor: FieldCollectorColors.onPrimaryContainer,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Setor uang ke kasir; konfirmasi di admin billing.')),
-              );
-            },
-            icon: const Icon(Icons.account_balance_wallet),
-            label: const Text('Setor sekarang'),
-          ),
           const SizedBox(height: 20),
           const Text('Riwayat pembayaran', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
           const SizedBox(height: 8),

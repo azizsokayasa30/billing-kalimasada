@@ -22,4 +22,12 @@ class FieldCollectorColors {
   static const Color onTertiaryFixed = Color(0xFF351002);
   static const Color primary = Color(0xFF000613);
   static const Color navInactive = Color(0xFF94A3B8);
+
+  /// Tombol “Terapkan” filter periode (ungu lembut).
+  static const Color periodApplyBackground = Color(0xFFEDE7F6);
+  static const Color periodApplyForeground = Color(0xFF4527A0);
+
+  /// Ringkasan dashboard: teks di atas putih.
+  static const Color summaryOverdue = Color(0xFFC62828);
+  static const Color summaryPaid = Color(0xFF1B5E20);
 }

@@ -187,20 +187,39 @@ async function submitCollectorPayment(opts) {
         });
     }
 
-    setTimeout(async () => {
-        try {
-            const allInvoices = await billingManager.getInvoicesByCustomer(Number(customer_id));
-            const unpaid = (allInvoices || []).filter((i) => i.status === 'unpaid');
-            if (unpaid.length === 0) {
-                const customer = await billingManager.getCustomerById(Number(customer_id));
-                if (customer && customer.status === 'suspended') {
-                    await serviceSuspension.restoreCustomerService(customer);
+    // Buka isolir di latar belakang — jangan await restore (Mikrotik/RADIUS) agar respons HTTP cepat untuk Flutter.
+    // Status billing di-set aktif dulu agar refresh daftar konsisten; jaringan menyusul di restore.
+    try {
+        const customerIdNum = Number(customer_id);
+        const allInvoices = await billingManager.getInvoicesByCustomer(customerIdNum);
+        const unpaid = (allInvoices || []).filter((i) => i.status === 'unpaid');
+        if (unpaid.length === 0) {
+            const customer = await billingManager.getCustomerById(customerIdNum);
+            if (customer && String(customer.status || '').toLowerCase().trim() === 'suspended') {
+                try {
+                    await billingManager.setCustomerStatusById(customerIdNum, 'active');
+                } catch (e) {
+                    console.error('Collector payment: set active after pay failed:', e);
                 }
+                setImmediate(() => {
+                    billingManager
+                        .getCustomerById(customerIdNum)
+                        .then((fresh) => {
+                            if (!fresh) return null;
+                            return serviceSuspension.restoreCustomerService(
+                                fresh,
+                                'Pembayaran kolektor — tagihan lunas, layanan dipulihkan'
+                            );
+                        })
+                        .catch((restoreErr) => {
+                            console.error('Collector payment: restore after pay failed:', restoreErr);
+                        });
+                });
             }
-        } catch (restoreErr) {
-            console.error('Immediate restore check failed:', restoreErr);
         }
-    }, 1000);
+    } catch (restorePrepErr) {
+        console.error('Collector payment: restore prep failed:', restorePrepErr);
+    }
 
     return { ok: true, payment_id: paymentId, commission_amount: commissionAmount };
 }

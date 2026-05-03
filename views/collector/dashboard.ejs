@@ -7,23 +7,6 @@
   <%- include('../partials/collector-field-topbar', { topbarTitle: 'Field Collector' }) %>
 
   <main class="max-w-md mx-auto p-margin-page space-y-stack-lg mt-stack-md">
-    <form method="get" action="/collector/dashboard" class="flex gap-2 items-center justify-end flex-wrap">
-      <select name="month" class="text-body-md rounded-lg border border-outline-variant bg-surface-container-high px-2 py-1.5 text-on-surface">
-        <% const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']; %>
-        <% const cm = (filters && filters.month) ? parseInt(filters.month, 10) : new Date().getMonth() + 1; %>
-        <% for (let m = 1; m <= 12; m++) { %>
-          <option value="<%= m %>" <%= cm === m ? 'selected' : '' %>><%= months[m-1] %></option>
-        <% } %>
-      </select>
-      <select name="year" class="text-body-md rounded-lg border border-outline-variant bg-surface-container-high px-2 py-1.5 text-on-surface">
-        <% const cy = new Date().getFullYear(); const sy = (filters && filters.year) ? parseInt(filters.year, 10) : cy; %>
-        <% for (let y = cy - 2; y <= cy + 1; y++) { %>
-          <option value="<%= y %>" <%= sy === y ? 'selected' : '' %>><%= y %></option>
-        <% } %>
-      </select>
-      <button type="submit" class="text-label-caps uppercase bg-primary-container text-on-primary px-3 py-1.5 rounded-lg">Terapkan</button>
-    </form>
-
     <section class="bg-surface-container-lowest p-gutter-card rounded-xl shadow-sm border border-outline-variant flex justify-between items-center">
       <div>
         <h1 class="font-h1 text-h1 text-on-surface"><%= collector.name || 'Kolektor' %></h1>
@@ -62,15 +45,24 @@
       </div>
     </section>
 
-    <section class="grid grid-cols-2 gap-stack-sm">
-      <a href="/collector/customers?status=unpaid" class="bg-primary text-on-primary py-padding-interactive px-4 rounded-lg font-h2 text-h2 flex items-center justify-center gap-2 active:scale-95 transition-transform text-center">
-        <span class="material-symbols-outlined fill">payments</span>
-        Tagih Sekarang
-      </a>
-      <a href="/collector/payment" class="bg-surface-container-high text-on-surface border border-outline py-padding-interactive px-4 rounded-lg font-h2 text-h2 flex items-center justify-center gap-2 active:scale-95 transition-transform text-center">
-        <span class="material-symbols-outlined">edit_document</span>
-        Input Pembayaran
-      </a>
+    <section class="bg-surface-container-lowest p-gutter-card rounded-xl shadow-sm border border-outline-variant">
+      <p class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-stack-sm">Periode target</p>
+      <form method="get" action="/collector/dashboard" class="flex flex-wrap gap-2 items-center">
+        <select name="month" aria-label="Bulan" class="text-body-md rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 text-on-surface min-w-[7rem] grow">
+          <% const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']; %>
+          <% const cm = (filters && filters.month) ? parseInt(filters.month, 10) : new Date().getMonth() + 1; %>
+          <% for (let m = 1; m <= 12; m++) { %>
+            <option value="<%= m %>" <%= cm === m ? 'selected' : '' %>><%= months[m-1] %></option>
+          <% } %>
+        </select>
+        <select name="year" aria-label="Tahun" class="text-body-md rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 text-on-surface min-w-[5.5rem]">
+          <% const cy = new Date().getFullYear(); const sy = (filters && filters.year) ? parseInt(filters.year, 10) : cy; %>
+          <% for (let y = cy - 2; y <= cy + 1; y++) { %>
+            <option value="<%= y %>" <%= sy === y ? 'selected' : '' %>><%= y %></option>
+          <% } %>
+        </select>
+        <button type="submit" class="text-label-caps uppercase bg-primary-container text-on-primary px-4 py-2 rounded-lg shrink-0">Terapkan</button>
+      </form>
     </section>
 
     <section class="grid grid-cols-2 gap-stack-sm">

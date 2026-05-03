@@ -3,8 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../store/collector_provider.dart';
 import '../../theme/collector_colors.dart';
-import 'collector_receive_payment_screen.dart';
-import 'collector_invoice_receipt_screen.dart';
+import 'collector_customer_detail_sheet.dart';
 
 String _rupiah(num? v) {
   final n = (v ?? 0).round();
@@ -218,32 +217,11 @@ class _CollectorCustomersScreenState extends State<CollectorCustomersScreen> {
                                     padding: const EdgeInsets.only(bottom: 12),
                                     child: _CustomerCard(
                                       row: row,
-                                      onTagih: () async {
-                                        final idRaw = row['id'] ?? row['customer_id'];
-                                        final id = int.tryParse(idRaw?.toString() ?? '');
-                                        if (id == null || !context.mounted) return;
-                                        final done = await Navigator.of(context).push<bool>(
-                                          MaterialPageRoute(
-                                            builder: (_) => CollectorReceivePaymentScreen(
-                                              customerId: id,
-                                              customerSnapshot: row,
-                                            ),
-                                          ),
-                                        );
-                                        if (done == true && context.mounted) {
-                                          await _reload();
-                                        }
-                                      },
-                                      onResi: () async {
-                                        final idRaw = row['id'] ?? row['customer_id'];
-                                        final id = int.tryParse(idRaw?.toString() ?? '');
-                                        if (id == null || !context.mounted) return;
-                                        await Navigator.of(context).push(
-                                          MaterialPageRoute<void>(
-                                            builder: (_) => CollectorInvoiceReceiptScreen(customerId: id),
-                                          ),
-                                        );
-                                      },
+                                      onOpenDetail: () => showCollectorCustomerDetailSheet(
+                                        context,
+                                        row: row,
+                                        onRefreshCustomers: _reload,
+                                      ),
                                     ),
                                   );
                                 },
@@ -304,13 +282,11 @@ class _FilterChip extends StatelessWidget {
 class _CustomerCard extends StatelessWidget {
   const _CustomerCard({
     required this.row,
-    required this.onTagih,
-    required this.onResi,
+    required this.onOpenDetail,
   });
 
   final Map<String, dynamic> row;
-  final VoidCallback onTagih;
-  final VoidCallback onResi;
+  final VoidCallback onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +303,6 @@ class _CustomerCard extends StatelessWidget {
 
     final isIsolir = st == 'suspended';
     final isPaid = ps == 'paid';
-    final isUnpaidLike = ps == 'unpaid' || ps == 'overdue' || ps == 'no_invoice';
 
     late String badgeLabel;
     late Color badgeBg;
@@ -351,136 +326,114 @@ class _CustomerCard extends StatelessWidget {
       badgeIcon = Icons.schedule;
     }
 
-    final showTagih = !isIsolir && !isPaid && isUnpaidLike;
-    final showResi = !isIsolir && isPaid;
-
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
       elevation: 0,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: FieldCollectorColors.outlineVariant),
-          boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 6, offset: Offset(0, 2))],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17, color: FieldCollectorColors.onSurface),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          idLine,
-                          style: const TextStyle(fontSize: 12, color: FieldCollectorColors.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: badgeBg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(badgeIcon, size: 14, color: badgeFg),
-                        const SizedBox(width: 4),
-                        Text(
-                          badgeLabel,
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: badgeFg, letterSpacing: 0.3),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.location_on_outlined, size: 18, color: FieldCollectorColors.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      addr.isEmpty ? '—' : addr,
-                      style: const TextStyle(fontSize: 13, color: FieldCollectorColors.onSurfaceVariant, height: 1.35),
-                    ),
-                  ),
-                ],
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Divider(height: 1),
-              ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          ps == 'overdue' ? 'TOTAL TAGIHAN (TUNGGAKAN)' : 'TOTAL TAGIHAN',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.4,
-                            color: ps == 'overdue' ? const Color(0xFFBA1A1A) : FieldCollectorColors.onSurfaceVariant,
+      child: InkWell(
+        onTap: onOpenDetail,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: FieldCollectorColors.outlineVariant),
+            boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 6, offset: Offset(0, 2))],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17, color: FieldCollectorColors.onSurface),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _rupiah(price),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            color: isPaid ? FieldCollectorColors.onSurfaceVariant : FieldCollectorColors.onSurface,
+                          const SizedBox(height: 4),
+                          Text(
+                            idLine,
+                            style: const TextStyle(fontSize: 12, color: FieldCollectorColors.onSurfaceVariant),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (showTagih)
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: FieldCollectorColors.primaryContainer,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ],
                       ),
-                      onPressed: onTagih,
-                      icon: const Icon(Icons.receipt_long, size: 18),
-                      label: const Text('TAGIH'),
                     ),
-                  if (showResi)
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: FieldCollectorColors.onSurfaceVariant,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        side: const BorderSide(color: FieldCollectorColors.outlineVariant),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: badgeBg,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      onPressed: onResi,
-                      icon: const Icon(Icons.description_outlined, size: 18),
-                      label: const Text('RESI'),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(badgeIcon, size: 14, color: badgeFg),
+                          const SizedBox(width: 4),
+                          Text(
+                            badgeLabel,
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: badgeFg, letterSpacing: 0.3),
+                          ),
+                        ],
+                      ),
                     ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.location_on_outlined, size: 18, color: FieldCollectorColors.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        addr.isEmpty ? '—' : addr,
+                        style: const TextStyle(fontSize: 13, color: FieldCollectorColors.onSurfaceVariant, height: 1.35),
+                      ),
+                    ),
+                  ],
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Divider(height: 1),
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ps == 'overdue' ? 'TOTAL TAGIHAN (TUNGGAKAN)' : 'TOTAL TAGIHAN',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.4,
+                              color: ps == 'overdue' ? const Color(0xFFBA1A1A) : FieldCollectorColors.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _rupiah(price),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              color: isPaid ? FieldCollectorColors.onSurfaceVariant : FieldCollectorColors.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right, color: FieldCollectorColors.onSurfaceVariant),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

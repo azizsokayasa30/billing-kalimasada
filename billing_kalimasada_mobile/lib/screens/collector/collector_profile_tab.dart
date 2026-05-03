@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../store/auth_provider.dart';
 import '../../store/collector_provider.dart';
 import '../../theme/collector_colors.dart';
+import 'collector_profile_edit_screen.dart';
 
 String _rupiah(num? v) {
   final n = (v ?? 0).round();
@@ -102,7 +103,7 @@ class _CollectorProfileTabState extends State<CollectorProfileTab> with Automati
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Statistik singkat', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                const Text('Performa Anda', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                 const Divider(height: 24),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -149,8 +150,14 @@ class _CollectorProfileTabState extends State<CollectorProfileTab> with Automati
                   title: const Text('Pengaturan akun'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Edit profil: gunakan portal /collector/profile/edit')),
+                    if (m == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Profil belum dimuat. Tarik untuk memuat ulang.')),
+                      );
+                      return;
+                    }
+                    Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(builder: (_) => const CollectorProfileEditScreen()),
                     );
                   },
                 ),

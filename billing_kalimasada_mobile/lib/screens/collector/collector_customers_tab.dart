@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../store/collector_provider.dart';
 import '../../theme/collector_colors.dart';
+import 'collector_customer_detail_sheet.dart';
 
 String _rupiah(num? v) {
   final n = (v ?? 0).round();
@@ -201,7 +202,14 @@ class _CollectorCustomersTabState extends State<CollectorCustomersTab> with Auto
                                 );
                               }
                               final row = Map<String, dynamic>.from(raw);
-                              return _CustomerTile(row: row, onTap: () => _openSheet(context, row));
+                              return _CustomerTile(
+                                row: row,
+                                onTap: () => showCollectorCustomerDetailSheet(
+                                  context,
+                                  row: row,
+                                  onRefreshCustomers: _reload,
+                                ),
+                              );
                             },
                           ),
                         ),
@@ -237,160 +245,6 @@ class _CollectorCustomersTabState extends State<CollectorCustomersTab> with Auto
     );
   }
 
-  void _openSheet(BuildContext context, Map<String, dynamic> row) {
-    final name = row['name']?.toString() ?? '';
-    final id = row['id'];
-    final addr = row['address']?.toString() ?? '';
-    final phone = row['phone']?.toString() ?? '';
-    final ps = row['payment_status']?.toString() ?? '';
-    final price = _coerceNum(row['package_price'])?.round() ?? 0;
-    final pkg = row['package_name']?.toString() ?? '';
-
-    String badge = 'Belum bayar';
-    Color badgeBg = FieldCollectorColors.errorContainer;
-    Color badgeFg = FieldCollectorColors.onErrorContainer;
-    if (row['status'] == 'suspended') {
-      badge = 'Isolir';
-      badgeBg = FieldCollectorColors.tertiaryFixed;
-      badgeFg = FieldCollectorColors.onTertiaryFixed;
-    } else if (ps == 'paid') {
-      badge = 'Lunas';
-      badgeBg = FieldCollectorColors.secondaryContainer;
-      badgeFg = FieldCollectorColors.onSecondaryContainer;
-    } else if (ps == 'no_invoice') {
-      badge = 'Baru';
-      badgeBg = const Color(0xFFD4E3FF);
-      badgeFg = const Color(0xFF001C3A);
-    }
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: FieldCollectorColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 20, right: 20, top: 12, bottom: MediaQuery.paddingOf(ctx).bottom + 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: FieldCollectorColors.outlineVariant,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name, style: Theme.of(ctx).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-                      Text('ID: $id', style: const TextStyle(color: FieldCollectorColors.onSurfaceVariant)),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(99)),
-                  child: Text(badge, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: badgeFg)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: FieldCollectorColors.outlineVariant),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.home_work_outlined, color: FieldCollectorColors.onSurfaceVariant),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(addr)),
-                    ],
-                  ),
-                  const Divider(height: 24),
-                  const Text('TAGIHAN (PAKET)', style: TextStyle(fontSize: 10, color: FieldCollectorColors.onSurfaceVariant)),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text(pkg.isEmpty ? '—' : pkg)),
-                      Text(_rupiah(price)),
-                    ],
-                  ),
-                  const Divider(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Total', style: TextStyle(fontWeight: FontWeight.w700)),
-                      Text(_rupiah(price), style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFFBA1A1A))),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: FieldCollectorColors.primary,
-                foregroundColor: FieldCollectorColors.onPrimary,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Pembayaran: buka /collector/payment?customer_id=$id di browser')),
-                );
-              },
-              icon: const Icon(Icons.payments),
-              label: const Text('Terima pembayaran'),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: phone.isEmpty
-                        ? null
-                        : () {
-                            /* url_launcher optional */
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hubungi: $phone')));
-                          },
-                    icon: const Icon(Icons.call),
-                    label: const Text('Hubungi'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: null,
-                    icon: const Icon(Icons.block),
-                    label: const Text('Isolir'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _CustomerTile extends StatelessWidget {

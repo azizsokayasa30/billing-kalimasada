@@ -16,11 +16,45 @@ num? _coerceNum(dynamic v) {
   return num.tryParse(v.toString());
 }
 
-class CollectorHomeTab extends StatelessWidget {
+const _kMonthShortId = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+];
+
+class CollectorHomeTab extends StatefulWidget {
   const CollectorHomeTab({super.key, this.onGoCustomersTab});
 
   /// Pindah ke tab Pelanggan (filter belum bayar di tab itu).
   final VoidCallback? onGoCustomersTab;
+
+  @override
+  State<CollectorHomeTab> createState() => _CollectorHomeTabState();
+}
+
+class _CollectorHomeTabState extends State<CollectorHomeTab> {
+  late int _month;
+  late int _year;
+  bool _syncedDropdownFromProvider = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final n = DateTime.now();
+    _month = n.month;
+    _year = n.year;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_syncedDropdownFromProvider) return;
+    final p = context.read<CollectorProvider>();
+    if (p.overviewMonth != null && p.overviewYear != null) {
+      _month = p.overviewMonth!;
+      _year = p.overviewYear!;
+    }
+    _syncedDropdownFromProvider = true;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +76,7 @@ class CollectorHomeTab extends StatelessWidget {
               Text(c.overviewError ?? '', textAlign: TextAlign.center),
               const SizedBox(height: 12),
               FilledButton(
-                onPressed: () => context.read<CollectorProvider>().fetchOverview(),
+                onPressed: () => context.read<CollectorProvider>().fetchOverview(month: _month, year: _year),
                 child: const Text('Coba lagi'),
               ),
             ],
@@ -67,7 +101,7 @@ class CollectorHomeTab extends StatelessWidget {
 
     return RefreshIndicator(
       color: FieldCollectorColors.primaryContainer,
-      onRefresh: () => context.read<CollectorProvider>().fetchOverview(),
+      onRefresh: () => context.read<CollectorProvider>().fetchOverview(month: _month, year: _year),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
@@ -220,37 +254,161 @@ class CollectorHomeTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: FieldCollectorColors.primary,
-                    foregroundColor: FieldCollectorColors.onPrimary,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  onPressed: () => onGoCustomersTab?.call(),
-                  icon: const Icon(Icons.payments),
-                  label: const Text('Tagih sekarang'),
+          _Card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Periode target',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: FieldCollectorColors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: FieldCollectorColors.onSurface,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Input pembayaran: gunakan portal /collector/payment di browser untuk sementara.')),
+                const SizedBox(height: 10),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    const controlH = 48.0;
+                    final labelStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: FieldCollectorColors.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        );
+                    final narrow = constraints.maxWidth < 340;
+                    final yearMin = DateTime.now().year - 2;
+                    final yearMax = DateTime.now().year + 1;
+                    final yearItems = [
+                      for (var y = yearMin; y <= yearMax; y++) DropdownMenuItem<int>(value: y, child: Text('$y')),
+                    ];
+
+                    BoxDecoration fieldDeco() => BoxDecoration(
+                          color: FieldCollectorColors.surface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: FieldCollectorColors.outlineVariant),
+                        );
+
+                    Widget dropdownBox({required Widget child}) {
+                      return SizedBox(
+                        height: controlH,
+                        child: DecoratedBox(
+                          decoration: fieldDeco(),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: DropdownButtonHideUnderline(
+                              child: Align(alignment: Alignment.centerLeft, child: child),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    final monthCtrl = dropdownBox(
+                      child: DropdownButton<int>(
+                        value: _month,
+                        isExpanded: true,
+                        isDense: true,
+                        menuMaxHeight: 280,
+                        icon: const Icon(Icons.arrow_drop_down, size: 22),
+                        style: Theme.of(context).textTheme.bodyLarge,
+                        items: [
+                          for (var m = 1; m <= 12; m++)
+                            DropdownMenuItem<int>(value: m, child: Text(_kMonthShortId[m - 1])),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _month = v);
+                        },
+                      ),
+                    );
+                    final yearCtrl = dropdownBox(
+                      child: DropdownButton<int>(
+                        value: _year,
+                        isExpanded: true,
+                        isDense: true,
+                        menuMaxHeight: 280,
+                        icon: const Icon(Icons.arrow_drop_down, size: 22),
+                        style: Theme.of(context).textTheme.bodyLarge,
+                        items: yearItems,
+                        onChanged: (v) {
+                          if (v != null) setState(() => _year = v);
+                        },
+                      ),
+                    );
+                    final applyStyle = FilledButton.styleFrom(
+                      backgroundColor: FieldCollectorColors.periodApplyBackground,
+                      foregroundColor: FieldCollectorColors.periodApplyForeground,
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      minimumSize: const Size(0, controlH),
+                      maximumSize: const Size(double.infinity, controlH),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    );
+                    final applyBtn = SizedBox(
+                      height: controlH,
+                      child: FilledButton(
+                        style: applyStyle,
+                        onPressed: () async {
+                          await context.read<CollectorProvider>().fetchOverview(month: _month, year: _year);
+                        },
+                        child: const Text('Terapkan'),
+                      ),
+                    );
+
+                    Widget labeledColumn(String label, Widget control) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(label, style: labelStyle),
+                          const SizedBox(height: 6),
+                          control,
+                        ],
+                      );
+                    }
+
+                    if (narrow) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          labeledColumn('Bulan', monthCtrl),
+                          const SizedBox(height: 10),
+                          labeledColumn('Tahun', yearCtrl),
+                          const SizedBox(height: 10),
+                          applyBtn,
+                        ],
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(flex: 2, child: Text('Bulan', style: labelStyle)),
+                            const SizedBox(width: 8),
+                            Expanded(flex: 2, child: Text('Tahun', style: labelStyle)),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 102,
+                              child: Text('\u00A0', style: labelStyle),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(flex: 2, child: monthCtrl),
+                            const SizedBox(width: 8),
+                            Expanded(flex: 2, child: yearCtrl),
+                            const SizedBox(width: 8),
+                            SizedBox(width: 102, child: applyBtn),
+                          ],
+                        ),
+                      ],
                     );
                   },
-                  icon: const Icon(Icons.edit_document),
-                  label: const Text('Input bayar'),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           _summaryGrid(context, totalPlg, blm, lunas, isolir),
@@ -263,7 +421,7 @@ class CollectorHomeTab extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               TextButton.icon(
-                onPressed: () => onGoCustomersTab?.call(),
+                onPressed: () => widget.onGoCustomersTab?.call(),
                 icon: const Icon(Icons.arrow_forward, size: 16),
                 label: const Text('Lihat semua'),
               ),
@@ -366,94 +524,107 @@ class CollectorHomeTab extends StatelessWidget {
   }
 
   Widget _summaryGrid(BuildContext context, int total, int blm, int lunas, int isolir) {
+    const statInnerH = 48.0;
+    const statCardPad = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+    const totalNumStyle = TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: FieldCollectorColors.onSurface);
+    const belumTextStyle = TextStyle(
+      fontWeight: FontWeight.w700,
+      fontSize: 14,
+      height: 1.1,
+      color: FieldCollectorColors.summaryOverdue,
+      letterSpacing: -0.2,
+    );
+    const belumNumStyle = TextStyle(
+      fontWeight: FontWeight.w800,
+      fontSize: 18,
+      height: 1.0,
+      color: FieldCollectorColors.summaryOverdue,
+      letterSpacing: -0.3,
+    );
+    const lunasTextStyle = TextStyle(
+      fontWeight: FontWeight.w700,
+      fontSize: 14,
+      height: 1.1,
+      color: FieldCollectorColors.summaryPaid,
+      letterSpacing: -0.2,
+    );
+    const lunasNumStyle = TextStyle(
+      fontWeight: FontWeight.w800,
+      fontSize: 18,
+      height: 1.0,
+      color: FieldCollectorColors.summaryPaid,
+      letterSpacing: -0.3,
+    );
+
     return Column(
       children: [
         _Card(
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD4E3FF),
-                  borderRadius: BorderRadius.circular(8),
+          padding: statCardPad,
+          child: SizedBox(
+            height: statInnerH,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD4E3FF),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.group, color: Color(0xFF001C3A)),
                 ),
-                child: const Icon(Icons.group, color: Color(0xFF001C3A)),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text('Total pelanggan', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-              ),
-              Text('$total', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-            ],
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Total pelanggan',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, height: 1.15),
+                  ),
+                ),
+                Text('$total', style: totalNumStyle),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 8),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: _Card(
-                color: FieldCollectorColors.errorContainer,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.warning_amber, size: 18, color: FieldCollectorColors.onErrorContainer.withValues(alpha: 0.9)),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Belum bayar',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: FieldCollectorColors.onErrorContainer.withValues(alpha: 0.95),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '$blm',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: FieldCollectorColors.onErrorContainer.withValues(alpha: 0.95),
+                padding: statCardPad,
+                child: SizedBox(
+                  height: statInnerH,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(Icons.warning_amber_rounded, size: 20, color: FieldCollectorColors.summaryOverdue),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text('Belum bayar', maxLines: 2, overflow: TextOverflow.ellipsis, style: belumTextStyle),
                       ),
-                    ),
-                  ],
+                      Text('$blm', style: belumNumStyle),
+                    ],
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _Card(
-                color: FieldCollectorColors.secondaryContainer,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.check_circle, size: 18, color: FieldCollectorColors.onSecondaryContainer.withValues(alpha: 0.95)),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Lunas',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: FieldCollectorColors.onSecondaryContainer.withValues(alpha: 0.95),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '$lunas',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: FieldCollectorColors.onSecondaryContainer.withValues(alpha: 0.95),
+                padding: statCardPad,
+                child: SizedBox(
+                  height: statInnerH,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 20, color: FieldCollectorColors.summaryPaid),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text('Lunas', maxLines: 2, overflow: TextOverflow.ellipsis, style: lunasTextStyle),
                       ),
-                    ),
-                  ],
+                      Text('$lunas', style: lunasNumStyle),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -461,23 +632,29 @@ class CollectorHomeTab extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         _Card(
+          padding: statCardPad,
           color: FieldCollectorColors.tertiaryFixed,
-          child: Row(
-            children: [
-              Icon(Icons.wifi_off, color: FieldCollectorColors.onTertiaryFixed.withValues(alpha: 0.9)),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text('Terisolir', style: TextStyle(fontWeight: FontWeight.w600)),
-              ),
-              Text(
-                '$isolir',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 20,
-                  color: FieldCollectorColors.onTertiaryFixed.withValues(alpha: 0.95),
+          child: SizedBox(
+            height: statInnerH,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(Icons.wifi_off, color: FieldCollectorColors.onTertiaryFixed.withValues(alpha: 0.9)),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text('Terisolir', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, height: 1.15)),
                 ),
-              ),
-            ],
+                Text(
+                  '$isolir',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    height: 1.0,
+                    color: FieldCollectorColors.onTertiaryFixed.withValues(alpha: 0.95),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -486,20 +663,23 @@ class CollectorHomeTab extends StatelessWidget {
 }
 
 class _Card extends StatelessWidget {
-  const _Card({required this.child, this.color});
+  const _Card({required this.child, this.color, this.padding});
   final Widget child;
   final Color? color;
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
+    final bg = color ?? FieldCollectorColors.surface;
+    final subtleShadow = bg == FieldCollectorColors.surface;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: padding ?? const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color ?? FieldCollectorColors.surface,
+        color: bg,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: FieldCollectorColors.outlineVariant),
-        boxShadow: color == null
+        boxShadow: subtleShadow
             ? const [BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 1))]
             : null,
       ),
