@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
@@ -13,6 +14,21 @@ const multer = require('multer');
 const upload = multer();
 const ExcelJS = require('exceljs');
 const { adminAuth } = require('./adminAuth');
+
+/** Password konfirmasi aksi sensitif: `super_admin_password` di settings jika diisi, else `admin_password`. */
+function verifySuperAdminPassword(plain) {
+    const dedicated = String(getSetting('super_admin_password', '') || '').trim();
+    const expected =
+        dedicated.length > 0 ? dedicated : String(getSetting('admin_password', 'admin'));
+    const a = Buffer.from(String(plain ?? ''), 'utf8');
+    const b = Buffer.from(expected, 'utf8');
+    if (a.length !== b.length) return false;
+    try {
+        return crypto.timingSafeEqual(a, b);
+    } catch (_) {
+        return false;
+    }
+}
 
 // Configure multer for image uploads
 const imageStorage = multer.diskStorage({
@@ -449,7 +465,7 @@ router.post('/api/collector-payment', adminAuth, async (req, res) => {
                     amount: invAmount,
                     payment_method,
                     reference_number: '',
-                    notes: notes || `Collector ${collector_id}`,
+                    notes: notes && String(notes).trim() ? String(notes).trim() : '',
                     collector_id: collector_id,
                     commission_amount: Math.round((invAmount * commissionRate) / 100)
                 });
@@ -477,7 +493,7 @@ router.post('/api/collector-payment', adminAuth, async (req, res) => {
                             amount: invAmount,
                             payment_method,
                             reference_number: '',
-                            notes: notes || `Collector ${collector_id}`,
+                            notes: notes && String(notes).trim() ? String(notes).trim() : '',
                             collector_id: collector_id,
                             commission_amount: Math.round((invAmount * commissionRate) / 100)
                         });
@@ -507,7 +523,26 @@ router.post('/api/collector-payment', adminAuth, async (req, res) => {
         } finally {
             db.close();
         }
-        
+
+        setImmediate(() => {
+            (async () => {
+                try {
+                    const cfn = require('../config/collectorFieldNotifications');
+                    const cust = await billingManager.getCustomerById(Number(customer_id));
+                    await cfn.notifyAdminRecordedCollectorPayment(
+                        Number(collector_id),
+                        paymentId,
+                        cust && cust.name ? String(cust.name) : '',
+                        paymentAmountNum
+                    );
+                } catch (e) {
+                    try {
+                        logger.warn('[admin collector-payment] collector notify:', e.message);
+                    } catch (_) {}
+                }
+            })();
+        });
+
         res.json({
             success: true,
             message: 'Payment recorded successfully',
@@ -817,6 +852,7 @@ router.get('/collector-details/:id', getAppSettings, async (req, res) => {
         const currentMonth = new Date().getMonth() + 1;
         const filterYear = parseInt(year) || currentYear;
         const filterMonth = parseInt(month) || currentMonth;
+        const isEmbed = req.query.embed === '1';
         
         const startDate = `${filterYear}-${String(filterMonth).padStart(2, '0')}-01`;
         const endDate = new Date(filterYear, filterMonth, 0).toISOString().split('T')[0];
@@ -931,7 +967,8 @@ router.get('/collector-details/:id', getAppSettings, async (req, res) => {
                 year: filterYear
             },
             settings: settings,
-            page: 'collector-reports'
+            page: 'collector-reports',
+            embed: isEmbed
         });
         
     } catch (error) {
@@ -1037,19 +1074,29 @@ router.get('/collector-remittance', getAppSettings, async (req, res) => {
         
         const filterMonth = month === 'all' ? null : month;
         const filterYear = year === 'all' ? null : year;
-        
-        // Get collectors with pending amounts from payments table
-        const collectors = await billingManager.getCollectorsWithPendingAmounts(filterMonth, filterYear);
-        
-        // Get recent remittances from expenses table (commission expenses)
-        const remittances = await billingManager.getCommissionExpenses();
-        
+
+        const collectorsPending = await billingManager.getCollectorsWithPendingAmounts(filterMonth, filterYear);
+        const { rows: reportRows, summary } = await billingManager.getCollectorReportsAreaRowsAndSummary(
+            filterMonth,
+            filterYear,
+            null
+        );
+        const reportById = new Map((reportRows || []).map((r) => [r.id, r]));
+        const collectors = collectorsPending.map((c) => {
+            const extra = reportById.get(c.id) || {};
+            return { ...c, ...extra };
+        });
+
+        // Riwayat = log penerimaan setoran kasir (bukan biaya komisi)
+        const remittances = await billingManager.getCollectorRemittanceReceipts(80);
+
         const settings = getSettingsWithCache();
         res.render('admin/billing/collector-remittance', {
             title: 'Terima Setoran Kolektor',
             appSettings: req.appSettings,
-            collectors: collectors,
-            remittances: remittances,
+            collectors,
+            summary,
+            remittances,
             settings: settings,
             filters: { month, year },
             page: 'collector-remittance'
@@ -1061,6 +1108,227 @@ router.get('/collector-remittance', getAppSettings, async (req, res) => {
             message: 'Gagal memuat data setoran kolektor',
             error: error.message 
         });
+    }
+});
+
+/** Export laporan halaman Terima Setoran (Excel / CSV). */
+function remitExportCsvEscape(value) {
+    const s = value == null ? '' : String(value);
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+}
+function remitExportCsvRow(cells) {
+    return cells.map(remitExportCsvEscape).join(',') + '\r\n';
+}
+
+router.get('/collector-remittance/export.xlsx', getAppSettings, adminAuth, async (req, res) => {
+    try {
+        const month = req.query.month !== undefined ? req.query.month : '';
+        const year = req.query.year !== undefined ? req.query.year : '';
+        const filterMonth = month === 'all' || month === '' ? null : month;
+        const filterYear = year === 'all' || year === '' ? null : year;
+
+        const collectorsPending = await billingManager.getCollectorsWithPendingAmounts(filterMonth, filterYear);
+        const { rows: reportRows, summary } = await billingManager.getCollectorReportsAreaRowsAndSummary(
+            filterMonth,
+            filterYear,
+            null
+        );
+        const reportById = new Map((reportRows || []).map((r) => [r.id, r]));
+        const collectors = collectorsPending.map((c) => ({ ...c, ...(reportById.get(c.id) || {}) }));
+
+        const remittances = await billingManager.getCollectorRemittanceReceiptsExported({
+            month: filterMonth != null ? String(filterMonth) : 'all',
+            year: filterYear != null ? String(filterYear) : 'all',
+            limit: 12000
+        });
+
+        const workbook = new ExcelJS.Workbook();
+        workbook.created = new Date();
+
+        const wsRing = workbook.addWorksheet('Ringkasan', { views: [{ state: 'frozen', ySplit: 5 }] });
+        wsRing.getColumn(1).width = 28;
+        wsRing.getColumn(2).width = 22;
+        const periodLabel =
+            filterMonth && filterYear
+                ? `Periode filter (kartu kolektor): ${String(filterMonth).padStart(2, '0')}/${filterYear}`
+                : 'Periode filter: semua waktu';
+        wsRing.addRow(['Laporan', 'Terima Setoran Kolektor']);
+        wsRing.addRow(['Diekspor', new Date().toISOString().slice(0, 19).replace('T', ' ')]);
+        wsRing.addRow([periodLabel, '']);
+        wsRing.addRow([]);
+        wsRing.addRow(['Total tagihan (area)', Number(summary.total_tagihan) || 0]);
+        wsRing.addRow(['Total lunas (area)', Number(summary.total_lunas) || 0]);
+        wsRing.addRow(['Belum lunas (area)', Number(summary.total_belum_lunas) || 0]);
+        wsRing.addRow(['Komisi kolektor (bruto)', Number(summary.total_komisi) || 0]);
+        wsRing.getCell('B5').numFmt = '"Rp" #,##0';
+        wsRing.getCell('B6').numFmt = '"Rp" #,##0';
+        wsRing.getCell('B7').numFmt = '"Rp" #,##0';
+        wsRing.getCell('B8').numFmt = '"Rp" #,##0';
+
+        const wsKol = workbook.addWorksheet('Kolektor', { views: [{ state: 'frozen', ySplit: 1 }] });
+        wsKol.columns = [
+            { header: 'Nama', key: 'name', width: 26 },
+            { header: 'Telepon', key: 'phone', width: 16 },
+            { header: 'Komisi %', key: 'rate', width: 10 },
+            { header: 'Total tagihan area (Rp)', key: 'tta', width: 22 },
+            { header: 'Jml tagihan', key: 'ct', width: 12 },
+            { header: 'Belum lunas (Rp)', key: 'blrp', width: 18 },
+            { header: 'Belum lunas (jml)', key: 'blc', width: 14 },
+            { header: 'Sudah lunas area (Rp)', key: 'tlrp', width: 20 },
+            { header: 'Jml lunas', key: 'cl', width: 11 },
+            { header: 'Jumlah lunas kolektor (Rp)', key: 'tlg', width: 24 },
+            { header: 'Sudah setor (Rp)', key: 'ss', width: 18 },
+            { header: 'Komisi (Rp)', key: 'kom', width: 16 },
+            { header: 'Belum setor (Rp)', key: 'pend', width: 18 }
+        ];
+        collectors.forEach((c) => {
+            wsKol.addRow({
+                name: c.name || '',
+                phone: c.phone || '',
+                rate: c.commission_rate != null ? Number(c.commission_rate) : 5,
+                tta: Number(c.total_tagihan_area) || 0,
+                ct: Number(c.count_tagihan_area) || 0,
+                blrp: Number(c.total_belum_lunas_amount) || 0,
+                blc: Number(c.total_belum_lunas_count) || 0,
+                tlrp: Number(c.total_lunas_area) || 0,
+                cl: Number(c.count_lunas_area) || 0,
+                tlg: Number(c.total_lunas_gross) || 0,
+                ss: Number(c.sudah_setor) || 0,
+                kom: Number(c.total_commission) || 0,
+                pend: Number(c.pending_amount) || 0
+            });
+        });
+        ['tta', 'blrp', 'tlrp', 'tlg', 'ss', 'kom', 'pend'].forEach((k) => {
+            wsKol.getColumn(k).numFmt = '"Rp" #,##0';
+        });
+
+        const wsRiw = workbook.addWorksheet('Riwayat terima', { views: [{ state: 'frozen', ySplit: 1 }] });
+        wsRiw.columns = [
+            { header: 'ID', key: 'id', width: 8 },
+            { header: 'Kolektor', key: 'cn', width: 26 },
+            { header: 'Waktu terima', key: 'dt', width: 20 },
+            { header: 'Metode', key: 'pm', width: 14 },
+            { header: 'Catatan', key: 'nt', width: 28 },
+            { header: 'Jumlah (Rp)', key: 'am', width: 18 },
+            { header: 'Status', key: 'st', width: 12 }
+        ];
+        remittances.forEach((r) => {
+            let dt = '';
+            try {
+                dt = r.received_at ? new Date(r.received_at).toLocaleString('id-ID') : '';
+            } catch (_) {
+                dt = String(r.received_at || '');
+            }
+            wsRiw.addRow({
+                id: r.id,
+                cn: r.collector_name || '',
+                dt,
+                pm: (r.payment_method || '').toString(),
+                nt: r.notes || '',
+                am: Number(r.amount) || 0,
+                st: 'Diterima'
+            });
+        });
+        wsRiw.getColumn('am').numFmt = '"Rp" #,##0';
+
+        const fn = `setoran-kolektor-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (error) {
+        logger.error('Error exporting collector remittance xlsx:', error);
+        res.status(500).send(error.message || 'Export gagal');
+    }
+});
+
+router.get('/collector-remittance/export.csv', getAppSettings, adminAuth, async (req, res) => {
+    try {
+        const table = String(req.query.table || 'riwayat').toLowerCase();
+        const month = req.query.month !== undefined ? req.query.month : '';
+        const year = req.query.year !== undefined ? req.query.year : '';
+        const filterMonth = month === 'all' || month === '' ? null : month;
+        const filterYear = year === 'all' || year === '' ? null : year;
+
+        let body = '\uFEFF';
+        let filename = 'setoran-kolektor.csv';
+
+        if (table === 'kolektor') {
+            filename = 'setoran-kolektor-snapshot.csv';
+            const collectorsPending = await billingManager.getCollectorsWithPendingAmounts(filterMonth, filterYear);
+            const { rows: reportRows } = await billingManager.getCollectorReportsAreaRowsAndSummary(
+                filterMonth,
+                filterYear,
+                null
+            );
+            const reportById = new Map((reportRows || []).map((r) => [r.id, r]));
+            const collectors = collectorsPending.map((c) => ({ ...c, ...(reportById.get(c.id) || {}) }));
+            body += remitExportCsvRow([
+                'Nama',
+                'Telepon',
+                'Komisi_%',
+                'Total_tagihan_area_Rp',
+                'Jml_tagihan',
+                'Belum_lunas_Rp',
+                'Belum_lunas_jml',
+                'Sudah_lunas_area_Rp',
+                'Jml_lunas',
+                'Lunas_kolektor_Rp',
+                'Sudah_setor_Rp',
+                'Komisi_Rp',
+                'Belum_setor_Rp'
+            ]);
+            collectors.forEach((c) => {
+                body += remitExportCsvRow([
+                    c.name || '',
+                    c.phone || '',
+                    c.commission_rate != null ? c.commission_rate : 5,
+                    Number(c.total_tagihan_area) || 0,
+                    Number(c.count_tagihan_area) || 0,
+                    Number(c.total_belum_lunas_amount) || 0,
+                    Number(c.total_belum_lunas_count) || 0,
+                    Number(c.total_lunas_area) || 0,
+                    Number(c.count_lunas_area) || 0,
+                    Number(c.total_lunas_gross) || 0,
+                    Number(c.sudah_setor) || 0,
+                    Number(c.total_commission) || 0,
+                    Number(c.pending_amount) || 0
+                ]);
+            });
+        } else {
+            filename = 'setoran-kolektor-riwayat-terima.csv';
+            const remittances = await billingManager.getCollectorRemittanceReceiptsExported({
+                month: filterMonth != null ? String(filterMonth) : 'all',
+                year: filterYear != null ? String(filterYear) : 'all',
+                limit: 12000
+            });
+            body += remitExportCsvRow(['ID', 'Kolektor', 'Waktu_terima', 'Metode', 'Catatan', 'Jumlah_Rp', 'Status']);
+            remittances.forEach((r) => {
+                let dt = '';
+                try {
+                    dt = r.received_at ? new Date(r.received_at).toISOString() : '';
+                } catch (_) {
+                    dt = String(r.received_at || '');
+                }
+                body += remitExportCsvRow([
+                    r.id,
+                    r.collector_name || '',
+                    dt,
+                    (r.payment_method || '').toString(),
+                    r.notes || '',
+                    Number(r.amount) || 0,
+                    'Diterima'
+                ]);
+            });
+        }
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(body);
+    } catch (error) {
+        logger.error('Error exporting collector remittance csv:', error);
+        res.status(500).send(error.message || 'Export gagal');
     }
 });
 
@@ -1076,7 +1344,6 @@ router.post('/api/collector-remittance', adminAuth, async (req, res) => {
             });
         }
         
-        // Use billing manager to record remittance
         const result = await billingManager.recordCollectorRemittance({
             collector_id,
             amount: parseFloat(remittance_amount),
@@ -1084,18 +1351,23 @@ router.post('/api/collector-remittance', adminAuth, async (req, res) => {
             notes: notes || '',
             remittance_date: remittance_date || new Date().toISOString()
         });
-        
+
         res.json({
             success: true,
             message: 'Setoran berhasil diterima',
             data: result
         });
-        
     } catch (error) {
         console.error('Error recording collector remittance:', error);
-        res.status(500).json({
+        const msg = error && error.message ? error.message : String(error);
+        const isBiz =
+            msg.includes('melebihi') ||
+            msg.includes('Tidak ada sisa') ||
+            msg.includes('tidak valid') ||
+            msg.includes('Alokasi');
+        res.status(isBiz ? 400 : 500).json({
             success: false,
-            message: 'Error recording remittance: ' + error.message
+            message: isBiz ? msg : 'Error recording remittance: ' + msg
         });
     }
 });
@@ -6554,12 +6826,29 @@ router.get('/payments', getAppSettings, async (req, res) => {
 // All Payments - Admin and Collector
 router.get('/all-payments', getAppSettings, async (req, res) => {
     try {
-        const payments = await billingManager.getPayments();
-        
+        const period = resolveMonthYearRange(req.query);
+        const filters = {
+            month: String(period.month),
+            year: String(period.year),
+            from: req.query.from || period.startDate,
+            to: req.query.to || period.endDate,
+            collector_id: req.query.collector_id || '',
+            q: req.query.q || ''
+        };
+
+        const [payments, collectors, summary] = await Promise.all([
+            billingManager.getAllPaymentsHistory(filters),
+            billingManager.getAllCollectors(),
+            billingManager.getAllPaymentsHistorySummary(filters)
+        ]);
+
         const settings = getSettingsWithCache();
         res.render('admin/billing/payments', {
             title: 'Riwayat Pembayaran',
             payments,
+            collectors,
+            filters,
+            summary,
             appSettings: req.appSettings,
             settings: settings,
             page: 'all-payments'
@@ -6574,9 +6863,46 @@ router.get('/all-payments', getAppSettings, async (req, res) => {
     }
 });
 
+/** Batalkan satu pembayaran (riwayat all-payments): hapus baris payment & kembalikan invoice ke unpaid bila perlu */
+router.post('/api/payments/:id/cancel', async (req, res) => {
+    try {
+        const id = parseInt(String(req.params.id), 10);
+        if (!Number.isFinite(id) || id <= 0) {
+            return res.status(400).json({ success: false, message: 'ID pembayaran tidak valid' });
+        }
+        const rawBody = req.body && typeof req.body === 'object' ? req.body : {};
+        const confirmPassword =
+            rawBody.confirm_password != null
+                ? String(rawBody.confirm_password)
+                : rawBody.super_admin_password != null
+                  ? String(rawBody.super_admin_password)
+                  : '';
+        if (!verifySuperAdminPassword(confirmPassword)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Password super admin salah atau kosong.'
+            });
+        }
+        const result = await billingManager.cancelPaymentById(id);
+        return res.json({
+            success: true,
+            message: result.invoice_reverted_unpaid
+                ? 'Pembayaran dibatalkan. Tagihan kembali belum lunas.'
+                : 'Pembayaran dibatalkan.',
+            ...result
+        });
+    } catch (error) {
+        logger.error('Cancel payment failed:', error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || 'Gagal membatalkan pembayaran'
+        });
+    }
+});
+
 router.post('/payments', async (req, res) => {
     try {
-        const { invoice_id, amount, payment_method, reference_number, notes, payment_date } = req.body;
+        const { invoice_id, amount, payment_method, reference_number, notes, payment_date, discount_amount } = req.body;
         
         // Validate required fields first
         if (!invoice_id || !amount || !payment_method) {
@@ -6590,13 +6916,15 @@ router.post('/payments', async (req, res) => {
         const normalizedNotes = (notes ? notes.trim() : '') ||
             (normalizedPaymentMethod === 'manual_admin' ? 'Pelunasan oleh Admin Kantor' : '');
 
+        const discNum = Math.max(0, parseFloat(discount_amount) || 0);
         const paymentData = {
             invoice_id: parseInt(invoice_id),
             amount: parseFloat(amount),
             payment_method: normalizedPaymentMethod,
             reference_number: reference_number ? reference_number.trim() : '',
             notes: normalizedNotes,
-            payment_date: payment_date ? String(payment_date).trim() : ''
+            payment_date: payment_date ? String(payment_date).trim() : '',
+            discount_amount: discNum
         };
 
         const newPayment = await billingManager.recordPayment(paymentData);

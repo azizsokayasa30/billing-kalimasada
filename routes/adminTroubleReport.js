@@ -194,11 +194,18 @@ router.get('/technicians/list', async (req, res) => {
 // POST: Buat tiket laporan gangguan baru dari admin
 router.post('/create', async (req, res) => {
   try {
-    const { name, phone, location, category, description, assignedTechnicianId, priority } = req.body;
+    const { name, phone, location, category, description, assignedTechnicianId, priority, customerId } = req.body;
     
     // Note: createTroubleReport will automatically send notification when auto_ticket setting is true
     const newReport = await createTroubleReport({
-      name, phone, location, category, description, assignedTechnicianId, priority
+      name,
+      phone,
+      location,
+      category,
+      description,
+      assignedTechnicianId,
+      priority,
+      customerId
     });
 
     const assignTid = newReport.assigned_technician_id || newReport.assignedTechnicianId;

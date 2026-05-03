@@ -7,9 +7,12 @@ import 'job_execution_screen.dart';
 import 'task_detail_screen.dart';
 
 class TaskListScreen extends StatefulWidget {
-  final void Function(int)? onNavigateToTab;
+  final void Function(int index, {String? taskListFilter})? onNavigateToTab;
 
-  const TaskListScreen({super.key, this.onNavigateToTab});
+  /// `'Tiket'` | `'PSB'` | `'Semua'` — filter chip saat layar dibuka (mis. dari dashboard Gangguan).
+  final String? initialTaskTypeFilter;
+
+  const TaskListScreen({super.key, this.onNavigateToTab, this.initialTaskTypeFilter});
 
   @override
   State<TaskListScreen> createState() => _TaskListScreenState();
@@ -18,12 +21,18 @@ class TaskListScreen extends StatefulWidget {
 class _TaskListScreenState extends State<TaskListScreen> {
   bool _isSearching = false;
   String _searchQuery = '';
-  String _selectedType = 'Semua'; // 'Semua', 'Tiket', 'PSB'
+  late String _selectedType; // 'Semua', 'Tiket', 'PSB'
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    final init = widget.initialTaskTypeFilter;
+    if (init == 'Tiket' || init == 'PSB' || init == 'Semua') {
+      _selectedType = init!;
+    } else {
+      _selectedType = 'Semua';
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskProvider>().fetchTasks();
     });

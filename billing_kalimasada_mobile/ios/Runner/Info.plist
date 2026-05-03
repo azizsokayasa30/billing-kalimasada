@@ -29,7 +29,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lokasi digunakan untuk menandai koordinat pemasangan saat menyelesaikan tugas di lapangan.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Aplikasi memerlukan akses kamera untuk mengambil foto selfie saat absen Check-In.</string>
+	<string>Kamera dipakai untuk selfie absensi dan memindai QR di lokasi kerja.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Aplikasi memerlukan akses galeri untuk mengambil foto.</string>
 	<key>NSMicrophoneUsageDescription</key>

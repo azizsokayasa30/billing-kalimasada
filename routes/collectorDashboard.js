@@ -539,7 +539,7 @@ router.post('/api/profile/update-password', collectorAuth, async (req, res) => {
 router.post('/api/payment', collectorAuth, collectorPaymentMulter.single('payment_proof'), async (req, res) => {
     try {
         const collectorId = req.collector.id;
-        const { customer_id, payment_amount, payment_method, notes, invoice_ids } = req.body;
+        const { customer_id, payment_amount, payment_method, notes, invoice_ids, discount_amount } = req.body;
         const paymentProof = req.file ? '/uploads/payments/' + req.file.filename : null;
 
         const result = await submitCollectorPayment({
@@ -549,6 +549,7 @@ router.post('/api/payment', collectorAuth, collectorPaymentMulter.single('paymen
             payment_method,
             notes,
             invoice_ids,
+            discount_amount,
             paymentProofRelativePath: paymentProof
         });
 

@@ -5,7 +5,7 @@ import 'customer_detail_screen.dart';
 
 class CustomerListScreen extends StatefulWidget {
   final String? initialFilter;
-  
+
   const CustomerListScreen({super.key, this.initialFilter});
 
   @override
@@ -37,30 +37,38 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScrollNearEnd);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<CustomerProvider>().fetchCustomers(
-        refresh: true, 
+        refresh: true,
         status: widget.initialFilter,
       );
       context.read<CustomerProvider>().fetchDashboardStats();
-    });
-
-    _scrollController.addListener(() {
-      if (_scrollController.position.pixels >=
-          _scrollController.position.maxScrollExtent - 200) {
-        context.read<CustomerProvider>().fetchCustomers(
-          search: _searchController.text,
-          status: widget.initialFilter,
-        );
-      }
     });
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScrollNearEnd);
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onScrollNearEnd() {
+    if (!mounted) return;
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (!pos.hasViewportDimension) return;
+    if (pos.maxScrollExtent <= 0) return;
+    if (pos.pixels < pos.maxScrollExtent - 200) return;
+    final p = context.read<CustomerProvider>();
+    if (!p.hasMore || p.loading) return;
+    p.fetchCustomers(
+      search: _searchController.text,
+      status: widget.initialFilter,
+    );
   }
 
   void _onSearch() {
@@ -68,6 +76,22 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       refresh: true,
       search: _searchController.text,
       status: widget.initialFilter,
+    );
+  }
+
+  Widget _scrollableRefreshBody(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: child,
+          ),
+        );
+      },
     );
   }
 
@@ -202,270 +226,18 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               // Customer List
               Expanded(
                 child: RefreshIndicator(
+                  color: _primaryContainerColor,
+                  displacement: 48,
+                  triggerMode: RefreshIndicatorTriggerMode.anywhere,
                   onRefresh: () async {
-                    provider.fetchDashboardStats();
+                    await provider.fetchDashboardStats();
                     await provider.fetchCustomers(
                       refresh: true,
                       search: _searchController.text,
+                      status: widget.initialFilter,
                     );
                   },
-                  color: _primaryContainerColor,
-                  child: () {
-                    if (provider.loading && provider.customers.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: _buildSkeleton(),
-                      );
-                    }
-
-                    if (provider.error != null && provider.customers.isEmpty) {
-                      return Center(
-                        child: Text(
-                          provider.error!,
-                          style: TextStyle(color: _errorColor),
-                        ),
-                      );
-                    }
-
-                    if (provider.customers.isEmpty) {
-                      return const Center(
-                        child: Text('Tidak ada pelanggan ditemukan.'),
-                      );
-                    }
-
-                    return ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount:
-                          provider.customers.length +
-                          (provider.hasMore ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == provider.customers.length) {
-                          return Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: _primaryContainerColor,
-                              ),
-                            ),
-                          );
-                        }
-
-                        final customer = provider.customers[index];
-                        final status =
-                            customer['status']?.toString().toLowerCase() ??
-                            'active';
-
-                        // Default to active colors
-                        Color statusColor = const Color(0xFF10B981); // Emerald
-                        Color bgColor = _bgSurfaceContainerLowest;
-                        String statusLabel = 'Aktif';
-                        IconData statusIcon = Icons.check_circle;
-
-                        if (status == 'suspended') {
-                          statusColor = _secondaryColor;
-                          statusLabel = 'Isolir';
-                          statusIcon = Icons.block;
-                          bgColor = _bgSurfaceContainerLowest.withValues(
-                            alpha: 0.75,
-                          );
-                        } else if (status == 'isolated') {
-                          statusColor = _errorColor;
-                          statusLabel = 'Gangguan';
-                          statusIcon = Icons.error;
-                          bgColor = const Color(
-                            0xFFFFDAD6,
-                          ).withValues(alpha: 0.2); // error container
-                        }
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: status == 'isolated'
-                                  ? _errorColor.withValues(alpha: 0.3)
-                                  : _outlineVariant,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.02),
-                                blurRadius: 4,
-                                offset: const Offset(0, 1),
-                              ),
-                            ],
-                          ),
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      CustomerDetailScreen(customer: customer),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: statusColor,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: _bgSurfaceContainer,
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                'ID: ${customer['customer_id'] ?? '-'}',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: _textOnSurfaceVariant,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: statusColor.withValues(
-                                                  alpha: 0.1,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    statusIcon,
-                                                    size: 10,
-                                                    color: statusColor,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    statusLabel,
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: statusColor,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          customer['name'] ?? '-',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: _textOnBackground,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.location_on,
-                                              size: 14,
-                                              color: _textOnSurfaceVariant,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                customer['address'] ?? '-',
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  color: _textOnSurfaceVariant,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(
-                                            0xFF1B0C6B,
-                                          ).withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          border: Border.all(
-                                            color: const Color(
-                                              0xFF070038,
-                                            ).withValues(alpha: 0.2),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          'FO', // Service type placeholder
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: _primaryColor,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Icon(
-                                        Icons.chevron_right,
-                                        color: _outline,
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  }(),
+                  child: _buildCustomerListBody(context, provider),
                 ),
               ),
               const SizedBox(height: 80), // Padding for bottom navbar
@@ -473,6 +245,259 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildCustomerListBody(
+    BuildContext context,
+    CustomerProvider provider,
+  ) {
+    if (provider.loading && provider.customers.isEmpty) {
+      return _scrollableRefreshBody(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: _buildSkeleton(),
+        ),
+      );
+    }
+
+    if (provider.error != null && provider.customers.isEmpty) {
+      return _scrollableRefreshBody(
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              provider.error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _errorColor),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (provider.customers.isEmpty) {
+      return _scrollableRefreshBody(
+        const Center(child: Text('Tidak ada pelanggan ditemukan.')),
+      );
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      itemCount: provider.customers.length + (provider.hasMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == provider.customers.length) {
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Center(
+              child: CircularProgressIndicator(color: _primaryContainerColor),
+            ),
+          );
+        }
+
+        final customer = provider.customers[index];
+        final rawStatus =
+            customer['status']?.toString().toLowerCase() ?? 'active';
+        // Layar filter Gangguan: pelanggan dari tiket aktif (status DB masih aktif) tetap tampil sebagai gangguan
+        final showAsGangguan =
+            rawStatus == 'isolated' ||
+            (widget.initialFilter == 'isolated' && rawStatus != 'suspended');
+
+        // Default to active colors
+        Color statusColor = const Color(0xFF10B981); // Emerald
+        Color bgColor = _bgSurfaceContainerLowest;
+        String statusLabel = 'Aktif';
+        IconData statusIcon = Icons.check_circle;
+
+        if (rawStatus == 'suspended') {
+          statusColor = _secondaryColor;
+          statusLabel = 'Isolir';
+          statusIcon = Icons.block;
+          bgColor = _bgSurfaceContainerLowest.withValues(alpha: 0.75);
+        } else if (showAsGangguan) {
+          statusColor = _errorColor;
+          statusLabel = 'Gangguan';
+          statusIcon = Icons.error;
+          bgColor = const Color(
+            0xFFFFDAD6,
+          ).withValues(alpha: 0.2); // error container
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: showAsGangguan
+                  ? _errorColor.withValues(alpha: 0.3)
+                  : _outlineVariant,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      CustomerDetailScreen(customer: customer),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _bgSurfaceContainer,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'ID: ${customer['customer_id'] ?? '-'}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: _textOnSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    statusIcon,
+                                    size: 10,
+                                    color: statusColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    statusLabel,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: statusColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          customer['name'] ?? '-',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: _textOnBackground,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.location_on,
+                              size: 14,
+                              color: _textOnSurfaceVariant,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                customer['address'] ?? '-',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: _textOnSurfaceVariant,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1B0C6B).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: const Color(
+                              0xFF070038,
+                            ).withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Text(
+                          'FO', // Service type placeholder
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: _primaryColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Icon(Icons.chevron_right, color: _outline),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

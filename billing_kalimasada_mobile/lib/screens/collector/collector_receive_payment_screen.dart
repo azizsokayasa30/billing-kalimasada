@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -22,6 +23,12 @@ num? _coerceNum(dynamic v) {
   return num.tryParse(v.toString());
 }
 
+int _parseNonNegativeInt(String raw) {
+  final d = raw.replaceAll(RegExp(r'[^0-9]'), '');
+  if (d.isEmpty) return 0;
+  return int.tryParse(d) ?? 0;
+}
+
 /// Terima pembayaran — setara `/collector/payment?customer_id=…` dengan tema Field Collector.
 class CollectorReceivePaymentScreen extends StatefulWidget {
   const CollectorReceivePaymentScreen({
@@ -38,7 +45,8 @@ class CollectorReceivePaymentScreen extends StatefulWidget {
 }
 
 class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentScreen> {
-  final _amount = TextEditingController();
+  final _discount = TextEditingController();
+  final _manualGross = TextEditingController();
   final _notes = TextEditingController();
   final _picker = ImagePicker();
 
@@ -63,9 +71,39 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
 
   @override
   void dispose() {
-    _amount.dispose();
+    _discount.dispose();
+    _manualGross.dispose();
     _notes.dispose();
     super.dispose();
+  }
+
+  num _grossFromSelectedInvoices() {
+    num sum = 0;
+    for (final inv in _invoices) {
+      final id = _coerceNum(inv['id'])?.toInt();
+      if (id == null || !_selectedIds.contains(id)) continue;
+      sum += _coerceNum(inv['amount']) ?? 0;
+    }
+    return sum;
+  }
+
+  /// Total sebelum diskon: tagihan terpilih, atau input manual bila tidak ada daftar tagihan.
+  num _grossBeforeDiscount() {
+    if (_invoices.isNotEmpty) return _grossFromSelectedInvoices();
+    return _parseNonNegativeInt(_manualGross.text);
+  }
+
+  int _discountParsedClamped() {
+    final gross = _grossBeforeDiscount().round();
+    final d = _parseNonNegativeInt(_discount.text);
+    return d > gross ? gross : d;
+  }
+
+  int _finalPaymentAmount() {
+    final g = _grossBeforeDiscount().round();
+    final d = _discountParsedClamped();
+    final n = g - d;
+    return n < 0 ? 0 : n;
   }
 
   Future<void> _loadInvoices() async {
@@ -90,7 +128,7 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
           ..clear()
           ..addAll(list.map((m) => _coerceNum(m['id'])?.toInt()).whereType<int>());
         _invoices = list;
-        _syncAmountFromSelection();
+        _clampDiscountToGross();
       } else {
         _invoiceError = body['message']?.toString() ?? 'Gagal memuat tagihan';
         _invoices = [];
@@ -103,14 +141,12 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
     }
   }
 
-  void _syncAmountFromSelection() {
-    num sum = 0;
-    for (final inv in _invoices) {
-      final id = _coerceNum(inv['id'])?.toInt();
-      if (id == null || !_selectedIds.contains(id)) continue;
-      sum += _coerceNum(inv['amount']) ?? 0;
+  void _clampDiscountToGross() {
+    final gross = _grossBeforeDiscount().round();
+    final d = _parseNonNegativeInt(_discount.text);
+    if (d > gross) {
+      _discount.text = gross > 0 ? gross.toString() : '';
     }
-    _amount.text = sum > 0 ? sum.round().toString() : '';
   }
 
   double _commissionRateFromMe(Map<String, dynamic>? me) {
@@ -122,7 +158,7 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
   }
 
   num _commissionPreview(double ratePct) {
-    final amt = num.tryParse(_amount.text.trim()) ?? 0;
+    final amt = _finalPaymentAmount();
     return (amt * ratePct) / 100;
   }
 
@@ -153,10 +189,16 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
   }
 
   Future<void> _submit() async {
-    final amt = num.tryParse(_amount.text.trim());
-    if (amt == null || amt <= 0) {
+    if (_invoices.isNotEmpty && _selectedIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Isi jumlah pembayaran yang valid.')),
+        const SnackBar(content: Text('Pilih minimal satu tagihan, atau gunakan mode setoran manual jika tidak ada tagihan.')),
+      );
+      return;
+    }
+    final finalAmt = _finalPaymentAmount();
+    if (finalAmt <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Jumlah pembayaran harus lebih dari 0 (periksa tagihan / nominal / diskon).')),
       );
       return;
     }
@@ -170,9 +212,11 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
     setState(() => _submitting = true);
     try {
       final idsJson = jsonEncode(_selectedIds.map((e) => e.toString()).toList());
+      final disc = _discountParsedClamped();
       final fields = <String, String>{
         'customer_id': widget.customerId.toString(),
-        'payment_amount': amt.round().toString(),
+        'payment_amount': finalAmt.toString(),
+        'discount_amount': disc.toString(),
         'payment_method': _method,
         'notes': _notes.text.trim(),
         'invoice_ids': idsJson,
@@ -218,6 +262,7 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
     final phone = snap?['phone']?.toString() ?? '';
     final addr = snap?['address']?.toString() ?? '';
     const bg = FieldCollectorColors.background;
+    final finalPay = _finalPaymentAmount();
 
     // Rute push tidak mewarisi Theme dari _CollectorTabs — hanya MaterialApp (dark).
     // Tanpa Theme.light di sini, onSurface putih sehingga teks hilang di kartu/field putih.
@@ -317,9 +362,30 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: FieldCollectorColors.outlineVariant),
               ),
-              child: const Text(
-                'Tidak ada tagihan unpaid. Anda tetap bisa mencatat pembayaran di bawah (mis. setoran manual).',
-                style: TextStyle(fontSize: 13, color: FieldCollectorColors.onSurfaceVariant, height: 1.35),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Tidak ada tagihan unpaid. Anda bisa mencatat setoran manual: isi nominal di bawah, lalu simpan.',
+                    style: TextStyle(fontSize: 13, color: FieldCollectorColors.onSurfaceVariant, height: 1.35),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _manualGross,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      labelText: 'Nominal sebelum diskon (Rp)',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onChanged: (_) {
+                      _clampDiscountToGross();
+                      setState(() {});
+                    },
+                  ),
+                ],
               ),
             )
           else
@@ -343,7 +409,7 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
                         } else {
                           _selectedIds.add(id);
                         }
-                        _syncAmountFromSelection();
+                        _clampDiscountToGross();
                       });
                     },
                     child: Padding(
@@ -360,7 +426,7 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
                                 } else {
                                   _selectedIds.remove(id);
                                 }
-                                _syncAmountFromSelection();
+                                _clampDiscountToGross();
                               });
                             },
                           ),
@@ -382,16 +448,29 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
               );
             }),
           const SizedBox(height: 20),
+          if (_invoices.isNotEmpty) ...[
+            Text(
+              'Total terpilih: ${_rupiah(_grossFromSelectedInvoices())}',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: FieldCollectorColors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+          ],
           TextField(
-            controller: _amount,
+            controller: _discount,
             keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: InputDecoration(
-              labelText: 'Jumlah pembayaran',
+              labelText: 'Diskon (Rp)',
+              hintText: '0',
+              helperText: 'Jumlah pembayaran = total tagihan terpilih (atau nominal manual) − diskon',
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) {
+              _clampDiscountToGross();
+              setState(() {});
+            },
           ),
           const SizedBox(height: 8),
           const Text('Metode pembayaran', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
@@ -441,6 +520,26 @@ class _CollectorReceivePaymentScreenState extends State<CollectorReceivePaymentS
                       _proof = null;
                     });
                   },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: FieldCollectorColors.outlineVariant),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Jumlah pembayaran', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                Text(
+                  _rupiah(finalPay),
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: FieldCollectorColors.primaryContainer),
                 ),
               ],
             ),

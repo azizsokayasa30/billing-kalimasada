@@ -99,11 +99,16 @@ async function createTroubleReport(reportData) {
     const id = `TR${Date.now().toString().slice(-6)}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
     const now = getLocalTimestamp();
     
+    const rawCid = reportData.customer_id ?? reportData.customerId;
+    const customerId =
+        rawCid != null && String(rawCid).trim() !== '' ? parseInt(String(rawCid), 10) : NaN;
+    const customerIdSql = Number.isFinite(customerId) && customerId > 0 ? customerId : null;
+
     const sql = `
       INSERT INTO trouble_reports (
         id, status, created_at, updated_at, name, phone, location, 
-        category, description, assigned_technician_id, priority, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        category, description, assigned_technician_id, priority, notes, customer_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
     const params = [
@@ -118,7 +123,8 @@ async function createTroubleReport(reportData) {
       reportData.description,
       reportData.assigned_technician_id || reportData.assignedTechnicianId,
       reportData.priority || 'Normal',
-      JSON.stringify([])
+      JSON.stringify([]),
+      customerIdSql
     ];
 
     db.run(sql, params, async function(err) {

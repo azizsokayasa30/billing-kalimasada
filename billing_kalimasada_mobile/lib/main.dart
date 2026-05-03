@@ -8,6 +8,7 @@ import 'store/customer_provider.dart';
 import 'store/task_provider.dart';
 import 'store/notification_provider.dart';
 import 'store/collector_provider.dart';
+import 'store/collector_notification_provider.dart';
 import 'screens/customer_list_screen.dart';
 import 'navigation/root_navigator.dart';
 
@@ -29,6 +30,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => TaskProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => CollectorProvider()),
+        ChangeNotifierProvider(create: (_) => CollectorNotificationProvider()),
       ],
       child: const MyApp(),
     ),

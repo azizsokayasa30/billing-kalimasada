@@ -69,8 +69,47 @@ function notifyTroubleTicket(technicianId, report) {
     return upsertTaskNotification(technicianId, 'TR', String(report.id), title, body);
 }
 
+/** Hapus notifikasi jenis LEAVE yang lebih tua dari 30 hari. */
+function pruneLeaveNotificationsOlderThanDays(days) {
+    const d = Number.isFinite(Number(days)) && Number(days) > 0 ? Math.min(365, Math.floor(Number(days))) : 30;
+    const mod = `-${d} days`;
+    return new Promise((resolve, reject) => {
+        db.run(
+            `DELETE FROM technician_field_notifications
+             WHERE UPPER(TRIM(kind)) = 'LEAVE'
+               AND datetime(created_at) < datetime('now', ?)`,
+            [mod],
+            function (e) {
+                if (e) {
+                    logger.error('[technician-field-notifications] prune LEAVE:', e.message);
+                    return reject(e);
+                }
+                resolve(this.changes);
+            }
+        );
+    });
+}
+
+/**
+ * Admin menyetujui / menolak izin-cuti — teknisi lihat di polling notifikasi mobile.
+ * ref_id = id baris employee_leave_requests (unik per teknisi + kind + ref_id).
+ */
+function notifyLeaveDecision(technicianId, leaveRequestId, approved, bodyText) {
+    const tid = parseInt(technicianId, 10);
+    if (!Number.isFinite(tid) || tid <= 0 || leaveRequestId == null || leaveRequestId === '') {
+        return Promise.resolve();
+    }
+    const title = approved ? 'Izin/cuti disetujui' : 'Izin/cuti ditolak';
+    const body = bodyText != null ? String(bodyText).trim().slice(0, 500) : null;
+    return pruneLeaveNotificationsOlderThanDays(30).then(() =>
+        upsertTaskNotification(tid, 'LEAVE', String(leaveRequestId), title, body)
+    );
+}
+
 module.exports = {
     upsertTaskNotification,
     notifyInstallationJob,
-    notifyTroubleTicket
+    notifyTroubleTicket,
+    pruneLeaveNotificationsOlderThanDays,
+    notifyLeaveDecision
 };

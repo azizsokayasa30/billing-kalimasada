@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../store/collector_provider.dart';
+import '../../store/collector_notification_provider.dart';
 import '../../theme/collector_colors.dart';
+import 'collector_notifications_screen.dart';
 import 'collector_customer_detail_sheet.dart';
 
 String _rupiah(num? v) {
@@ -75,6 +77,7 @@ class _CollectorCustomersScreenState extends State<CollectorCustomersScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<CollectorProvider>();
+    final unread = context.watch<CollectorNotificationProvider>().unreadCount;
     const bg = Color(0xFFF8F9FA);
 
     return Scaffold(
@@ -94,20 +97,42 @@ class _CollectorCustomersScreenState extends State<CollectorCustomersScreen> {
           onPressed: widget.onOpenMenu,
         ),
         actions: [
-          if (_syncing)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF001F3F)),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.sync),
-              onPressed: _doSync,
+          IconButton(
+            tooltip: 'Notifikasi',
+            iconSize: 32,
+            padding: const EdgeInsets.all(10),
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            onPressed: () async {
+              final nav = Navigator.of(context);
+              final notifProv = context.read<CollectorNotificationProvider>();
+              await nav.push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => const CollectorNotificationsScreen(),
+                ),
+              );
+              await notifProv.fetchNotifications(silent: true);
+            },
+            icon: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                const Icon(Icons.notifications_outlined, size: 32),
+                if (unread > 0)
+                  Positioned(
+                    right: 0,
+                    top: -1,
+                    child: Container(
+                      width: 11,
+                      height: 11,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF1744),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
             ),
+          ),
         ],
         bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider(height: 1)),
       ),
@@ -189,7 +214,7 @@ class _CollectorCustomersScreenState extends State<CollectorCustomersScreen> {
                       )
                     : RefreshIndicator(
                         color: FieldCollectorColors.primaryContainer,
-                        onRefresh: _reload,
+                        onRefresh: _doSync,
                         child: !c.customersLoading && c.customers.isEmpty && c.customersError == null
                             ? ListView(
                                 physics: const AlwaysScrollableScrollPhysics(),

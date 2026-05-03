@@ -16,6 +16,14 @@ num? _coerceNum(dynamic v) {
   return num.tryParse(v.toString());
 }
 
+/// Nominal yang dibayar pelanggan (tagihan baris − diskon pada baris pembayaran).
+int _netPaidDisplay(Map<String, dynamic> p) {
+  final gross = (_coerceNum(p['payment_amount']) ?? 0).round();
+  final disc = (_coerceNum(p['discount_amount']) ?? 0).round();
+  final net = gross - disc;
+  return net < 0 ? 0 : net;
+}
+
 class CollectorSettlementTab extends StatefulWidget {
   const CollectorSettlementTab({super.key});
 
@@ -100,8 +108,17 @@ class _CollectorSettlementTabState extends State<CollectorSettlementTab> with Au
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Progress setoran', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: FieldCollectorColors.primaryContainer)),
-                    Text('$pct%', style: const TextStyle(fontWeight: FontWeight.w700, color: FieldCollectorColors.primaryContainer)),
+                    const Text(
+                      'Progress setoran',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: FieldCollectorColors.onSurfaceVariant),
+                    ),
+                    Text(
+                      '$pct%',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: FieldCollectorColors.onSecondaryContainer,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -111,7 +128,8 @@ class _CollectorSettlementTabState extends State<CollectorSettlementTab> with Au
                     value: pct / 100,
                     minHeight: 8,
                     backgroundColor: const Color(0xFFE1E3E4),
-                    color: FieldCollectorColors.primaryContainer,
+                    // Sama seperti bar "Rasio lunas/tagihan" di tab Profil
+                    color: const Color(0xFF66DF75),
                   ),
                 ),
                 const Divider(height: 28),
@@ -159,7 +177,7 @@ class _CollectorSettlementTabState extends State<CollectorSettlementTab> with Au
             if (raw is! Map) return const SizedBox.shrink();
             final p = Map<String, dynamic>.from(raw);
             final done = (p['status']?.toString() ?? '') == 'completed';
-            final amt = _coerceNum(p['payment_amount'])?.round() ?? 0;
+            final amt = _netPaidDisplay(p);
             final cust = p['customer_name']?.toString() ?? 'Pelanggan';
             final at = p['collected_at']?.toString();
             String when = '—';

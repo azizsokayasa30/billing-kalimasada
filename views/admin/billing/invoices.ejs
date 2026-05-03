@@ -882,7 +882,8 @@
                         payment_method: paymentMethod,
                         payment_date: paymentDate,
                         reference_number: '',
-                        notes
+                        notes,
+                        discount_amount: Math.round(Number(discount) || 0)
                     })
                 });
                 const result = await resp.json();

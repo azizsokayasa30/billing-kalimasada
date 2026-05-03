@@ -7,10 +7,11 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
-const { verifyToken } = require('./auth');
+const { verifyToken, normalizePhone } = require('./auth');
 const logger = require('../../config/logger');
 const { getSetting, getLocalTimestamp } = require('../../config/settingsManager');
 require('../../config/technicianFieldNotifications');
+require('../../config/collectorFieldNotifications');
 
 const dbPath = path.join(__dirname, '../../data/billing.db');
 const db = new sqlite3.Database(dbPath);
@@ -182,6 +183,29 @@ db.run(
         }
     }
 );
+db.run('ALTER TABLE trouble_reports ADD COLUMN customer_id INTEGER', (err) => {
+    if (err && !/duplicate column/i.test(String(err.message))) {
+        logger.warn('[mobile-adapter] trouble_reports.customer_id:', err.message);
+    }
+    if (!err || /duplicate column/i.test(String(err.message))) {
+        // Tiket lama: isi customer_id dari nama pelanggan yang sama (bantu app Gangguan / dashboard).
+        db.run(
+            `UPDATE trouble_reports SET customer_id = (
+                SELECT c.id FROM customers c
+                WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(trouble_reports.name))
+                  AND LENGTH(TRIM(trouble_reports.name)) >= 3
+                ORDER BY c.id DESC LIMIT 1
+            )
+            WHERE (customer_id IS NULL OR customer_id = 0)
+              AND name IS NOT NULL AND TRIM(name) != ''`,
+            (e2) => {
+                if (e2 && !/no such column/i.test(String(e2.message))) {
+                    logger.warn('[mobile-adapter] trouble_reports customer_id backfill (name):', e2.message);
+                }
+            }
+        );
+    }
+});
 
 const installJobAlterSql = [
     'ALTER TABLE installation_jobs ADD COLUMN work_started_at DATETIME',
@@ -312,6 +336,30 @@ function requireTechnician(req, res, next) {
     next();
 }
 
+function phoneVariantsForEmployeeLookup(rawPhone) {
+    const norm = normalizePhone(rawPhone || '');
+    const v = new Set();
+    const raw = rawPhone != null ? String(rawPhone).trim() : '';
+    if (raw) v.add(raw);
+    if (norm) {
+        v.add(norm);
+        v.add(`+${norm}`);
+        if (norm.startsWith('62') && norm.length > 2) {
+            v.add(`0${norm.slice(2)}`);
+        }
+    }
+    return [...v].filter(Boolean);
+}
+
+function jakartaAttendanceTodayYmd() {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(new Date());
+}
+
 function mapInstallPriority(p) {
     const u = String(p || 'normal').toLowerCase();
     if (u === 'urgent' || u === 'high') return 'HIGH';
@@ -330,6 +378,36 @@ function mapDisplayStatusTrouble(status) {
     if (s === 'resolved' || s === 'closed') return 'closed';
     if (s === 'in_progress') return 'in_progress';
     return s || 'open';
+}
+
+/** Kondisi SQL: baris customers (alias cu) ↔ trouble_reports (alias tr) adalah pelanggan yang sama. */
+function sqlTroubleTicketCustomerMatch(cu, tr) {
+    const digits = (expr) =>
+        `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(${expr}, ''), ' ', ''), '-', ''), '+', ''), '(', ''), ')', '')`;
+    return `(
+        (NULLIF(${tr}.customer_id, 0) IS NOT NULL AND CAST(${cu}.id AS INTEGER) = CAST(${tr}.customer_id AS INTEGER))
+        OR (
+            NULLIF(TRIM(IFNULL(${cu}.phone, '')), '') IS NOT NULL
+            AND NULLIF(TRIM(IFNULL(${tr}.phone, '')), '') IS NOT NULL
+            AND LOWER(TRIM(IFNULL(${cu}.phone, ''))) = LOWER(TRIM(IFNULL(${tr}.phone, '')))
+        )
+        OR (
+            NULLIF(TRIM(IFNULL(${cu}.phone, '')), '') IS NOT NULL
+            AND NULLIF(TRIM(IFNULL(${tr}.phone, '')), '') IS NOT NULL
+            AND REPLACE(REPLACE(REPLACE(LOWER(TRIM(IFNULL(${cu}.phone, ''))), ' ', ''), '-', ''), '+', '') =
+                REPLACE(REPLACE(REPLACE(LOWER(TRIM(IFNULL(${tr}.phone, ''))), ' ', ''), '-', ''), '+', '')
+        )
+        OR (
+            LENGTH(${digits(`${cu}.phone`)}) >= 10
+            AND LENGTH(${digits(`${tr}.phone`)}) >= 10
+            AND SUBSTR(${digits(`${cu}.phone`)}, -10) = SUBSTR(${digits(`${tr}.phone`)}, -10)
+        )
+        OR (
+            LENGTH(TRIM(IFNULL(${tr}.name, ''))) >= 3
+            AND LENGTH(TRIM(IFNULL(${cu}.name, ''))) >= 3
+            AND LOWER(TRIM(IFNULL(${cu}.name, ''))) = LOWER(TRIM(IFNULL(${tr}.name, '')))
+        )
+    )`;
 }
 
 /** Simpan foto base64 (opsional) ke public/img/field-completion — kembalikan path relatif `/img/...` */
@@ -384,8 +462,26 @@ router.get('/customers', verifyToken, allowFieldOps, (req, res) => {
     const params = [];
     let where = '1=1';
     if (status) {
-        where += ' AND LOWER(c.status) = LOWER(?)';
-        params.push(status);
+        const role = req.user && req.user.role;
+        const techId = role === 'technician' ? parseInt(req.user.id, 10) : NaN;
+        const isGangguanFilter = status.toLowerCase() === 'isolated';
+        if (isGangguanFilter && role === 'technician' && Number.isFinite(techId)) {
+            // App "Gangguan" = status isolated + pelanggan yang punya tiket gangguan aktif ditugaskan ke teknisi ini
+            const trMatch = sqlTroubleTicketCustomerMatch('cu', 'tr');
+            where += ` AND (
+                LOWER(c.status) = LOWER(?)
+                OR c.id IN (
+                    SELECT cu.id FROM customers cu
+                    INNER JOIN trouble_reports tr ON ${trMatch}
+                    WHERE (tr.assigned_technician_id = ? OR CAST(tr.assigned_technician_id AS TEXT) = ?)
+                      AND LOWER(IFNULL(tr.status, '')) NOT IN ('closed', 'resolved')
+                )
+            )`;
+            params.push(status, techId, String(techId));
+        } else {
+            where += ' AND LOWER(c.status) = LOWER(?)';
+            params.push(status);
+        }
     }
     if (search) {
         where += ' AND (c.name LIKE ? OR c.phone LIKE ? OR CAST(c.customer_id AS TEXT) LIKE ? OR c.username LIKE ?)';
@@ -508,33 +604,354 @@ router.get('/me', verifyToken, requireTechnician, (req, res) => {
     });
 });
 
+// --- Absensi teknisi (employees.no_hp = nomor login JWT) ---
+router.get('/attendance/status', verifyToken, requireTechnician, (req, res) => {
+    const variants = phoneVariantsForEmployeeLookup(req.user.phone || req.user.username || '');
+    if (!variants.length) {
+        return res.json({ success: true, data: null, employee_matched: false });
+    }
+    const ph = variants.map(() => '?').join(',');
+    db.get(
+        `SELECT id FROM employees WHERE (status IS NULL OR LOWER(TRIM(status)) = 'aktif') AND TRIM(no_hp) IN (${ph}) LIMIT 1`,
+        variants,
+        (empErr, empRow) => {
+            if (empErr) {
+                logger.error('[mobile-adapter] attendance/status employee', empErr);
+                return res.status(500).json({ success: false, message: empErr.message });
+            }
+            const eid = empRow && empRow.id != null ? parseInt(empRow.id, 10) : NaN;
+            if (!Number.isFinite(eid) || eid <= 0) {
+                return res.json({ success: true, data: null, employee_matched: false });
+            }
+            const today = jakartaAttendanceTodayYmd();
+            db.get(
+                'SELECT id, date, check_in, check_out, status, notes FROM employee_attendance WHERE employee_id = ? AND date = ?',
+                [eid, today],
+                (aErr, row) => {
+                    if (aErr) {
+                        logger.error('[mobile-adapter] attendance/status', aErr);
+                        return res.status(500).json({ success: false, message: aErr.message });
+                    }
+                    if (!row) {
+                        return res.json({ success: true, data: null, employee_matched: true, date: today });
+                    }
+                    res.json({
+                        success: true,
+                        employee_matched: true,
+                        date: row.date,
+                        data: {
+                            check_in: row.check_in,
+                            check_out: row.check_out,
+                            status: row.status,
+                            notes: row.notes
+                        }
+                    });
+                }
+            );
+        }
+    );
+});
+
+router.post('/attendance', verifyToken, requireTechnician, (req, res) => {
+    const body = req.body || {};
+    const type = String(body.type || '').toLowerCase();
+    if (!['check_in', 'check_out'].includes(type)) {
+        return res.status(400).json({ success: false, message: 'Tipe tidak valid' });
+    }
+    const lat = body.location && body.location.latitude != null ? Number(body.location.latitude) : NaN;
+    const lng = body.location && body.location.longitude != null ? Number(body.location.longitude) : NaN;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res.status(400).json({ success: false, message: 'Koordinat lokasi wajib' });
+    }
+    const mode = String(body.check_in_mode || '').toLowerCase();
+    const qrValue = body.qr_value != null ? String(body.qr_value).trim() : '';
+    const photoB64 = body.photo_base64 != null ? String(body.photo_base64).trim() : '';
+
+    if (type === 'check_in') {
+        if (mode !== 'selfie' && mode !== 'qr') {
+            return res.status(400).json({ success: false, message: 'Mode absensi wajib: selfie atau qr' });
+        }
+        if (mode === 'selfie' && !photoB64) {
+            return res.status(400).json({ success: false, message: 'Foto selfie wajib' });
+        }
+        if (mode === 'qr' && !qrValue) {
+            return res.status(400).json({ success: false, message: 'Data QR wajib' });
+        }
+    }
+
+    const variants = phoneVariantsForEmployeeLookup(req.user.phone || req.user.username || '');
+    if (!variants.length) {
+        return res.status(400).json({
+            success: false,
+            message: 'Nomor HP teknisi tidak cocok dengan data karyawan (employees.no_hp). Hubungi admin.'
+        });
+    }
+    const ph = variants.map(() => '?').join(',');
+    db.get(
+        `SELECT id FROM employees WHERE (status IS NULL OR LOWER(TRIM(status)) = 'aktif') AND TRIM(no_hp) IN (${ph}) LIMIT 1`,
+        variants,
+        (empErr, empRow) => {
+            if (empErr) {
+                logger.error('[mobile-adapter] attendance employee', empErr);
+                return res.status(500).json({ success: false, message: empErr.message });
+            }
+            const eid = empRow && empRow.id != null ? parseInt(empRow.id, 10) : NaN;
+            if (!Number.isFinite(eid) || eid <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Karyawan tidak ditemukan. Pastikan no_hp di data karyawan sama dengan nomor login teknisi.'
+                });
+            }
+            const today = jakartaAttendanceTodayYmd();
+            const ts = getLocalTimestamp();
+            const noteBase = `[MOBILE] ${type} lat:${lat.toFixed(5)} lng:${lng.toFixed(5)}`;
+            logger.info('[mobile-adapter] attendance request', {
+                type,
+                employee_id: eid,
+                date: today,
+                mode: type === 'check_in' ? mode : null,
+                photo_len: photoB64.length,
+                qr_len: qrValue.length
+            });
+
+            db.get(
+                'SELECT id, check_in, check_out, notes FROM employee_attendance WHERE employee_id = ? AND date = ?',
+                [eid, today],
+                (rowErr, row) => {
+                    if (rowErr) {
+                        logger.error('[mobile-adapter] attendance row', rowErr);
+                        return res.status(500).json({ success: false, message: rowErr.message });
+                    }
+
+                    if (type === 'check_in') {
+                        if (row && row.check_in) {
+                            return res.status(400).json({ success: false, message: 'Sudah masuk hari ini' });
+                        }
+                        const extra =
+                            mode === 'qr'
+                                ? ` | qr:${qrValue.slice(0, 240)}`
+                                : ` | selfie_bytes:${photoB64 ? photoB64.length : 0}`;
+                        const notes = `${noteBase}${extra}`;
+                        if (row && row.id) {
+                            return db.run(
+                                `UPDATE employee_attendance SET status = 'hadir', check_in = ?, check_out = NULL, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                                [ts, notes, row.id],
+                                function (upErr) {
+                                    if (upErr) {
+                                        logger.error('[mobile-adapter] attendance check_in update', upErr);
+                                        return res.status(500).json({ success: false, message: upErr.message });
+                                    }
+                                    logger.info('[mobile-adapter] attendance check_in ok', { attendance_id: row.id });
+                                    return res.json({ success: true, message: 'Masuk berhasil', check_in: ts });
+                                }
+                            );
+                        }
+                        return db.run(
+                            `INSERT INTO employee_attendance (employee_id, date, status, check_in, check_out, notes) VALUES (?, ?, 'hadir', ?, NULL, ?)`,
+                            [eid, today, ts, notes],
+                            function (insErr) {
+                                if (insErr) {
+                                    logger.error('[mobile-adapter] attendance check_in insert', insErr);
+                                    return res.status(500).json({ success: false, message: insErr.message });
+                                }
+                                logger.info('[mobile-adapter] attendance check_in ok', { attendance_id: this.lastID });
+                                return res.json({ success: true, message: 'Masuk berhasil', check_in: ts });
+                            }
+                        );
+                    }
+
+                    if (!row || !row.check_in) {
+                        return res.status(400).json({ success: false, message: 'Belum masuk hari ini' });
+                    }
+                    if (row.check_out) {
+                        return res.status(400).json({ success: false, message: 'Sudah pulang hari ini' });
+                    }
+                    const outNotes = row.notes ? `${row.notes} | ${noteBase}` : noteBase;
+                    return db.run(
+                        `UPDATE employee_attendance SET check_out = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                        [ts, outNotes, row.id],
+                        function (coErr) {
+                            if (coErr) {
+                                logger.error('[mobile-adapter] attendance check_out', coErr);
+                                return res.status(500).json({ success: false, message: coErr.message });
+                            }
+                            logger.info('[mobile-adapter] attendance check_out ok', { attendance_id: row.id });
+                            return res.json({ success: true, message: 'Pulang berhasil', check_out: ts });
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
+
+/** Izin/cuti dari app teknisi → `employee_leave_requests` (pending), tampil di admin /employees/leave-requests */
+router.post('/leave-request', verifyToken, requireTechnician, (req, res) => {
+    const body = req.body || {};
+    const requestType = String(body.request_type || '').toLowerCase() === 'cuti' ? 'cuti' : 'izin';
+    const startDate = body.start_date != null ? String(body.start_date).trim().slice(0, 10) : '';
+    const endDate = body.end_date != null ? String(body.end_date).trim().slice(0, 10) : '';
+    const reason = body.reason != null ? String(body.reason).trim() : '';
+
+    const ymd = /^\d{4}-\d{2}-\d{2}$/;
+    if (!ymd.test(startDate) || !ymd.test(endDate)) {
+        return res.status(400).json({ success: false, message: 'Format tanggal wajib YYYY-MM-DD' });
+    }
+    if (!reason) {
+        return res.status(400).json({ success: false, message: 'Alasan wajib diisi' });
+    }
+    const t0 = new Date(`${startDate}T00:00:00`);
+    const t1 = new Date(`${endDate}T00:00:00`);
+    if (Number.isNaN(t0.getTime()) || Number.isNaN(t1.getTime()) || t1 < t0) {
+        return res.status(400).json({ success: false, message: 'Rentang tanggal tidak valid' });
+    }
+
+    const variants = phoneVariantsForEmployeeLookup(req.user.phone || req.user.username || '');
+    if (!variants.length) {
+        return res.status(400).json({
+            success: false,
+            message: 'Nomor HP login tidak cocok dengan data karyawan (employees.no_hp). Hubungi admin.'
+        });
+    }
+    const requestedBy = [req.user.phone, req.user.username].filter(Boolean).join(' / ') || 'mobile';
+    const ph = variants.map(() => '?').join(',');
+    db.get(
+        `SELECT id FROM employees WHERE (status IS NULL OR LOWER(TRIM(status)) = 'aktif') AND TRIM(no_hp) IN (${ph}) LIMIT 1`,
+        variants,
+        (empErr, empRow) => {
+            if (empErr) {
+                logger.error('[mobile-adapter] leave-request employee', empErr);
+                return res.status(500).json({ success: false, message: empErr.message });
+            }
+            const eid = empRow && empRow.id != null ? parseInt(empRow.id, 10) : NaN;
+            if (!Number.isFinite(eid) || eid <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Karyawan tidak ditemukan. Pastikan no_hp di data karyawan sama dengan nomor login teknisi.'
+                });
+            }
+            const query = `
+                INSERT INTO employee_leave_requests (employee_id, request_type, start_date, end_date, reason, requested_by, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending')
+            `;
+            db.run(
+                query,
+                [eid, requestType, startDate, endDate, reason, requestedBy],
+                function (insErr) {
+                    if (insErr) {
+                        logger.error('[mobile-adapter] leave-request insert', insErr);
+                        return res.status(500).json({ success: false, message: insErr.message });
+                    }
+                    logger.info('[mobile-adapter] leave-request ok', {
+                        id: this.lastID,
+                        employee_id: eid,
+                        request_type: requestType,
+                        start_date: startDate,
+                        end_date: endDate
+                    });
+                    return res.json({
+                        success: true,
+                        id: this.lastID,
+                        message: 'Permintaan izin/cuti dikirim. Menunggu persetujuan admin.'
+                    });
+                }
+            );
+        }
+    );
+});
+
+/** Riwayat izin/cuti yang sudah diproses admin (30 hari) — tampil di halaman absensi mobile */
+router.get('/leave-requests/recent', verifyToken, requireTechnician, (req, res) => {
+    const variants = phoneVariantsForEmployeeLookup(req.user.phone || req.user.username || '');
+    if (!variants.length) {
+        return res.json({ success: true, data: [], employee_matched: false });
+    }
+    const ph = variants.map(() => '?').join(',');
+    db.get(
+        `SELECT id FROM employees WHERE (status IS NULL OR LOWER(TRIM(status)) = 'aktif') AND TRIM(no_hp) IN (${ph}) LIMIT 1`,
+        variants,
+        (empErr, empRow) => {
+            if (empErr) {
+                logger.error('[mobile-adapter] leave-requests/recent employee', empErr);
+                return res.status(500).json({ success: false, message: empErr.message });
+            }
+            const eid = empRow && empRow.id != null ? parseInt(empRow.id, 10) : NaN;
+            if (!Number.isFinite(eid) || eid <= 0) {
+                return res.json({ success: true, data: [], employee_matched: false });
+            }
+            db.all(
+                `SELECT id, request_type, start_date, end_date, reason, status, approved_at, approval_notes, created_at
+                 FROM employee_leave_requests
+                 WHERE employee_id = ?
+                   AND status IN ('approved', 'rejected')
+                   AND datetime(COALESCE(approved_at, updated_at, created_at)) >= datetime('now', '-30 days')
+                 ORDER BY datetime(COALESCE(approved_at, updated_at)) DESC
+                 LIMIT 50`,
+                [eid],
+                (qErr, rows) => {
+                    if (qErr) {
+                        logger.error('[mobile-adapter] leave-requests/recent', qErr);
+                        return res.status(500).json({ success: false, message: qErr.message });
+                    }
+                    res.json({ success: true, employee_matched: true, data: rows || [] });
+                }
+            );
+        }
+    );
+});
+
 // --- Dashboard stats ---
 router.get('/dashboard', verifyToken, allowFieldOps, (req, res) => {
-    db.get(
-        `SELECT
+    const baseSql = `SELECT
             COUNT(*) AS total_customers,
             SUM(CASE WHEN LOWER(status) = 'active' THEN 1 ELSE 0 END) AS active_customers,
             SUM(CASE WHEN LOWER(status) = 'suspended' THEN 1 ELSE 0 END) AS suspended_customers,
             SUM(CASE WHEN LOWER(status) IN ('inactive','register') THEN 1 ELSE 0 END) AS isolated_customers
-         FROM customers`,
-        [],
-        (err, row) => {
-            if (err) {
-                return res.status(500).json({ success: false, message: err.message });
-            }
-            res.json({
-                success: true,
-                data: {
-                    stats: {
-                        total_customers: row.total_customers || 0,
-                        active_customers: row.active_customers || 0,
-                        suspended_customers: row.suspended_customers || 0,
-                        isolated_customers: row.isolated_customers || 0
-                    }
+         FROM customers`;
+
+    const sendStats = (row, isolatedOverride) => {
+        res.json({
+            success: true,
+            data: {
+                stats: {
+                    total_customers: row.total_customers || 0,
+                    active_customers: row.active_customers || 0,
+                    suspended_customers: row.suspended_customers || 0,
+                    isolated_customers:
+                        isolatedOverride != null ? isolatedOverride : row.isolated_customers || 0
                 }
-            });
+            }
+        });
+    };
+
+    db.get(baseSql, [], (err, row) => {
+        if (err) {
+            logger.error('[mobile-adapter] dashboard:', err);
+            return res.status(500).json({ success: false, message: err.message });
         }
-    );
+        const role = req.user && req.user.role;
+        const techId = role === 'technician' ? parseInt(req.user.id, 10) : NaN;
+        if (role === 'technician' && Number.isFinite(techId)) {
+            const trMatch = sqlTroubleTicketCustomerMatch('cu', 'tr');
+            const gangSql = `SELECT COUNT(DISTINCT id) AS n FROM (
+                SELECT c.id FROM customers c WHERE LOWER(c.status) = 'isolated'
+                UNION
+                SELECT cu.id FROM customers cu
+                INNER JOIN trouble_reports tr ON ${trMatch}
+                WHERE (tr.assigned_technician_id = ? OR CAST(tr.assigned_technician_id AS TEXT) = ?)
+                  AND LOWER(IFNULL(tr.status, '')) NOT IN ('closed', 'resolved')
+            )`;
+            db.get(gangSql, [techId, String(techId)], (err2, gRow) => {
+                if (err2) {
+                    logger.error('[mobile-adapter] dashboard gangguan:', err2);
+                    return sendStats(row, null);
+                }
+                sendStats(row, gRow && gRow.n != null ? gRow.n : 0);
+            });
+            return;
+        }
+        sendStats(row, null);
+    });
 });
 
 // --- Tasks: instalasi + tiket gangguan untuk teknisi login ---
@@ -668,6 +1085,10 @@ router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
                         customer: row.name,
                         address: row.location || '',
                         phone: row.phone,
+                        customer_id: (() => {
+                            const c = row.customer_id != null ? parseInt(row.customer_id, 10) : NaN;
+                            return Number.isFinite(c) && c > 0 ? c : null;
+                        })(),
                         status: mapDisplayStatusTrouble(row.status),
                         priority: mapInstallPriority(row.priority),
                         description: row.description || '',
@@ -680,6 +1101,209 @@ router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
                 res.json({ success: true, data: tasks });
             }
         );
+    });
+});
+
+/** Zona waktu untuk rentang "minggu ini" (Sen–Min) di kartu performa teknisi. */
+const PERF_WEEK_TZ = 'Asia/Jakarta';
+const PERF_WEEKDAY_ID = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+
+function jakartaYmdFromInstant(inst) {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: PERF_WEEK_TZ,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(inst);
+}
+
+function jakartaWeekdayMon0(inst) {
+    const wd = new Intl.DateTimeFormat('en-US', { timeZone: PERF_WEEK_TZ, weekday: 'short' }).format(inst);
+    const map = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+    return map[wd] ?? 0;
+}
+
+function jakartaAddDaysFromInstant(inst, deltaDays) {
+    return new Date(inst.getTime() + deltaDays * 86400000);
+}
+
+function attendanceDayScore(row) {
+    if (!row) return 0;
+    const st = String(row.status || '')
+        .toLowerCase()
+        .trim();
+    if (st === 'izin' || st === 'sakit') return 100;
+    if (st === 'alpha') return 0;
+    const hasIn = row.check_in != null && String(row.check_in).trim() !== '';
+    const hasOut = row.check_out != null && String(row.check_out).trim() !== '';
+    if (hasOut) return 100;
+    if (hasIn) return 70;
+    return 0;
+}
+
+/** Sen–Min kalender minggu berjalan (Asia/Jakarta), + agregat tugas selesai & skor absensi per hari. */
+router.get('/performance/week', verifyToken, requireTechnician, (req, res) => {
+    const role = req.user && req.user.role;
+    const techId = parseInt(req.user.id, 10);
+    if (role === 'admin' || !Number.isFinite(techId)) {
+        const now = new Date();
+        let anchor = now;
+        for (let i = 0; i < jakartaWeekdayMon0(now); i++) {
+            anchor = jakartaAddDaysFromInstant(anchor, -1);
+        }
+        const todayYmd = jakartaYmdFromInstant(now);
+        const daysEmpty = [];
+        let cur = anchor;
+        for (let i = 0; i < 7; i++) {
+            const ymd = jakartaYmdFromInstant(cur);
+            daysEmpty.push({
+                date: ymd,
+                weekday: PERF_WEEKDAY_ID[i],
+                is_today: ymd === todayYmd,
+                tasks_completed: 0,
+                attendance_score: 0
+            });
+            cur = jakartaAddDaysFromInstant(cur, 1);
+        }
+        return res.json({
+            success: true,
+            data: {
+                days: daysEmpty,
+                tasks_week_total: 0,
+                attendance_week_avg: 0,
+                employee_matched: false
+            }
+        });
+    }
+
+    const now = new Date();
+    let anchor = now;
+    for (let i = 0; i < jakartaWeekdayMon0(now); i++) {
+        anchor = jakartaAddDaysFromInstant(anchor, -1);
+    }
+    const weekStartYmd = jakartaYmdFromInstant(anchor);
+    const weekEndYmd = jakartaYmdFromInstant(jakartaAddDaysFromInstant(anchor, 6));
+    const todayYmd = jakartaYmdFromInstant(now);
+
+    const installSql = `
+        SELECT substr(COALESCE(updated_at, created_at), 1, 10) AS d, COUNT(*) AS c
+        FROM installation_jobs
+        WHERE assigned_technician_id = ?
+          AND LOWER(status) IN ('completed','cancelled')
+          AND substr(COALESCE(updated_at, created_at), 1, 10) >= ?
+          AND substr(COALESCE(updated_at, created_at), 1, 10) <= ?
+        GROUP BY substr(COALESCE(updated_at, created_at), 1, 10)
+    `;
+    const troubleSql = `
+        SELECT substr(COALESCE(updated_at, created_at), 1, 10) AS d, COUNT(*) AS c
+        FROM trouble_reports
+        WHERE (assigned_technician_id = ? OR CAST(assigned_technician_id AS TEXT) = ?)
+          AND LOWER(status) IN ('closed','resolved')
+          AND substr(COALESCE(updated_at, created_at), 1, 10) >= ?
+          AND substr(COALESCE(updated_at, created_at), 1, 10) <= ?
+        GROUP BY substr(COALESCE(updated_at, created_at), 1, 10)
+    `;
+
+    db.all(installSql, [techId, weekStartYmd, weekEndYmd], (err1, installAgg) => {
+        if (err1) {
+            logger.error('[mobile-adapter] performance/week install:', err1);
+            return res.status(500).json({ success: false, message: 'Gagal memuat performa tugas' });
+        }
+        db.all(troubleSql, [techId, String(techId), weekStartYmd, weekEndYmd], (err2, troubleAgg) => {
+            if (err2) {
+                logger.error('[mobile-adapter] performance/week trouble:', err2);
+                return res.status(500).json({ success: false, message: 'Gagal memuat performa tiket' });
+            }
+            const taskByDay = {};
+            for (const row of installAgg || []) {
+                if (row && row.d) taskByDay[row.d] = (taskByDay[row.d] || 0) + toFiniteNumber(row.c);
+            }
+            for (const row of troubleAgg || []) {
+                if (row && row.d) taskByDay[row.d] = (taskByDay[row.d] || 0) + toFiniteNumber(row.c);
+            }
+
+            const variants = phoneVariantsForEmployeeLookup(req.user.phone || req.user.username || '');
+            const findEmp = (cb) => {
+                if (!variants.length) return cb(null, null);
+                const ph = variants.map(() => '?').join(',');
+                db.get(
+                    `SELECT id FROM employees
+                     WHERE (status IS NULL OR LOWER(TRIM(status)) = 'aktif')
+                       AND TRIM(no_hp) IN (${ph})
+                     LIMIT 1`,
+                    variants,
+                    (e, empRow) => cb(e, empRow)
+                );
+            };
+
+            findEmp((empErr, empRow) => {
+                if (empErr) {
+                    logger.error('[mobile-adapter] performance/week employee:', empErr);
+                }
+                const employeeId = empRow && empRow.id != null ? parseInt(empRow.id, 10) : null;
+                const employeeMatched = Number.isFinite(employeeId) && employeeId > 0;
+
+                const finish = (attRows) => {
+                    const attByDate = {};
+                    for (const r of attRows || []) {
+                        if (r && r.date) attByDate[String(r.date).slice(0, 10)] = r;
+                    }
+
+                    const days = [];
+                    let cur = anchor;
+                    let tasksWeekTotal = 0;
+                    let attSum = 0;
+                    let attCount = 0;
+                    let maxTasks = 0;
+                    for (let i = 0; i < 7; i++) {
+                        const ymd = jakartaYmdFromInstant(cur);
+                        const tc = toFiniteNumber(taskByDay[ymd]);
+                        if (tc > maxTasks) maxTasks = tc;
+                        tasksWeekTotal += tc;
+                        const attSc = employeeMatched ? attendanceDayScore(attByDate[ymd]) : 0;
+                        if (employeeMatched) {
+                            attSum += attSc;
+                            attCount += 1;
+                        }
+                        days.push({
+                            date: ymd,
+                            weekday: PERF_WEEKDAY_ID[i],
+                            is_today: ymd === todayYmd,
+                            tasks_completed: tc,
+                            attendance_score: attSc
+                        });
+                        cur = jakartaAddDaysFromInstant(cur, 1);
+                    }
+                    const attendanceWeekAvg = attCount > 0 ? Math.round((attSum / attCount) * 10) / 10 : 0;
+                    res.json({
+                        success: true,
+                        data: {
+                            days,
+                            tasks_week_total: tasksWeekTotal,
+                            attendance_week_avg: attendanceWeekAvg,
+                            employee_matched: employeeMatched,
+                            tasks_week_max_per_day: maxTasks
+                        }
+                    });
+                };
+
+                if (!employeeMatched) {
+                    return finish([]);
+                }
+                db.all(
+                    `SELECT date, check_in, check_out, status FROM employee_attendance
+                     WHERE employee_id = ? AND date >= ? AND date <= ?`,
+                    [employeeId, weekStartYmd, weekEndYmd],
+                    (aErr, rows) => {
+                        if (aErr) {
+                            logger.error('[mobile-adapter] performance/week attendance:', aErr);
+                            return finish([]);
+                        }
+                        finish(rows);
+                    }
+                );
+            });
+        });
     });
 });
 
@@ -1394,7 +2018,92 @@ router.post('/odps/:odpId/assign', verifyToken, requireTechnician, (req, res) =>
     );
 });
 
-// --- Kolektor (Field Collector app) ---
+// --- Kolektor (Field Collector app) — notifikasi in-app ---
+router.get('/collector/notifications', verifyToken, requireCollector, (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!Number.isFinite(collectorId)) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    db.get(
+        `SELECT COUNT(*) AS c FROM collector_field_notifications
+         WHERE collector_id = ? AND read_at IS NULL`,
+        [collectorId],
+        (e1, countRow) => {
+            if (e1) {
+                logger.error('[mobile-adapter] collector/notifications count:', e1);
+                return res.status(500).json({ success: false, message: e1.message });
+            }
+            const unread_count = countRow ? countRow.c : 0;
+            db.all(
+                `SELECT id, collector_id, kind, ref_id, title, body, read_at, created_at
+                 FROM collector_field_notifications
+                 WHERE collector_id = ?
+                 ORDER BY datetime(created_at) DESC
+                 LIMIT ?`,
+                [collectorId, limit],
+                (e2, rows) => {
+                    if (e2) {
+                        logger.error('[mobile-adapter] collector/notifications list:', e2);
+                        return res.status(500).json({ success: false, message: e2.message });
+                    }
+                    const items = (rows || []).map((r) => ({
+                        id: r.id,
+                        kind: r.kind,
+                        ref_id: r.ref_id,
+                        title: r.title,
+                        body: r.body,
+                        read_at: r.read_at,
+                        created_at: r.created_at,
+                        unread: !r.read_at
+                    }));
+                    res.json({ success: true, data: { items, unread_count } });
+                }
+            );
+        }
+    );
+});
+
+router.post('/collector/notifications/:notifId/read', verifyToken, requireCollector, (req, res) => {
+    const collectorId = parseCollectorId(req);
+    const nid = parseInt(req.params.notifId, 10);
+    if (!Number.isFinite(collectorId) || !Number.isFinite(nid)) {
+        return res.status(400).json({ success: false, message: 'Data tidak valid' });
+    }
+    db.run(
+        `UPDATE collector_field_notifications SET read_at = datetime('now')
+         WHERE id = ? AND collector_id = ?`,
+        [nid, collectorId],
+        function (err) {
+            if (err) {
+                return res.status(500).json({ success: false, message: err.message });
+            }
+            if (this.changes === 0) {
+                return res.status(404).json({ success: false, message: 'Notifikasi tidak ditemukan' });
+            }
+            res.json({ success: true, message: 'Ditandai dibaca' });
+        }
+    );
+});
+
+router.post('/collector/notifications/read-all', verifyToken, requireCollector, (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!Number.isFinite(collectorId)) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    db.run(
+        `UPDATE collector_field_notifications SET read_at = datetime('now')
+         WHERE collector_id = ? AND read_at IS NULL`,
+        [collectorId],
+        function (err) {
+            if (err) {
+                return res.status(500).json({ success: false, message: err.message });
+            }
+            res.json({ success: true, message: 'Semua ditandai dibaca', updated: this.changes });
+        }
+    );
+});
+
 router.get('/collector/overview', verifyToken, requireCollector, async (req, res) => {
     const collectorId = parseCollectorId(req);
     if (!collectorId) {
@@ -1818,7 +2527,8 @@ router.post(
         if (!collectorId) {
             return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
         }
-        const { customer_id, payment_amount, payment_method, notes, invoice_ids } = req.body || {};
+        const { customer_id, payment_amount, payment_method, notes, invoice_ids, discount_amount } =
+            req.body || {};
         const customerIdNum = parseInt(String(customer_id), 10);
         if (!Number.isFinite(customerIdNum) || customerIdNum <= 0) {
             return res.status(400).json({ success: false, message: 'ID pelanggan tidak valid' });
@@ -1840,6 +2550,7 @@ router.post(
                 payment_method: method,
                 notes,
                 invoice_ids,
+                discount_amount,
                 paymentProofRelativePath: paymentProof
             });
             if (!result.ok) {

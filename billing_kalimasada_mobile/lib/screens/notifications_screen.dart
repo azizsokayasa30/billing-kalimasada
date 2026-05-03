@@ -38,13 +38,41 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.engineering;
       case 'TR':
         return Icons.build_circle_outlined;
+      case 'LEAVE':
+        return Icons.event_note;
       default:
         return Icons.notifications_outlined;
     }
   }
 
+  String _hintForKind(String? kind) {
+    switch ((kind ?? '').toUpperCase()) {
+      case 'LEAVE':
+        return 'Izin/cuti · ketuk untuk tandai dibaca';
+      case 'TR':
+        return 'Tiket gangguan · ketuk untuk detail';
+      default:
+        return 'Instalasi · ketuk untuk detail';
+    }
+  }
+
   Future<void> _openTaskFromNotification(Map<String, dynamic> item) async {
     final notif = context.read<NotificationProvider>();
+    final kindUpper = (item['kind'] ?? '').toString().toUpperCase();
+    if (kindUpper == 'LEAVE') {
+      final idRaw = item['id'];
+      final nid = idRaw is int ? idRaw : int.tryParse(idRaw.toString());
+      if (nid != null) {
+        await notif.markRead(nid);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Riwayat keputusan ada di menu Absensi (maks. 30 hari).'),
+        ),
+      );
+      return;
+    }
     final tasksProv = context.read<TaskProvider>();
     final idRaw = item['id'];
     final nid = idRaw is int ? idRaw : int.tryParse(idRaw.toString());
@@ -253,7 +281,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    kind == 'TR' ? 'Tiket gangguan · ketuk untuk detail' : 'Instalasi · ketuk untuk detail',
+                                    _hintForKind(kind),
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: const Color(0xFF1B0C6B).withValues(alpha: 0.85),

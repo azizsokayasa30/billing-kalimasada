@@ -55,6 +55,7 @@ function parseInvoiceIds(invoice_ids) {
  * @param {string} [opts.payment_method]
  * @param {string} [opts.notes]
  * @param {string[]|string|undefined} [opts.invoice_ids]
+ * @param {number|string} [opts.discount_amount] total diskon (Rp), 0 jika tidak ada
  * @param {string|null} [opts.paymentProofRelativePath] e.g. '/uploads/payments/proof-....jpg'
  * @returns {Promise<{ ok: true, payment_id: number, commission_amount: number } | { ok: false, status: number, message: string }>}
  */
@@ -66,11 +67,13 @@ async function submitCollectorPayment(opts) {
         payment_method = '',
         notes = '',
         invoice_ids: rawInvoiceIds,
-        paymentProofRelativePath = null
+        paymentProofRelativePath = null,
+        discount_amount: rawDiscount = 0
     } = opts;
 
     const paymentAmountNum = Number(payment_amount);
     const parsedInvoiceIds = parseInvoiceIds(rawInvoiceIds);
+    const discountTotal = Math.max(0, Math.round(Number(rawDiscount) || 0));
 
     if (!customer_id || !paymentAmountNum) {
         return { ok: false, status: 400, message: 'Customer ID dan jumlah pembayaran harus diisi' };
@@ -80,6 +83,9 @@ async function submitCollectorPayment(opts) {
     }
     if (paymentAmountNum > 999999999) {
         return { ok: false, status: 400, message: 'Jumlah pembayaran terlalu besar (maksimal 999,999,999)' };
+    }
+    if (discountTotal > 999999999) {
+        return { ok: false, status: 400, message: 'Diskon terlalu besar' };
     }
 
     const collector = await billingManager.getCollectorById(collectorId);
@@ -96,6 +102,26 @@ async function submitCollectorPayment(opts) {
     }
 
     const commissionAmount = Math.round((paymentAmountNum * commissionRate) / 100);
+
+    if (parsedInvoiceIds.length > 0) {
+        let grossSum = 0;
+        for (const invoiceId of parsedInvoiceIds) {
+            const inv = await billingManager.getInvoiceById(invoiceId);
+            grossSum += parseFloat(inv?.amount || 0) || 0;
+        }
+        grossSum = Math.round(grossSum);
+        if (discountTotal > grossSum) {
+            return { ok: false, status: 400, message: 'Diskon tidak boleh melebihi total tagihan terpilih' };
+        }
+        const expectedNet = grossSum - discountTotal;
+        if (Math.abs(paymentAmountNum - expectedNet) > 1) {
+            return {
+                ok: false,
+                status: 400,
+                message: 'Jumlah pembayaran tidak sesuai total tagihan setelah diskon'
+            };
+        }
+    }
 
     const paymentId = await billingManager.recordCollectorPaymentRecord({
         collector_id: collectorId,
@@ -121,8 +147,16 @@ async function submitCollectorPayment(opts) {
     }
 
     let lastPaymentId = null;
+    const baseNotes = notes && String(notes).trim() ? String(notes).trim() : '';
+    const discountNote =
+        discountTotal > 0 ? `Diskon: Rp ${discountTotal.toLocaleString('id-ID')}` : '';
+    const mergeLineNotes = (includeDiscount) => {
+        const parts = [baseNotes, includeDiscount && discountNote ? discountNote : ''].filter(Boolean);
+        return parts.join(' | ');
+    };
 
     if (parsedInvoiceIds && parsedInvoiceIds.length > 0) {
+        let isFirst = true;
         for (const invoiceId of parsedInvoiceIds) {
             await billingManager.updateInvoiceStatus(invoiceId, 'paid', payment_method);
             const inv = await billingManager.getInvoiceById(invoiceId);
@@ -132,11 +166,13 @@ async function submitCollectorPayment(opts) {
                 amount: invAmount,
                 payment_method,
                 reference_number: '',
-                notes: notes || `Collector ${collectorId}`,
+                notes: mergeLineNotes(isFirst),
                 collector_id: collectorId,
-                commission_amount: Math.round((invAmount * commissionRate) / 100)
+                commission_amount: Math.round((invAmount * commissionRate) / 100),
+                discount_amount: isFirst ? discountTotal : 0
             });
             lastPaymentId = newPayment?.id || lastPaymentId;
+            isFirst = false;
         }
     } else {
         let remaining = paymentAmountNum || 0;
@@ -145,6 +181,7 @@ async function submitCollectorPayment(opts) {
             const unpaidInvoices = (invoicesByCustomer || [])
                 .filter((i) => i.status === 'unpaid')
                 .sort((a, b) => new Date(a.due_date || a.id) - new Date(b.due_date || b.id));
+            let isFirst = true;
             for (const inv of unpaidInvoices) {
                 const invAmount = parseFloat(inv.amount || 0) || 0;
                 if (remaining >= invAmount && invAmount > 0) {
@@ -154,11 +191,13 @@ async function submitCollectorPayment(opts) {
                         amount: invAmount,
                         payment_method,
                         reference_number: '',
-                        notes: notes || `Collector ${collectorId}`,
+                        notes: mergeLineNotes(isFirst),
                         collector_id: collectorId,
-                        commission_amount: Math.round((invAmount * commissionRate) / 100)
+                        commission_amount: Math.round((invAmount * commissionRate) / 100),
+                        discount_amount: isFirst ? discountTotal : 0
                     });
                     lastPaymentId = newPayment?.id || lastPaymentId;
+                    isFirst = false;
                     remaining -= invAmount;
                     if (remaining <= 0) break;
                 } else {
