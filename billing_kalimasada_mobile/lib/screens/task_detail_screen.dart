@@ -44,6 +44,42 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
     return v.toString().trim();
   }
 
+  double? _taskDouble(String key) {
+    final v = _task[key];
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString().trim());
+  }
+
+  ({double lat, double lng})? _customerCoordinate() {
+    final latCandidates = <String>[
+      'customer_latitude',
+      'customer_lat',
+      'latitude',
+      'lat',
+    ];
+    final lngCandidates = <String>[
+      'customer_longitude',
+      'customer_lng',
+      'longitude',
+      'lng',
+    ];
+
+    double? lat;
+    double? lng;
+    for (final k in latCandidates) {
+      lat = _taskDouble(k);
+      if (lat != null) break;
+    }
+    for (final k in lngCandidates) {
+      lng = _taskDouble(k);
+      if (lng != null) break;
+    }
+
+    if (lat == null || lng == null) return null;
+    return (lat: lat, lng: lng);
+  }
+
   String _pppoeUserDisplay() {
     final u = _taskStr('pppoe_username');
     if (u.isNotEmpty) return u;
@@ -356,17 +392,30 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                               onPressed: () async {
                                 final phone = _task['phone']?.toString();
                                 if (phone != null && phone.isNotEmpty) {
-                                  final uri = Uri.parse('tel:$phone');
+                                  final digits = phone.replaceAll(RegExp(r'\D'), '');
+                                  if (digits.isEmpty) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Nomor WhatsApp tidak valid')),
+                                      );
+                                    }
+                                    return;
+                                  }
+                                  final wa =
+                                      digits.startsWith('62')
+                                          ? digits
+                                          : '62${digits.startsWith('0') ? digits.substring(1) : digits}';
+                                  final uri = Uri.parse('https://wa.me/$wa');
                                   if (await canLaunchUrl(uri)) {
-                                    await launchUrl(uri);
+                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
                                   } else if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Tidak dapat membuka aplikasi telepon')),
+                                      const SnackBar(content: Text('Tidak dapat membuka WhatsApp')),
                                     );
                                   }
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Nomor telepon tidak tersedia')),
+                                    const SnackBar(content: Text('Nomor WhatsApp tidak tersedia')),
                                   );
                                 }
                               },
@@ -385,6 +434,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () async {
+                                final coord = _customerCoordinate();
+                                if (coord != null) {
+                                  final uri = Uri.parse(
+                                    'https://www.google.com/maps/search/?api=1&query=${coord.lat},${coord.lng}',
+                                  );
+                                  if (await canLaunchUrl(uri)) {
+                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                  } else if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Tidak dapat membuka peta')),
+                                    );
+                                  }
+                                  return;
+                                }
+
                                 final address = _task['address']?.toString();
                                 if (address != null && address.isNotEmpty) {
                                   final uri = Uri.parse(
@@ -399,7 +463,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                                   }
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Alamat tidak tersedia')),
+                                    const SnackBar(content: Text('Koordinat/alamat pelanggan tidak tersedia')),
                                   );
                                 }
                               },
