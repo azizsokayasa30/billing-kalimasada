@@ -880,6 +880,26 @@ function getDeviceSerialNumber(device) {
 // Fungsi untuk memantau perangkat yang tidak aktif (offline)
 async function monitorOfflineDevices(thresholdHours = null) {
     try {
+        const offlineNotifEnabled = getSetting('offline_notification_enable', true) !== false;
+        if (!offlineNotifEnabled) {
+            console.log('Offline notification monitoring disabled (offline_notification_enable=false) — skip monitorOfflineDevices');
+            return {
+                success: true,
+                offlineDevices: [],
+                message: 'Offline notification monitoring disabled'
+            };
+        }
+
+        const { isWaSystemMonitorEnabled: waMonOff } = require('./whatsappMonitoringSettings');
+        if (!waMonOff('genieacs_offline_digest_wa')) {
+            console.log('Master switch genieacs_offline_digest_wa off — skip monitorOfflineDevices');
+            return {
+                success: true,
+                offlineDevices: [],
+                message: 'GenieACS offline WA digest disabled'
+            };
+        }
+
         // Jika thresholdHours tidak diberikan, ambil dari settings
         if (thresholdHours === null) {
             thresholdHours = parseInt(getSetting('offline_device_threshold_hours', '24'));
@@ -944,13 +964,8 @@ async function monitorOfflineDevices(thresholdHours = null) {
 
             message += `Mohon segera ditindaklanjuti.`;
 
-            const { isWaSystemMonitorEnabled: waMonOff } = require('./whatsappMonitoringSettings');
-            if (!waMonOff('genieacs_offline_digest_wa')) {
-                console.log('Master switch genieacs_offline_digest_wa off — skip WA digest offline');
-            } else {
-                await sendTechnicianMessage(message, 'medium');
-                console.log(`Pesan peringatan perangkat offline terkirim untuk ${offlineDevices.length} perangkat`);
-            }
+            await sendTechnicianMessage(message, 'medium');
+            console.log(`Pesan peringatan perangkat offline terkirim untuk ${offlineDevices.length} perangkat`);
         } else {
             console.log('Tidak ada perangkat yang offline lebih dari threshold');
         }

@@ -209,13 +209,38 @@ router.post('/create', async (req, res) => {
     });
 
     const assignTid = newReport.assigned_technician_id || newReport.assignedTechnicianId;
-    if (assignTid) {
-      try {
-        const fieldNotif = require('../config/technicianFieldNotifications');
-        await fieldNotif.notifyTroubleTicket(assignTid, newReport);
-      } catch (nfErr) {
-        console.error('Field notification trouble create:', nfErr.message || nfErr);
+    try {
+      const fieldNotif = require('../config/technicianFieldNotifications');
+      const assignNum = parseInt(assignTid, 10);
+      if (Number.isFinite(assignNum) && assignNum > 0) {
+        await fieldNotif.notifyTroubleTicket(assignNum, newReport);
+      } else {
+        // Jika tidak di-assign, broadcast ke semua teknisi aktif agar tiket tampil sebagai notifikasi baru.
+        const dbPath = require('path').join(__dirname, '../data/billing.db');
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database(dbPath);
+        const techRows = await new Promise((resolve, reject) => {
+          db.all(
+            `SELECT id FROM technicians
+             WHERE is_active = 1
+               AND LOWER(IFNULL(role, 'technician')) = 'technician'`,
+            [],
+            (err, rows) => {
+              db.close();
+              if (err) return reject(err);
+              resolve(rows || []);
+            }
+          );
+        });
+        for (const tr of techRows) {
+          const tid = parseInt(tr.id, 10);
+          if (Number.isFinite(tid) && tid > 0) {
+            await fieldNotif.notifyTroubleTicket(tid, newReport);
+          }
+        }
       }
+    } catch (nfErr) {
+      console.error('Field notification trouble create:', nfErr.message || nfErr);
     }
     
     res.json({ success: true, message: 'Tiket berhasil dibuat', report: newReport });
