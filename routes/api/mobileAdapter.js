@@ -938,7 +938,11 @@ router.get('/dashboard', verifyToken, allowFieldOps, (req, res) => {
                 UNION
                 SELECT cu.id FROM customers cu
                 INNER JOIN trouble_reports tr ON ${trMatch}
-                WHERE (tr.assigned_technician_id = ? OR CAST(tr.assigned_technician_id AS TEXT) = ?)
+                WHERE (
+                        tr.assigned_technician_id = ?
+                        OR CAST(tr.assigned_technician_id AS TEXT) = ?
+                        OR IFNULL(TRIM(CAST(tr.assigned_technician_id AS TEXT)), '') IN ('', '0')
+                      )
                   AND LOWER(IFNULL(tr.status, '')) NOT IN ('closed', 'resolved')
             )`;
             db.get(gangSql, [techId, String(techId)], (err2, gRow) => {
@@ -1000,7 +1004,11 @@ router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
     const troubleWhere = history
         ? `(assigned_technician_id = ? OR CAST(assigned_technician_id AS TEXT) = ?)
             AND LOWER(status) IN ('closed','resolved')`
-        : `(assigned_technician_id = ? OR CAST(assigned_technician_id AS TEXT) = ?)
+        : `(
+                assigned_technician_id = ?
+                OR CAST(assigned_technician_id AS TEXT) = ?
+                OR IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0')
+            )
             AND LOWER(status) NOT IN ('closed','resolved')`;
 
     db.all(installSql, [techId], (err1, installRows) => {
@@ -1556,9 +1564,18 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
             const wallNow = getLocalTimestamp();
             db.run(
                 `UPDATE trouble_reports SET status = ?, updated_at = ?,
-                 work_started_at = COALESCE(work_started_at, ?)
-                 WHERE id = ? AND (assigned_technician_id = ? OR CAST(assigned_technician_id AS TEXT) = ?)`,
-                [dbStatus, wallNow, wallNow, id, techId, String(techId)],
+                 work_started_at = COALESCE(work_started_at, ?),
+                 assigned_technician_id = CASE
+                    WHEN IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0') THEN ?
+                    ELSE assigned_technician_id
+                 END
+                 WHERE id = ?
+                   AND (
+                        assigned_technician_id = ?
+                        OR CAST(assigned_technician_id AS TEXT) = ?
+                        OR IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0')
+                   )`,
+                [dbStatus, wallNow, wallNow, techId, id, techId, String(techId)],
                 done
             );
             return;
@@ -1580,7 +1597,13 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
             }
 
             db.get(
-                `SELECT id FROM trouble_reports WHERE id = ? AND (assigned_technician_id = ? OR CAST(assigned_technician_id AS TEXT) = ?)`,
+                `SELECT id FROM trouble_reports
+                 WHERE id = ?
+                   AND (
+                        assigned_technician_id = ?
+                        OR CAST(assigned_technician_id AS TEXT) = ?
+                        OR IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0')
+                   )`,
                 [id, techId, String(techId)],
                 (qErr, row) => {
                     if (qErr) {
@@ -1620,9 +1643,19 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
         }
 
         db.run(
-            `UPDATE trouble_reports SET status = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ? AND (assigned_technician_id = ? OR CAST(assigned_technician_id AS TEXT) = ?)`,
-            [dbStatus, id, techId, String(techId)],
+            `UPDATE trouble_reports
+             SET status = ?, updated_at = CURRENT_TIMESTAMP,
+                 assigned_technician_id = CASE
+                    WHEN IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0') THEN ?
+                    ELSE assigned_technician_id
+                 END
+             WHERE id = ?
+               AND (
+                    assigned_technician_id = ?
+                    OR CAST(assigned_technician_id AS TEXT) = ?
+                    OR IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0')
+               )`,
+            [dbStatus, techId, id, techId, String(techId)],
             done
         );
         return;

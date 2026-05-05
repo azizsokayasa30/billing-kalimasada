@@ -1,137 +1,145 @@
 import 'package:flutter/material.dart';
 
-/// Marker ODP kecil di peta: pin kuning sederhana, ujung (titik lokasi) jelas.
-class OdpMapMarker extends StatelessWidget {
+/// Marker ODP mengikuti style web: pin kuning dengan icon ODP.
+class OdpMapMarker extends StatefulWidget {
   const OdpMapMarker({
     super.key,
     this.status = 'active',
     this.size = 28,
+    this.enablePulse = true,
   });
 
   final String status;
   final double size;
+  final bool enablePulse;
+
+  @override
+  State<OdpMapMarker> createState() => _OdpMapMarkerState();
+}
+
+class _OdpMapMarkerState extends State<OdpMapMarker>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
+    if (widget.enablePulse) {
+      _pulseController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant OdpMapMarker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.enablePulse != oldWidget.enablePulse) {
+      if (widget.enablePulse) {
+        _pulseController.repeat(reverse: true);
+      } else {
+        _pulseController.stop();
+        _pulseController.value = 0.0;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final s = status.toLowerCase();
+    final s = widget.status.toLowerCase();
     final inactive = s == 'inactive';
     final maintenance = s == 'maintenance';
 
-    final Color top = inactive
-        ? const Color(0xFFE8E8E8)
-        : maintenance
-            ? const Color(0xFFFFE082)
-            : const Color(0xFFFFF59D);
-    final Color bottom = inactive
+    final Color fill = inactive
         ? const Color(0xFFC4C4C4)
         : maintenance
             ? const Color(0xFFFFCA28)
             : const Color(0xFFFFC107);
-    final Color ring = inactive
+    final Color stroke = inactive
         ? const Color(0xFF9E9E9E)
         : maintenance
             ? const Color(0xFFFF9800)
             : const Color(0xFFF9A825);
-    final Color tip = inactive
-        ? const Color(0xFF424242)
-        : const Color(0xFFE65100);
+    final d = widget.size;
+    final icon = maintenance
+        ? Icons.settings_input_component_rounded
+        : Icons.settings_input_antenna_rounded;
 
-    final d = size;
-    return SizedBox(
-      width: d,
-      height: d * 1.18,
-      child: CustomPaint(
-        painter: _OdpPinPainter(
-          top: top,
-          bottom: bottom,
-          ring: ring,
-          tip: tip,
-          maintenanceRing: maintenance && !inactive,
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, child) {
+        final scale = widget.enablePulse ? (1.0 + (_pulseController.value * 0.08)) : 1.0;
+        return Transform.scale(scale: scale, child: child);
+      },
+      child: SizedBox(
+        width: d + 2,
+        height: d * 1.28,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.topCenter,
+          children: [
+            Container(
+              width: d,
+              height: d,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [fill.withValues(alpha: 0.92), fill],
+                ),
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                icon,
+                size: d * 0.48,
+                color: Colors.white,
+              ),
+            ),
+            Positioned(
+              top: d - 2,
+              child: Container(
+                width: 0,
+                height: 0,
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(color: Colors.transparent, width: d * 0.18),
+                    right: BorderSide(color: Colors.transparent, width: d * 0.18),
+                    top: BorderSide(color: fill, width: d * 0.28),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: d + (d * 0.10),
+              child: Container(
+                width: d * 0.16,
+                height: d * 0.16,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: stroke,
+                  border: Border.all(color: Colors.white70, width: 1),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
-  }
-}
-
-class _OdpPinPainter extends CustomPainter {
-  _OdpPinPainter({
-    required this.top,
-    required this.bottom,
-    required this.ring,
-    required this.tip,
-    required this.maintenanceRing,
-  });
-
-  final Color top;
-  final Color bottom;
-  final Color ring;
-  final Color tip;
-  final bool maintenanceRing;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final cx = w / 2;
-    final headR = w * 0.36;
-    final headCy = headR + w * 0.04;
-    final tipY = h - 1.0;
-
-    final shadowPath = Path()
-      ..addOval(Rect.fromCircle(center: Offset(cx, headCy + 0.8), radius: headR * 0.75));
-    canvas.drawShadow(shadowPath, Colors.black38, 1.8, false);
-
-    final ringPaint = Paint()
-      ..color = ring
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = maintenanceRing ? 1.8 : 1.2;
-    canvas.drawCircle(Offset(cx, headCy), headR + 0.8, ringPaint);
-
-    final body = Path()
-      ..moveTo(cx, tipY)
-      ..quadraticBezierTo(cx - headR * 0.9, headCy + headR * 0.42, cx - headR * 0.88, headCy)
-      ..arcToPoint(
-        Offset(cx + headR * 0.88, headCy),
-        radius: Radius.circular(headR),
-        clockwise: false,
-      )
-      ..quadraticBezierTo(cx + headR * 0.9, headCy + headR * 0.42, cx, tipY)
-      ..close();
-
-    final grad = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [top, bottom],
-      ).createShader(Rect.fromLTWH(0, 0, w, h));
-    canvas.drawPath(body, grad);
-
-    final edge = Paint()
-      ..color = Colors.white.withValues(alpha: 0.55)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.9;
-    canvas.drawPath(body, edge);
-
-    // Titik lokasi: bulat gelap di ujung — mudah terlihat di citra satelit
-    final tipR = (w * 0.11).clamp(2.2, 3.4);
-    canvas.drawCircle(
-      Offset(cx, tipY - tipR * 0.35),
-      tipR,
-      Paint()..color = tip,
-    );
-    canvas.drawCircle(
-      Offset(cx, tipY - tipR * 0.35),
-      tipR * 0.45,
-      Paint()..color = Colors.white.withValues(alpha: 0.75),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _OdpPinPainter oldDelegate) {
-    return oldDelegate.top != top ||
-        oldDelegate.bottom != bottom ||
-        oldDelegate.ring != ring ||
-        oldDelegate.tip != tip ||
-        oldDelegate.maintenanceRing != maintenanceRing;
   }
 }

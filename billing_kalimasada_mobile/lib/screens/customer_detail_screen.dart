@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../store/customer_provider.dart';
 import '../store/auth_provider.dart';
 
@@ -17,6 +19,38 @@ class CustomerDetailScreen extends StatefulWidget {
 class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   late Map<String, dynamic> customer;
 
+  double? _toDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    return double.tryParse(v?.toString() ?? '');
+  }
+
+  Future<void> _openGoogleMapsDirections(double lat, double lng) async {
+    final navUri = Uri.parse('google.navigation:q=$lat,$lng');
+    final webUri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+
+    final navOk = await launchUrl(
+      navUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (navOk) return;
+
+    final webOk = await launchUrl(
+      webUri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!webOk && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gagal membuka Google Maps.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +61,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   Widget build(BuildContext context) {
     final isTechnician = context.watch<AuthProvider>().role == 'technician';
     final status = customer['status']?.toString().toLowerCase() ?? 'active';
+    final customerLat = _toDouble(customer['latitude']);
+    final customerLng = _toDouble(customer['longitude']);
 
     // Default to active colors
     Color statusColor = const Color(0xFF0D5930); // Dark Green text
@@ -436,14 +472,14 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                   ),
 
                   const SizedBox(height: 16),
-                  if (customer['latitude'] != null && customer['longitude'] != null)
+                  if (customerLat != null && customerLng != null)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const Text('LOKASI PELANGGAN', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textOnSurfaceVariant, letterSpacing: 1.1)),
                         const SizedBox(height: 8),
                         Container(
-                          height: 150,
+                          height: 130,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: outlineVariant),
@@ -451,29 +487,26 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                           clipBehavior: Clip.antiAlias,
                           child: FlutterMap(
                             options: MapOptions(
-                              initialCenter: LatLng(customer['latitude'] as double, customer['longitude'] as double),
-                              initialZoom: 16.0,
+                              initialCenter: LatLng(customerLat, customerLng),
+                              initialZoom: 15.5,
                               interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                             ),
                             children: [
                               TileLayer(
-                                urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                                 userAgentPackageName: 'com.example.billing_kalimasada_mobile',
                               ),
                               MarkerLayer(
                                 markers: [
                                   Marker(
-                                    point: LatLng(customer['latitude'] as double, customer['longitude'] as double),
-                                    width: 36,
-                                    height: 36,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(10),
-                                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
-                                      ),
-                                      child: const Center(
-                                        child: Icon(Icons.wifi, color: Colors.green, size: 22),
+                                    point: LatLng(customerLat, customerLng),
+                                    width: 28,
+                                    height: 28,
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.location_on,
+                                        color: Color(0xFFE53935),
+                                        size: 26,
                                       ),
                                     ),
                                   ),
@@ -486,26 +519,17 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                       ],
                     ),
                   OutlinedButton.icon(
-                    onPressed: () async {
-                      final updatedLocation = await showDialog<LatLng>(
-                        context: context,
-                        builder: (context) => _TagLocationDialog(customer: customer),
-                      );
-                      if (updatedLocation != null) {
-                        setState(() {
-                          customer['latitude'] = updatedLocation.latitude;
-                          customer['longitude'] = updatedLocation.longitude;
-                        });
-                      }
-                    },
+                    onPressed: (customerLat != null && customerLng != null)
+                        ? () => _openGoogleMapsDirections(customerLat, customerLng)
+                        : null,
                     icon: Icon(
                       customer['latitude'] != null ? Icons.edit_location : Icons.my_location,
                       color: surfaceTint,
                       size: 20,
                     ),
-                    label: Text(
-                      customer['latitude'] != null ? 'Update Lokasi Pelanggan' : 'Tambahkan Lokasi Pelanggan',
-                      style: const TextStyle(
+                    label: const Text(
+                      'Dapatkan Arah',
+                      style: TextStyle(
                         color: textOnBackground,
                         fontWeight: FontWeight.w600,
                       ),
@@ -778,19 +802,138 @@ class _TagLocationDialog extends StatefulWidget {
   State<_TagLocationDialog> createState() => _TagLocationDialogState();
 }
 
-class _TagLocationDialogState extends State<_TagLocationDialog> {
+class _TagLocationDialogState extends State<_TagLocationDialog>
+    with SingleTickerProviderStateMixin {
   LatLng? _selectedLocation;
+  LatLng? _currentLocation;
+  bool _isLocating = false;
   final MapController _mapController = MapController();
   late LatLng _defaultLocation;
+  late final AnimationController _gpsPulseController;
 
   @override
   void initState() {
     super.initState();
+    _gpsPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1700),
+    )..repeat();
     if (widget.customer['latitude'] != null && widget.customer['longitude'] != null) {
       _defaultLocation = LatLng(widget.customer['latitude'] as double, widget.customer['longitude'] as double);
       _selectedLocation = _defaultLocation;
     } else {
       _defaultLocation = const LatLng(-7.404620, 109.724536);
+    }
+    _loadCurrentLocation(showError: false);
+  }
+
+  @override
+  void dispose() {
+    _gpsPulseController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildGpsPulseMarker() {
+    return AnimatedBuilder(
+      animation: _gpsPulseController,
+      builder: (context, _) {
+        final pulse = Curves.easeOut.transform(_gpsPulseController.value);
+        final ringScale = 1.0 + (pulse * 1.2);
+        final ringOpacity = (0.30 * (1 - pulse)).clamp(0.0, 1.0);
+        return SizedBox(
+          width: 42,
+          height: 42,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Transform.scale(
+                scale: ringScale,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1A73E8).withValues(alpha: ringOpacity),
+                  ),
+                ),
+              ),
+              Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF1A73E8),
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _loadCurrentLocation({bool showError = true}) async {
+    if (_isLocating) return;
+    setState(() => _isLocating = true);
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (showError && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('GPS belum aktif. Silakan aktifkan lokasi di perangkat.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (showError && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Izin lokasi ditolak. Berikan izin lokasi untuk fitur ini.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      if (!mounted) return;
+      final point = LatLng(pos.latitude, pos.longitude);
+      setState(() {
+        _currentLocation = point;
+      });
+      _mapController.move(point, 18.0);
+    } catch (_) {
+      if (showError && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gagal mengambil lokasi GPS saat ini.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLocating = false);
     }
   }
 
@@ -831,6 +974,17 @@ class _TagLocationDialogState extends State<_TagLocationDialog> {
                         urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                         userAgentPackageName: 'com.example.billing_kalimasada_mobile',
                       ),
+                      if (_currentLocation != null)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _currentLocation!,
+                              width: 34,
+                              height: 34,
+                              child: _buildGpsPulseMarker(),
+                            ),
+                          ],
+                        ),
                       if (_selectedLocation != null)
                         MarkerLayer(
                           markers: [
@@ -858,6 +1012,26 @@ class _TagLocationDialogState extends State<_TagLocationDialog> {
                           ],
                         ),
                     ],
+                  ),
+                  Positioned(
+                    right: 12,
+                    bottom: 12,
+                    child: Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      elevation: 2,
+                      child: IconButton(
+                        tooltip: 'My Location',
+                        onPressed: _isLocating ? null : () => _loadCurrentLocation(),
+                        icon: _isLocating
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.my_location, color: Color(0xFF070038)),
+                      ),
+                    ),
                   ),
                 ],
               ),
