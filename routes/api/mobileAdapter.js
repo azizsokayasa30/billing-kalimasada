@@ -1740,6 +1740,96 @@ router.get('/odps', verifyToken, requireTechnician, (req, res) => {
     );
 });
 
+// Network map payload for mobile (customers + ODP + cable routes + backbone)
+router.get('/network-map', verifyToken, requireTechnician, async (req, res) => {
+    try {
+        const odps = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT id, name, code, latitude, longitude, status, capacity, used_ports, address, parent_odp_id
+                 FROM odps
+                 WHERE latitude IS NOT NULL AND longitude IS NOT NULL`,
+                [],
+                (err, rows) => (err ? reject(err) : resolve(rows || []))
+            );
+        });
+
+        const customers = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT id, name, phone, status, latitude, longitude, odp_id
+                 FROM customers
+                 WHERE latitude IS NOT NULL AND longitude IS NOT NULL`,
+                [],
+                (err, rows) => (err ? reject(err) : resolve(rows || []))
+            );
+        });
+
+        const cableRoutes = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT cr.id, cr.customer_id, cr.odp_id, cr.status, cr.cable_type, cr.cable_length,
+                        c.name AS customer_name, c.latitude AS customer_lat, c.longitude AS customer_lng,
+                        o.name AS odp_name, o.latitude AS odp_lat, o.longitude AS odp_lng
+                 FROM cable_routes cr
+                 JOIN customers c ON c.id = cr.customer_id
+                 JOIN odps o ON o.id = cr.odp_id
+                 WHERE c.latitude IS NOT NULL AND c.longitude IS NOT NULL
+                   AND o.latitude IS NOT NULL AND o.longitude IS NOT NULL`,
+                [],
+                (err, rows) => (err ? reject(err) : resolve(rows || []))
+            );
+        });
+
+        const backbone = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT oc.id, oc.from_odp_id, oc.to_odp_id, oc.connection_type, oc.status, oc.cable_length,
+                        fo.name AS from_name, fo.latitude AS from_lat, fo.longitude AS from_lng,
+                        to2.name AS to_name, to2.latitude AS to_lat, to2.longitude AS to_lng
+                 FROM odp_connections oc
+                 JOIN odps fo ON fo.id = oc.from_odp_id
+                 JOIN odps to2 ON to2.id = oc.to_odp_id
+                 WHERE fo.latitude IS NOT NULL AND fo.longitude IS NOT NULL
+                   AND to2.latitude IS NOT NULL AND to2.longitude IS NOT NULL`,
+                [],
+                (err, rows) => (err ? reject(err) : resolve(rows || []))
+            );
+        });
+
+        res.json({
+            success: true,
+            data: {
+                odps: odps.map((r) => ({
+                    ...r,
+                    latitude: parseFloat(r.latitude),
+                    longitude: parseFloat(r.longitude)
+                })),
+                customers: customers.map((r) => ({
+                    ...r,
+                    latitude: parseFloat(r.latitude),
+                    longitude: parseFloat(r.longitude)
+                })),
+                cableRoutes: cableRoutes.map((r) => ({
+                    ...r,
+                    customer_lat: parseFloat(r.customer_lat),
+                    customer_lng: parseFloat(r.customer_lng),
+                    odp_lat: parseFloat(r.odp_lat),
+                    odp_lng: parseFloat(r.odp_lng)
+                })),
+                backbone: backbone.map((r) => ({
+                    ...r,
+                    from_lat: parseFloat(r.from_lat),
+                    from_lng: parseFloat(r.from_lng),
+                    to_lat: parseFloat(r.to_lat),
+                    to_lng: parseFloat(r.to_lng)
+                }))
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Gagal memuat data network map'
+        });
+    }
+});
+
 router.get('/odps/:odpId', verifyToken, requireTechnician, (req, res) => {
     const odpId = req.params.odpId;
     db.get(

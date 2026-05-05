@@ -299,6 +299,12 @@
                                 <input type="text" class="form-control" id="editOdpCode" name="code" required>
                             </div>
                             <div class="mb-3">
+                                <label for="editOdpParentId" class="form-label">Parent ODP</label>
+                                <select class="form-select" id="editOdpParentId" name="parent_odp_id">
+                                    <option value="">Tanpa Parent (ODP Utama)</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
                                 <label for="editOdpCapacity" class="form-label">Capacity</label>
                                 <input type="number" class="form-control" id="editOdpCapacity" name="capacity" min="1" required>
                             </div>
@@ -347,7 +353,7 @@
 
 <!-- Edit Customer Modal -->
 <div class="modal fade" id="editCustomerModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
                 <h5 class="modal-title">
@@ -359,7 +365,7 @@
                 <form id="editCustomerForm">
                     <input type="hidden" id="editCustomerId" name="id">
                     
-                    <div class="row">
+                    <div class="row g-3">
                         <div class="col-md-6">
                             <h6 class="text-info">Personal Information</h6>
                             <div class="mb-3">
@@ -371,12 +377,8 @@
                                 <input type="tel" class="form-control" id="editCustomerPhone" name="phone" required>
                             </div>
                             <div class="mb-3">
-                                <label for="editCustomerEmail" class="form-label">Email Address</label>
-                                <input type="email" class="form-control" id="editCustomerEmail" name="email">
-                            </div>
-                            <div class="mb-3">
-                                <label for="editCustomerPppoeUsername" class="form-label">PPPoE Username</label>
-                                <input type="text" class="form-control" id="editCustomerPppoeUsername" name="pppoe_username">
+                                <label for="editCustomerAddress" class="form-label">Address</label>
+                                <textarea class="form-control" id="editCustomerAddress" name="address" rows="3"></textarea>
                             </div>
                             <div class="mb-3">
                                 <label for="editCustomerStatus" class="form-label">Status</label>
@@ -390,22 +392,11 @@
                         <div class="col-md-6">
                             <h6 class="text-info">Service & Location Information</h6>
                             <div class="mb-3">
-                                <label for="editCustomerPackage" class="form-label">Package</label>
-                                <select class="form-select" id="editCustomerPackage" name="package_id">
-                                    <option value="">Select Package</option>
-                                    <!-- Options will be populated dynamically -->
-                                </select>
-                            </div>
-                            <div class="mb-3">
                                 <label for="editCustomerOdp" class="form-label">ODP</label>
                                 <select class="form-select" id="editCustomerOdp" name="odp_id">
                                     <option value="">Select ODP</option>
                                     <!-- Options will be populated dynamically -->
                                 </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="editCustomerAddress" class="form-label">Address</label>
-                                <textarea class="form-control" id="editCustomerAddress" name="address" rows="3"></textarea>
                             </div>
                             <div class="mb-3">
                                 <label for="editCustomerLat" class="form-label">Latitude</label>
@@ -415,9 +406,24 @@
                                 <label for="editCustomerLng" class="form-label">Longitude</label>
                                 <input type="number" class="form-control" id="editCustomerLng" name="longitude" step="any">
                             </div>
-                            <div class="mb-3">
-                                <label for="editCustomerJoinDate" class="form-label">Join Date</label>
-                                <input type="date" class="form-control" id="editCustomerJoinDate" name="join_date">
+                        </div>
+                        <div class="col-12">
+                            <div class="mb-2 small text-muted">
+                                Klik map atau drag marker untuk update titik koordinat.
+                            </div>
+                            <div id="editCustomerMapWrap" style="position: relative;">
+                                <div style="position: absolute; top: 10px; left: 10px; right: 10px; z-index: 1000; display: flex; gap: 8px;">
+                                    <input type="text" class="form-control form-control-sm" id="editCustomerMapSearch" placeholder="Cari alamat/lokasi">
+                                    <button type="button" class="btn btn-sm btn-light" id="editCustomerMapSearchBtn">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-light active" id="editCustomerStreetBtn">Street</button>
+                                    <button type="button" class="btn btn-sm btn-light" id="editCustomerSatelliteBtn">Satellite</button>
+                                </div>
+                                <div id="editCustomerMap" style="height: 380px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15);"></div>
+                            </div>
+                            <div class="mt-2 small text-muted" id="editCustomerMapHint">
+                                Latitude/Longitude akan otomatis terisi dari map tagging.
                             </div>
                         </div>
                     </div>

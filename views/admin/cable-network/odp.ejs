@@ -359,7 +359,15 @@
                         <!-- Map Container untuk Add -->
                         <div class="mb-3">
                             <label class="form-label">Peta Lokasi</label>
-                            <div id="addODPMap" style="height: 300px; border-radius: 8px; border: 1px solid #dee2e6;"></div>
+                            <div id="addODPMapWrap" style="position: relative;">
+                                <div style="position:absolute; top:10px; left:10px; right:10px; z-index:1000; display:flex; gap:8px;">
+                                    <input type="text" class="form-control form-control-sm" id="addODPMapSearch" placeholder="Cari alamat/lokasi">
+                                    <button type="button" class="btn btn-sm btn-light" id="addODPMapSearchBtn">
+                                        <i class="bi bi-search"></i>
+                                    </button>
+                                </div>
+                                <div id="addODPMap" style="height: 300px; border-radius: 8px; border: 1px solid #dee2e6;"></div>
+                            </div>
                             <small class="text-muted">Klik pada map untuk menambah posisi ODP</small>
                         </div>
                         <div class="mb-3">
@@ -370,7 +378,7 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label class="form-label">Kapasitas Port</label>
-                                    <input type="number" class="form-control" name="capacity" value="64" min="1">
+                                    <input type="number" class="form-control" name="capacity" value="8" min="1">
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -797,6 +805,34 @@
             }
         });
 
+        async function runAddODPMapSearch() {
+            const searchInput = document.getElementById('addODPMapSearch');
+            if (!searchInput) return;
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+                const results = await response.json();
+                if (!Array.isArray(results) || results.length === 0) {
+                    showAlert('warning', 'Lokasi tidak ditemukan');
+                    return;
+                }
+
+                const lat = parseFloat(results[0].lat);
+                const lng = parseFloat(results[0].lon);
+                if (!isNaN(lat) && !isNaN(lng) && addODPMap && addODPMarker) {
+                    addODPMarker.setLatLng([lat, lng]);
+                    addODPMap.setView([lat, lng], 16);
+                    document.getElementById('addODPLatitude').value = lat.toFixed(6);
+                    document.getElementById('addODPLongitude').value = lng.toFixed(6);
+                }
+            } catch (error) {
+                console.error('Add ODP map search error:', error);
+                showAlert('danger', 'Gagal mencari lokasi');
+            }
+        }
+
         // Initialize map untuk add ODP
         function initializeAddODPMap() {
             // Default center (Jakarta)
@@ -880,6 +916,24 @@
             // Update marker when coordinates are manually changed
             document.getElementById('addODPLatitude').addEventListener('input', updateAddMarkerFromInputs);
             document.getElementById('addODPLongitude').addEventListener('input', updateAddMarkerFromInputs);
+
+            const mapSearchInput = document.getElementById('addODPMapSearch');
+            const mapSearchBtn = document.getElementById('addODPMapSearchBtn');
+            if (mapSearchInput && !mapSearchInput.dataset.bound) {
+                mapSearchInput.addEventListener('keydown', async function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        await runAddODPMapSearch();
+                    }
+                });
+                mapSearchInput.dataset.bound = '1';
+            }
+            if (mapSearchBtn && !mapSearchBtn.dataset.bound) {
+                mapSearchBtn.addEventListener('click', async function() {
+                    await runAddODPMapSearch();
+                });
+                mapSearchBtn.dataset.bound = '1';
+            }
         }
 
         // Update marker position from input fields for add modal

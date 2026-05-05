@@ -21,26 +21,33 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
   double _currentZoom = 15.0;
 
   List<dynamic> _odps = [];
+  List<dynamic> _customers = [];
+  List<dynamic> _cableRoutes = [];
+  List<dynamic> _backbone = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchOdps();
+    _fetchNetworkMap();
   }
 
-  Future<void> _fetchOdps() async {
+  Future<void> _fetchNetworkMap() async {
     setState(() => _isLoading = true);
     try {
-      final response = await ApiClient.get('/api/mobile-adapter/odps');
+      final response = await ApiClient.get('/api/mobile-adapter/network-map');
       final data = jsonDecode(response.body);
       if (data['success'] == true) {
         setState(() {
-          _odps = data['data'];
+          final payload = Map<String, dynamic>.from(data['data'] ?? {});
+          _odps = List<dynamic>.from(payload['odps'] ?? const []);
+          _customers = List<dynamic>.from(payload['customers'] ?? const []);
+          _cableRoutes = List<dynamic>.from(payload['cableRoutes'] ?? const []);
+          _backbone = List<dynamic>.from(payload['backbone'] ?? const []);
         });
       }
     } catch (e) {
-      print('Error fetching ODPs: $e');
+      print('Error fetching network map: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -82,7 +89,7 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _fetchOdps,
+            onPressed: _fetchNetworkMap,
           ),
         ],
       ),
@@ -105,12 +112,72 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
                 urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                 userAgentPackageName: 'com.example.billing_kalimasada_mobile',
               ),
+              PolylineLayer(
+                polylines: _backbone.whereType<Map>().map((row) {
+                  final fromLat = (row['from_lat'] as num?)?.toDouble();
+                  final fromLng = (row['from_lng'] as num?)?.toDouble();
+                  final toLat = (row['to_lat'] as num?)?.toDouble();
+                  final toLng = (row['to_lng'] as num?)?.toDouble();
+                  if (fromLat == null || fromLng == null || toLat == null || toLng == null) {
+                    return null;
+                  }
+                  return Polyline(
+                    points: [LatLng(fromLat, fromLng), LatLng(toLat, toLng)],
+                    color: const Color(0xFFFFD400),
+                    strokeWidth: 4,
+                  );
+                }).whereType<Polyline>().toList(),
+              ),
+              PolylineLayer(
+                polylines: _cableRoutes.whereType<Map>().map((row) {
+                  final fromLat = (row['customer_lat'] as num?)?.toDouble();
+                  final fromLng = (row['customer_lng'] as num?)?.toDouble();
+                  final toLat = (row['odp_lat'] as num?)?.toDouble();
+                  final toLng = (row['odp_lng'] as num?)?.toDouble();
+                  if (fromLat == null || fromLng == null || toLat == null || toLng == null) {
+                    return null;
+                  }
+                  final status = (row['status'] ?? 'connected').toString().toLowerCase();
+                  return Polyline(
+                    points: [LatLng(fromLat, fromLng), LatLng(toLat, toLng)],
+                    color: status == 'connected' ? const Color(0xFF28A745) : const Color(0xFFDC3545),
+                    strokeWidth: 3,
+                  );
+                }).whereType<Polyline>().toList(),
+              ),
+              MarkerLayer(
+                markers: _customers.whereType<Map>().map((c) {
+                  final lat = (c['latitude'] as num?)?.toDouble();
+                  final lng = (c['longitude'] as num?)?.toDouble();
+                  if (lat == null || lng == null) return null;
+                  final status = (c['status'] ?? 'active').toString().toLowerCase();
+                  final color = status == 'active' ? const Color(0xFF2196F3) : const Color(0xFF9E9E9E);
+                  return Marker(
+                    point: LatLng(lat, lng),
+                    width: 22,
+                    height: 22,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: const Icon(Icons.home, size: 12, color: Colors.white),
+                    ),
+                  );
+                }).whereType<Marker>().toList(),
+              ),
               MarkerLayer(
                 markers: _odps.map((odp) {
                   final status = (odp['status'] ?? 'active').toString();
+                  final lat = (odp['latitude'] as num?)?.toDouble();
+                  final lng = (odp['longitude'] as num?)?.toDouble();
+                  if (lat == null || lng == null) {
+                    return null;
+                  }
 
                   return Marker(
-                    point: LatLng(odp['latitude'], odp['longitude']),
+                    point: LatLng(lat, lng),
                     width: 28,
                     height: 33,
                     alignment: Alignment.topCenter,
@@ -121,12 +188,12 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
                           MaterialPageRoute(
                             builder: (context) => OdpDetailScreen(odpId: odp['code'] ?? odp['name'] ?? odp['id'].toString()),
                           ),
-                        ).then((_) => _fetchOdps()); // Refresh after returning
+                        ).then((_) => _fetchNetworkMap()); // Refresh after returning
                       },
                       child: OdpMapMarker(status: status),
                     ),
                   );
-                }).toList(),
+                }).whereType<Marker>().toList(),
               ),
             ],
           ),
@@ -166,9 +233,13 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
                               if (textEditingValue.text.isEmpty) {
                                 return const Iterable<Map<String, dynamic>>.empty();
                               }
-                              return _odps.whereType<Map<String, dynamic>>().where((odp) {
-                                final name = (odp['name'] ?? '').toString().toLowerCase();
-                                final code = (odp['code'] ?? '').toString().toLowerCase();
+                              final allItems = <Map<String, dynamic>>[
+                                ..._odps.whereType<Map>().map((e) => Map<String, dynamic>.from(e)..['__type'] = 'ODP'),
+                                ..._customers.whereType<Map>().map((e) => Map<String, dynamic>.from(e)..['__type'] = 'CUSTOMER'),
+                              ];
+                              return allItems.where((item) {
+                                final name = (item['name'] ?? '').toString().toLowerCase();
+                                final code = (item['code'] ?? item['phone'] ?? '').toString().toLowerCase();
                                 final query = textEditingValue.text.toLowerCase();
                                 return name.contains(query) || code.contains(query);
                               });
@@ -227,7 +298,9 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
                                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
                                                 ),
                                                 subtitle: Text(
-                                                  option['code'] ?? '', 
+                                                  option['__type'] == 'CUSTOMER'
+                                                      ? 'Pelanggan • ${(option['phone'] ?? '').toString()}'
+                                                      : 'ODP • ${(option['code'] ?? '').toString()}',
                                                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                                                 ),
                                                 onTap: () {
@@ -312,7 +385,7 @@ class _NetworkMapScreenState extends State<NetworkMapScreen> {
                               MaterialPageRoute(builder: (context) => const TagLocationScreen()),
                             ).then((success) {
                               if (success == true) {
-                                _fetchOdps();
+                                _fetchNetworkMap();
                               }
                             });
                           },

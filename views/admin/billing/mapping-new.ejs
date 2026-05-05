@@ -1220,6 +1220,73 @@
         .leaflet-container svg.leaflet-zoom-animated path.leaflet-interactive {
             vector-effect: non-scaling-stroke;
         }
+
+        /* ===== Mapping page hardening (avoid transparent/low-contrast UI) ===== */
+        .control-panel,
+        .stats-panel,
+        .leaflet-control-layers,
+        .leaflet-popup-content-wrapper,
+        .modal-content,
+        .table {
+            background-color: #1f2d46 !important;
+        }
+
+        .modal-content,
+        .modal-content .table td,
+        .modal-content .table th,
+        .modal-content .form-label,
+        .modal-content h1,
+        .modal-content h2,
+        .modal-content h3,
+        .modal-content h4,
+        .modal-content h5,
+        .modal-content h6 {
+            color: #e9f0ff !important;
+        }
+
+        .modal-content .form-control,
+        .modal-content .form-select,
+        .modal-content .input-group-text {
+            background-color: #0f1b2e !important;
+            color: #e9f0ff !important;
+            border-color: #2f4369 !important;
+        }
+
+        .modal-content .form-control::placeholder {
+            color: #93a7c9 !important;
+        }
+
+        .leaflet-control-layers label,
+        .leaflet-control-layers span,
+        .leaflet-control-layers input {
+            color: #e9f0ff !important;
+        }
+
+        .leaflet-popup-content,
+        .leaflet-popup-content * {
+            color: #e9f0ff !important;
+        }
+
+        /* Hide zoom controls: map interaction uses mouse/touch gestures */
+        .leaflet-control-zoom {
+            display: none !important;
+        }
+
+        /* Backbone visual: yellow cable with green animation */
+        .backbone-cable {
+            stroke: #ffd400 !important;
+            stroke-width: 5 !important;
+            stroke-opacity: 0.95 !important;
+            stroke-dasharray: 12, 6 !important;
+            animation: backboneFlow 2.8s linear infinite !important;
+        }
+        .backbone-flow .data-flow-dot {
+            background: #28a745 !important;
+            box-shadow: 0 0 10px #28a745 !important;
+        }
+        .backbone-flow .data-flow-trail {
+            background: linear-gradient(90deg, transparent, #28a745, transparent) !important;
+        }
     </style>
     
     <!-- Add SVG defs for arrowhead -->
@@ -1398,7 +1465,9 @@
             const defaultLat = <%= typeof defaultMapLat !== 'undefined' && defaultMapLat != null ? Number(defaultMapLat) : -6.2088 %>;
             const defaultLng = <%= typeof defaultMapLng !== 'undefined' && defaultMapLng != null ? Number(defaultMapLng) : 106.8456 %>;
             const defaultZoom = <%= typeof defaultMapZoom !== 'undefined' && defaultMapZoom != null ? parseInt(String(defaultMapZoom), 10) : 13 %>;
-            map = L.map('map').setView([defaultLat, defaultLng], defaultZoom);
+            map = L.map('map', {
+                zoomControl: false
+            }).setView([defaultLat, defaultLng], defaultZoom);
             
             // Add enhanced tile layers with multiple options
             const lightTheme = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -2245,7 +2314,7 @@
         // Show Customer Details Modal
         function showCustomerDetailsModal(customerId) {
             // Find customer data from networkData
-            const customer = networkData.customers?.find(c => c.id === customerId);
+            const customer = networkData.customers?.find(c => String(c.id) === String(customerId));
             if (!customer) {
                 alert('Customer data not found');
                 return;
@@ -2367,6 +2436,23 @@
         
         // Populate ODP form dengan data
         function populateODPForm(odp) {
+            // Populate parent ODP dropdown (exclude self)
+            const parentSelect = document.getElementById('editOdpParentId');
+            if (parentSelect) {
+                parentSelect.innerHTML = '<option value="">Tanpa Parent (ODP Utama)</option>';
+                if (Array.isArray(networkData.odps)) {
+                    networkData.odps
+                        .filter(o => String(o.id) !== String(odp.id))
+                        .forEach(o => {
+                            const option = document.createElement('option');
+                            option.value = o.id;
+                            option.textContent = `${o.name || 'ODP'} (${o.code || '-'})`;
+                            parentSelect.appendChild(option);
+                        });
+                }
+                parentSelect.value = odp.parent_odp_id || '';
+            }
+
             // Populate edit form
             document.getElementById('editOdpId').value = odp.id;
             document.getElementById('editOdpName').value = odp.name || '';
@@ -2399,7 +2485,7 @@
             // Convert FormData to object
             for (let [key, value] of formData.entries()) {
                 // Konversi nilai numerik
-                if (key === 'capacity' || key === 'used_ports' || key === 'latitude' || key === 'longitude') {
+                if (key === 'capacity' || key === 'used_ports' || key === 'latitude' || key === 'longitude' || key === 'parent_odp_id') {
                     odpData[key] = value ? parseFloat(value) : (key === 'used_ports' ? 0 : null);
                 } else {
                     odpData[key] = value;
@@ -2463,6 +2549,11 @@
                     if (editModal) {
                         editModal.hide();
                     }
+
+                    // Refresh full mapping dataset so backbone/cable/customer relations stay in sync.
+                    if (typeof loadNetworkData === 'function') {
+                        loadNetworkData();
+                    }
                 } else {
                     console.error('Error saving ODP data:', data.message);
                     alert('Error saving ODP data: ' + (data.message || 'Unknown error'));
@@ -2496,18 +2587,153 @@
             });
         }
         
+        let editCustomerMap = null;
+        let editCustomerMarker = null;
+        let editCustomerStreetLayer = null;
+        let editCustomerSatelliteLayer = null;
+        let pendingEditCustomerLatLng = null;
+
+        function syncEditCustomerLatLngFromMap(lat, lng) {
+            const latInput = document.getElementById('editCustomerLat');
+            const lngInput = document.getElementById('editCustomerLng');
+            if (latInput) latInput.value = Number(lat).toFixed(6);
+            if (lngInput) lngInput.value = Number(lng).toFixed(6);
+        }
+
+        function moveEditCustomerMarker(lat, lng, shouldCenter = true) {
+            if (!editCustomerMap || !editCustomerMarker) return;
+            editCustomerMarker.setLatLng([lat, lng]);
+            if (shouldCenter) {
+                editCustomerMap.setView([lat, lng], Math.max(editCustomerMap.getZoom(), 16));
+            }
+            syncEditCustomerLatLngFromMap(lat, lng);
+        }
+
+        async function runEditCustomerMapSearch() {
+            const searchInput = document.getElementById('editCustomerMapSearch');
+            if (!searchInput) return;
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            try {
+                const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+                const results = await resp.json();
+                if (!Array.isArray(results) || results.length === 0) {
+                    alert('Lokasi tidak ditemukan');
+                    return;
+                }
+                const lat = parseFloat(results[0].lat);
+                const lon = parseFloat(results[0].lon);
+                moveEditCustomerMarker(lat, lon, true);
+            } catch (error) {
+                console.error('Map search error:', error);
+                alert('Gagal mencari lokasi. Coba lagi.');
+            }
+        }
+
+        function initEditCustomerMap() {
+            const mapContainer = document.getElementById('editCustomerMap');
+            if (!mapContainer) return;
+
+            if (!editCustomerMap) {
+                editCustomerMap = L.map('editCustomerMap', {
+                    zoomControl: false
+                }).setView([-6.2, 106.8], 13);
+
+                editCustomerStreetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 20,
+                    attribution: '&copy; OpenStreetMap contributors'
+                });
+                editCustomerSatelliteLayer = L.tileLayer(
+                    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    {
+                        maxZoom: 20,
+                        attribution: 'Tiles &copy; Esri'
+                    }
+                );
+                editCustomerStreetLayer.addTo(editCustomerMap);
+
+                editCustomerMarker = L.marker([-6.2, 106.8], { draggable: true }).addTo(editCustomerMap);
+
+                editCustomerMap.on('click', function(event) {
+                    moveEditCustomerMarker(event.latlng.lat, event.latlng.lng, false);
+                });
+
+                editCustomerMarker.on('dragend', function() {
+                    const latlng = editCustomerMarker.getLatLng();
+                    syncEditCustomerLatLngFromMap(latlng.lat, latlng.lng);
+                });
+
+                const searchInput = document.getElementById('editCustomerMapSearch');
+                if (searchInput) {
+                    searchInput.addEventListener('keydown', async function(event) {
+                        if (event.key !== 'Enter') return;
+                        event.preventDefault();
+                        await runEditCustomerMapSearch();
+                    });
+                }
+
+                const searchBtn = document.getElementById('editCustomerMapSearchBtn');
+                if (searchBtn) {
+                    searchBtn.addEventListener('click', async function() {
+                        await runEditCustomerMapSearch();
+                    });
+                }
+
+                const streetBtn = document.getElementById('editCustomerStreetBtn');
+                const satelliteBtn = document.getElementById('editCustomerSatelliteBtn');
+                const setBaseLayer = (type) => {
+                    if (!editCustomerMap || !editCustomerStreetLayer || !editCustomerSatelliteLayer) return;
+                    if (type === 'satellite') {
+                        if (editCustomerMap.hasLayer(editCustomerStreetLayer)) {
+                            editCustomerMap.removeLayer(editCustomerStreetLayer);
+                        }
+                        if (!editCustomerMap.hasLayer(editCustomerSatelliteLayer)) {
+                            editCustomerSatelliteLayer.addTo(editCustomerMap);
+                        }
+                        streetBtn && streetBtn.classList.remove('active');
+                        satelliteBtn && satelliteBtn.classList.add('active');
+                    } else {
+                        if (editCustomerMap.hasLayer(editCustomerSatelliteLayer)) {
+                            editCustomerMap.removeLayer(editCustomerSatelliteLayer);
+                        }
+                        if (!editCustomerMap.hasLayer(editCustomerStreetLayer)) {
+                            editCustomerStreetLayer.addTo(editCustomerMap);
+                        }
+                        streetBtn && streetBtn.classList.add('active');
+                        satelliteBtn && satelliteBtn.classList.remove('active');
+                    }
+                };
+
+                if (streetBtn) {
+                    streetBtn.addEventListener('click', function() {
+                        setBaseLayer('street');
+                    });
+                }
+                if (satelliteBtn) {
+                    satelliteBtn.addEventListener('click', function() {
+                        setBaseLayer('satellite');
+                    });
+                }
+            }
+
+            // Recalculate map size setelah modal fully rendered.
+            if (editCustomerMap) {
+                editCustomerMap.invalidateSize();
+                setTimeout(() => editCustomerMap && editCustomerMap.invalidateSize(), 120);
+                setTimeout(() => editCustomerMap && editCustomerMap.invalidateSize(), 300);
+            }
+        }
+
         function editCustomer(customerId) {
             console.log('Edit Customer:', customerId);
             
             // Find the customer data
-            const customer = networkData.customers.find(customer => customer.id === customerId);
+            const customer = networkData.customers.find(customer => String(customer.id) === String(customerId));
             if (!customer) {
                 alert('Customer not found');
                 return;
             }
-            
-            // Populate package dropdown
-            populatePackageDropdown();
             
             // Populate ODP dropdown
             populateODPDropdownForCustomer();
@@ -2516,46 +2742,34 @@
             document.getElementById('editCustomerId').value = customer.id;
             document.getElementById('editCustomerName').value = customer.name || '';
             document.getElementById('editCustomerPhone').value = customer.phone || '';
-            document.getElementById('editCustomerEmail').value = customer.email || '';
-            document.getElementById('editCustomerPppoeUsername').value = customer.pppoe_username || '';
             document.getElementById('editCustomerStatus').value = customer.status || 'active';
             document.getElementById('editCustomerAddress').value = customer.address || '';
             document.getElementById('editCustomerLat').value = customer.latitude || '';
             document.getElementById('editCustomerLng').value = customer.longitude || '';
-            document.getElementById('editCustomerPackage').value = customer.package_id || '';
             document.getElementById('editCustomerOdp').value = customer.odp_id || '';
-            
-            // Format join date
-            if (customer.join_date) {
-                const date = new Date(customer.join_date);
-                const formattedDate = date.toISOString().split('T')[0];
-                document.getElementById('editCustomerJoinDate').value = formattedDate;
-            }
+            const mapSearchInput = document.getElementById('editCustomerMapSearch');
+            if (mapSearchInput) mapSearchInput.value = '';
             
             // Show edit modal
-            const editModal = new bootstrap.Modal(document.getElementById('editCustomerModal'));
+            const editCustomerModalEl = document.getElementById('editCustomerModal');
+            const editModal = new bootstrap.Modal(editCustomerModalEl);
             editModal.show();
-        }
-        
-        // Populate package dropdown
-        function populatePackageDropdown() {
-            const packageSelect = document.getElementById('editCustomerPackage');
-            packageSelect.innerHTML = '<option value="">Select Package</option>';
-            
-            // For now, we'll use a static list. In a real app, this would come from an API
-            const packages = [
-                { id: 1, name: 'Paket 10 Mbps' },
-                { id: 2, name: 'Paket 20 Mbps' },
-                { id: 3, name: 'Paket 50 Mbps' },
-                { id: 4, name: 'Paket 100 Mbps' }
-            ];
-            
-            packages.forEach(pkg => {
-                const option = document.createElement('option');
-                option.value = pkg.id;
-                option.textContent = pkg.name;
-                packageSelect.appendChild(option);
-            });
+
+            const lat = parseFloat(customer.latitude);
+            const lng = parseFloat(customer.longitude);
+            pendingEditCustomerLatLng = (Number.isFinite(lat) && Number.isFinite(lng))
+                ? { lat, lng }
+                : { lat: -6.2, lng: 106.8 };
+
+            // Init map saat modal sudah tampil agar tidak blank/terpotong.
+            if (!editCustomerModalEl.dataset.mapShownHandlerBound) {
+                editCustomerModalEl.addEventListener('shown.bs.modal', function() {
+                    initEditCustomerMap();
+                    const target = pendingEditCustomerLatLng || { lat: -6.2, lng: 106.8 };
+                    moveEditCustomerMarker(target.lat, target.lng, true);
+                });
+                editCustomerModalEl.dataset.mapShownHandlerBound = '1';
+            }
         }
         
         // Populate ODP dropdown for customer
@@ -2583,10 +2797,19 @@
             for (let [key, value] of formData.entries()) {
                 customerData[key] = value;
             }
+
+            // Mapping page only: send mapping-related fields only.
+            const payload = {
+                id: customerData.id,
+                odp_id: customerData.odp_id || null,
+                address: customerData.address || null,
+                latitude: customerData.latitude || null,
+                longitude: customerData.longitude || null
+            };
             
             // Validate required fields
-            if (!customerData.name || !customerData.phone) {
-                alert('Please fill in all required fields');
+            if (!payload.id) {
+                alert('Customer ID tidak ditemukan');
                 return;
             }
             
@@ -2610,7 +2833,7 @@
             fetch('/admin/update-customer', {
                 method: 'POST',
                 headers: headers,
-                body: JSON.stringify(customerData)
+                body: JSON.stringify(payload)
             })
             .then(response => response.json())
             .then(data => {
@@ -2618,13 +2841,13 @@
                     console.log('Customer data saved to database:', data);
                     
                     // Update the customer in networkData
-                    const customerIndex = networkData.customers.findIndex(customer => customer.id === customerData.id);
+                    const customerIndex = networkData.customers.findIndex(customer => String(customer.id) === String(payload.id));
                     if (customerIndex !== -1) {
-                        networkData.customers[customerIndex] = { ...networkData.customers[customerIndex], ...customerData };
+                        networkData.customers[customerIndex] = { ...networkData.customers[customerIndex], ...payload };
                     }
                     
                     // Update the marker on the map
-                    updateCustomerMarkerOnMap(customerData);
+                    updateCustomerMarkerOnMap(payload);
                     
                     // Show success message
                     alert('Customer updated successfully in database!');
@@ -2633,6 +2856,11 @@
                     const editModal = bootstrap.Modal.getInstance(document.getElementById('editCustomerModal'));
                     if (editModal) {
                         editModal.hide();
+                    }
+
+                    // Refresh full mapping dataset so cable routes/backbone re-render after update.
+                    if (typeof loadNetworkData === 'function') {
+                        loadNetworkData();
                     }
                 } else {
                     console.error('Error saving customer data:', data.message);
@@ -2654,7 +2882,7 @@
         function updateCustomerMarkerOnMap(customerData) {
             // Find and update the marker
             customerLayer.eachLayer(function(layer) {
-                if (layer.options.customerId === customerData.id) {
+                if (String(layer.options.customerId) === String(customerData.id)) {
                     // Update marker position if coordinates changed
                     if (customerData.latitude && customerData.longitude) {
                         layer.setLatLng([parseFloat(customerData.latitude), parseFloat(customerData.longitude)]);

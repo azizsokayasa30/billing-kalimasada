@@ -5962,6 +5962,8 @@ router.put('/customers/:phone', customerPhotoUpload.fields([
             const shouldCreate = req.body.create_pppoe_user === 1 || req.body.create_pppoe_user === '1' || req.body.create_pppoe_user === true || req.body.create_pppoe_user === 'true';
             const newPPPoEUsername = pppoe_username || currentCustomer.pppoe_username;
             const pppoePassword = req.body.pppoe_password || null;
+            const hasExplicitPppoePassword = !!(pppoePassword && String(pppoePassword).trim());
+            const isUsernameChanged = !!(newPPPoEUsername && newPPPoEUsername !== currentCustomer.pppoe_username);
             
             // Helper function untuk get router by ID
             const getRouterById = async (routerId) => {
@@ -5979,12 +5981,23 @@ router.put('/customers/:phone', customerPhotoUpload.fields([
                 }
             };
             
-            // Jika checkbox dicentang atau pppoe_username baru/diubah, buat/update PPPoE user
-            if ((shouldCreate || (newPPPoEUsername && newPPPoEUsername !== currentCustomer.pppoe_username)) && newPPPoEUsername) {
+            // SAFETY:
+            // - Pilih PPPoE existing tanpa isi password JANGAN ubah password di RADIUS/Mikrotik.
+            // - Proses create/update PPPoE hanya jika:
+            //   1) user memang centang create_pppoe_user, ATAU
+            //   2) user mengisi password PPPoE baru secara eksplisit.
+            // Dengan ini, perubahan mapping/link username saja tidak akan me-reset password acak.
+            const shouldProcessPppoeProvisioning = !!(newPPPoEUsername && (shouldCreate || hasExplicitPppoePassword));
+            if (isUsernameChanged && !shouldProcessPppoeProvisioning) {
+                logger.info(`[BILLING] PPPoE username changed to existing/link-only (${newPPPoEUsername}) without password; skipping PPPoE credential update`);
+            }
+
+            if (shouldProcessPppoeProvisioning) {
                 pppoeCreate.attempted = true;
                 
-                // Generate password jika tidak diberikan
-                const passwordToUse = (pppoePassword && String(pppoePassword).trim())
+                // Generate password hanya saat provisioning eksplisit tanpa password.
+                // Untuk alur link existing tanpa provisioning, blok ini tidak akan dijalankan.
+                const passwordToUse = hasExplicitPppoePassword
                     ? String(pppoePassword).trim()
                     : (Math.random().toString(36).slice(-8) + Math.floor(Math.random()*10));
 

@@ -791,7 +791,7 @@ router.post('/update-odp', adminAuth, async (req, res) => {
         console.log('🔄 Update ODP API - Processing request...');
         console.log('📋 Request data:', req.body);
         
-        const { id, name, code, capacity, used_ports, status, address, latitude, longitude, installation_date } = req.body;
+        const { id, name, code, capacity, used_ports, status, address, latitude, longitude, installation_date, parent_odp_id } = req.body;
         
         // Validate required fields - hanya validasi id karena update bisa sebagian
         if (!id) {
@@ -858,6 +858,11 @@ router.post('/update-odp', adminAuth, async (req, res) => {
                 fields.push('installation_date = ?');
                 values.push(installation_date);
             }
+            if (parent_odp_id !== undefined) {
+                fields.push('parent_odp_id = ?');
+                const parsedParent = (parent_odp_id === '' || parent_odp_id === null) ? null : parseInt(parent_odp_id, 10);
+                values.push(Number.isInteger(parsedParent) ? parsedParent : null);
+            }
             
             // Tambahkan updated_at
             fields.push('updated_at = CURRENT_TIMESTAMP');
@@ -877,6 +882,48 @@ router.post('/update-odp', adminAuth, async (req, res) => {
                         }
                     });
                 });
+            }
+
+            // Sinkronkan koneksi antar ODP untuk visual backbone di mapping view.
+            if (parent_odp_id !== undefined) {
+                const childOdpId = parseInt(id, 10);
+                const parsedParent = (parent_odp_id === '' || parent_odp_id === null) ? null : parseInt(parent_odp_id, 10);
+                const validParentId = Number.isInteger(parsedParent) && parsedParent > 0 && parsedParent !== childOdpId
+                    ? parsedParent
+                    : null;
+
+                if (validParentId) {
+                    const existingBackbone = await new Promise((resolve, reject) => {
+                        db.get(
+                            'SELECT id FROM odp_connections WHERE to_odp_id = ? ORDER BY id ASC LIMIT 1',
+                            [childOdpId],
+                            (err, row) => (err ? reject(err) : resolve(row || null))
+                        );
+                    });
+
+                    if (existingBackbone) {
+                        await new Promise((resolve, reject) => {
+                            db.run(
+                                `UPDATE odp_connections
+                                 SET from_odp_id = ?, to_odp_id = ?, status = COALESCE(status, 'active'),
+                                     connection_type = COALESCE(connection_type, 'fiber'),
+                                     updated_at = CURRENT_TIMESTAMP
+                                 WHERE id = ?`,
+                                [validParentId, childOdpId, existingBackbone.id],
+                                (err) => (err ? reject(err) : resolve())
+                            );
+                        });
+                    } else {
+                        await new Promise((resolve, reject) => {
+                            db.run(
+                                `INSERT INTO odp_connections (from_odp_id, to_odp_id, connection_type, status, notes)
+                                 VALUES (?, ?, ?, ?, ?)`,
+                                [validParentId, childOdpId, 'fiber', 'active', 'Auto-created from mapping ODP parent'],
+                                (err) => (err ? reject(err) : resolve())
+                            );
+                        });
+                    }
+                }
             }
         } else {
             // Validasi field yang diperlukan untuk insert
@@ -933,7 +980,8 @@ router.post('/update-odp', adminAuth, async (req, res) => {
                 address: address,
                 latitude: latitude,
                 longitude: longitude,
-                installation_date: installation_date
+                installation_date: installation_date,
+                parent_odp_id: parent_odp_id ?? null
             }
         });
         
@@ -952,13 +1000,15 @@ router.post('/update-customer', adminAuth, async (req, res) => {
         console.log('🔄 Update Customer API - Processing request...');
         console.log('📋 Request data:', req.body);
         
-        const { id, name, phone, email, pppoe_username, status, address, latitude, longitude, package_id, odp_id, join_date } = req.body;
+        // Endpoint ini KHUSUS untuk halaman mapping:
+        // hanya boleh mengubah data lokasi + mapping ODP.
+        const { id, address, latitude, longitude, odp_id } = req.body;
         
         // Validate required fields
-        if (!id || !name || !phone) {
+        if (!id) {
             return res.status(400).json({
                 success: false,
-                message: 'Missing required fields: id, name, phone'
+                message: 'Missing required field: id'
             });
         }
         
@@ -983,20 +1033,12 @@ router.post('/update-customer', adminAuth, async (req, res) => {
             await new Promise((resolve, reject) => {
                 db.run(`
                     UPDATE customers SET 
-                        name = ?, 
-                        phone = ?, 
-                        email = ?, 
-                        pppoe_username = ?, 
-                        status = ?, 
                         address = ?, 
                         latitude = ?, 
                         longitude = ?, 
-                        package_id = ?, 
-                        odp_id = ?, 
-                        join_date = ?,
-                        updated_at = CURRENT_TIMESTAMP
+                        odp_id = ?
                     WHERE id = ?
-                `, [name, phone, email, pppoe_username, status, address, latitude, longitude, package_id, odp_id, join_date, id], function(err) {
+                `, [address ?? null, latitude ?? null, longitude ?? null, odp_id ?? null, id], function(err) {
                     if (err) {
                         reject(err);
                     } else {
@@ -1005,23 +1047,59 @@ router.post('/update-customer', adminAuth, async (req, res) => {
                     }
                 });
             });
-        } else {
-            // Insert new Customer
-            await new Promise((resolve, reject) => {
-                db.run(`
-                    INSERT INTO customers (
-                        id, name, phone, email, pppoe_username, status, 
-                        address, latitude, longitude, package_id, odp_id, join_date, 
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                `, [id, name, phone, email, pppoe_username, status, address, latitude, longitude, package_id, odp_id, join_date], function(err) {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        console.log(`✅ Created new Customer: ${id}`);
-                        resolve();
-                    }
+
+            // Sinkronisasi cable route agar konsisten dengan menu Cable Route:
+            // jika ODP dipilih/diganti dari mapping view, route pelanggan harus ikut terbuat/terupdate.
+            const normalizedOdpId = (odp_id === '' || odp_id === null || odp_id === undefined)
+                ? null
+                : parseInt(odp_id, 10);
+
+            if (Number.isInteger(normalizedOdpId) && normalizedOdpId > 0) {
+                const existingRoute = await new Promise((resolve, reject) => {
+                    db.get(
+                        'SELECT * FROM cable_routes WHERE customer_id = ? LIMIT 1',
+                        [id],
+                        (err, row) => (err ? reject(err) : resolve(row || null))
+                    );
                 });
+
+                if (existingRoute) {
+                    await new Promise((resolve, reject) => {
+                        db.run(
+                            `UPDATE cable_routes
+                             SET odp_id = ?, updated_at = CURRENT_TIMESTAMP
+                             WHERE customer_id = ?`,
+                            [normalizedOdpId, id],
+                            (err) => (err ? reject(err) : resolve())
+                        );
+                    });
+                    console.log(`✅ Cable route updated for customer ${id} -> ODP ${normalizedOdpId}`);
+                } else {
+                    await new Promise((resolve, reject) => {
+                        db.run(
+                            `INSERT INTO cable_routes (customer_id, odp_id, cable_type, cable_length, port_number, status, notes)
+                             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                            [
+                                id,
+                                normalizedOdpId,
+                                'Fiber Optic',
+                                0,
+                                1,
+                                'connected',
+                                'Auto-created from mapping view'
+                            ],
+                            (err) => (err ? reject(err) : resolve())
+                        );
+                    });
+                    console.log(`✅ Cable route created for customer ${id} -> ODP ${normalizedOdpId}`);
+                }
+            }
+        } else {
+            // Dari mapping page TIDAK BOLEH membuat customer baru.
+            db.close();
+            return res.status(404).json({
+                success: false,
+                message: `Customer with id ${id} not found`
             });
         }
         
@@ -1040,20 +1118,13 @@ router.post('/update-customer', adminAuth, async (req, res) => {
         
         res.json({
             success: true,
-            message: 'Customer updated successfully',
+            message: 'Customer mapping updated successfully',
             data: {
                 id: id,
-                name: name,
-                phone: phone,
-                email: email,
-                pppoe_username: pppoe_username,
-                status: status,
-                address: address,
-                latitude: latitude,
-                longitude: longitude,
-                package_id: package_id,
-                odp_id: odp_id,
-                join_date: join_date
+                address: address ?? null,
+                latitude: latitude ?? null,
+                longitude: longitude ?? null,
+                odp_id: odp_id ?? null
             }
         });
         
