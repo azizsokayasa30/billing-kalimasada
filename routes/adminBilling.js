@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
@@ -13,6 +14,21 @@ const multer = require('multer');
 const upload = multer();
 const ExcelJS = require('exceljs');
 const { adminAuth } = require('./adminAuth');
+
+/** Password konfirmasi aksi sensitif: `super_admin_password` di settings jika diisi, else `admin_password`. */
+function verifySuperAdminPassword(plain) {
+    const dedicated = String(getSetting('super_admin_password', '') || '').trim();
+    const expected =
+        dedicated.length > 0 ? dedicated : String(getSetting('admin_password', 'admin'));
+    const a = Buffer.from(String(plain ?? ''), 'utf8');
+    const b = Buffer.from(expected, 'utf8');
+    if (a.length !== b.length) return false;
+    try {
+        return crypto.timingSafeEqual(a, b);
+    } catch (_) {
+        return false;
+    }
+}
 
 // Configure multer for image uploads
 const imageStorage = multer.diskStorage({
@@ -449,7 +465,7 @@ router.post('/api/collector-payment', adminAuth, async (req, res) => {
                     amount: invAmount,
                     payment_method,
                     reference_number: '',
-                    notes: notes || `Collector ${collector_id}`,
+                    notes: notes && String(notes).trim() ? String(notes).trim() : '',
                     collector_id: collector_id,
                     commission_amount: Math.round((invAmount * commissionRate) / 100)
                 });
@@ -477,7 +493,7 @@ router.post('/api/collector-payment', adminAuth, async (req, res) => {
                             amount: invAmount,
                             payment_method,
                             reference_number: '',
-                            notes: notes || `Collector ${collector_id}`,
+                            notes: notes && String(notes).trim() ? String(notes).trim() : '',
                             collector_id: collector_id,
                             commission_amount: Math.round((invAmount * commissionRate) / 100)
                         });
@@ -507,7 +523,26 @@ router.post('/api/collector-payment', adminAuth, async (req, res) => {
         } finally {
             db.close();
         }
-        
+
+        setImmediate(() => {
+            (async () => {
+                try {
+                    const cfn = require('../config/collectorFieldNotifications');
+                    const cust = await billingManager.getCustomerById(Number(customer_id));
+                    await cfn.notifyAdminRecordedCollectorPayment(
+                        Number(collector_id),
+                        paymentId,
+                        cust && cust.name ? String(cust.name) : '',
+                        paymentAmountNum
+                    );
+                } catch (e) {
+                    try {
+                        logger.warn('[admin collector-payment] collector notify:', e.message);
+                    } catch (_) {}
+                }
+            })();
+        });
+
         res.json({
             success: true,
             message: 'Payment recorded successfully',
@@ -817,6 +852,7 @@ router.get('/collector-details/:id', getAppSettings, async (req, res) => {
         const currentMonth = new Date().getMonth() + 1;
         const filterYear = parseInt(year) || currentYear;
         const filterMonth = parseInt(month) || currentMonth;
+        const isEmbed = req.query.embed === '1';
         
         const startDate = `${filterYear}-${String(filterMonth).padStart(2, '0')}-01`;
         const endDate = new Date(filterYear, filterMonth, 0).toISOString().split('T')[0];
@@ -931,7 +967,8 @@ router.get('/collector-details/:id', getAppSettings, async (req, res) => {
                 year: filterYear
             },
             settings: settings,
-            page: 'collector-reports'
+            page: 'collector-reports',
+            embed: isEmbed
         });
         
     } catch (error) {
@@ -1037,19 +1074,29 @@ router.get('/collector-remittance', getAppSettings, async (req, res) => {
         
         const filterMonth = month === 'all' ? null : month;
         const filterYear = year === 'all' ? null : year;
-        
-        // Get collectors with pending amounts from payments table
-        const collectors = await billingManager.getCollectorsWithPendingAmounts(filterMonth, filterYear);
-        
-        // Get recent remittances from expenses table (commission expenses)
-        const remittances = await billingManager.getCommissionExpenses();
-        
+
+        const collectorsPending = await billingManager.getCollectorsWithPendingAmounts(filterMonth, filterYear);
+        const { rows: reportRows, summary } = await billingManager.getCollectorReportsAreaRowsAndSummary(
+            filterMonth,
+            filterYear,
+            null
+        );
+        const reportById = new Map((reportRows || []).map((r) => [r.id, r]));
+        const collectors = collectorsPending.map((c) => {
+            const extra = reportById.get(c.id) || {};
+            return { ...c, ...extra };
+        });
+
+        // Riwayat = log penerimaan setoran kasir (bukan biaya komisi)
+        const remittances = await billingManager.getCollectorRemittanceReceipts(80);
+
         const settings = getSettingsWithCache();
         res.render('admin/billing/collector-remittance', {
             title: 'Terima Setoran Kolektor',
             appSettings: req.appSettings,
-            collectors: collectors,
-            remittances: remittances,
+            collectors,
+            summary,
+            remittances,
             settings: settings,
             filters: { month, year },
             page: 'collector-remittance'
@@ -1061,6 +1108,227 @@ router.get('/collector-remittance', getAppSettings, async (req, res) => {
             message: 'Gagal memuat data setoran kolektor',
             error: error.message 
         });
+    }
+});
+
+/** Export laporan halaman Terima Setoran (Excel / CSV). */
+function remitExportCsvEscape(value) {
+    const s = value == null ? '' : String(value);
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+}
+function remitExportCsvRow(cells) {
+    return cells.map(remitExportCsvEscape).join(',') + '\r\n';
+}
+
+router.get('/collector-remittance/export.xlsx', getAppSettings, adminAuth, async (req, res) => {
+    try {
+        const month = req.query.month !== undefined ? req.query.month : '';
+        const year = req.query.year !== undefined ? req.query.year : '';
+        const filterMonth = month === 'all' || month === '' ? null : month;
+        const filterYear = year === 'all' || year === '' ? null : year;
+
+        const collectorsPending = await billingManager.getCollectorsWithPendingAmounts(filterMonth, filterYear);
+        const { rows: reportRows, summary } = await billingManager.getCollectorReportsAreaRowsAndSummary(
+            filterMonth,
+            filterYear,
+            null
+        );
+        const reportById = new Map((reportRows || []).map((r) => [r.id, r]));
+        const collectors = collectorsPending.map((c) => ({ ...c, ...(reportById.get(c.id) || {}) }));
+
+        const remittances = await billingManager.getCollectorRemittanceReceiptsExported({
+            month: filterMonth != null ? String(filterMonth) : 'all',
+            year: filterYear != null ? String(filterYear) : 'all',
+            limit: 12000
+        });
+
+        const workbook = new ExcelJS.Workbook();
+        workbook.created = new Date();
+
+        const wsRing = workbook.addWorksheet('Ringkasan', { views: [{ state: 'frozen', ySplit: 5 }] });
+        wsRing.getColumn(1).width = 28;
+        wsRing.getColumn(2).width = 22;
+        const periodLabel =
+            filterMonth && filterYear
+                ? `Periode filter (kartu kolektor): ${String(filterMonth).padStart(2, '0')}/${filterYear}`
+                : 'Periode filter: semua waktu';
+        wsRing.addRow(['Laporan', 'Terima Setoran Kolektor']);
+        wsRing.addRow(['Diekspor', new Date().toISOString().slice(0, 19).replace('T', ' ')]);
+        wsRing.addRow([periodLabel, '']);
+        wsRing.addRow([]);
+        wsRing.addRow(['Total tagihan (area)', Number(summary.total_tagihan) || 0]);
+        wsRing.addRow(['Total lunas (area)', Number(summary.total_lunas) || 0]);
+        wsRing.addRow(['Belum lunas (area)', Number(summary.total_belum_lunas) || 0]);
+        wsRing.addRow(['Komisi kolektor (bruto)', Number(summary.total_komisi) || 0]);
+        wsRing.getCell('B5').numFmt = '"Rp" #,##0';
+        wsRing.getCell('B6').numFmt = '"Rp" #,##0';
+        wsRing.getCell('B7').numFmt = '"Rp" #,##0';
+        wsRing.getCell('B8').numFmt = '"Rp" #,##0';
+
+        const wsKol = workbook.addWorksheet('Kolektor', { views: [{ state: 'frozen', ySplit: 1 }] });
+        wsKol.columns = [
+            { header: 'Nama', key: 'name', width: 26 },
+            { header: 'Telepon', key: 'phone', width: 16 },
+            { header: 'Komisi %', key: 'rate', width: 10 },
+            { header: 'Total tagihan area (Rp)', key: 'tta', width: 22 },
+            { header: 'Jml tagihan', key: 'ct', width: 12 },
+            { header: 'Belum lunas (Rp)', key: 'blrp', width: 18 },
+            { header: 'Belum lunas (jml)', key: 'blc', width: 14 },
+            { header: 'Sudah lunas area (Rp)', key: 'tlrp', width: 20 },
+            { header: 'Jml lunas', key: 'cl', width: 11 },
+            { header: 'Jumlah lunas kolektor (Rp)', key: 'tlg', width: 24 },
+            { header: 'Sudah setor (Rp)', key: 'ss', width: 18 },
+            { header: 'Komisi (Rp)', key: 'kom', width: 16 },
+            { header: 'Belum setor (Rp)', key: 'pend', width: 18 }
+        ];
+        collectors.forEach((c) => {
+            wsKol.addRow({
+                name: c.name || '',
+                phone: c.phone || '',
+                rate: c.commission_rate != null ? Number(c.commission_rate) : 5,
+                tta: Number(c.total_tagihan_area) || 0,
+                ct: Number(c.count_tagihan_area) || 0,
+                blrp: Number(c.total_belum_lunas_amount) || 0,
+                blc: Number(c.total_belum_lunas_count) || 0,
+                tlrp: Number(c.total_lunas_area) || 0,
+                cl: Number(c.count_lunas_area) || 0,
+                tlg: Number(c.total_lunas_gross) || 0,
+                ss: Number(c.sudah_setor) || 0,
+                kom: Number(c.total_commission) || 0,
+                pend: Number(c.pending_amount) || 0
+            });
+        });
+        ['tta', 'blrp', 'tlrp', 'tlg', 'ss', 'kom', 'pend'].forEach((k) => {
+            wsKol.getColumn(k).numFmt = '"Rp" #,##0';
+        });
+
+        const wsRiw = workbook.addWorksheet('Riwayat terima', { views: [{ state: 'frozen', ySplit: 1 }] });
+        wsRiw.columns = [
+            { header: 'ID', key: 'id', width: 8 },
+            { header: 'Kolektor', key: 'cn', width: 26 },
+            { header: 'Waktu terima', key: 'dt', width: 20 },
+            { header: 'Metode', key: 'pm', width: 14 },
+            { header: 'Catatan', key: 'nt', width: 28 },
+            { header: 'Jumlah (Rp)', key: 'am', width: 18 },
+            { header: 'Status', key: 'st', width: 12 }
+        ];
+        remittances.forEach((r) => {
+            let dt = '';
+            try {
+                dt = r.received_at ? new Date(r.received_at).toLocaleString('id-ID') : '';
+            } catch (_) {
+                dt = String(r.received_at || '');
+            }
+            wsRiw.addRow({
+                id: r.id,
+                cn: r.collector_name || '',
+                dt,
+                pm: (r.payment_method || '').toString(),
+                nt: r.notes || '',
+                am: Number(r.amount) || 0,
+                st: 'Diterima'
+            });
+        });
+        wsRiw.getColumn('am').numFmt = '"Rp" #,##0';
+
+        const fn = `setoran-kolektor-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (error) {
+        logger.error('Error exporting collector remittance xlsx:', error);
+        res.status(500).send(error.message || 'Export gagal');
+    }
+});
+
+router.get('/collector-remittance/export.csv', getAppSettings, adminAuth, async (req, res) => {
+    try {
+        const table = String(req.query.table || 'riwayat').toLowerCase();
+        const month = req.query.month !== undefined ? req.query.month : '';
+        const year = req.query.year !== undefined ? req.query.year : '';
+        const filterMonth = month === 'all' || month === '' ? null : month;
+        const filterYear = year === 'all' || year === '' ? null : year;
+
+        let body = '\uFEFF';
+        let filename = 'setoran-kolektor.csv';
+
+        if (table === 'kolektor') {
+            filename = 'setoran-kolektor-snapshot.csv';
+            const collectorsPending = await billingManager.getCollectorsWithPendingAmounts(filterMonth, filterYear);
+            const { rows: reportRows } = await billingManager.getCollectorReportsAreaRowsAndSummary(
+                filterMonth,
+                filterYear,
+                null
+            );
+            const reportById = new Map((reportRows || []).map((r) => [r.id, r]));
+            const collectors = collectorsPending.map((c) => ({ ...c, ...(reportById.get(c.id) || {}) }));
+            body += remitExportCsvRow([
+                'Nama',
+                'Telepon',
+                'Komisi_%',
+                'Total_tagihan_area_Rp',
+                'Jml_tagihan',
+                'Belum_lunas_Rp',
+                'Belum_lunas_jml',
+                'Sudah_lunas_area_Rp',
+                'Jml_lunas',
+                'Lunas_kolektor_Rp',
+                'Sudah_setor_Rp',
+                'Komisi_Rp',
+                'Belum_setor_Rp'
+            ]);
+            collectors.forEach((c) => {
+                body += remitExportCsvRow([
+                    c.name || '',
+                    c.phone || '',
+                    c.commission_rate != null ? c.commission_rate : 5,
+                    Number(c.total_tagihan_area) || 0,
+                    Number(c.count_tagihan_area) || 0,
+                    Number(c.total_belum_lunas_amount) || 0,
+                    Number(c.total_belum_lunas_count) || 0,
+                    Number(c.total_lunas_area) || 0,
+                    Number(c.count_lunas_area) || 0,
+                    Number(c.total_lunas_gross) || 0,
+                    Number(c.sudah_setor) || 0,
+                    Number(c.total_commission) || 0,
+                    Number(c.pending_amount) || 0
+                ]);
+            });
+        } else {
+            filename = 'setoran-kolektor-riwayat-terima.csv';
+            const remittances = await billingManager.getCollectorRemittanceReceiptsExported({
+                month: filterMonth != null ? String(filterMonth) : 'all',
+                year: filterYear != null ? String(filterYear) : 'all',
+                limit: 12000
+            });
+            body += remitExportCsvRow(['ID', 'Kolektor', 'Waktu_terima', 'Metode', 'Catatan', 'Jumlah_Rp', 'Status']);
+            remittances.forEach((r) => {
+                let dt = '';
+                try {
+                    dt = r.received_at ? new Date(r.received_at).toISOString() : '';
+                } catch (_) {
+                    dt = String(r.received_at || '');
+                }
+                body += remitExportCsvRow([
+                    r.id,
+                    r.collector_name || '',
+                    dt,
+                    (r.payment_method || '').toString(),
+                    r.notes || '',
+                    Number(r.amount) || 0,
+                    'Diterima'
+                ]);
+            });
+        }
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(body);
+    } catch (error) {
+        logger.error('Error exporting collector remittance csv:', error);
+        res.status(500).send(error.message || 'Export gagal');
     }
 });
 
@@ -1076,7 +1344,6 @@ router.post('/api/collector-remittance', adminAuth, async (req, res) => {
             });
         }
         
-        // Use billing manager to record remittance
         const result = await billingManager.recordCollectorRemittance({
             collector_id,
             amount: parseFloat(remittance_amount),
@@ -1084,18 +1351,23 @@ router.post('/api/collector-remittance', adminAuth, async (req, res) => {
             notes: notes || '',
             remittance_date: remittance_date || new Date().toISOString()
         });
-        
+
         res.json({
             success: true,
             message: 'Setoran berhasil diterima',
             data: result
         });
-        
     } catch (error) {
         console.error('Error recording collector remittance:', error);
-        res.status(500).json({
+        const msg = error && error.message ? error.message : String(error);
+        const isBiz =
+            msg.includes('melebihi') ||
+            msg.includes('Tidak ada sisa') ||
+            msg.includes('tidak valid') ||
+            msg.includes('Alokasi');
+        res.status(isBiz ? 400 : 500).json({
             success: false,
-            message: 'Error recording remittance: ' + error.message
+            message: isBiz ? msg : 'Error recording remittance: ' + msg
         });
     }
 });
@@ -2200,6 +2472,139 @@ router.get('/export/customers.xlsx', async (req, res) => {
     }
 });
 
+/** Template impor / restore pelanggan (tanpa .xlsx di path — hindari 404 dari nginx/static). */
+router.get('/import/customers/template', async (req, res) => {
+    try {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Pelanggan');
+        try {
+            ws.views = [{ state: 'frozen', ySplit: 1 }];
+        } catch (_) {
+            /* opsional */
+        }
+
+        const headers = [
+            'name',
+            'phone',
+            'username',
+            'login_password',
+            'email',
+            'address',
+            'latitude',
+            'longitude',
+            'package_id',
+            'odp_id',
+            'area',
+            'area_id',
+            'pppoe_username',
+            'pppoe_password',
+            'pppoe_profile',
+            'router_id',
+            'status',
+            'auto_suspension',
+            'billing_day',
+            'renewal_type',
+            'fix_date',
+            'cable_type',
+            'cable_length',
+            'port_number',
+            'cable_status',
+            'cable_notes'
+        ];
+
+        const headerRow = ws.addRow(headers);
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE8F5E9' }
+        };
+
+        ws.addRow([
+            'Contoh Pelanggan',
+            '6281234567890',
+            '',
+            '',
+            'nama@email.com',
+            'Jl. Contoh No. 1',
+            '-6.253011',
+            '107.923009',
+            '1',
+            '',
+            'Wilayah A',
+            '',
+            'userpppoe',
+            'rahasiaPPP',
+            'default',
+            '',
+            'active',
+            '1',
+            '15',
+            'renewal',
+            '',
+            'Fiber Optic',
+            '85',
+            '1',
+            'connected',
+            'Dari template import'
+        ]);
+
+        for (let c = 1; c <= headers.length; c++) {
+            ws.getColumn(c).width = Math.min(42, Math.max(12, String(headers[c - 1]).length + 8));
+        }
+
+        const help = workbook.addWorksheet('Petunjuk');
+        help.getColumn(1).width = 28;
+        help.getColumn(2).width = 88;
+        const rows = [
+            ['Kolom', 'Penjelasan'],
+            ['name *', 'Nama lengkap pelanggan (wajib). Boleh juga pakai header "Nama" / "nama".'],
+            ['phone *', 'Nomor HP utama (wajib). Dipakai sebagai kunci update jika sudah ada. Format angka/+62.'],
+            ['username', 'Username login portal billing. Kosong = digenerate dari nomor HP.'],
+            ['login_password', 'Password login portal billing (bukan PPPoE). Opsional.'],
+            ['email', 'Email.'],
+            ['address', 'Alamat pemasangan. Boleh header "Alamat" / "alamat".'],
+            ['latitude', 'Garis lintang (desimal). Opsional; kosong saat create = default peta server.'],
+            ['longitude', 'Garis bujur (desimal).'],
+            ['package_id', 'ID paket (angka) dari tabel packages. Wajib untuk tagihan otomatis yang mengikat paket.'],
+            ['odp_id', 'ID ODP (angka) jika sudah terdaftar — memicu pembuatan cable_routes saat pelanggan baru.'],
+            ['area', 'Nama wilayah / cluster (teks).'],
+            ['area_id', 'ID wilayah jika dipakai di database.'],
+            ['pppoe_username', 'Login PPPoE di Mikrotik/RADIUS. Boleh header "PPPoE Username".'],
+            ['pppoe_password', 'Password PPPoE. Jika diisi bersama username, sistem mencoba push ke router/RADIUS.'],
+            ['pppoe_profile', 'Profil PPPoE Mikrotik, default "default".'],
+            ['router_id', 'ID router (angka) dari halaman router, atau kosong / "RADIUS" untuk mode RADIUS.'],
+            ['status', 'active, suspended, register, nonaktif, dll. Default active.'],
+            ['auto_suspension', '1 = ikut auto suspension, 0 = tidak. Default 1.'],
+            ['billing_day', 'Tanggal tagih 1–28. Default 15.'],
+            ['renewal_type', 'renewal atau fix_date (sesuai pengaturan paket pelanggan).'],
+            ['fix_date', 'Jika renewal_type = fix_date, tanggal 1–28.'],
+            ['cable_type', 'Mis. Fiber Optic.'],
+            ['cable_length', 'Panjang kabel (meter), angka.'],
+            ['port_number', 'Port ODP, angka.'],
+            ['cable_status', 'connected atau disconnected.'],
+            ['cable_notes', 'Catatan jalur kabel.'],
+            ['', 'Baris 2 pada sheet Pelanggan adalah CONTOH — hapus atau ganti sebelum import produksi.'],
+            ['', 'Simpan sebagai .xlsx, lalu unggah lewat menu Restore Data Pelanggan (Import).']
+        ];
+        rows.forEach((r, i) => {
+            const row = help.addRow(r);
+            if (i === 0) {
+                row.font = { bold: true };
+            }
+        });
+
+        const buf = await workbook.xlsx.writeBuffer();
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename="template-import-pelanggan.xlsx"');
+        res.setHeader('Content-Length', Buffer.byteLength(buf));
+        res.end(Buffer.from(buf));
+    } catch (error) {
+        logger.error('Error generating customer import template:', error);
+        res.status(500).json({ success: false, message: 'Gagal membuat template', error: error.message });
+    }
+});
+
 // Import customers from XLSX file
 router.post('/import/customers/xlsx', upload.single('file'), async (req, res) => {
     try {
@@ -2222,20 +2627,40 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
             if (key) headerMap[key] = colNumber;
         });
 
-        // Support for Indonesian headers (from new export format)
+        // Support for Indonesian headers (export lama + template restore)
         const indonesianHeaderMap = {
-            'nama': 'name',
-            'phone': 'phone',
+            nama: 'name',
+            phone: 'phone',
             'pppoe username': 'pppoe_username',
             'pppoe password': 'pppoe_password',
-            'email': 'email',
-            'alamat': 'address',
+            email: 'email',
+            alamat: 'address',
             'package id': 'package_id',
             'pppoe profile': 'pppoe_profile',
-            'status': 'status',
+            status: 'status',
             'router id': 'router_id',
             'auto suspension': 'auto_suspension',
-            'billing day': 'billing_day'
+            'billing day': 'billing_day',
+            lintang: 'latitude',
+            bujur: 'longitude',
+            'id paket': 'package_id',
+            'id odp': 'odp_id',
+            wilayah: 'area',
+            'id wilayah': 'area_id',
+            'area id': 'area_id',
+            'odp id': 'odp_id',
+            username: 'username',
+            'login password': 'login_password',
+            'password login': 'login_password',
+            'kata sandi login': 'login_password',
+            'renewal type': 'renewal_type',
+            'fix date': 'fix_date',
+            'tipe kabel': 'cable_type',
+            'panjang kabel': 'cable_length',
+            port: 'port_number',
+            'nomor port': 'port_number',
+            'status kabel': 'cable_status',
+            'catatan kabel': 'cable_notes'
         };
 
         // Create unified header map
@@ -2262,14 +2687,28 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                     failed++; errors.push({ row: rowNumber, error: 'Nama/Phone wajib' }); return;
                 }
 
+                const cellStr = (key) => String(getVal(row, key) ?? '').trim();
+                const cellNum = (key) => {
+                    const v = getVal(row, key);
+                    if (v === '' || v === null || v === undefined) return null;
+                    const n = Number(String(v).replace(',', '.'));
+                    return Number.isFinite(n) ? n : null;
+                };
                 const raw = {
                     name,
                     phone,
+                    username: cellStr('username'),
+                    login_password: cellStr('login_password') || cellStr('billing_password'),
                     pppoe_username: String(getVal(row, 'pppoe_username') || '').trim(),
                     pppoe_password: String(getVal(row, 'pppoe_password') || '').trim(),
                     email: String(getVal(row, 'email') || '').trim(),
                     address: String(getVal(row, 'address') || '').trim(),
+                    latitude: cellNum('latitude'),
+                    longitude: cellNum('longitude'),
                     package_id: getVal(row, 'package_id') ? Number(getVal(row, 'package_id')) : null,
+                    odp_id: cellNum('odp_id'),
+                    area: cellStr('area'),
+                    area_id: cellNum('area_id'),
                     pppoe_profile: String(getVal(row, 'pppoe_profile') || 'default').trim(),
                     status: String(getVal(row, 'status') || 'active').trim(),
                     router_id: getVal(row, 'router_id') ? (isNaN(getVal(row, 'router_id')) ? getVal(row, 'router_id') : Number(getVal(row, 'router_id'))) : null,
@@ -2279,14 +2718,19 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                         return Number.isFinite(n) ? n : 1;
                     })(),
                     billing_day: (() => {
-                        // If the cell is empty or whitespace, default to 1
                         const rawVal = getVal(row, 'billing_day');
                         const rawStr = String(rawVal ?? '').trim();
-                        if (rawStr === '') return 1;
+                        if (rawStr === '') return 15;
                         const v = parseInt(rawStr, 10);
-                        const n = Number.isFinite(v) ? Math.min(Math.max(v, 1), 28) : 1;
-                        return n;
-                    })()
+                        return Number.isFinite(v) ? Math.min(Math.max(v, 1), 28) : 15;
+                    })(),
+                    renewal_type: cellStr('renewal_type') || undefined,
+                    fix_date: cellNum('fix_date'),
+                    cable_type: cellStr('cable_type') || undefined,
+                    cable_length: cellNum('cable_length'),
+                    port_number: cellNum('port_number'),
+                    cable_status: cellStr('cable_status') || undefined,
+                    cable_notes: cellStr('cable_notes') || undefined
                 };
 
                 // Process upsert
@@ -2330,9 +2774,23 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                     package_id: raw.package_id || null,
                     pppoe_profile: raw.pppoe_profile || 'default',
                     status: raw.status || 'active',
-                    auto_suspension: typeof raw.auto_suspension !== 'undefined' ? parseInt(raw.auto_suspension) : 1,
-                    billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day), 1), 28) : 15
+                    auto_suspension: typeof raw.auto_suspension !== 'undefined' ? parseInt(raw.auto_suspension, 10) : 1,
+                    billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day, 10), 1), 28) : 15
                 };
+                if (raw.username) customerData.username = raw.username.trim();
+                if (raw.login_password) customerData.password = raw.login_password;
+                if (raw.latitude != null) customerData.latitude = raw.latitude;
+                if (raw.longitude != null) customerData.longitude = raw.longitude;
+                if (raw.area) customerData.area = raw.area;
+                if (raw.area_id != null) customerData.area_id = raw.area_id;
+                if (raw.odp_id != null) customerData.odp_id = raw.odp_id;
+                if (raw.renewal_type) customerData.renewal_type = raw.renewal_type;
+                if (raw.fix_date != null) customerData.fix_date = raw.fix_date;
+                if (raw.cable_type) customerData.cable_type = raw.cable_type;
+                if (raw.cable_length != null) customerData.cable_length = raw.cable_length;
+                if (raw.port_number != null) customerData.port_number = raw.port_number;
+                if (raw.cable_status) customerData.cable_status = raw.cable_status;
+                if (raw.cable_notes) customerData.cable_notes = raw.cable_notes;
 
                 let result;
                 if (existing) {
@@ -2548,6 +3006,11 @@ router.post('/import/customers/json', upload.single('file'), async (req, res) =>
                 }
 
                 const existing = await billingManager.getCustomerByPhone(phone);
+                const optNum = (v) => {
+                    if (v === undefined || v === null || v === '') return undefined;
+                    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+                    return Number.isFinite(n) ? n : undefined;
+                };
                 const customerData = {
                     name,
                     phone,
@@ -2558,8 +3021,29 @@ router.post('/import/customers/json', upload.single('file'), async (req, res) =>
                     pppoe_profile: raw.pppoe_profile || 'default',
                     status: raw.status || 'active',
                     auto_suspension: raw.auto_suspension !== undefined ? parseInt(raw.auto_suspension, 10) : 1,
-                    billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day), 1), 28) : 1
+                    billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day, 10), 1), 28) : 15
                 };
+                if (raw.username) customerData.username = String(raw.username).trim();
+                if (raw.login_password || raw.password) customerData.password = String(raw.login_password || raw.password).trim();
+                const latJ = optNum(raw.latitude);
+                const lngJ = optNum(raw.longitude);
+                if (latJ !== undefined) customerData.latitude = latJ;
+                if (lngJ !== undefined) customerData.longitude = lngJ;
+                if (raw.area) customerData.area = String(raw.area).trim();
+                const aid = optNum(raw.area_id);
+                if (aid !== undefined) customerData.area_id = aid;
+                const oid = optNum(raw.odp_id);
+                if (oid !== undefined) customerData.odp_id = oid;
+                if (raw.renewal_type) customerData.renewal_type = String(raw.renewal_type).trim();
+                const fd = optNum(raw.fix_date);
+                if (fd !== undefined) customerData.fix_date = fd;
+                if (raw.cable_type) customerData.cable_type = String(raw.cable_type).trim();
+                const clen = optNum(raw.cable_length);
+                if (clen !== undefined) customerData.cable_length = clen;
+                const pnum = optNum(raw.port_number);
+                if (pnum !== undefined) customerData.port_number = pnum;
+                if (raw.cable_status) customerData.cable_status = String(raw.cable_status).trim();
+                if (raw.cable_notes) customerData.cable_notes = String(raw.cable_notes).trim();
 
                 let result;
                 if (existing) {
@@ -2886,6 +3370,7 @@ router.get('/whatsapp-settings', getAppSettings, async (req, res) => {
     try {
         res.render('admin/billing/whatsapp-settings', {
             title: 'WhatsApp Notification Settings',
+            page: 'whatsapp-settings',
             appSettings: req.appSettings
         });
     } catch (error) {
@@ -2895,6 +3380,65 @@ router.get('/whatsapp-settings', getAppSettings, async (req, res) => {
             error: error.message,
             appSettings: req.appSettings
         });
+    }
+});
+
+// WhatsApp system monitoring (master on/off per automated WA source)
+router.get('/whatsapp-monitoring', getAppSettings, async (req, res) => {
+    try {
+        res.render('admin/billing/whatsapp-monitoring', {
+            title: 'Monitoring WhatsApp',
+            page: 'whatsapp-monitoring',
+            appSettings: req.appSettings
+        });
+    } catch (error) {
+        logger.error('Error loading WhatsApp monitoring page:', error);
+        res.status(500).render('error', {
+            message: 'Error loading WhatsApp monitoring page',
+            error: error.message,
+            appSettings: req.appSettings
+        });
+    }
+});
+
+router.get('/whatsapp-monitoring/switches', getAppSettings, async (req, res) => {
+    try {
+        const { MONITOR_DEFINITIONS, getMergedMonitors } = require('../config/whatsappMonitoringSettings');
+        res.json({
+            success: true,
+            monitors: MONITOR_DEFINITIONS,
+            switches: getMergedMonitors()
+        });
+    } catch (error) {
+        logger.error('Error reading WA monitoring switches:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+router.post('/whatsapp-monitoring/switches', getAppSettings, async (req, res) => {
+    try {
+        const { setMonitorsPartial, getMergedMonitors } = require('../config/whatsappMonitoringSettings');
+        const incoming = (req.body && req.body.switches) ? req.body.switches : req.body;
+        if (!incoming || typeof incoming !== 'object') {
+            return res.status(400).json({ success: false, message: 'Invalid body' });
+        }
+        setMonitorsPartial(incoming);
+        try {
+            const intervalManager = require('../config/intervalManager');
+            intervalManager.restartAll();
+        } catch (e) {
+            logger.warn('intervalManager.restartAll after WA monitors:', e.message);
+        }
+        try {
+            const pm = require('../config/pppoe-monitor');
+            await pm.restartPPPoEMonitoring();
+        } catch (e) {
+            logger.warn('restartPPPoEMonitoring after WA monitors:', e.message);
+        }
+        res.json({ success: true, switches: getMergedMonitors() });
+    } catch (error) {
+        logger.error('Error saving WA monitoring switches:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -3313,7 +3857,9 @@ router.post('/whatsapp-settings/test', async (req, res) => {
                 amount: '500,000',
                 payment_method: 'Transfer Bank',
                 payment_date: '10 Januari 2024',
-                reference_number: 'TRX123456'
+                reference_number: 'TRX123456',
+                package_name: 'Paket Premium',
+                package_speed: '50 Mbps'
             },
             service_disruption: {
                 disruption_type: 'Gangguan Jaringan',
@@ -3338,11 +3884,76 @@ router.post('/whatsapp-settings/test', async (req, res) => {
                 package_name: 'Paket Premium',
                 package_speed: '50 Mbps',
                 wifi_password: 'test123456',
+                pppoe_username: 'user@test',
+                pppoe_password: 'pass123',
                 support_phone: getSetting('contact_whatsapp', '0813-6888-8498')
+            },
+            installation_job_assigned: {
+                technician_name: 'Teknisi Test',
+                job_number: 'JOB-001',
+                customer_name: 'Pelanggan Test',
+                customer_phone: '081234567890',
+                customer_address: 'Jl. Contoh No. 1',
+                package_name: 'Paket 30 Mbps',
+                package_price: '350.000',
+                installation_date: '5 Mei 2026',
+                installation_time: '09:00',
+                notes: 'Catatan job',
+                equipment_needed: 'ONT, kabel',
+                priority: 'Normal',
+                pppoe_username: 'pppoe_test',
+                pppoe_password: 'rahasia'
+            },
+            installation_status_update: {
+                technician_name: 'Teknisi Test',
+                job_number: 'JOB-001',
+                customer_name: 'Pelanggan Test',
+                new_status: 'Sedang Berlangsung',
+                update_time: '5 Mei 2026 10:00',
+                notes: 'Sedang instalasi'
+            },
+            installation_completed: {
+                technician_name: 'Teknisi Test',
+                job_number: 'JOB-001',
+                customer_name: 'Pelanggan Test',
+                completion_time: '5 Mei 2026 11:30',
+                completion_notes: 'Instalasi OK'
+            },
+            sales_order_new_customer: {
+                customer_id: '12345',
+                customer_name: 'Pelanggan Baru',
+                customer_phone: '081298765432',
+                customer_email: 'test@mail.com',
+                customer_address: 'Alamat contoh',
+                package_name: 'Paket 50 Mbps',
+                package_speed: '50 Mbps',
+                pppoe_username: 'sales_pppoe',
+                pppoe_password: 'salespass',
+                pppoe_profile: 'default'
+            },
+            trouble_report_new_technician: {
+                company_header: getSetting('company_header', 'ISP Test'),
+                report_id: '99',
+                customer_name: 'Budi',
+                phone: '081211112222',
+                location: 'Desa Contoh',
+                category: 'Internet putus',
+                created_at: '05/05/2026 08:00:00',
+                description: 'Kabel putus',
+                status: 'OPEN'
+            },
+            trouble_report_customer_update: {
+                company_header: getSetting('company_header', 'ISP Test'),
+                report_id: '99',
+                updated_at: '05/05/2026 09:00:00',
+                status_label: 'Sedang Ditangani',
+                technician_note_section: '💬 *Catatan Teknisi*:\nTim menuju lokasi.\n\n',
+                status_message: 'Tim teknisi kami sedang menangani laporan Anda.'
             }
         };
-        
-        const result = await whatsappNotifications.testNotification(phoneNumber, templateKey, testData[templateKey]);
+
+        const testPayload = testData[templateKey] || {};
+        const result = await whatsappNotifications.testNotification(phoneNumber, templateKey, testPayload);
         
         if (result.success) {
             res.json({
@@ -4774,24 +5385,38 @@ router.post('/customers', customerPhotoUpload.fields([
         }
 
         if (save_mode === 'save_and_create_task') {
-            req.session.prefillInstallationCustomer = {
+            const prefillInstallationCustomer = {
                 customer_id: result.id,
                 customer_name: result.name || name,
                 customer_phone: result.phone || phone,
-                customer_address: result.address || address || '',
+                customer_address: (result.address != null && result.address !== '') ? result.address : (address || ''),
                 package_id: package_id ? parseInt(package_id, 10) : null,
                 pppoe_username: pppoe_username || '',
                 pppoe_password: (pppoeCreate && pppoeCreate.password) ? pppoeCreate.password : (pppoe_password || '')
             };
+            req.session.prefillInstallationCustomer = prefillInstallationCustomer;
+            req.session.save((err) => {
+                if (err) {
+                    logger.error('Error saving session for prefill:', err);
+                }
+                res.json({
+                    success: true,
+                    message: 'Pelanggan berhasil ditambahkan',
+                    customer: result,
+                    pppoeCreate,
+                    prefill_installation: prefillInstallationCustomer,
+                    redirect_to_task: '/admin/installations/create?prefill_customer=1'
+                });
+            });
+        } else {
+            res.json({
+                success: true,
+                message: 'Pelanggan berhasil ditambahkan',
+                customer: result,
+                pppoeCreate,
+                redirect_to_task: null
+            });
         }
-
-        res.json({
-            success: true,
-            message: 'Pelanggan berhasil ditambahkan',
-            customer: result,
-            pppoeCreate,
-            redirect_to_task: save_mode === 'save_and_create_task' ? '/admin/installations/create?prefill_customer=1' : null
-        });
     } catch (error) {
         logger.error('Error creating customer:', error);
         
@@ -5625,8 +6250,8 @@ router.post('/customers/:phone/accept', async (req, res) => {
         // Send notification to technicians (Sales Order)
         let techNotifSent = false;
         try {
-            const { sendSalesOrderNotification } = require('../config/whatsapp-notifications');
-            const techResult = await sendSalesOrderNotification(updatedCustomer);
+            const whatsappNotifications = require('../config/whatsapp-notifications');
+            const techResult = await whatsappNotifications.sendSalesOrderNotification(updatedCustomer);
             if (techResult && techResult.success) {
                 techNotifSent = true;
                 logger.info(`Sales Order notification sent to technicians for ${updatedCustomer.name}`);
@@ -5834,38 +6459,49 @@ router.post('/invoices', async (req, res) => {
 
         const newInvoice = await billingManager.createInvoice(invoiceData);
         logger.info(`Invoice created: ${newInvoice.invoice_number} for ${isMemberInvoice ? 'member' : 'customer'}`);
-        
-        // Send WhatsApp notification
-        try {
-            const whatsappNotifications = require('../config/whatsapp-notifications');
-            if (isMemberInvoice && invoiceData.member_id) {
-                await whatsappNotifications.sendMemberInvoiceCreatedNotification(invoiceData.member_id, newInvoice.id);
-            } else if (invoiceData.customer_id) {
-                await whatsappNotifications.sendInvoiceCreatedNotification(invoiceData.customer_id, newInvoice.id);
-            }
-        } catch (notificationError) {
-            logger.error('Error sending invoice notification:', notificationError);
-            // Don't fail the invoice creation if notification fails
-        }
-        
-        // Send Email notification
-        try {
-            const emailNotifications = require('../config/email-notifications');
-            if (isMemberInvoice && invoiceData.member_id) {
-                // Email notification for members if implemented
-                await emailNotifications.sendInvoiceCreatedNotification(invoiceData.member_id, newInvoice.id);
-            } else if (invoiceData.customer_id) {
-                await emailNotifications.sendInvoiceCreatedNotification(invoiceData.customer_id, newInvoice.id);
-            }
-        } catch (notificationError) {
-            logger.error('Error sending email invoice notification:', notificationError);
-            // Don't fail the invoice creation if notification fails
-        }
-        
+
         res.json({
             success: true,
             message: 'Tagihan berhasil dibuat',
             invoice: newInvoice
+        });
+
+        // WA / email di background — jangan blokir respons (invoice sudah commit).
+        setImmediate(() => {
+            (async () => {
+                try {
+                    const whatsappNotifications = require('../config/whatsapp-notifications');
+                    if (isMemberInvoice && invoiceData.member_id) {
+                        await whatsappNotifications.sendMemberInvoiceCreatedNotification(
+                            invoiceData.member_id,
+                            newInvoice.id
+                        );
+                    } else if (invoiceData.customer_id) {
+                        await whatsappNotifications.sendInvoiceCreatedNotification(
+                            invoiceData.customer_id,
+                            newInvoice.id
+                        );
+                    }
+                } catch (notificationError) {
+                    logger.error('Error sending invoice WhatsApp (background):', notificationError);
+                }
+                try {
+                    const emailNotifications = require('../config/email-notifications');
+                    if (isMemberInvoice && invoiceData.member_id) {
+                        await emailNotifications.sendInvoiceCreatedNotification(
+                            invoiceData.member_id,
+                            newInvoice.id
+                        );
+                    } else if (invoiceData.customer_id) {
+                        await emailNotifications.sendInvoiceCreatedNotification(
+                            invoiceData.customer_id,
+                            newInvoice.id
+                        );
+                    }
+                } catch (notificationError) {
+                    logger.error('Error sending invoice email (background):', notificationError);
+                }
+            })();
         });
     } catch (error) {
         logger.error('Error creating invoice:', error);
@@ -6191,12 +6827,29 @@ router.get('/payments', getAppSettings, async (req, res) => {
 // All Payments - Admin and Collector
 router.get('/all-payments', getAppSettings, async (req, res) => {
     try {
-        const payments = await billingManager.getPayments();
-        
+        const period = resolveMonthYearRange(req.query);
+        const filters = {
+            month: String(period.month),
+            year: String(period.year),
+            from: req.query.from || period.startDate,
+            to: req.query.to || period.endDate,
+            collector_id: req.query.collector_id || '',
+            q: req.query.q || ''
+        };
+
+        const [payments, collectors, summary] = await Promise.all([
+            billingManager.getAllPaymentsHistory(filters),
+            billingManager.getAllCollectors(),
+            billingManager.getAllPaymentsHistorySummary(filters)
+        ]);
+
         const settings = getSettingsWithCache();
         res.render('admin/billing/payments', {
             title: 'Riwayat Pembayaran',
             payments,
+            collectors,
+            filters,
+            summary,
             appSettings: req.appSettings,
             settings: settings,
             page: 'all-payments'
@@ -6211,9 +6864,46 @@ router.get('/all-payments', getAppSettings, async (req, res) => {
     }
 });
 
+/** Batalkan satu pembayaran (riwayat all-payments): hapus baris payment & kembalikan invoice ke unpaid bila perlu */
+router.post('/api/payments/:id/cancel', async (req, res) => {
+    try {
+        const id = parseInt(String(req.params.id), 10);
+        if (!Number.isFinite(id) || id <= 0) {
+            return res.status(400).json({ success: false, message: 'ID pembayaran tidak valid' });
+        }
+        const rawBody = req.body && typeof req.body === 'object' ? req.body : {};
+        const confirmPassword =
+            rawBody.confirm_password != null
+                ? String(rawBody.confirm_password)
+                : rawBody.super_admin_password != null
+                  ? String(rawBody.super_admin_password)
+                  : '';
+        if (!verifySuperAdminPassword(confirmPassword)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Password super admin salah atau kosong.'
+            });
+        }
+        const result = await billingManager.cancelPaymentById(id);
+        return res.json({
+            success: true,
+            message: result.invoice_reverted_unpaid
+                ? 'Pembayaran dibatalkan. Tagihan kembali belum lunas.'
+                : 'Pembayaran dibatalkan.',
+            ...result
+        });
+    } catch (error) {
+        logger.error('Cancel payment failed:', error);
+        return res.status(400).json({
+            success: false,
+            message: error.message || 'Gagal membatalkan pembayaran'
+        });
+    }
+});
+
 router.post('/payments', async (req, res) => {
     try {
-        const { invoice_id, amount, payment_method, reference_number, notes, payment_date } = req.body;
+        const { invoice_id, amount, payment_method, reference_number, notes, payment_date, discount_amount } = req.body;
         
         // Validate required fields first
         if (!invoice_id || !amount || !payment_method) {
@@ -6227,13 +6917,15 @@ router.post('/payments', async (req, res) => {
         const normalizedNotes = (notes ? notes.trim() : '') ||
             (normalizedPaymentMethod === 'manual_admin' ? 'Pelunasan oleh Admin Kantor' : '');
 
+        const discNum = Math.max(0, parseFloat(discount_amount) || 0);
         const paymentData = {
             invoice_id: parseInt(invoice_id),
             amount: parseFloat(amount),
             payment_method: normalizedPaymentMethod,
             reference_number: reference_number ? reference_number.trim() : '',
             notes: normalizedNotes,
-            payment_date: payment_date ? String(payment_date).trim() : ''
+            payment_date: payment_date ? String(payment_date).trim() : '',
+            discount_amount: discNum
         };
 
         const newPayment = await billingManager.recordPayment(paymentData);
@@ -6534,32 +7226,9 @@ router.get('/api/devices', async (req, res) => {
             devices = await getDevicesCached();
             console.log(`📊 Found ${devices.length} devices from GenieACS`);
         } catch (genieacsError) {
-            console.log('⚠️ GenieACS not available, creating fallback data...');
-            // Create fallback data from customers
-            const db = require('../config/billing').db;
-            const customers = await new Promise((resolve, reject) => {
-                db.all(`
-                    SELECT id, name, phone, pppoe_username, latitude, longitude 
-                    FROM customers 
-                    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-                    LIMIT 10
-                `, [], (err, rows) => {
-                    if (err) reject(err);
-                    else resolve(rows || []);
-                });
-            });
-            
-            devices = customers.map((customer, index) => ({
-                _id: `fallback_${customer.id}`,
-                'Device.DeviceInfo.SerialNumber': `SIM${customer.id.toString().padStart(4, '0')}`,
-                'Device.DeviceInfo.ModelName': 'Simulated ONU',
-                'InternetGatewayDevice.DeviceInfo.UpTime': index % 2 === 0 ? '7 days' : null,
-                'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID': `SSID_${customer.id}`,
-                'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username': customer.pppoe_username,
-                _lastInform: new Date().toISOString()
-            }));
-            
-            console.log(`📊 Created ${devices.length} fallback devices from customers`);
+            console.warn('⚠️ GenieACS tidak tersedia:', genieacsError.message);
+            // Jangan buat perangkat simulasi (fallback_*, Simulated ONU) — bukan data DB dan membingungkan.
+            devices = [];
         }
         
         // Process devices with customer information
@@ -8318,10 +8987,15 @@ router.get('/devices', getAppSettings, async (req, res) => {
 // New Mapping page
 router.get('/mapping-new', getAppSettings, async (req, res) => {
     try {
+        const { ensureMapCenterFromCompanyAddress } = require('../config/mapDefaultCenter');
+        const mapCenter = await ensureMapCenterFromCompanyAddress();
         res.render('admin/billing/mapping-new', {
             title: 'Network Mapping - New',
             user: req.user,
-            settings: req.appSettings
+            settings: req.appSettings,
+            defaultMapLat: mapCenter.lat,
+            defaultMapLng: mapCenter.lng,
+            defaultMapZoom: mapCenter.zoom
         });
     } catch (error) {
         console.error('Error rendering new mapping page:', error);

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../../partials/hard-reload') %>
@@ -99,18 +99,46 @@
                 align-items: center;
             }
         }
+
+        body.collector-details-embed {
+            margin: 0;
+            overflow-x: hidden;
+            min-height: auto;
+        }
+        .collector-details-embed-main {
+            margin-left: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-height: auto !important;
+        }
+        .collector-embed-compact {
+            max-width: 100%;
+        }
+        .collector-embed-header {
+            padding: 0.65rem 1rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        .collector-embed-header .f-page-title {
+            font-size: 1.05rem !important;
+        }
     </style>
 
     <%- include('../../partials/theme-head') %>
 </head>
-<body class="finance-content-area">
+<% var isEmbed = typeof embed !== 'undefined' && embed; %>
+<body class="finance-content-area<%= isEmbed ? ' collector-details-embed' : '' %>">
+    <% if (!isEmbed) { %>
     <div class="f-wrapper">
         <%- include('../../partials/billing-sidebar') %>
-        
-        <main class="f-main-area main-content">
+    <% } %>
+        <main class="f-main-area main-content<%= isEmbed ? ' collector-details-embed-main' : '' %>">
             <!-- PAGE HEADER (Glass) -->
-            <header class="f-header-glass">
+            <header class="f-header-glass<%= isEmbed ? ' collector-embed-header' : '' %>">
                 <div>
+                    <% if (isEmbed) { %>
+                    <p class="mb-0 small text-muted">Riwayat pembayaran</p>
+                    <h1 class="f-page-title f-premium-text mb-0 text-truncate" style="max-width: min(100%, 22rem);"><%= collector.name %></h1>
+                    <% } else { %>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb mb-1" style="background: transparent; padding: 0;">
                             <li class="breadcrumb-item"><a href="/admin/billing/collector-reports" class="text-muted text-decoration-none small">Laporan Kolektor</a></li>
@@ -118,26 +146,39 @@
                         </ol>
                     </nav>
                     <h1 class="f-page-title f-premium-text">Profil Kolektor</h1>
+                    <% } %>
                 </div>
                 <div class="f-actions">
-                    <button class="f-btn f-btn-outline" onclick="window.location.reload()" title="Refresh Content">
+                    <button type="button" class="f-btn f-btn-outline" onclick="window.location.reload()" title="Refresh Content">
                         <i class="bi bi-arrow-clockwise"></i>Refresh
                     </button>
-                    <button class="f-btn f-btn-outline" onclick="goBack()">
+                    <% if (isEmbed) { %>
+                    <a class="f-btn f-btn-outline btn-sm py-1 px-2" href="/admin/billing/collector-details/<%= collector.id %>" target="_top" title="Profil &amp; ringkasan lengkap">
+                        <i class="bi bi-box-arrow-up-right"></i><span class="d-none d-sm-inline ms-1">Lengkap</span>
+                    </a>
+                    <button type="button" class="f-btn f-btn-outline btn-sm py-1 px-2" onclick="goBack()">
+                        <i class="bi bi-x-lg"></i><span class="d-none d-sm-inline ms-1">Tutup</span>
+                    </button>
+                    <% } else { %>
+                    <button type="button" class="f-btn f-btn-outline" onclick="goBack()">
                         <i class="bi bi-arrow-left me-2"></i>Kembali
                     </button>
-                    <button class="f-btn f-btn-primary" onclick="exportCollectorDetails()">
+                    <% } %>
+                    <% if (!isEmbed) { %>
+                    <button type="button" class="f-btn f-btn-primary" onclick="exportCollectorDetails()">
                         <i class="bi bi-file-earmark-excel me-2"></i>Export .xlsx
                     </button>
+                    <% } %>
                 </div>
             </header>
 
-            <div class="f-container">
+            <div class="f-container<%= isEmbed ? ' collector-embed-compact' : '' %>">
 
+                <% if (!isEmbed) { %>
                 <!-- COLLECTOR PROFILE -->
                 <div class="collector-profile-card">
                     <div class="collector-avatar">
-                        <%= collector.name.charAt(0).toUpperCase() %>
+                        <%= (collector.name && collector.name.length) ? collector.name.charAt(0).toUpperCase() : '?' %>
                     </div>
                     <div>
                         <div class="d-flex align-items-center gap-3">
@@ -200,8 +241,38 @@
                         <div class="f-stat-value f-premium-text text-info">Rp <%= (stats.total_komisi || 0).toLocaleString('id-ID') %></div>
                     </div>
                 </div>
+                <% } %>
 
                 <!-- FILTER & HISTORY -->
+                <% if (isEmbed) { %>
+                <div class="f-card mb-2">
+                    <div class="f-card-body py-2 px-3">
+                        <div class="d-flex flex-wrap align-items-end gap-2">
+                            <div class="flex-grow-1" style="min-width: 8.5rem;">
+                                <label class="f-label small mb-1">Bulan</label>
+                                <select class="f-select form-select-sm" id="monthFilter">
+                                    <% const monthsEmbed = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']; %>
+                                    <% for(let m=1; m<=12; m++) { %>
+                                        <option value="<%= m %>" <%= filters.month == m ? 'selected' : '' %>><%= monthsEmbed[m-1] %></option>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <div style="min-width: 5.5rem;">
+                                <label class="f-label small mb-1">Tahun</label>
+                                <select class="f-select form-select-sm" id="yearFilter">
+                                    <% const currYEmbed = new Date().getFullYear(); %>
+                                    <% for(let y=currYEmbed-3; y<=currYEmbed+1; y++) { %>
+                                        <option value="<%= y %>" <%= filters.year == y ? 'selected' : '' %>><%= y %></option>
+                                    <% } %>
+                                </select>
+                            </div>
+                            <button type="button" class="f-btn f-btn-primary btn-sm py-2" onclick="applyFilters()">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <% } else { %>
                 <div class="row mt-4">
                     <div class="col-lg-3">
                         <div class="f-card" style="position: sticky; top: 2rem;">
@@ -227,13 +298,14 @@
                                         <% } %>
                                     </select>
                                 </div>
-                                <button class="f-btn f-btn-primary w-100" onclick="applyFilters()">
+                                <button type="button" class="f-btn f-btn-primary w-100" onclick="applyFilters()">
                                     <i class="bi bi-search me-2"></i>Terapkan
                                 </button>
                             </div>
                         </div>
                     </div>
                     <div class="col-lg-9">
+                <% } %>
                         <div class="f-card">
                             <div class="f-card-header d-flex justify-content-between align-items-center">
                                 <h3 class="f-card-title"><i class="bi bi-clock-history me-2"></i>Riwayat Pembayaran</h3>
@@ -293,16 +365,21 @@
                                 </table>
                             </div>
                         </div>
+                <% if (!isEmbed) { %>
                     </div>
                 </div>
+                <% } %>
             </div>
         </main>
+    <% if (!isEmbed) { %>
     </div>
+    <% } %>
 
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
+        var isEmbed = <%= isEmbed ? 'true' : 'false' %>;
         function applyFilters() {
             const month = document.getElementById('monthFilter').value;
             const year = document.getElementById('yearFilter').value;
@@ -310,11 +387,18 @@
             const params = new URLSearchParams();
             if (month) params.append('month', month);
             if (year) params.append('year', year);
+            if (isEmbed) params.append('embed', '1');
             
             window.location.href = `/admin/billing/collector-details/<%= collector.id %>?${params.toString()}`;
         }
         
         function goBack() {
+            if (isEmbed) {
+                try {
+                    window.parent.postMessage({ type: 'billing-close-collector-detail' }, '*');
+                } catch (e) {}
+                return;
+            }
             window.location.href = '/admin/billing/collector-reports';
         }
         

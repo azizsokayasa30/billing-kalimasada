@@ -11,32 +11,35 @@ const bcrypt = require('bcrypt');
 const { getSetting } = require('../config/settingsManager');
 const { collectorAuth } = require('./collectorAuth');
 const billingManager = require('../config/billing');
-const serviceSuspension = require('../config/serviceSuspension');
-const whatsappNotifications = require('../config/whatsapp-notifications');
-const fs = require('fs');
-const multer = require('multer');
+const { submitCollectorPayment, collectorPaymentMulter } = require('../utils/collectorPaymentSubmit');
 
-// Pastikan direktori upload ada
-const uploadDir = path.join(__dirname, '../public/uploads/payments');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+function collectorCustomerIsIsolir(c) {
+    return String(c.status || '')
+        .toLowerCase()
+        .trim() === 'suspended';
 }
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname) || '.jpg';
-        cb(null, 'proof-' + uniqueSuffix + ext);
-    }
-});
+function matchesAdminBelumLunasFromPaymentStatus(c) {
+    const ps = c.payment_status || '';
+    return ps === 'unpaid' || ps === 'overdue' || ps === 'no_invoice';
+}
 
-const upload = multer({ 
-    storage: storage,
-    limits: { fileSize: 2.5 * 1024 * 1024 } // Batas server 2.5 MB, kompresi di-handle client-side
-});
+function matchesAdminLunasFromPaymentStatus(c) {
+    return (c.payment_status || '') === 'paid';
+}
+
+function joinDateThisCalendarMonth(c) {
+    if (!c.join_date) return false;
+    const jd = String(c.join_date).slice(0, 10);
+    const now = new Date();
+    const y = now.getFullYear();
+    const mo = now.getMonth();
+    const pad = (n) => String(n).padStart(2, '0');
+    const startStr = `${y}-${pad(mo + 1)}-01`;
+    const lastD = new Date(y, mo + 1, 0).getDate();
+    const endStr = `${y}-${pad(mo + 1)}-${pad(lastD)}`;
+    return jd >= startStr && jd <= endStr;
+}
 
 // Dashboard
 router.get('/dashboard', collectorAuth, async (req, res) => {
@@ -72,6 +75,45 @@ router.get('/dashboard', collectorAuth, async (req, res) => {
         const recentPayments = await billingManager.getCollectorRecentPayments(collectorId, 5);
         
         const appSettings = await getAppSettings();
+
+        const allMappedCustomers = await billingManager.getCollectorCustomers(collectorId);
+        const list = allMappedCustomers || [];
+        const totalPelangganAktif = list.length;
+        const belumBayarCount = list.filter(c => matchesAdminBelumLunasFromPaymentStatus(c)).length;
+        const lunasCount = list.filter(c => matchesAdminLunasFromPaymentStatus(c)).length;
+        const isolirCount = list.filter(c => collectorCustomerIsIsolir(c)).length;
+        const priorityCustomers = list
+            .filter(c => matchesAdminBelumLunasFromPaymentStatus(c) && !collectorCustomerIsIsolir(c))
+            .slice(0, 5)
+            .map(c => ({
+                id: c.id,
+                name: c.name,
+                address: c.address || '-',
+                amount: Math.round(parseFloat(c.package_price || 0)),
+                payment_status: c.payment_status
+            }));
+
+        const targetMonth = Math.round(parseFloat(dashboardStats.tagihan?.total || 0));
+        // Terkumpul = nilai invoice cohort bulan yang sudah paid (bukan hanya pembayaran lewat akun kolektor).
+        const terkumpul = Math.round(
+            parseFloat((dashboardStats.tagihanLunas?.total ?? dashboardStats.lunas?.total) || 0)
+        );
+        const progressPct = targetMonth > 0 ? Math.min(100, Math.round((terkumpul / targetMonth) * 100)) : 0;
+        const sisaTarget = Math.max(0, targetMonth - terkumpul);
+
+        const dbPath = path.join(__dirname, '../data/billing.db');
+        const db = new sqlite3.Database(dbPath);
+        const areaRows = await new Promise((resolve, reject) => {
+            db.all('SELECT DISTINCT area FROM collector_areas WHERE collector_id = ? AND area IS NOT NULL AND area != "" LIMIT 8', [collectorId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+        db.close();
+        const areaLabel = areaRows.map(r => r.area).join(', ') || (collector.address || 'Wilayah penugasan');
+
+        const now = new Date();
+        const displayDate = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         
         res.render('collector/dashboard', {
             title: 'Dashboard Tukang Tagih',
@@ -79,7 +121,20 @@ router.get('/dashboard', collectorAuth, async (req, res) => {
             collector: collector,
             statistics: dashboardStats,
             recentPayments: recentPayments,
-            filters: { month, year }
+            filters: { month, year },
+            fieldUi: {
+                totalPelangganAktif,
+                belumBayarCount,
+                lunasCount,
+                isolirCount,
+                priorityCustomers,
+                targetMonth,
+                terkumpul,
+                progressPct,
+                sisaTarget,
+                areaLabel,
+                displayDate
+            }
         });
         
     } catch (error) {
@@ -112,8 +167,8 @@ router.get('/payment', collectorAuth, async (req, res) => {
             const sql = `
                 SELECT c.* 
                 FROM customers c 
-                INNER JOIN collector_areas ca ON c.area = ca.area 
-                WHERE ca.collector_id = ? AND c.status = 'active' 
+                INNER JOIN collector_areas ca ON TRIM(IFNULL(c.area, '')) != '' AND TRIM(c.area) = TRIM(ca.area)
+                WHERE ca.collector_id = ? AND LOWER(TRIM(c.status)) IN ('active', 'register')
                 ORDER BY c.name
             `;
             db.all(sql, [collector.id], (err, rows) => {
@@ -193,6 +248,12 @@ router.get('/payments', collectorAuth, async (req, res) => {
         
         // Get all payments menggunakan BillingManager
         const payments = await billingManager.getCollectorAllPayments(collectorId);
+        const dashboardStats = await billingManager.getCollectorDashboardStats(collectorId);
+        const s = dashboardStats.setoran || {};
+        const sudahSetor = Math.round(parseFloat(s.sudah_setor || 0));
+        const belumSetor = Math.round(parseFloat(s.belum_setor || 0));
+        const totalHarusSetor = sudahSetor + belumSetor;
+        const setoranProgressPct = totalHarusSetor > 0 ? Math.min(100, Math.round((sudahSetor / totalHarusSetor) * 100)) : 0;
         
         const appSettings = await getAppSettings();
         
@@ -200,7 +261,8 @@ router.get('/payments', collectorAuth, async (req, res) => {
             title: 'Riwayat Pembayaran',
             appSettings: appSettings,
             collector: collector,
-            payments: payments
+            payments: payments,
+            setoranUi: { sudahSetor, belumSetor, totalHarusSetor, setoranProgressPct }
         });
         
     } catch (error) {
@@ -219,12 +281,33 @@ router.get('/customers', collectorAuth, async (req, res) => {
         const collector = req.collector;
         const allMappedCustomers = await billingManager.getCollectorCustomers(collector.id);
         const statusFilter = (req.query.status || '').toString().toLowerCase();
-        const validFilters = new Set(['paid', 'unpaid', 'overdue', 'no_invoice']);
-        
-        let customers = (allMappedCustomers || []).filter(c => c.status === 'active');
-        if (validFilters.has(statusFilter)) {
+        const validFilters = new Set(['paid', 'unpaid', 'overdue', 'no_invoice', 'isolir', 'baru']);
+        const q = (req.query.q || '').toString().trim().toLowerCase();
+
+        let customers = allMappedCustomers || [];
+        if (statusFilter === 'isolir') {
+            customers = customers.filter(c => collectorCustomerIsIsolir(c));
+        } else if (statusFilter === 'baru') {
+            customers = customers.filter(c => joinDateThisCalendarMonth(c));
+        } else if (statusFilter === 'unpaid') {
+            customers = customers.filter(c => matchesAdminBelumLunasFromPaymentStatus(c));
+        } else if (statusFilter === 'paid') {
+            customers = customers.filter(c => matchesAdminLunasFromPaymentStatus(c));
+        } else if (validFilters.has(statusFilter) && statusFilter !== '') {
             customers = customers.filter(c => (c.payment_status || '') === statusFilter);
         }
+
+        if (q) {
+            customers = customers.filter(c => {
+                const name = (c.name || '').toLowerCase();
+                const idStr = String(c.id || '');
+                const phone = (c.phone || '').toLowerCase();
+                const ppp = (c.pppoe_username || '').toString().toLowerCase();
+                const user = (c.username || '').toString().toLowerCase();
+                return name.includes(q) || idStr.includes(q) || phone.includes(q) || ppp.includes(q) || user.includes(q);
+            });
+        }
+
         const appSettings = await getAppSettings();
         
         res.render('collector/customers', {
@@ -232,7 +315,8 @@ router.get('/customers', collectorAuth, async (req, res) => {
             appSettings: appSettings,
             collector: collector,
             customers: customers,
-            currentStatusFilter: validFilters.has(statusFilter) ? statusFilter : ''
+            currentStatusFilter: validFilters.has(statusFilter) ? statusFilter : '',
+            searchQuery: q
         });
         
     } catch (error) {
@@ -262,11 +346,25 @@ router.get('/profile', collectorAuth, async (req, res) => {
         const appSettings = await getAppSettings();
         
         db.close();
+
+        const dashboardStats = await billingManager.getCollectorDashboardStats(collectorId);
+        const tagCount = parseInt(dashboardStats.tagihan?.count || 0, 10) || 0;
+        const paidDistinct = parseInt(dashboardStats.lunas?.count || 0, 10) || 0;
+        const successRate = tagCount > 0 ? Math.min(100, Math.round((paidDistinct / tagCount) * 100)) : 0;
+        const allPayments = await billingManager.getCollectorAllPayments(collectorId);
+        const totalCollections = (allPayments || []).filter(p => p.status === 'completed').length;
+        const now = new Date();
+        const monthlyCommission = await billingManager.getCollectorMonthlyCommission(collectorId, now.getFullYear(), now.getMonth() + 1);
         
         res.render('collector/profile', {
             title: 'Profil Saya',
             appSettings: appSettings,
-            collector: collector
+            collector: collector,
+            profileStats: {
+                successRate,
+                totalCollections,
+                monthlyCommission: Math.round(parseFloat(monthlyCommission || 0))
+            }
         });
         
     } catch (error) {
@@ -438,199 +536,36 @@ router.post('/api/profile/update-password', collectorAuth, async (req, res) => {
 });
 
 // Submit payment
-router.post('/api/payment', collectorAuth, upload.single('payment_proof'), async (req, res) => {
+router.post('/api/payment', collectorAuth, collectorPaymentMulter.single('payment_proof'), async (req, res) => {
     try {
         const collectorId = req.collector.id;
-        const { customer_id, payment_amount, payment_method, notes, invoice_ids } = req.body;
-        
-        // Simpan path foto bukti transfer jika ada upload
+        const { customer_id, payment_amount, payment_method, notes, invoice_ids, discount_amount } = req.body;
         const paymentProof = req.file ? '/uploads/payments/' + req.file.filename : null;
 
-
-        // Normalize values
-        const paymentAmountNum = Number(payment_amount);
-        let parsedInvoiceIds = [];
-        if (Array.isArray(invoice_ids)) {
-            parsedInvoiceIds = invoice_ids;
-        } else if (typeof invoice_ids === 'string') {
-            const trimmed = invoice_ids.trim();
-            if (trimmed) {
-                try {
-                    parsedInvoiceIds = trimmed.startsWith('[') ? JSON.parse(trimmed) : trimmed.split(',');
-                } catch (_) {
-                    parsedInvoiceIds = trimmed.split(',');
-                }
-            }
-        }
-        parsedInvoiceIds = parsedInvoiceIds.map(v => Number(String(v).trim())).filter(v => !Number.isNaN(v));
-        
-        if (!customer_id || !paymentAmountNum) {
-            return res.status(400).json({
-                success: false,
-                message: 'Customer ID dan jumlah pembayaran harus diisi'
-            });
-        }
-        
-        // Validasi jumlah pembayaran
-        if (paymentAmountNum <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Jumlah pembayaran harus lebih dari 0'
-            });
-        }
-        
-        if (paymentAmountNum > 999999999) {
-            return res.status(400).json({
-                success: false,
-                message: 'Jumlah pembayaran terlalu besar (maksimal 999,999,999)'
-            });
-        }
-        
-        // Get collector commission rate using BillingManager
-        const collector = await billingManager.getCollectorById(collectorId);
-        
-        if (!collector) {
-            return res.status(400).json({
-                success: false,
-                message: 'Collector not found'
-            });
-        }
-        
-        const commissionRate = collector.commission_rate !== null && collector.commission_rate !== undefined ? collector.commission_rate : 5;
-        
-        // Validasi commission rate
-        if (commissionRate < 0 || commissionRate > 100) {
-            return res.status(400).json({
-                success: false,
-                message: 'Rate komisi tidak valid (harus antara 0-100%)'
-            });
-        }
-        
-        const commissionAmount = Math.round((paymentAmountNum * commissionRate) / 100); // Rounding untuk komisi
-        
-        // Insert collector payment record
-        const paymentId = await billingManager.recordCollectorPaymentRecord({
-            collector_id: collectorId,
-            customer_id: customer_id,
-            amount: paymentAmountNum,
-            payment_amount: paymentAmountNum,
-            commission_amount: commissionAmount,
-            payment_method: payment_method,
-            notes: notes,
-            status: 'completed'
+        const result = await submitCollectorPayment({
+            collectorId,
+            customer_id,
+            payment_amount,
+            payment_method,
+            notes,
+            invoice_ids,
+            discount_amount,
+            paymentProofRelativePath: paymentProof
         });
-        
-        // Update the payment record with the image path manually 
-        // since recordCollectorPaymentRecord might not support payment_proof field out of the box
-        if (paymentId && paymentProof) {
-            const dbPath = path.join(__dirname, '../data/billing.db');
-            const db = new sqlite3.Database(dbPath);
-            await new Promise((resolve, reject) => {
-                db.run('UPDATE payments SET payment_proof = ? WHERE id = ?', [paymentProof, paymentId], (err) => {
-                    db.close();
-                    if (err) reject(err);
-                    else resolve();
-                });
+
+        if (!result.ok) {
+            return res.status(result.status || 400).json({
+                success: false,
+                message: result.message
             });
         }
-        
-        let lastPaymentId = null;
-
-        // Update invoices if specified, else auto-allocate to oldest unpaid invoices
-        if (parsedInvoiceIds && parsedInvoiceIds.length > 0) {
-            for (const invoiceId of parsedInvoiceIds) {
-                // tandai lunas dengan mencatat metode dan tanggal pembayaran
-                await billingManager.updateInvoiceStatus(invoiceId, 'paid', payment_method);
-                // catat entri payment sesuai nilai invoice dengan collector info
-                const inv = await billingManager.getInvoiceById(invoiceId);
-                const invAmount = parseFloat(inv?.amount || 0) || 0;
-                const newPayment = await billingManager.recordCollectorPayment({
-                    invoice_id: invoiceId,
-                    amount: invAmount,
-                    payment_method,
-                    reference_number: '',
-                    notes: notes || `Collector ${collectorId}`,
-                    collector_id: collectorId,
-                    commission_amount: Math.round((invAmount * commissionRate) / 100)
-                });
-                lastPaymentId = newPayment?.id || lastPaymentId;
-            }
-        } else {
-            // Auto allocate payment to unpaid invoices (oldest first)
-            let remaining = paymentAmountNum || 0;
-            if (remaining > 0) {
-                const invoicesByCustomer = await billingManager.getInvoicesByCustomer(Number(customer_id));
-                const unpaidInvoices = (invoicesByCustomer || [])
-                    .filter(i => i.status === 'unpaid')
-                    .sort((a, b) => new Date(a.due_date || a.id) - new Date(b.due_date || b.id));
-                for (const inv of unpaidInvoices) {
-                    const invAmount = parseFloat(inv.amount || 0) || 0;
-                    if (remaining >= invAmount && invAmount > 0) {
-                        await billingManager.updateInvoiceStatus(inv.id, 'paid', payment_method);
-                        const newPayment = await billingManager.recordCollectorPayment({
-                            invoice_id: inv.id,
-                            amount: invAmount,
-                            payment_method,
-                            reference_number: '',
-                            notes: notes || `Collector ${collectorId}`,
-                            collector_id: collectorId,
-                            commission_amount: Math.round((invAmount * commissionRate) / 100)
-                        });
-                        lastPaymentId = newPayment?.id || lastPaymentId;
-                        remaining -= invAmount;
-                        if (remaining <= 0) break;
-                    } else {
-                        break; // skip partial untuk konsistensi
-                    }
-                }
-            }
-        }
-
-        // Kirim notifikasi WhatsApp jika ada payment yang dicatat
-        try {
-            if (lastPaymentId) {
-                await whatsappNotifications.sendPaymentReceivedNotification(lastPaymentId);
-            }
-        } catch (notificationError) {
-            console.error('Error sending payment notification:', notificationError);
-            // Jangan gagalkan transaksi karena notifikasi
-        }
-        
-        // Kirim notifikasi Email jika ada payment yang dicatat
-        try {
-            if (lastPaymentId) {
-                const emailNotifications = require('../config/email-notifications');
-                await emailNotifications.sendPaymentReceivedNotification(lastPaymentId);
-            }
-        } catch (notificationError) {
-            console.error('Error sending email payment notification:', notificationError);
-            // Jangan gagalkan transaksi karena notifikasi
-        }
-
-        // Cek restore layanan jika semua tagihan pelanggan sudah lunas
-        // Delay sedikit untuk memastikan database connection sudah ditutup
-        setTimeout(async () => {
-            try {
-                const allInvoices = await billingManager.getInvoicesByCustomer(Number(customer_id));
-                const unpaid = (allInvoices || []).filter(i => i.status === 'unpaid');
-                if (unpaid.length === 0) {
-                    const customer = await billingManager.getCustomerById(Number(customer_id));
-                    if (customer && customer.status === 'suspended') {
-                        await serviceSuspension.restoreCustomerService(customer);
-                    }
-                }
-            } catch (restoreErr) {
-                console.error('Immediate restore check failed:', restoreErr);
-            }
-        }, 1000); // Delay 1 detik
 
         res.json({
             success: true,
             message: 'Payment recorded successfully',
-            payment_id: paymentId,
-            commission_amount: commissionAmount
+            payment_id: result.payment_id,
+            commission_amount: result.commission_amount
         });
-        
     } catch (error) {
         console.error('Error recording payment:', error);
         res.status(500).json({

@@ -7,14 +7,196 @@
     const { getCompanyHeader } = require('./message-templates');
     const { getSetting, getLocalTimestamp } = require('./settingsManager');
 
+    /** Diskon dari catatan admin: "… | Diskon: Rp 50.000 | …" (format id-ID) */
+    function parseDiscountFromPaymentNotes(notes) {
+        if (notes == null || notes === '') return 0;
+        const m = String(notes).match(/Diskon:\s*Rp\s*([\d.\s\u00a0]+)/i);
+        if (!m) return 0;
+        const num = m[1].replace(/\./g, '').replace(/\s/g, '').replace(/,/g, '').trim();
+        const n = parseInt(num, 10);
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+    }
+
+    function effectivePaymentDiscount(row) {
+        const col = Number(row.discount_amount);
+        if (Number.isFinite(col) && col > 0) return col;
+        return parseDiscountFromPaymentNotes(row.notes);
+    }
+
+    /** Nilai tagihan dari invoice (bukan bruto kolom payments.amount). */
+    function paymentInvoiceTagihan(row) {
+        const inv = Number(row.invoice_amount);
+        if (Number.isFinite(inv) && inv >= 0) return inv;
+        return Number(row.amount) || 0;
+    }
+
+    /** Setelah diskon: dasar "Lunas Kolektor" di UI & kartu terima setoran. */
+    function paymentJumlahSetelahDiskon(row) {
+        const tag = paymentInvoiceTagihan(row);
+        const disc = effectivePaymentDiscount(row);
+        return Math.max(0, Math.round((tag - disc) * 100) / 100);
+    }
+
+    /** Pool setoran ke kasir per baris: jumlah setelah diskon dikurangi komisi kolektor. */
+    function paymentRemittancePoolRp(row) {
+        const j = paymentJumlahSetelahDiskon(row);
+        const c = Number(row.commission_amount) || 0;
+        return Math.max(0, Math.round((j - c) * 100) / 100);
+    }
+
     class BillingManager {
         constructor() {
             this.dbPath = path.join(__dirname, '../data/billing.db');
             this.paymentGateway = new PaymentGatewayManager();
+            this._paymentsDiscountColumnEnsured = false;
+            this._remittanceNetAppliedEnsured = false;
             this.initDatabase();
             
             // Inisialisasi scheduler otomatis hapus foto usang (Umur > 60 Hari)
             this.autoCleanTwoMonthsOldPaymentProofs();
+        }
+
+        /** Pastikan kolom payments.discount_amount ada (ALTER bisa race dengan query pertama). */
+        async _ensurePaymentsDiscountColumn() {
+            if (this._paymentsDiscountColumnEnsured) return;
+            await new Promise((resolve) => {
+                this.db.run('ALTER TABLE payments ADD COLUMN discount_amount REAL DEFAULT 0', (err) => {
+                    if (err && !String(err.message || '').toLowerCase().includes('duplicate')) {
+                        try {
+                            logger.warn('[billing] payments.discount_amount:', err.message);
+                        } catch (_) {}
+                    }
+                    this._paymentsDiscountColumnEnsured = true;
+                    resolve();
+                });
+            });
+        }
+
+        /**
+         * Akumulasi net setoran ke kasir per baris payments (tanpa memecah baris untuk setoran parsial).
+         * Memperbaiki baris legacy hasil INSERT split "[setoran parsial terima]".
+         */
+        async _ensureRemittanceNetAppliedColumn() {
+            if (this._remittanceNetAppliedEnsured) return;
+            await new Promise((resolve) => {
+                this.db.run(
+                    'ALTER TABLE payments ADD COLUMN remittance_net_applied REAL NOT NULL DEFAULT 0',
+                    (err) => {
+                        if (err && !String(err.message || '').toLowerCase().includes('duplicate')) {
+                            try {
+                                logger.warn('[billing] payments.remittance_net_applied:', err.message);
+                            } catch (_) {}
+                        }
+                        resolve();
+                    }
+                );
+            });
+            try {
+                await this._repairCollectorPartialSplitPaymentRows();
+            } catch (e) {
+                try {
+                    logger.warn('[billing] repair partial split payments:', e.message);
+                } catch (_) {}
+            }
+            await new Promise((resolve) => {
+                this.db.run(
+                    `UPDATE payments
+                     SET remittance_net_applied = ROUND((amount - COALESCE(commission_amount, 0)) * 100) / 100.0
+                     WHERE payment_type = 'collector'
+                       AND remittance_status = 'remitted'
+                       AND ABS(COALESCE(remittance_net_applied, 0)) < 0.00001`,
+                    (err) => resolve()
+                );
+            });
+            this._remittanceNetAppliedEnsured = true;
+        }
+
+        async _repairCollectorPartialSplitPaymentRows() {
+            const dbAll = (sql, params = []) =>
+                new Promise((resolve, reject) => {
+                    this.db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
+                });
+            const dbGet = (sql, params = []) =>
+                new Promise((resolve, reject) => {
+                    this.db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+                });
+            const dbRun = (sql, params = []) =>
+                new Promise((resolve, reject) => {
+                    this.db.run(sql, params, function (err) {
+                        if (err) reject(err);
+                        else resolve({ changes: this.changes });
+                    });
+                });
+            for (let guard = 0; guard < 200; guard++) {
+                const children = await dbAll(
+                    `SELECT id, invoice_id, collector_id, amount, commission_amount, notes, remittance_status, remittance_date, remittance_notes
+                     FROM payments
+                     WHERE payment_type = 'collector'
+                       AND COALESCE(notes, '') LIKE '%[setoran parsial terima]%'
+                     ORDER BY id ASC
+                     LIMIT 80`
+                );
+                if (!children.length) break;
+                for (const ch of children) {
+                    const root = await dbGet(
+                        `SELECT id, amount, commission_amount, remittance_net_applied, remittance_status, remittance_date, remittance_notes
+                         FROM payments
+                         WHERE invoice_id = ? AND collector_id = ? AND payment_type = 'collector'
+                         ORDER BY id ASC
+                         LIMIT 1`,
+                        [ch.invoice_id, ch.collector_id]
+                    );
+                    if (!root || root.id === ch.id) {
+                        const cleaned = String(ch.notes || '')
+                            .replace(/\[setoran parsial terima\]/gi, '')
+                            .replace(/\s*\|\s*/g, ' | ')
+                            .replace(/^\s*\|\s*|\s*\|\s*$/g, '')
+                            .trim();
+                        await dbRun(`UPDATE payments SET notes = ? WHERE id = ?`, [cleaned, ch.id]);
+                        continue;
+                    }
+                    const chNet = (Number(ch.amount) || 0) - (Number(ch.commission_amount) || 0);
+                    await dbRun(
+                        `UPDATE payments SET
+                            amount = amount + ?,
+                            commission_amount = commission_amount + ?,
+                            remittance_net_applied = COALESCE(remittance_net_applied, 0) + ?
+                         WHERE id = ?`,
+                        [Number(ch.amount) || 0, Number(ch.commission_amount) || 0, chNet, root.id]
+                    );
+                    if (ch.remittance_status === 'remitted' && ch.remittance_date) {
+                        await dbRun(
+                            `UPDATE payments SET remittance_date = COALESCE(remittance_date, ?) WHERE id = ?`,
+                            [ch.remittance_date, root.id]
+                        );
+                        const rn = String(ch.remittance_notes || '').trim();
+                        if (rn) {
+                            await dbRun(
+                                `UPDATE payments SET remittance_notes = CASE
+                                    WHEN TRIM(COALESCE(remittance_notes, '')) = '' THEN ?
+                                    ELSE TRIM(remittance_notes) || ' | ' || ? END
+                                 WHERE id = ?`,
+                                [rn, rn, root.id]
+                            );
+                        }
+                    }
+                    await dbRun(`DELETE FROM payments WHERE id = ?`, [ch.id]);
+                    const r2 = await dbGet(
+                        `SELECT amount, commission_amount, remittance_net_applied, remittance_status
+                         FROM payments WHERE id = ?`,
+                        [root.id]
+                    );
+                    if (r2) {
+                        const net = (Number(r2.amount) || 0) - (Number(r2.commission_amount) || 0);
+                        const applied = Number(r2.remittance_net_applied) || 0;
+                        const done = net > 0 && applied + 0.01 >= net;
+                        await dbRun(
+                            `UPDATE payments SET remittance_status = ? WHERE id = ?`,
+                            [done ? 'remitted' : 'pending', root.id]
+                        );
+                    }
+                }
+            }
         }
 
         // Hot-reload payment gateway configuration
@@ -250,6 +432,18 @@
                             // PENTING: Auto-sync ke RADIUS jika status berubah menjadi 'suspended' atau 'active'
                             await this._autoSyncStatusToRadius(existing, oldStatus, status);
                         } catch (_) {}
+                        const st = String(status || '').toLowerCase();
+                        const oldSt = String(oldStatus || '').toLowerCase();
+                        const nowIsolir = st === 'suspended' || st === 'isolir';
+                        const wasIsolir = oldSt === 'suspended' || oldSt === 'isolir';
+                        if (nowIsolir && !wasIsolir) {
+                            setImmediate(() => {
+                                try {
+                                    const cfn = require('./collectorFieldNotifications');
+                                    cfn.notifyCustomerIsolir(Number(id), existing.name || '');
+                                } catch (_) {}
+                            });
+                        }
                         resolve({ id, status });
                     });
                 } catch (e) {
@@ -342,6 +536,20 @@
                                     status: newStatus
                                 };
                                 await this._autoSyncStatusToRadius(updatedCustomer, oldStatus, newStatus);
+                                const nst = String(newStatus || '').toLowerCase();
+                                const ost = String(oldStatus || '').toLowerCase();
+                                const nowIsolir = nst === 'suspended' || nst === 'isolir';
+                                const wasIsolir = ost === 'suspended' || ost === 'isolir';
+                                if (nowIsolir && !wasIsolir) {
+                                    setImmediate(() => {
+                                        try {
+                                            const cfn = require('./collectorFieldNotifications');
+                                            const nm =
+                                                (name !== undefined ? name : oldCustomer.name) || '';
+                                            cfn.notifyCustomerIsolir(Number(id), nm);
+                                        } catch (_) {}
+                                    });
+                                }
                             }
                             
                             // Sinkronisasi cable routes jika ada data ODP atau cable
@@ -1041,6 +1249,14 @@
             }
         });
 
+        this.db.run('ALTER TABLE payments ADD COLUMN discount_amount REAL DEFAULT 0', (err) => {
+            if (err && !err.message.includes('duplicate column name')) {
+                console.error('Error adding discount_amount to payments:', err);
+            } else if (!err) {
+                console.log('Added discount_amount column to payments table');
+            }
+        });
+
         // Tambahkan kolom password ke customers untuk login via username/password
         this.db.run("ALTER TABLE customers ADD COLUMN password TEXT", (err) => {
             if (err && !err.message.includes('duplicate column name')) {
@@ -1622,7 +1838,85 @@
         });
     }
 
+    /** Tabel master `areas` (admin) dipakai untuk cocokkan area_id pelanggan dengan teks di collector_areas. */
+    async _hasAreasReferenceTable() {
+        return new Promise((resolve) => {
+            this.db.all(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='areas'",
+                [],
+                (err, rows) => resolve(!err && rows && rows.length > 0)
+            );
+        });
+    }
+
+    /**
+     * SQL boolean: pelanggan c berada di wilayah yang sama dengan baris collector_areas (alias).
+     * Mendukung c.area (teks) dan c.area_id → areas.nama_area / kode_area.
+     */
+    _sqlCustomerMatchesCollectorAreaRow(hasAreas, areaAlias = 'cra') {
+        const a = areaAlias;
+        const byCustomerAreaText = `(TRIM(IFNULL(c.area, '')) != '' AND LOWER(TRIM(c.area)) = LOWER(TRIM(${a}.area)))`;
+        if (!hasAreas) {
+            return byCustomerAreaText;
+        }
+        return `(
+            ${byCustomerAreaText}
+            OR (
+                c.area_id IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM areas ar
+                    WHERE ar.id = c.area_id
+                    AND (
+                        (TRIM(IFNULL(ar.nama_area, '')) != '' AND LOWER(TRIM(ar.nama_area)) = LOWER(TRIM(${a}.area)))
+                        OR (TRIM(IFNULL(ar.kode_area, '')) != '' AND LOWER(TRIM(ar.kode_area)) = LOWER(TRIM(${a}.area)))
+                    )
+                )
+            )
+        )`;
+    }
+
+    /**
+     * Kolektor yang "melihat" pelanggan ini di mobile (penugasan manual ∪ cocok area collector_areas).
+     */
+    async getCollectorIdsForCustomer(customerId) {
+        const cid = parseInt(String(customerId), 10);
+        if (!Number.isFinite(cid) || cid <= 0) return [];
+        const hasAreas = await this._hasAreasReferenceTable();
+        const areaRowMatch = this._sqlCustomerMatchesCollectorAreaRow(hasAreas, 'cra');
+        const sql = `
+            SELECT DISTINCT x.collector_id AS collector_id FROM (
+                SELECT ca.collector_id AS collector_id
+                FROM collector_assignments ca
+                WHERE ca.customer_id = ?
+                UNION
+                SELECT cra.collector_id AS collector_id
+                FROM customers c
+                INNER JOIN collector_areas cra ON (${areaRowMatch})
+                WHERE c.id = ?
+            ) x
+            WHERE x.collector_id IS NOT NULL
+        `;
+        return new Promise((resolve, reject) => {
+            this.db.all(sql, [cid, cid], (err, rows) => {
+                if (err) reject(err);
+                else {
+                    const out = [];
+                    const seen = new Set();
+                    for (const r of rows || []) {
+                        const id = parseInt(String(r.collector_id), 10);
+                        if (Number.isFinite(id) && id > 0 && !seen.has(id)) {
+                            seen.add(id);
+                            out.push(id);
+                        }
+                    }
+                    resolve(out);
+                }
+            });
+        });
+    }
+
     async getCollectorCustomers(collectorId, month = null, year = null) {
+        const hasAreas = await this._hasAreasReferenceTable();
+        const areaRowMatch = this._sqlCustomerMatchesCollectorAreaRow(hasAreas, 'cra');
         return new Promise(async (resolve, reject) => {
             // Kita gabungkan customer yang di-mapping area-nya DAN yang di-mapping manual
             const sql = `
@@ -1663,8 +1957,11 @@ ${year && month ? `
                 LEFT JOIN packages p ON c.package_id = p.id
                 LEFT JOIN customer_router_map m ON m.customer_id = c.id
                 LEFT JOIN routers r ON r.id = m.router_id
-                -- Filter Area: Ambil customer yang areanya sesuai dengan area yang di-assign ke collector
-                LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != "" AND c.area = cra.area AND cra.collector_id = ?)
+                -- Area: teks customers.area ATAU area_id → areas.nama_area/kode_area (sama seperti filter admin)
+                LEFT JOIN collector_areas cra ON (
+                    cra.collector_id = ?
+                    AND ${areaRowMatch}
+                )
                 -- Filter Manual: Ambil customer yang di-mapping manual ke collector
                 LEFT JOIN collector_assignments ca ON (c.id = ca.customer_id AND ca.collector_id = ?)
                 WHERE cra.collector_id IS NOT NULL OR ca.collector_id IS NOT NULL
@@ -2173,27 +2470,35 @@ ${year && month ? `
         });
     }
 
-    // Search customers by name, phone, or username
+    // Search customers by name, phone, username, PPPoE, atau ID pelanggan (6 digit)
     async searchCustomers(searchTerm) {
         return new Promise((resolve, reject) => {
             const searchPattern = `%${searchTerm}%`;
-            
+
+            // Skema customers memakai join_date (bukan created_at/updated_at)
             const sql = `
-                SELECT id, username, name, phone, email, address, pppoe_username, 
-                       package_id, status, created_at, updated_at
-                FROM customers 
-                WHERE name LIKE ? OR phone LIKE ? OR username LIKE ? OR pppoe_username LIKE ?
-                ORDER BY name ASC
+                SELECT c.id, c.customer_id, c.username, c.password, c.name, c.phone, c.email, c.address,
+                       c.pppoe_username, c.package_id, c.status, c.join_date,
+                       p.name AS package_name
+                FROM customers c
+                LEFT JOIN packages p ON c.package_id = p.id
+                WHERE c.name LIKE ? OR c.phone LIKE ? OR c.username LIKE ? OR c.pppoe_username LIKE ?
+                   OR (c.customer_id IS NOT NULL AND TRIM(CAST(c.customer_id AS TEXT)) != '' AND CAST(c.customer_id AS TEXT) LIKE ?)
+                ORDER BY c.name ASC
                 LIMIT 20
             `;
-            
-            this.db.all(sql, [searchPattern, searchPattern, searchPattern, searchPattern], (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows || []);
+
+            this.db.all(
+                sql,
+                [searchPattern, searchPattern, searchPattern, searchPattern, searchPattern],
+                (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(rows || []);
+                    }
                 }
-            });
+            );
         });
     }
 
@@ -2824,7 +3129,21 @@ ${year && month ? `
                 if (err) {
                     reject(err);
                 } else {
-                    resolve({ id: this.lastID, invoice_number, ...invoiceData });
+                    const newId = this.lastID;
+                    const cid = customer_id != null ? parseInt(String(customer_id), 10) : null;
+                    if (Number.isFinite(cid) && cid > 0) {
+                        const amtLbl =
+                            amount != null
+                                ? `Rp ${Number(amount).toLocaleString('id-ID')}`
+                                : '';
+                        setImmediate(() => {
+                            try {
+                                const cfn = require('./collectorFieldNotifications');
+                                cfn.notifyNewInvoice(cid, newId, invoice_number, amtLbl);
+                            } catch (_) {}
+                        });
+                    }
+                    resolve({ id: newId, invoice_number, ...invoiceData });
                 }
             });
         });
@@ -3346,6 +3665,62 @@ ${year && month ? `
         });
     }
 
+    /** Satu query untuk cek duplikat bulanan — hindari N× getInvoicesByCustomerAndDateRange saat bulk generate */
+    async getDistinctCustomerUsernamesWithInvoicesBetween(startDate, endDate) {
+        return new Promise((resolve, reject) => {
+            const sql = `
+                SELECT DISTINCT c.username
+                FROM invoices i
+                JOIN customers c ON i.customer_id = c.id
+                WHERE i.created_at BETWEEN ? AND ?
+            `;
+            this.db.all(sql, [startDate.toISOString(), endDate.toISOString()], (err, rows) => {
+                if (err) reject(err);
+                else resolve(new Set((rows || []).map((r) => r.username).filter(Boolean)));
+            });
+        });
+    }
+
+    /** Kunci yang dipakai scheduler member (hotspot_username || username) jika ada invoice di rentang tanggal */
+    async getMemberIdentityKeysWithInvoicesBetween(startDate, endDate) {
+        return new Promise((resolve, reject) => {
+            const sql = `
+                SELECT m.hotspot_username, m.username
+                FROM invoices i
+                JOIN members m ON i.member_id = m.id
+                WHERE i.created_at BETWEEN ? AND ?
+            `;
+            this.db.all(sql, [startDate.toISOString(), endDate.toISOString()], (err, rows) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                const keys = new Set();
+                for (const r of rows || []) {
+                    const u = r.hotspot_username != null && String(r.hotspot_username).trim()
+                        ? String(r.hotspot_username).trim()
+                        : '';
+                    const n = r.username != null && String(r.username).trim()
+                        ? String(r.username).trim()
+                        : '';
+                    if (u) keys.add(u);
+                    if (n) keys.add(n);
+                }
+                resolve(keys);
+            });
+        });
+    }
+
+    /** Semua baris packages untuk cache id → row (termasuk non-aktif) */
+    async getAllPackagesByIdMap() {
+        return new Promise((resolve, reject) => {
+            this.db.all('SELECT * FROM packages', [], (err, rows) => {
+                if (err) reject(err);
+                else resolve(new Map((rows || []).map((p) => [p.id, p])));
+            });
+        });
+    }
+
     async getInvoiceById(id) {
         return new Promise((resolve, reject) => {
             // Check if members table exists
@@ -3597,13 +3972,16 @@ ${year && month ? `
     async recordPayment(paymentData) {
         return new Promise(async (resolve, reject) => {
             try {
-                const { invoice_id, amount, payment_method, reference_number, notes, payment_date } = paymentData;
-                let sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes) VALUES (?, ?, ?, ?, ?)`;
-                let params = [invoice_id, amount, payment_method, reference_number, notes];
+                await this._ensurePaymentsDiscountColumn();
+                const { invoice_id, amount, payment_method, reference_number, notes, payment_date, discount_amount } =
+                    paymentData;
+                const disc = Math.max(0, Number(discount_amount) || 0);
+                let sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes, discount_amount) VALUES (?, ?, ?, ?, ?, ?)`;
+                let params = [invoice_id, amount, payment_method, reference_number, notes, disc];
 
                 if (payment_date) {
-                    sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes, payment_date) VALUES (?, ?, ?, ?, ?, ?)`;
-                    params = [invoice_id, amount, payment_method, reference_number, notes, payment_date];
+                    sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes, payment_date, discount_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+                    params = [invoice_id, amount, payment_method, reference_number, notes, payment_date, disc];
                 }
 
                 this.db.run(sql, params, function(err) {
@@ -3624,10 +4002,20 @@ ${year && month ? `
     }
 
     async recordCollectorPayment(paymentData) {
+        await this._ensurePaymentsDiscountColumn();
+        const {
+            invoice_id,
+            amount,
+            payment_method,
+            reference_number,
+            notes,
+            collector_id,
+            commission_amount,
+            discount_amount: discountAmountRaw
+        } = paymentData;
+        const discIns = Math.max(0, Number(discountAmountRaw) || 0);
+        const self = this;
         return new Promise((resolve, reject) => {
-            const { invoice_id, amount, payment_method, reference_number, notes, collector_id, commission_amount } = paymentData;
-            const self = this; // Store reference to this
-            
             // Set database timeout and WAL mode for better concurrency
             this.db.run('PRAGMA busy_timeout=30000', (err) => {
                 if (err) {
@@ -3651,12 +4039,13 @@ ${year && month ? `
                         // Insert payment
                         const sql = `INSERT INTO payments (
                             invoice_id, amount, payment_method, reference_number, notes, 
-                            collector_id, commission_amount, payment_type
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'collector')`;
+                            collector_id, commission_amount, payment_type, discount_amount
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'collector', ?)`;
                         
                         self.db.run(sql, [
                             invoice_id, amount, payment_method, reference_number, notes,
-                            collector_id, commission_amount || 0
+                            collector_id, commission_amount || 0,
+                            discIns
                         ], function(err) {
                             if (err) {
                                 self.db.run('ROLLBACK', (rollbackErr) => {
@@ -3777,11 +4166,16 @@ ${year && month ? `
     }
 
     async getCollectorAssignedCustomerCount(collectorId) {
+        const hasAreas = await this._hasAreasReferenceTable();
+        const areaRowMatch = this._sqlCustomerMatchesCollectorAreaRow(hasAreas, 'cra');
         return new Promise((resolve, reject) => {
             const sql = `
                 SELECT COUNT(DISTINCT c.id) as count 
                 FROM customers c 
-                LEFT JOIN collector_areas cra ON (c.area IS NOT NULL AND c.area != "" AND c.area = cra.area AND cra.collector_id = ?)
+                LEFT JOIN collector_areas cra ON (
+                    cra.collector_id = ?
+                    AND ${areaRowMatch}
+                )
                 LEFT JOIN collector_assignments ca ON (c.id = ca.customer_id AND ca.collector_id = ?)
                 WHERE cra.collector_id IS NOT NULL OR ca.collector_id IS NOT NULL
             `;
@@ -3854,13 +4248,31 @@ ${year && month ? `
         const todayStr = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
 
         try {
-            const qTagihan = `
-                SELECT COUNT(i.id) as count, COALESCE(SUM(i.amount), 0) as total
+            await this._ensureRemittanceNetAppliedColumn();
+            const hasAreas = await this._hasAreasReferenceTable();
+            const areaRowMatch = this._sqlCustomerMatchesCollectorAreaRow(hasAreas, 'cra');
+            /** Sama pool pelanggan dengan getCollectorCustomers: area kolektor ATAU penugasan manual. */
+            const poolWhere = `
+                (cra.collector_id IS NOT NULL OR casm.collector_id IS NOT NULL)
+                AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ?
+            `;
+            const poolJoin = `
                 FROM invoices i
                 INNER JOIN customers c ON i.customer_id = c.id
-                INNER JOIN collector_areas ca ON c.area = ca.area
-                WHERE ca.collector_id = ? 
-                AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ?
+                LEFT JOIN collector_areas cra ON cra.collector_id = ? AND ${areaRowMatch}
+                LEFT JOIN collector_assignments casm ON casm.customer_id = c.id AND casm.collector_id = ?
+            `;
+            const qTagihan = `
+                SELECT COUNT(i.id) as count, COALESCE(SUM(i.amount), 0) as total
+                ${poolJoin}
+                WHERE ${poolWhere}
+            `;
+
+            /** Sama kohort dengan qTagihan, hanya invoice sudah lunas (admin / portal / kolektor). Untuk progress dashboard. */
+            const qTagihanLunas = `
+                SELECT COUNT(i.id) as count, COALESCE(SUM(i.amount), 0) as total
+                ${poolJoin}
+                WHERE i.status = 'paid' AND ${poolWhere}
             `;
             
             const qLunas = `
@@ -3873,11 +4285,8 @@ ${year && month ? `
             
             const qBelumLunas = `
                 SELECT COUNT(DISTINCT i.customer_id) as count, COALESCE(SUM(i.amount), 0) as total
-                FROM invoices i
-                INNER JOIN customers c ON i.customer_id = c.id
-                INNER JOIN collector_areas ca ON c.area = ca.area
-                WHERE ca.collector_id = ? AND i.status = 'unpaid'
-                AND strftime('%m', i.created_at) = ? AND strftime('%Y', i.created_at) = ?
+                ${poolJoin}
+                WHERE i.status = 'unpaid' AND ${poolWhere}
             `;
             
             const qLunasHariIni = `
@@ -3890,26 +4299,38 @@ ${year && month ? `
             
             const qSetoran = `
                 SELECT 
-                    COALESCE(SUM(CASE WHEN remittance_status = 'remitted' THEN (amount - commission_amount) ELSE 0 END), 0) as sudah_setor,
-                    COALESCE(SUM(CASE WHEN remittance_status IS NULL THEN (amount - commission_amount) ELSE 0 END), 0) as belum_setor
-                FROM payments
-                WHERE collector_id = ? AND payment_type = 'collector'
-                AND strftime('%m', payment_date) = ? AND strftime('%Y', payment_date) = ?
+                    COALESCE(SUM(COALESCE(p.remittance_net_applied, 0)), 0) as sudah_setor,
+                    COALESCE(SUM(
+                        CASE WHEN (p.remittance_status IS NULL OR p.remittance_status = 'pending')
+                             AND (
+                                (COALESCE(i.amount, 0) - COALESCE(p.discount_amount, 0) - COALESCE(p.commission_amount, 0))
+                                - COALESCE(p.remittance_net_applied, 0)
+                             ) > 0.009
+                        THEN (COALESCE(i.amount, 0) - COALESCE(p.discount_amount, 0) - COALESCE(p.commission_amount, 0))
+                             - COALESCE(p.remittance_net_applied, 0)
+                        ELSE 0 END
+                    ), 0) as belum_setor
+                FROM payments p
+                INNER JOIN invoices i ON i.id = p.invoice_id
+                WHERE p.collector_id = ? AND p.payment_type = 'collector'
+                AND strftime('%m', p.payment_date) = ? AND strftime('%Y', p.payment_date) = ?
             `;
 
             const runGet = (sql, params) => new Promise((resolve, reject) => {
                 this.db.get(sql, params, (err, row) => err ? reject(err) : resolve(row || {}));
             });
 
-            const [tagihan, lunas, belumLunas, hariIni, setoran] = await Promise.all([
-                runGet(qTagihan, [collectorId, filterMonth, filterYear]),
+            const poolParams = [collectorId, collectorId, filterMonth, filterYear];
+            const [tagihan, tagihanLunas, lunas, belumLunas, hariIni, setoran] = await Promise.all([
+                runGet(qTagihan, poolParams),
+                runGet(qTagihanLunas, poolParams),
                 runGet(qLunas, [collectorId, filterMonth, filterYear]),
-                runGet(qBelumLunas, [collectorId, filterMonth, filterYear]),
+                runGet(qBelumLunas, poolParams),
                 runGet(qLunasHariIni, [collectorId, todayStr]),
                 runGet(qSetoran, [collectorId, filterMonth, filterYear])
             ]);
 
-            return { tagihan, lunas, belumLunas, hariIni, setoran };
+            return { tagihan, tagihanLunas, lunas, belumLunas, hariIni, setoran };
         } catch (error) {
             console.error("Error getCollectorDashboardStats:", error);
             throw error;
@@ -3982,25 +4403,48 @@ ${year && month ? `
 
     async getCollectorAllPayments(collectorId) {
         return new Promise((resolve, reject) => {
-            this.db.all(`
-                SELECT cp.*, c.name as customer_name, c.phone as customer_phone
-                FROM collector_payments cp
-                LEFT JOIN customers c ON cp.customer_id = c.id
-                WHERE cp.collector_id = ?
-                ORDER BY cp.collected_at DESC
-            `, [collectorId], (err, rows) => {
-                if (err) reject(err);
-                else {
-                    const validRows = (rows || []).map(row => ({
-                        ...row,
-                        payment_amount: Math.round(parseFloat(row.payment_amount || 0)),
-                        commission_amount: Math.round(parseFloat(row.commission_amount || 0)),
-                        customer_name: row.customer_name || 'Unknown Customer',
-                        collected_at: row.collected_at || new Date().toISOString()
-                    }));
-                    resolve(validRows);
+            // Riwayat dari `payments` (bukan `collector_payments`): baris log kolektor
+            // di collector_payments tidak dihapus saat admin membatalkan pembayaran,
+            // sedangkan baris payments dihapus — supaya riwayat app kolektor selaras.
+            this.db.all(
+                `
+                SELECT
+                    p.id,
+                    p.invoice_id,
+                    p.collector_id,
+                    i.customer_id,
+                    p.amount AS payment_amount,
+                    COALESCE(p.discount_amount, 0) AS discount_amount,
+                    COALESCE(p.commission_amount, 0) AS commission_amount,
+                    p.payment_method,
+                    p.notes,
+                    'completed' AS status,
+                    COALESCE(p.payment_date, CURRENT_TIMESTAMP) AS collected_at,
+                    c.name AS customer_name,
+                    c.phone AS customer_phone
+                FROM payments p
+                INNER JOIN invoices i ON i.id = p.invoice_id
+                LEFT JOIN customers c ON c.id = i.customer_id
+                WHERE p.collector_id = ?
+                  AND IFNULL(p.payment_type, 'collector') = 'collector'
+                ORDER BY collected_at DESC
+            `,
+                [collectorId],
+                (err, rows) => {
+                    if (err) reject(err);
+                    else {
+                        const validRows = (rows || []).map((row) => ({
+                            ...row,
+                            payment_amount: Math.round(parseFloat(row.payment_amount || 0)),
+                            discount_amount: Math.round(parseFloat(row.discount_amount || 0)),
+                            commission_amount: Math.round(parseFloat(row.commission_amount || 0)),
+                            customer_name: row.customer_name || 'Unknown Customer',
+                            collected_at: row.collected_at || new Date().toISOString()
+                        }));
+                        resolve(validRows);
+                    }
                 }
-            });
+            );
         });
     }
 
@@ -4267,6 +4711,244 @@ ${year && month ? `
                 }
             });
         });
+    }
+
+    /**
+     * Riwayat pembayaran (admin + kolektor + tipe lain): pelanggan atau member.
+     * Tanpa kolom remittance di UI — gunakan untuk halaman all-payments.
+     */
+    _allPaymentsHistoryWhere(filters) {
+        let sql = `
+            FROM payments p
+            JOIN invoices i ON p.invoice_id = i.id
+            LEFT JOIN customers c ON i.customer_id = c.id
+            LEFT JOIN members m ON i.member_id = m.id
+            LEFT JOIN collectors col ON p.collector_id = col.id
+            WHERE 1=1
+        `;
+        const params = [];
+        if (filters.from) {
+            sql += ` AND date(p.payment_date) >= date(?)`;
+            params.push(filters.from);
+        }
+        if (filters.to) {
+            sql += ` AND date(p.payment_date) <= date(?)`;
+            params.push(filters.to);
+        }
+        if (filters.collector_id) {
+            sql += ` AND p.collector_id = ?`;
+            params.push(filters.collector_id);
+        }
+        if (filters.q) {
+            const term = `%${String(filters.q).trim()}%`;
+            sql += ` AND (
+                COALESCE(c.name, '') LIKE ? OR COALESCE(m.name, '') LIKE ?
+                OR COALESCE(c.phone, '') LIKE ? OR COALESCE(m.phone, '') LIKE ?
+                OR COALESCE(i.invoice_number, '') LIKE ?
+                OR COALESCE(p.notes, '') LIKE ?
+                OR COALESCE(col.name, '') LIKE ?
+            )`;
+            params.push(term, term, term, term, term, term, term);
+        }
+        return { sql, params };
+    }
+
+    async getAllPaymentsHistory(filters = {}) {
+        await this._ensurePaymentsDiscountColumn();
+        await this._ensureRemittanceNetAppliedColumn();
+        const { sql: whereSql, params: whereParams } = this._allPaymentsHistoryWhere(filters);
+        const limit = Math.min(2500, Math.max(1, parseInt(String(filters.limit || 1500), 10) || 1500));
+        const params = [...whereParams, limit];
+        return new Promise((resolve, reject) => {
+            const sql = `
+                SELECT
+                    p.id,
+                    p.payment_date,
+                    p.amount,
+                    p.commission_amount,
+                    p.payment_method,
+                    p.payment_type,
+                    p.notes,
+                    p.collector_id,
+                    p.invoice_id,
+                    p.remittance_status,
+                    COALESCE(p.discount_amount, 0) as discount_amount,
+                    COALESCE(i.amount, 0) as invoice_amount,
+                    i.invoice_number,
+                    i.status as invoice_status,
+                    COALESCE(c.name, m.name, '—') as customer_name,
+                    COALESCE(c.phone, m.phone, '') as customer_phone,
+                    col.name as collector_name
+                ${whereSql}
+                ORDER BY datetime(p.payment_date) DESC, p.id DESC
+                LIMIT ?
+            `;
+            this.db.all(sql, params, (err, rows) => {
+                if (err) reject(err);
+                else {
+                    const mapped = (rows || []).map((r) => {
+                        const disc = effectivePaymentDiscount(r);
+                        const tagihan = paymentInvoiceTagihan(r);
+                        const jumlah = paymentJumlahSetelahDiskon({ ...r, discount_amount: disc });
+                        return {
+                            ...r,
+                            discount_amount: disc,
+                            invoice_tagihan: tagihan,
+                            jumlah_setelah_diskon: jumlah
+                        };
+                    });
+                    resolve(mapped);
+                }
+            });
+        });
+    }
+
+    async getAllPaymentsHistorySummary(filters = {}) {
+        await this._ensurePaymentsDiscountColumn();
+        await this._ensureRemittanceNetAppliedColumn();
+        const { sql: whereSql, params: whereParams } = this._allPaymentsHistoryWhere(filters);
+        const aggSql = `
+                SELECT
+                    COUNT(*) as transaction_count,
+                    COALESCE(SUM(p.amount), 0) as total_amount,
+                    COALESCE(SUM(COALESCE(p.commission_amount, 0)), 0) as total_commission
+                ${whereSql}
+            `;
+        const whereRestIdx = whereSql.indexOf('WHERE 1=1');
+        const whereRest = whereRestIdx >= 0 ? whereSql.slice(whereRestIdx + 'WHERE 1=1'.length) : '';
+        const discSql = `
+                SELECT COALESCE(i.amount, 0) as invoice_amount, COALESCE(p.discount_amount, 0) as discount_amount, p.notes
+                FROM payments p
+                JOIN invoices i ON p.invoice_id = i.id
+                LEFT JOIN customers c ON i.customer_id = c.id
+                LEFT JOIN members m ON i.member_id = m.id
+                LEFT JOIN collectors col ON p.collector_id = col.id
+                WHERE 1=1
+                ${whereRest}
+            `;
+        return new Promise((resolve, reject) => {
+            this.db.get(aggSql, whereParams, (err, row) => {
+                if (err) return reject(err);
+                this.db.all(discSql, whereParams, (err2, discRows) => {
+                    if (err2) return reject(err2);
+                    let total_discount = 0;
+                    let total_tagihan = 0;
+                    for (const r of discRows || []) {
+                        const disc = effectivePaymentDiscount({
+                            discount_amount: r.discount_amount,
+                            notes: r.notes
+                        });
+                        total_discount += disc;
+                        const tag = paymentInvoiceTagihan(r);
+                        total_tagihan += tag;
+                    }
+                    const total_commission = row ? Number(row.total_commission) || 0 : 0;
+                    const total_net = Math.round(total_tagihan - total_discount - total_commission);
+                    resolve({
+                        transaction_count: row ? parseInt(row.transaction_count, 10) || 0 : 0,
+                        total_amount: row ? Number(row.total_amount) || 0 : 0,
+                        total_tagihan,
+                        total_commission,
+                        total_net,
+                        total_discount
+                    });
+                });
+            });
+        });
+    }
+
+    /**
+     * Batalkan satu baris pembayaran (admin): hapus baris payments, kembalikan invoice ke unpaid bila sisa pembayaran tidak menutupi tagihan.
+     * Menghapus expense komisi kolektor yang cocok (jika ada). Tidak memblokir remitted/parsial — untuk bereskan data kacau di kantor.
+     */
+    async cancelPaymentById(paymentId) {
+        const pid = parseInt(String(paymentId), 10);
+        if (!Number.isFinite(pid) || pid <= 0) {
+            throw new Error('ID pembayaran tidak valid');
+        }
+
+        const dbGet = (sql, params = []) =>
+            new Promise((resolve, reject) => {
+                this.db.get(sql, params, (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                });
+            });
+        const dbRun = (sql, params = []) =>
+            new Promise((resolve, reject) => {
+                this.db.run(sql, params, function (err) {
+                    if (err) reject(err);
+                    else resolve({ changes: this.changes });
+                });
+            });
+
+        await dbRun('BEGIN IMMEDIATE');
+        try {
+            const payment = await dbGet('SELECT * FROM payments WHERE id = ?', [pid]);
+            if (!payment) {
+                throw new Error('Pembayaran tidak ditemukan');
+            }
+
+            const invoiceId = payment.invoice_id;
+            const commission = Number(payment.commission_amount) || 0;
+            const collectorId = payment.collector_id;
+
+            if (commission > 0 && collectorId) {
+                await dbRun(
+                    `DELETE FROM expenses
+                     WHERE category = 'Operasional'
+                       AND description LIKE 'Komisi Kolektor%'
+                       AND notes LIKE '%pembayaran invoice ' || ? || ' via kolektor%'
+                       AND ABS(CAST(amount AS REAL) - ?) < 0.05`,
+                    [String(invoiceId), commission]
+                );
+            }
+
+            const del = await dbRun('DELETE FROM payments WHERE id = ?', [pid]);
+            if (!del.changes) {
+                throw new Error('Gagal menghapus pembayaran');
+            }
+
+            const inv = await dbGet('SELECT id, amount, status FROM invoices WHERE id = ?', [invoiceId]);
+            const sumRow = await dbGet(
+                'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE invoice_id = ?',
+                [invoiceId]
+            );
+            const totalPaid = Number(sumRow?.total) || 0;
+            const invAmount = Number(inv?.amount) || 0;
+            const tol = 0.009;
+            let invoiceRevertedToUnpaid = false;
+            if (totalPaid + tol < invAmount) {
+                await this.updateInvoiceStatus(invoiceId, 'unpaid', null);
+                invoiceRevertedToUnpaid = true;
+            }
+
+            await dbRun('COMMIT');
+            try {
+                logger.info(`[BILLING] Payment ${pid} cancelled; invoice ${invoiceId} unpaid=${invoiceRevertedToUnpaid}`);
+            } catch (_) {}
+            if (collectorId) {
+                setImmediate(() => {
+                    try {
+                        const cfn = require('./collectorFieldNotifications');
+                        cfn.notifyPaymentCancelled(
+                            Number(collectorId),
+                            pid,
+                            `Invoice #${invoiceId} · baris pembayaran dihapus admin`
+                        );
+                    } catch (_) {}
+                });
+            }
+            return {
+                success: true,
+                payment_id: pid,
+                invoice_id: invoiceId,
+                invoice_reverted_unpaid: invoiceRevertedToUnpaid
+            };
+        } catch (e) {
+            await dbRun('ROLLBACK').catch(() => {});
+            throw e;
+        }
     }
 
     async getAllCollectors() {
@@ -6579,68 +7261,190 @@ async handlePaymentWebhook(payload, gateway) {
 
     // Method untuk mendapatkan kolektor dengan pending amounts dan statistik (untuk remittance)
     async getCollectorsWithPendingAmounts(month = null, year = null) {
-        return new Promise((resolve, reject) => {
-            let dateFilter = "";
-            let params = [];
-            
-            if (month && year) {
-                const startMonth = String(month).padStart(2, '0');
-                dateFilter = " AND strftime('%m', payment_date) = ? AND strftime('%Y', payment_date) = ?";
-                params.push(startMonth, String(year));
+        await this._ensureRemittanceNetAppliedColumn();
+        const collectors = await new Promise((resolve, reject) => {
+            this.db.all(
+                `SELECT id, name, phone, commission_rate FROM collectors WHERE status = 'active' ORDER BY name`,
+                [],
+                (err, rows) => (err ? reject(err) : resolve(rows || []))
+            );
+        });
+        let dateWhere = '';
+        const payParams = [];
+        if (month && year) {
+            dateWhere = ` AND strftime('%m', p.payment_date) = ? AND strftime('%Y', p.payment_date) = ?`;
+            payParams.push(String(month).padStart(2, '0'), String(year));
+        }
+        const payments = await new Promise((resolve, reject) => {
+            this.db.all(
+                `SELECT p.collector_id, p.amount, p.commission_amount, p.discount_amount, p.notes,
+                        COALESCE(p.remittance_net_applied, 0) as remittance_net_applied, p.remittance_status, p.payment_date,
+                        COALESCE(i.amount, 0) as invoice_amount
+                 FROM payments p
+                 INNER JOIN invoices i ON i.id = p.invoice_id
+                 WHERE p.payment_type = 'collector' ${dateWhere}`,
+                payParams,
+                (err, rows) => (err ? reject(err) : resolve(rows || []))
+            );
+        });
+        const sums = {};
+        for (const c of collectors) {
+            sums[c.id] = {
+                total_lunas_gross: 0,
+                sudah_setor: 0,
+                pending_amount: 0,
+                pending_payments_count: 0
+            };
+        }
+        for (const p of payments) {
+            const cid = p.collector_id;
+            if (!sums[cid]) continue;
+            const jumlah = paymentJumlahSetelahDiskon(p);
+            sums[cid].total_lunas_gross += jumlah;
+            sums[cid].sudah_setor += Number(p.remittance_net_applied) || 0;
+            const pool = paymentRemittancePoolRp(p);
+            const applied = Number(p.remittance_net_applied) || 0;
+            const remain = pool - applied;
+            if (
+                (p.remittance_status == null || p.remittance_status === 'pending') &&
+                remain > 0.009
+            ) {
+                sums[cid].pending_amount += remain;
+                sums[cid].pending_payments_count += 1;
             }
+        }
+        return collectors.map((c) => ({
+            ...c,
+            ...(sums[c.id] || {
+                total_lunas_gross: 0,
+                sudah_setor: 0,
+                pending_amount: 0,
+                pending_payments_count: 0
+            })
+        }));
+    }
 
-            const sql = `
-                SELECT 
-                    c.id,
-                    c.name,
-                    c.phone,
-                    c.commission_rate,
-                    -- Total Lunas (Gross)
-                    (
-                        SELECT COALESCE(SUM(amount), 0)
-                        FROM payments
-                        WHERE collector_id = c.id AND payment_type = 'collector'
-                        ${dateFilter.replace(/payment_date/g, 'payments.payment_date')}
-                    ) as total_lunas_gross,
-                    -- Sudah Setor (Netto)
-                    (
-                        SELECT COALESCE(SUM(amount - commission_amount), 0)
-                        FROM payments
-                        WHERE collector_id = c.id AND payment_type = 'collector' AND remittance_status = 'remitted'
-                        ${dateFilter.replace(/payment_date/g, 'payments.payment_date')}
-                    ) as sudah_setor,
-                    -- Belum Setor (Netto)
-                    (
-                        SELECT COALESCE(SUM(amount - commission_amount), 0)
-                        FROM payments
-                        WHERE collector_id = c.id AND payment_type = 'collector' AND remittance_status IS NULL
-                        ${dateFilter.replace(/payment_date/g, 'payments.payment_date')}
-                    ) as pending_amount,
-                    (
-                        SELECT COUNT(id)
-                        FROM payments
-                        WHERE collector_id = c.id AND payment_type = 'collector' AND remittance_status IS NULL
-                        ${dateFilter.replace(/payment_date/g, 'payments.payment_date')}
-                    ) as pending_payments_count
+    /**
+     * Statistik area kolektor (sama logika kartu / kartu kolektor di halaman Laporan Kolektor admin).
+     * month/year kosong atau 'all' = tanpa filter tanggal (seluruh riwayat).
+     */
+    async getCollectorReportsAreaRowsAndSummary(month, year, collectorId = null) {
+        const m =
+            month != null && String(month).trim() !== '' && String(month) !== 'all'
+                ? parseInt(String(month), 10)
+                : NaN;
+        const y =
+            year != null && String(year).trim() !== '' && String(year) !== 'all'
+                ? parseInt(String(year), 10)
+                : NaN;
+        const useRange = Number.isFinite(m) && m >= 1 && m <= 12 && Number.isFinite(y);
+        let invDate = '1=1';
+        let cpExtra = '';
+        let cpCntExtra = '';
+        if (useRange) {
+            const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+            const endDate = new Date(y, m, 0).toISOString().split('T')[0];
+            invDate = `DATE(i.created_at) >= '${startDate}' AND DATE(i.created_at) <= '${endDate}'`;
+            cpExtra = `AND cp.collected_at >= '${startDate}' AND cp.collected_at <= '${endDate} 23:59:59'`;
+            cpCntExtra = `AND cp2.collected_at >= '${startDate}' AND cp2.collected_at <= '${endDate} 23:59:59'`;
+        }
+        const colFilter =
+            collectorId != null && Number.isFinite(parseInt(String(collectorId), 10))
+                ? `AND c.id = ${parseInt(String(collectorId), 10)}`
+                : '';
+        const sql = `
+                SELECT c.*,
+                       (
+                           SELECT COALESCE(SUM(i.amount), 0)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id
+                           AND (${invDate})
+                       ) as total_tagihan_area,
+                       (
+                           SELECT COUNT(i.id)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id
+                           AND (${invDate})
+                       ) as count_tagihan_area,
+                       (
+                           SELECT COALESCE(SUM(i.amount), 0)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id
+                           AND i.status = 'paid'
+                           AND (${invDate})
+                       ) as total_lunas_area,
+                       (
+                           SELECT COUNT(i.id)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id
+                           AND i.status = 'paid'
+                           AND (${invDate})
+                       ) as count_lunas_area,
+                       (
+                           SELECT COALESCE(SUM(i.amount), 0)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id
+                           AND i.status = 'unpaid'
+                           AND (${invDate})
+                       ) as total_belum_lunas_amount,
+                       (
+                           SELECT COUNT(i.id)
+                           FROM invoices i
+                           JOIN customers cust ON i.customer_id = cust.id
+                           JOIN collector_areas ca ON cust.area = ca.area
+                           WHERE ca.collector_id = c.id
+                           AND i.status = 'unpaid'
+                           AND (${invDate})
+                       ) as total_belum_lunas_count,
+                       (
+                           SELECT COUNT(*)
+                           FROM collector_payments cp2
+                           WHERE cp2.collector_id = c.id
+                             AND cp2.status = 'completed'
+                             ${useRange ? cpCntExtra : ''}
+                       ) as total_payments,
+                       COALESCE(SUM(cp.payment_amount), 0) as total_payment_amount,
+                       COALESCE(SUM(cp.commission_amount), 0) as total_commission
                 FROM collectors c
-                WHERE c.status = 'active'
-                GROUP BY c.id, c.name, c.phone, c.commission_rate
+                LEFT JOIN collector_payments cp ON c.id = cp.collector_id
+                    AND cp.status = 'completed'
+                    ${useRange ? cpExtra : ''}
+                WHERE c.status = 'active' ${colFilter}
+                GROUP BY c.id
                 ORDER BY c.name
             `;
-            
-            const fullParams = [...params, ...params, ...params, ...params];
-            
-            this.db.all(sql, fullParams, (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows || []);
-                }
+        return new Promise((resolve, reject) => {
+            this.db.all(sql, [], (err, rows) => {
+                if (err) return reject(err);
+                const list = rows || [];
+                const summary = {
+                    total_tagihan: 0,
+                    total_lunas: 0,
+                    total_belum_lunas: 0,
+                    total_komisi: 0
+                };
+                list.forEach((c) => {
+                    summary.total_tagihan += Number(c.total_tagihan_area) || 0;
+                    summary.total_lunas += Number(c.total_lunas_area) || 0;
+                    summary.total_belum_lunas += Number(c.total_belum_lunas_amount) || 0;
+                    summary.total_komisi += Number(c.total_commission) || 0;
+                });
+                resolve({ rows: list, summary });
             });
         });
     }
 
-    // Method untuk mendapatkan riwayat komisi (expenses) sebagai remittances
+    // Method untuk mendapatkan riwayat komisi (expenses) — bukan log setoran kasir (lihat getCollectorRemittanceReceipts).
     async getCommissionExpenses() {
         return new Promise((resolve, reject) => {
             const sql = `
@@ -6669,53 +7473,303 @@ async handlePaymentWebhook(payload, gateway) {
         });
     }
 
-    // Method untuk mencatat remittance (update status di payments)
-    async recordCollectorRemittance(remittanceData) {
+    /** Tabel log penerimaan setoran ke kasir (Terima Setoran admin). */
+    async ensureCollectorRemittanceReceiptsTable() {
         return new Promise((resolve, reject) => {
-            const { collector_id, amount, payment_method, notes, remittance_date } = remittanceData;
-            const self = this; // Store reference to this
-            
-            // Mulai transaction
-            this.db.run('BEGIN TRANSACTION', (err) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
-                
-                // Update payments dengan remittance_status = 'remitted'
-                const updateSql = `
-                    UPDATE payments 
-                    SET remittance_status = 'remitted', 
-                        remittance_date = ?,
-                        remittance_notes = ?
-                    WHERE collector_id = ? 
-                    AND payment_type = 'collector'
-                    AND remittance_status IS NULL
-                `;
-                
-                // Update semua payment yang belum di-remit
-                self.db.run(updateSql, [remittance_date, notes, collector_id], function(err) {
-                    if (err) {
-                        self.db.run('ROLLBACK');
-                        reject(err);
-                        return;
-                    }
-                    
-                    // Commit transaction
-                    self.db.run('COMMIT', (err) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            resolve({ 
-                                success: true, 
-                                updatedPayments: this.changes,
-                                ...remittanceData 
-                            });
+            const sql = `CREATE TABLE IF NOT EXISTS collector_remittance_receipts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collector_id INTEGER NOT NULL,
+                amount_net REAL NOT NULL,
+                payment_method TEXT,
+                notes TEXT,
+                received_at TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (collector_id) REFERENCES collectors(id)
+            )`;
+            this.db.run(sql, (err) => {
+                if (err) return reject(err);
+                this.db.run(
+                    'CREATE INDEX IF NOT EXISTS idx_crr_collector ON collector_remittance_receipts(collector_id)',
+                    () => {}
+                );
+                this.db.run(
+                    'CREATE INDEX IF NOT EXISTS idx_crr_received ON collector_remittance_receipts(received_at)',
+                    () => {}
+                );
+                // Satu kali: hapus entri expenses "Komisi Kolektor … Citra Dewi" yang dulu salah dipakai sebagai riwayat setoran di UI.
+                const flagPath = path.join(path.dirname(this.dbPath), '.legacy_remittance_ui_cleanup_citra_dewi');
+                if (!fs.existsSync(flagPath)) {
+                    this.db.run(
+                        `DELETE FROM expenses
+                         WHERE category = 'Operasional'
+                           AND description LIKE 'Komisi Kolektor%'
+                           AND LOWER(description) LIKE '%citra%dewi%'`,
+                        (delErr) => {
+                            if (delErr) {
+                                console.error('[billing] Cleanup legacy remittance UI (Citra Dewi):', delErr.message);
+                            }
+                            try {
+                                fs.writeFileSync(flagPath, new Date().toISOString(), 'utf8');
+                            } catch (wErr) {
+                                console.warn('[billing] Could not write cleanup flag:', wErr.message);
+                            }
+                            resolve();
                         }
-                    });
-                });
+                    );
+                } else {
+                    resolve();
+                }
             });
         });
+    }
+
+    /** Riwayat penerimaan setoran (nilai net yang disetor ke kasir). */
+    async getCollectorRemittanceReceipts(limit = 80) {
+        await this.ensureCollectorRemittanceReceiptsTable();
+        const lim = Math.min(500, Math.max(1, parseInt(String(limit), 10) || 80));
+        return new Promise((resolve, reject) => {
+            const sql = `
+                SELECT 
+                    r.id,
+                    r.amount_net as amount,
+                    r.payment_method,
+                    r.notes,
+                    r.received_at,
+                    c.name as collector_name
+                FROM collector_remittance_receipts r
+                JOIN collectors c ON c.id = r.collector_id
+                ORDER BY datetime(COALESCE(r.received_at, r.created_at)) DESC, r.id DESC
+                LIMIT ?
+            `;
+            this.db.all(sql, [lim], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+    }
+
+    /**
+     * Riwayat penerimaan setoran untuk export (batas aman, filter periode opsional).
+     * month/year = 'all' atau kosong → tanpa filter tanggal.
+     */
+    async getCollectorRemittanceReceiptsExported({ limit = 8000, month = null, year = null } = {}) {
+        await this.ensureCollectorRemittanceReceiptsTable();
+        const lim = Math.min(20000, Math.max(1, parseInt(String(limit), 10) || 8000));
+        const m =
+            month != null && String(month).trim() !== '' && String(month) !== 'all'
+                ? parseInt(String(month), 10)
+                : NaN;
+        const y =
+            year != null && String(year).trim() !== '' && String(year) !== 'all'
+                ? parseInt(String(year), 10)
+                : NaN;
+        const useRange = Number.isFinite(m) && m >= 1 && m <= 12 && Number.isFinite(y);
+        let dateWhere = '';
+        const params = [];
+        if (useRange) {
+            const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+            const endDate = new Date(y, m, 0).toISOString().split('T')[0];
+            dateWhere =
+                ' WHERE date(COALESCE(r.received_at, r.created_at)) >= date(?) AND date(COALESCE(r.received_at, r.created_at)) <= date(?) ';
+            params.push(startDate, endDate);
+        }
+        const sql = `
+                SELECT
+                    r.id,
+                    r.amount_net as amount,
+                    r.payment_method,
+                    r.notes,
+                    r.received_at,
+                    c.name as collector_name
+                FROM collector_remittance_receipts r
+                JOIN collectors c ON c.id = r.collector_id
+                ${dateWhere}
+                ORDER BY datetime(COALESCE(r.received_at, r.created_at)) DESC, r.id DESC
+                LIMIT ?
+            `;
+        params.push(lim);
+        return new Promise((resolve, reject) => {
+            this.db.all(sql, params, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+    }
+
+    async insertCollectorRemittanceReceipt({ collector_id, amount_net, payment_method, notes, received_at }) {
+        await this.ensureCollectorRemittanceReceiptsTable();
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                `INSERT INTO collector_remittance_receipts (collector_id, amount_net, payment_method, notes, received_at)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [
+                    collector_id,
+                    Number(amount_net) || 0,
+                    payment_method != null ? String(payment_method) : '',
+                    notes != null ? String(notes) : '',
+                    received_at || new Date().toISOString()
+                ],
+                function (err) {
+                    if (err) reject(err);
+                    else resolve({ id: this.lastID });
+                }
+            );
+        });
+    }
+
+    // Method untuk mencatat remittance (update status di payments) — mendukung setoran parsial sesuai jumlah di form (FIFO).
+    async recordCollectorRemittance(remittanceData) {
+        const { collector_id, amount, payment_method, notes, remittance_date } = remittanceData;
+        const remitDate = remittance_date || new Date().toISOString();
+        const noteStr = notes != null ? String(notes) : '';
+        const collectorIdNum = parseInt(String(collector_id), 10);
+        const targetNet = Number(amount);
+
+        if (!Number.isFinite(collectorIdNum) || collectorIdNum <= 0) {
+            throw new Error('ID kolektor tidak valid');
+        }
+        if (!Number.isFinite(targetNet) || targetNet <= 0) {
+            throw new Error('Jumlah setoran harus lebih dari 0');
+        }
+
+        await this._ensurePaymentsDiscountColumn();
+        await this._ensureRemittanceNetAppliedColumn();
+
+        const targetCents = Math.round(targetNet * 100);
+
+        const dbRun = (sql, params = []) =>
+            new Promise((resolve, reject) => {
+                this.db.run(sql, params, function (err) {
+                    if (err) reject(err);
+                    else resolve({ lastID: this.lastID, changes: this.changes });
+                });
+            });
+        const dbAll = (sql, params = []) =>
+            new Promise((resolve, reject) => {
+                this.db.all(sql, params, (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                });
+            });
+
+        const rowsAll = await dbAll(
+            `SELECT p.id, p.invoice_id, p.amount, p.commission_amount, p.payment_method, p.reference_number, p.notes, p.payment_date,
+                    COALESCE(p.remittance_net_applied, 0) as remittance_net_applied,
+                    COALESCE(i.amount, 0) as invoice_amount, COALESCE(p.discount_amount, 0) as discount_amount
+             FROM payments p
+             INNER JOIN invoices i ON i.id = p.invoice_id
+             WHERE p.collector_id = ?
+               AND p.payment_type = 'collector'
+               AND (p.remittance_status IS NULL OR p.remittance_status = 'pending')
+             ORDER BY datetime(COALESCE(p.payment_date, '1970-01-01')) ASC, p.id ASC`,
+            [collectorIdNum]
+        );
+        const rows = (rowsAll || []).filter(
+            (r) => paymentRemittancePoolRp(r) - (Number(r.remittance_net_applied) || 0) > 0.009
+        );
+
+        const normalized = rows.map((r) => {
+            const poolRp = paymentRemittancePoolRp(r);
+            const poolCents = Math.round(poolRp * 100);
+            const appliedCents = Math.round((Number(r.remittance_net_applied) || 0) * 100);
+            const pendingNetCents = Math.max(0, poolCents - appliedCents);
+            return { ...r, _poolCents: poolCents, _appliedCents: appliedCents, _pendingNetCents: pendingNetCents };
+        });
+
+        const pendingNetCents = normalized.reduce((s, row) => s + row._pendingNetCents, 0);
+
+        if (pendingNetCents <= 0) {
+            throw new Error('Tidak ada sisa setoran untuk kolektor ini');
+        }
+        if (targetCents > pendingNetCents + 1) {
+            const maxRp = pendingNetCents / 100;
+            throw new Error(
+                `Jumlah setoran (Rp ${targetNet.toLocaleString('id-ID')}) melebihi sisa belum setor (Rp ${maxRp.toLocaleString('id-ID')})`
+            );
+        }
+
+        let rowsTouched = 0;
+        let partialApplied = false;
+
+        await dbRun('BEGIN IMMEDIATE');
+        try {
+            let remaining = targetCents;
+
+            for (const row of normalized) {
+                if (remaining <= 0) break;
+                if (row._pendingNetCents <= 0) continue;
+
+                if (remaining >= row._pendingNetCents) {
+                    const newAppliedRp = row._poolCents / 100;
+                    await dbRun(
+                        `UPDATE payments SET
+                            remittance_net_applied = ?,
+                            remittance_status = 'remitted',
+                            remittance_date = ?,
+                            remittance_notes = ?
+                         WHERE id = ?`,
+                        [newAppliedRp, remitDate, noteStr, row.id]
+                    );
+                    remaining -= row._pendingNetCents;
+                    rowsTouched += 1;
+                } else {
+                    const newAppliedCents = row._appliedCents + remaining;
+                    const newAppliedRp = newAppliedCents / 100;
+                    await dbRun(
+                        `UPDATE payments SET
+                            remittance_net_applied = ?,
+                            remittance_status = 'pending',
+                            remittance_notes = CASE
+                                WHEN TRIM(?) != '' THEN ?
+                                ELSE remittance_notes END
+                         WHERE id = ?`,
+                        [newAppliedRp, noteStr, noteStr, row.id]
+                    );
+                    partialApplied = true;
+                    rowsTouched += 1;
+                    remaining = 0;
+                    break;
+                }
+            }
+
+            if (remaining > 0) {
+                throw new Error('Alokasi setoran tidak selesai; coba ulangi dengan jumlah yang lebih kecil');
+            }
+
+            await dbRun('COMMIT');
+
+            let receiptLogId = null;
+            try {
+                const rec = await this.insertCollectorRemittanceReceipt({
+                    collector_id: collectorIdNum,
+                    amount_net: targetNet,
+                    payment_method,
+                    notes: noteStr,
+                    received_at: remitDate
+                });
+                receiptLogId = rec && rec.id != null ? rec.id : null;
+            } catch (logErr) {
+                console.error('[billing] Gagal mencatat riwayat setoran (payments sudah commit):', logErr.message);
+            }
+            if (receiptLogId != null) {
+                setImmediate(() => {
+                    try {
+                        const cfn = require('./collectorFieldNotifications');
+                        cfn.notifyAdminRemittanceRecorded(collectorIdNum, receiptLogId, targetNet);
+                    } catch (_) {}
+                });
+            }
+
+            return {
+                success: true,
+                updatedPayments: rowsTouched,
+                splitPayment: partialApplied,
+                ...remittanceData
+            };
+        } catch (e) {
+            await dbRun('ROLLBACK').catch(() => {});
+            throw e;
+        }
     }
 
     async getPaymentTransactions(invoiceId = null) {

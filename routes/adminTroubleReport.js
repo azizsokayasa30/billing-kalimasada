@@ -6,7 +6,8 @@ const {
   getTroubleReportById, 
   updateTroubleReportStatus,
   createTroubleReport,
-  deleteTroubleReport
+  deleteTroubleReport,
+  extractTechnicianCompletion
 } = require('../config/troubleReport');
 
 // Middleware admin auth untuk semua route
@@ -53,10 +54,13 @@ router.get('/detail/:id', async (req, res) => {
       return res.redirect('/admin/trouble');
     }
     
+    const appPublicBase = (process.env.PUBLIC_APP_BASE_URL || '').replace(/\/$/, '');
     // Render halaman detail laporan
     res.render('admin/trouble-report-detail', {
       report,
-      title: `Detail Laporan #${reportId}`
+      title: `Detail Laporan #${reportId}`,
+      technicianCompletion: extractTechnicianCompletion(report),
+      appPublicBase
     });
   } catch (error) {
     console.error('Error loading trouble report detail:', error);
@@ -78,8 +82,14 @@ router.post('/update-status/:id', async (req, res) => {
     });
   }
   
-  // Update status laporan dengan parameter sendNotification
-  const updatedReport = await updateTroubleReportStatus(reportId, status, notes, {}, sendNotification);
+  const notify =
+    sendNotification === false ||
+    sendNotification === 'false' ||
+    sendNotification === 0
+      ? false
+      : true;
+  
+  const updatedReport = await updateTroubleReportStatus(reportId, status, notes, {}, notify);
   
   if (!updatedReport) {
     return res.status(500).json({
@@ -90,7 +100,7 @@ router.post('/update-status/:id', async (req, res) => {
   
   res.json({
     success: true,
-    message: 'Status laporan berhasil diupdate',
+    message: 'Catatan berhasil disimpan' + (notify ? ' dan notifikasi dikirim ke pelanggan.' : '.'),
     report: updatedReport
   });
 });
@@ -184,12 +194,29 @@ router.get('/technicians/list', async (req, res) => {
 // POST: Buat tiket laporan gangguan baru dari admin
 router.post('/create', async (req, res) => {
   try {
-    const { name, phone, location, category, description, assignedTechnicianId, priority } = req.body;
+    const { name, phone, location, category, description, assignedTechnicianId, priority, customerId } = req.body;
     
     // Note: createTroubleReport will automatically send notification when auto_ticket setting is true
     const newReport = await createTroubleReport({
-      name, phone, location, category, description, assignedTechnicianId, priority
+      name,
+      phone,
+      location,
+      category,
+      description,
+      assignedTechnicianId,
+      priority,
+      customerId
     });
+
+    const assignTid = newReport.assigned_technician_id || newReport.assignedTechnicianId;
+    if (assignTid) {
+      try {
+        const fieldNotif = require('../config/technicianFieldNotifications');
+        await fieldNotif.notifyTroubleTicket(assignTid, newReport);
+      } catch (nfErr) {
+        console.error('Field notification trouble create:', nfErr.message || nfErr);
+      }
+    }
     
     res.json({ success: true, message: 'Tiket berhasil dibuat', report: newReport });
   } catch (error) {

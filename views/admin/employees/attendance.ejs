@@ -206,6 +206,39 @@
             } catch (e) { console.error(e); }
         }
 
+        /** Tampilan sel tabel: datetime penuh (mobile) atau hanya jam (input manual). */
+        function formatCheckCell(raw) {
+            if (raw == null || String(raw).trim() === '') return '-';
+            const s = String(raw).trim();
+            const dtMatch = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/);
+            if (dtMatch) {
+                const normalized = s.includes('T') ? s : s.replace(' ', 'T');
+                const d = new Date(normalized);
+                if (!Number.isNaN(d.getTime())) {
+                    return d.toLocaleString('id-ID', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    });
+                }
+            }
+            return s;
+        }
+
+        /** Nilai untuk input type="time" dari DB (datetime atau HH:mm). */
+        function timeInputFromAttendance(raw) {
+            if (raw == null || String(raw).trim() === '') return '';
+            const s = String(raw).trim();
+            const m = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?/);
+            if (m) return m[3] != null ? `${m[2]}:${m[3]}` : m[2];
+            if (/^\d{2}:\d{2}(:\d{2})?$/.test(s)) return s.length === 5 ? s : s.slice(0, 8);
+            return '';
+        }
+
         function renderTable() {
             const tbody = document.getElementById('dataTableBody');
             const term = document.getElementById('searchInput').value.toLowerCase();
@@ -229,8 +262,8 @@
                     <td class="fw-bold">${dt}</td>
                     <td>${a.nama_lengkap}</td>
                     <td>${a.nik}</td>
-                    <td class="text-center">${a.check_in ? a.check_in.substring(0,5) : '-'}</td>
-                    <td class="text-center">${a.check_out ? a.check_out.substring(0,5) : '-'}</td>
+                    <td class="text-center">${formatCheckCell(a.check_in)}</td>
+                    <td class="text-center">${formatCheckCell(a.check_out)}</td>
                     <td class="text-center">
                         <span class="status-badge status-${a.status}">${a.status.toUpperCase()}</span>
                     </td>
@@ -255,8 +288,8 @@
             document.getElementById('employee_id').value = a.employee_id;
             document.getElementById('date').value = a.date.split('T')[0] || a.date;
             document.getElementById('status').value = a.status;
-            document.getElementById('check_in').value = a.check_in || '';
-            document.getElementById('check_out').value = a.check_out || '';
+            document.getElementById('check_in').value = timeInputFromAttendance(a.check_in);
+            document.getElementById('check_out').value = timeInputFromAttendance(a.check_out);
             document.getElementById('notes').value = a.notes || '';
             modalInstance.show();
         }

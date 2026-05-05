@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>KalimasadaMobile - Notifications</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-low": "#f6f1ff",
+                        "on-background": "#19163f",
+                        "surface-container-high": "#eae5ff",
+                        "inverse-primary": "#c5c0ff",
+                        "on-tertiary": "#ffffff",
+                        "inverse-surface": "#2f2b55",
+                        "secondary-fixed": "#f9d8ff",
+                        "surface-variant": "#e4dfff",
+                        "error": "#ba1a1a",
+                        "on-secondary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "background": "#fcf8ff",
+                        "on-tertiary-fixed": "#3a0a00",
+                        "on-surface": "#19163f",
+                        "on-primary-fixed": "#140166",
+                        "on-error-container": "#93000a",
+                        "surface-dim": "#dad5ff",
+                        "surface-container-highest": "#e4dfff",
+                        "primary": "#070038",
+                        "secondary": "#7e4990",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed": "#ffdbd0",
+                        "on-secondary-container": "#6f3b81",
+                        "on-surface-variant": "#474551",
+                        "surface": "#fcf8ff",
+                        "on-primary-container": "#857ed9",
+                        "outline-variant": "#c8c4d3",
+                        "on-secondary-fixed-variant": "#643177",
+                        "on-tertiary-container": "#c87257",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed": "#320046",
+                        "surface-container": "#f0ebff",
+                        "tertiary-fixed-dim": "#ffb59f",
+                        "secondary-container": "#ebaefd",
+                        "tertiary-container": "#450e00",
+                        "primary-fixed-dim": "#c5c0ff",
+                        "surface-bright": "#fcf8ff",
+                        "primary-container": "#1b0c6b",
+                        "primary-fixed": "#e4dfff",
+                        "surface-tint": "#5a53ab",
+                        "inverse-on-surface": "#f3eeff",
+                        "outline": "#787582",
+                        "on-tertiary-fixed-variant": "#76321c",
+                        "on-primary-fixed-variant": "#423a91",
+                        "tertiary": "#1e0300",
+                        "secondary-fixed-dim": "#edb1ff",
+                        "on-primary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-mobile": "1.25rem",
+                        "stack-md": "1rem",
+                        "touch-target-min": "48px",
+                        "gutter": "1rem",
+                        "stack-sm": "0.5rem",
+                        "stack-lg": "2rem"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Public Sans"],
+                        "button-text": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "button-text": ["16px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg": ["28px", { "lineHeight": "36px", "fontWeight": "700" }],
+                        "body-lg": ["18px", { "lineHeight": "26px", "fontWeight": "400" }],
+                        "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body-md text-body-md min-h-screen flex flex-col pb-24">
+<!-- TopAppBar -->
+<header class="bg-white dark:bg-slate-950 font-inter antialiased font-semibold tracking-tight docked full-width top-0 border-b border-slate-200 dark:border-slate-800 flat no shadows flex items-center h-14 px-5 w-full sticky z-40">
+<button class="mr-4 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform duration-150 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">arrow_back</span>
+</button>
+<h1 class="text-indigo-950 dark:text-white font-bold text-lg flex-1 text-center pr-10">Notifications</h1>
+</header>
+<!-- Main Content -->
+<main class="flex-1 p-margin-mobile flex flex-col gap-stack-lg max-w-3xl mx-auto w-full">
+<!-- Today Group -->
+<section class="flex flex-col gap-stack-sm">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">Today</h2>
+<!-- Notification Item 1 (Unread) -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 flex gap-4 items-start relative hover:bg-surface-container-low transition-colors duration-200 cursor-pointer">
+<!-- Unread Indicator -->
+<div class="absolute top-4 left-2 w-2 h-2 rounded-full bg-primary"></div>
+<div class="w-12 h-12 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center shrink-0 ml-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">assignment</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-1 gap-2">
+<h3 class="font-button-text text-button-text text-on-surface truncate">New Task Assigned</h3>
+<span class="text-sm text-on-surface-variant whitespace-nowrap">10m ago</span>
+</div>
+<p class="text-on-surface-variant text-sm line-clamp-2">Installation at Site A-42 requires immediate attention. Ensure fiber splice kit is ready.</p>
+</div>
+</div>
+<!-- Notification Item 2 (Unread) -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 flex gap-4 items-start relative hover:bg-surface-container-low transition-colors duration-200 cursor-pointer">
+<!-- Unread Indicator -->
+<div class="absolute top-4 left-2 w-2 h-2 rounded-full bg-primary"></div>
+<div class="w-12 h-12 rounded-full bg-error-container text-on-error-container flex items-center justify-center shrink-0 ml-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">warning</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-1 gap-2">
+<h3 class="font-button-text text-button-text text-on-surface truncate">Network Alert: Sector 7</h3>
+<span class="text-sm text-on-surface-variant whitespace-nowrap">1h ago</span>
+</div>
+<p class="text-on-surface-variant text-sm line-clamp-2">Signal degradation detected. Preliminary checks suggest physical layer issue.</p>
+</div>
+</div>
+<!-- Notification Item 3 (Read) -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 flex gap-4 items-start hover:bg-surface-container-low transition-colors duration-200 cursor-pointer opacity-80">
+<div class="w-12 h-12 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center shrink-0 ml-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-1 gap-2">
+<h3 class="font-button-text text-button-text text-on-surface truncate">Payment Confirmed</h3>
+<span class="text-sm text-on-surface-variant whitespace-nowrap">3h ago</span>
+</div>
+<p class="text-on-surface-variant text-sm line-clamp-2">Client invoice #INV-8890 settled. Account status updated to active.</p>
+</div>
+</div>
+</section>
+<!-- Yesterday Group -->
+<section class="flex flex-col gap-stack-sm">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">Yesterday</h2>
+<!-- Notification Item 4 (Read) -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 flex gap-4 items-start hover:bg-surface-container-low transition-colors duration-200 cursor-pointer opacity-80">
+<div class="w-12 h-12 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center shrink-0 ml-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">assignment</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-1 gap-2">
+<h3 class="font-button-text text-button-text text-on-surface truncate">Task Updated</h3>
+<span class="text-sm text-on-surface-variant whitespace-nowrap">1d ago</span>
+</div>
+<p class="text-on-surface-variant text-sm line-clamp-2">Schedule changed for Site B-12 maintenance. Now set for tomorrow at 0900.</p>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="bg-white dark:bg-slate-950 font-inter text-[11px] font-medium uppercase tracking-wider docked full-width bottom-0 border-t border-slate-200 dark:border-slate-800 flat no shadows fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 px-2 md:hidden">
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-700 dark:hover:text-indigo-200 active:opacity-80 transition-opacity duration-100" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-700 dark:hover:text-indigo-200 active:opacity-80 transition-opacity duration-100" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">group</span>
+<span>Pelanggan</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-700 dark:hover:text-indigo-200 active:opacity-80 transition-opacity duration-100" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">assignment</span>
+<span>Tugas</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-700 dark:hover:text-indigo-200 active:opacity-80 transition-opacity duration-100" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">router</span>
+<span>Jaringan</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-700 dark:hover:text-indigo-200 active:opacity-80 transition-opacity duration-100" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">person</span>
+<span>Profil</span>
+</a>
+</nav>
+</body></html>

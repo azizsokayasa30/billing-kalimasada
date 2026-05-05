@@ -779,13 +779,18 @@
         let networkData = {};
         let customerLayer, odpLayer, cableLayer, backboneLayer;
 
+        const COMPANY_MAP_DEFAULT = [
+            <%= typeof defaultMapLat !== 'undefined' && defaultMapLat != null ? Number(defaultMapLat) : -6.2088 %>,
+            <%= typeof defaultMapLng !== 'undefined' && defaultMapLng != null ? Number(defaultMapLng) : 106.8456 %>
+        ];
+        const COMPANY_MAP_ZOOM = <%= typeof defaultMapZoom !== 'undefined' && defaultMapZoom != null ? parseInt(String(defaultMapZoom), 10) : 13 %>;
+
         // Initialize map
         function initMap() {
             console.log('??? Initializing technician mapping...');
             
             try {
-                // Create map centered on Jakarta
-                map = L.map('map').setView([-6.2088, 106.8456], 13);
+                map = L.map('map').setView(COMPANY_MAP_DEFAULT, COMPANY_MAP_ZOOM);
                 console.log('? Map instance created successfully');
             } catch (error) {
                 console.error('? Error creating map:', error);
@@ -1275,9 +1280,8 @@
                 map.fitBounds(bounds, { padding: [20, 20] });
                 console.log(`? Map fitted to bounds containing data`);
             } else {
-                // Fallback to Jakarta if no data
-                console.log('?? No data found, using default Jakarta location');
-                map.setView([-6.2088, 106.8456], 13);
+                console.log('?? No data found, using default map location from company settings');
+                map.setView(COMPANY_MAP_DEFAULT, COMPANY_MAP_ZOOM);
             }
         }
         

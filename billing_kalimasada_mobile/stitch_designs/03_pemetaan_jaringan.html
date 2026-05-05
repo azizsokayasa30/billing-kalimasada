@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pemetaan Jaringan - Field Ops Executive</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols (Strict Inclusion) -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-primary-container": "#857ed9",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#320046",
+                        "on-tertiary-container": "#c87257",
+                        "on-tertiary-fixed-variant": "#76321c",
+                        "outline": "#787582",
+                        "on-primary-fixed": "#140166",
+                        "on-primary-fixed-variant": "#423a91",
+                        "on-secondary-fixed-variant": "#643177",
+                        "tertiary-fixed": "#ffdbd0",
+                        "surface-variant": "#e4dfff",
+                        "secondary": "#7e4990",
+                        "primary-fixed-dim": "#c5c0ff",
+                        "surface-container-highest": "#e4dfff",
+                        "tertiary": "#1e0300",
+                        "inverse-surface": "#2f2b55",
+                        "error": "#ba1a1a",
+                        "background": "#fcf8ff",
+                        "inverse-on-surface": "#f3eeff",
+                        "surface-tint": "#5a53ab",
+                        "on-background": "#19163f",
+                        "on-tertiary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "on-primary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "surface-bright": "#fcf8ff",
+                        "secondary-fixed": "#f9d8ff",
+                        "tertiary-container": "#450e00",
+                        "surface-container-low": "#f6f1ff",
+                        "surface-container": "#f0ebff",
+                        "surface-dim": "#dad5ff",
+                        "inverse-primary": "#c5c0ff",
+                        "on-secondary-container": "#6f3b81",
+                        "on-surface": "#19163f",
+                        "primary-fixed": "#e4dfff",
+                        "surface": "#fcf8ff",
+                        "primary": "#070038",
+                        "tertiary-fixed-dim": "#ffb59f",
+                        "primary-container": "#1b0c6b",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface-variant": "#474551",
+                        "surface-container-high": "#eae5ff",
+                        "outline-variant": "#c8c4d3",
+                        "secondary-container": "#ebaefd",
+                        "on-tertiary-fixed": "#3a0a00",
+                        "secondary-fixed-dim": "#edb1ff",
+                        "on-secondary": "#ffffff"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "sm": "0.25rem",
+                        "md": "0.75rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "gutter": "1rem",
+                        "margin-mobile": "1.25rem",
+                        "stack-lg": "2rem",
+                        "stack-sm": "0.5rem",
+                        "stack-md": "1rem",
+                        "touch-target-min": "48px"
+                    },
+                    fontFamily: {
+                        "headline-lg": ["Inter", "sans-serif"],
+                        "button-text": ["Inter", "sans-serif"],
+                        "body-lg": ["Inter", "sans-serif"],
+                        "label-caps": ["Public Sans", "sans-serif"],
+                        "headline-md": ["Inter", "sans-serif"],
+                        "body-md": ["Inter", "sans-serif"]
+                    },
+                    fontSize: {
+                        "headline-lg": ["28px", { "lineHeight": "36px", "fontWeight": "700" }],
+                        "button-text": ["16px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "26px", "fontWeight": "400" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background font-body-md flex flex-col h-screen overflow-hidden antialiased">
+<!-- Header (Back-to-Main Exception applied, themed) -->
+<header class="flex flex-col gap-2 p-4 pb-2 shrink-0 z-20 bg-primary">
+<div class="flex items-center h-12"><div class="flex items-center gap-2">
+<button class="flex size-[48px] shrink-0 items-center justify-center rounded-full transition-colors text-white hover:bg-white/10" data-icon="ArrowBack" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<h1 class="font-headline-md tracking-tight text-white text-headline-lg">Pemetaan Jaringan</h1>
+</div></div>
+</header>
+<!-- Main Content: Map Area -->
+<main class="flex-1 relative flex flex-col min-h-0 bg-surface-container-low">
+<!-- Map Background -->
+<div class="absolute inset-0 bg-cover bg-center" data-alt="A highly detailed, top-down view of a digital map interface showing a complex network topology overlay. The map features a modern, light-mode aesthetic with functional minimalist design, using a sophisticated palette of deep indigo, pristine whites, and light lavender grays. Glowing nodes and connecting lines represent fiber optic infrastructure in an urban setting, conveying a sense of authoritative, precision-oriented field operations." data-location="Jakarta" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB2nHOXeg688_A3gMPT8YraLvJenTW3isc8OmHzcXY73VcQqz3wn_JhnjmSV62sCqTwY_CjHKEUnQmzAgB6SuWjRsujmrlFiE73tRC4idLIEwVb6O9vlxvsXRzDnf51X8ZitSssL9cAcUtNwW8_pFp8zqBF5BAYgflZRUeSoNq_lmbWZmgV2lMkM5V01ejvGqqF8OREMQNyznWtSEB7lg2pkIJ2HtW3dhszasxOpKI9uz8Sp4Jihtqx5NTIuwTAwVAmT5B9X47Wth4');">
+</div>
+<!-- Overlays Layer -->
+<div class="absolute inset-0 flex flex-col justify-between p-margin-mobile pointer-events-none z-10">
+<!-- Top: Search Bar -->
+<div class="flex w-full pointer-events-auto">
+<div class="flex w-full items-stretch rounded-lg bg-surface shadow-md h-12 border border-outline-variant overflow-hidden">
+<div class="flex items-center justify-center pl-4 bg-surface text-on-surface-variant" data-icon="MagnifyingGlass" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">magnification_large</span>
+</div>
+<input class="flex-1 bg-surface border-none focus:ring-0 text-on-surface font-body-md placeholder:text-outline px-3 h-full" placeholder="Cari ODP atau perangkat" type="text"/>
+</div>
+</div>
+<!-- Bottom: Controls, Info Panel, FAB -->
+<div class="flex flex-col gap-stack-md pointer-events-auto">
+<!-- Map Controls (Zoom & Location) -->
+<div class="flex flex-col items-end gap-stack-sm">
+<div class="flex flex-col rounded-lg bg-surface shadow-md border border-outline-variant overflow-hidden">
+<button class="flex size-[48px] items-center justify-center hover:bg-surface-variant transition-colors border-b border-outline-variant text-on-surface" data-icon="Plus" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">plus_one</span>
+</button>
+<button class="flex size-[48px] items-center justify-center hover:bg-surface-variant transition-colors text-on-surface" data-icon="Minus" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">heart_minus</span>
+</button>
+</div>
+<button class="flex size-[48px] items-center justify-center rounded-lg bg-surface shadow-md border border-outline-variant hover:bg-surface-variant transition-colors text-on-surface mt-1" data-icon="NavigationArrow" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">arrow_top_right</span>
+</button>
+</div>
+<!-- FAB: Tambah Tagging ODP -->
+<div class="flex justify-end">
+<button class="flex items-center justify-center h-[56px] px-6 rounded-lg bg-primary-container text-on-primary shadow-lg gap-2 hover:bg-primary transition-colors">
+<div class="flex items-center justify-center" data-icon="Plus" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">plus_one</span>
+</div>
+<span class="font-button-text">Tambah Tagging ODP</span>
+</button>
+</div>
+<!-- Info Panel (Selected Node) -->
+<div class="flex flex-col gap-3 rounded-lg bg-surface p-4 shadow-lg border border-outline-variant">
+<div class="flex justify-between items-start gap-4">
+<div class="flex flex-col gap-1 flex-1">
+<h3 class="font-headline-md text-on-surface m-0 leading-tight">ODP-JBG-01</h3>
+<p class="font-body-md text-on-surface-variant m-0">Kapasitas: 8 Port | Aktif: 5 Port</p>
+</div>
+<!-- Status Indicator (Success/Active) -->
+<div class="flex items-center justify-center px-3 py-1 rounded-full bg-[#e8f5e9] border border-[#a5d6a7] shrink-0 gap-1">
+<span class="material-symbols-outlined text-[#2e7d32] text-[16px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-caps text-[#2e7d32]">AKTIF</span>
+</div>
+</div>
+<button class="flex items-center justify-center w-full h-[48px] rounded-lg bg-surface-variant text-on-surface font-button-text gap-2 hover:bg-outline-variant transition-colors border border-outline-variant">
+<span>Detail ODP</span>
+<div class="flex items-center justify-center" data-icon="ArrowRight" data-size="18px" data-weight="regular">
+<span class="material-symbols-outlined text-[18px]">arrow_right</span>
+</div>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation (Shared Component, Themed) -->
+<nav class="flex gap-2 border-t border-outline-variant bg-surface px-4 pb-4 pt-2 shrink-0 z-20">
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-on-surface-variant hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center" data-icon="House" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">house</span>
+</div>
+<p class="font-label-caps">Beranda</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-on-surface-variant hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center" data-icon="Users" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">user_attributes</span>
+</div>
+<p class="font-label-caps">Pelanggan</p>
+</a>
+<!-- Active State: Jaringan -->
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-primary" href="#">
+<div class="flex h-8 w-16 items-center justify-center bg-primary-container text-on-primary rounded-full" data-icon="GitBranch" data-size="24px" data-weight="fill">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">rebase</span>
+</div>
+<p class="font-label-caps">Jaringan</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-on-surface-variant hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center" data-icon="Copy" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">file_copy</span>
+</div>
+<p class="font-label-caps">Tugas</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-on-surface-variant hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center" data-icon="User" data-size="24px" data-weight="regular">
+<span class="material-symbols-outlined text-[24px]">verified_user</span>
+</div>
+<p class="font-label-caps">Profil</p>
+</a>
+</nav>
+</body></html>

@@ -1,0 +1,12 @@
+<% var tbTitle = typeof topbarTitle !== 'undefined' ? topbarTitle : 'Field Collector'; %>
+<header class="fixed top-0 w-full z-50 border-b border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 flex justify-between items-center h-14 px-4">
+  <a href="/collector/profile" class="flex items-center gap-stack-sm text-primary-container dark:text-white hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all duration-200 p-2 rounded-lg" aria-label="Menu">
+    <span class="material-symbols-outlined">menu</span>
+  </a>
+  <div class="font-['Inter'] text-lg font-bold tracking-tight text-primary-container dark:text-slate-100 flex-1 text-center truncate px-2">
+    <%= tbTitle %>
+  </div>
+  <button type="button" onclick="location.reload()" class="flex items-center gap-stack-sm text-primary-container dark:text-white hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all duration-200 p-2 rounded-lg" aria-label="Sinkron">
+    <span class="material-symbols-outlined">sync</span>
+  </button>
+</header>

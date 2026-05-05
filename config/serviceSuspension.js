@@ -142,9 +142,13 @@ class ServiceSuspensionManager {
     /**
      * Suspend layanan pelanggan (blokir internet)
      * Mendukung PPPoE dan IP statik
+     * @param {object} [options]
+     * @param {boolean} [options.skipBillingStatus] — jangan update status di DB (untuk WA dulu di luar)
+     * @param {boolean} [options.awaitWhatsApp] — tunggu kirim WA sebelum return (dipakai dengan skipBillingStatus)
      */
-    async suspendCustomerService(customer, reason = 'Telat bayar') {
+    async suspendCustomerService(customer, reason = 'Telat bayar', options = {}) {
         try {
+            const { skipBillingStatus = false, awaitWhatsApp = false } = options || {};
             logger.info(`Suspending service for customer: ${customer.username} (${reason})`);
 
             const results = {
@@ -168,46 +172,43 @@ class ServiceSuspensionManager {
                 // Check jika menggunakan RADIUS mode
                 if (authMode === 'radius') {
                     try {
-                        // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah group
-                        // Agar saat reconnect, langsung dapat IP isolir
-                        try {
-                            const { disconnectPPPoEUser } = require('./mikrotik');
-                            const routerObj = await findRouterForPppDisconnect(customer, pppUser);
-
-                            if (routerObj) {
-                                let disconnectResult;
-                                try {
-                                    disconnectResult = await withTimeout(
-                                        disconnectPPPoEUser(pppUser, routerObj),
-                                        8000,
-                                        `disconnect PPPoE ${pppUser}`
-                                    );
-                                } catch (e) {
-                                    disconnectResult = { success: false, disconnected: 0, message: e.message };
-                                    logger.warn(`RADIUS: disconnect timeout/error untuk ${pppUser}: ${e.message}`);
-                                }
-
-                                if (disconnectResult.success && disconnectResult.disconnected > 0) {
-                                    logger.info(`RADIUS: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${pppUser} before changing to isolir group`);
-                                    await new Promise((resolve) => setTimeout(resolve, POST_DISCONNECT_SETTLE_MS));
-                                } else if (disconnectResult.disconnected === 0) {
-                                    logger.info(`RADIUS: User ${pppUser} tidak sedang online, langsung ubah group ke isolir`);
-                                } else {
-                                    logger.warn(`RADIUS: Disconnect result: ${disconnectResult.message}`);
-                                }
-                            } else {
-                                logger.warn(`RADIUS: Tidak ada router yang tersedia untuk disconnect ${pppUser}`);
-                            }
-                        } catch (disconnectError) {
-                            logger.warn(`RADIUS: Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
-                        }
-                        
-                        // Setelah disconnect, baru ubah group ke isolir
+                        // 1) Pindah ke group isolir dulu, 2) putus sesi aktif agar reconnect pakai atribut isolir
                         const suspendResult = await suspendUserRadius(pppUser);
                         if (suspendResult && suspendResult.success) {
                             results.mikrotik = true;
                             results.radius = true;
-                            logger.info(`RADIUS: Successfully suspended user ${pppUser} (moved to isolir group, will get isolir IP on reconnect)`);
+                            logger.info(`RADIUS: User ${pppUser} dipindah ke group isolir`);
+                            try {
+                                const { disconnectPPPoEUser } = require('./mikrotik');
+                                const routerObj = await findRouterForPppDisconnect(customer, pppUser);
+
+                                if (routerObj) {
+                                    let disconnectResult;
+                                    try {
+                                        disconnectResult = await withTimeout(
+                                            disconnectPPPoEUser(pppUser, routerObj),
+                                            8000,
+                                            `disconnect PPPoE ${pppUser}`
+                                        );
+                                    } catch (e) {
+                                        disconnectResult = { success: false, disconnected: 0, message: e.message };
+                                        logger.warn(`RADIUS: disconnect timeout/error untuk ${pppUser}: ${e.message}`);
+                                    }
+
+                                    if (disconnectResult.success && disconnectResult.disconnected > 0) {
+                                        logger.info(`RADIUS: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${pppUser} after isolir group`);
+                                        await new Promise((resolve) => setTimeout(resolve, POST_DISCONNECT_SETTLE_MS));
+                                    } else if (disconnectResult.disconnected === 0) {
+                                        logger.info(`RADIUS: User ${pppUser} tidak sedang online setelah ubah group isolir`);
+                                    } else {
+                                        logger.warn(`RADIUS: Disconnect result: ${disconnectResult.message}`);
+                                    }
+                                } else {
+                                    logger.warn(`RADIUS: Tidak ada router yang tersedia untuk disconnect ${pppUser}`);
+                                }
+                            } catch (disconnectError) {
+                                logger.warn(`RADIUS: Failed to disconnect active session for ${pppUser}: ${disconnectError.message}`);
+                            }
                         } else {
                             logger.error(`RADIUS: Suspension failed for ${pppUser}`);
                         }
@@ -224,8 +225,26 @@ class ServiceSuspensionManager {
                         // Pastikan profile isolir ada pada NAS milik customer
                         await this.ensureIsolirProfile(customer);
 
-                        // PENTING: Putuskan koneksi PPPoE aktif TERLEBIH DAHULU sebelum mengubah profile
-                        // Agar saat reconnect, langsung dapat IP isolir
+                        // 1) Ubah secret ke profile isolir, 2) putus sesi aktif agar reconnect pakai isolir
+                        let secretId = null;
+                        try {
+                            const secrets = await mikrotik.write('/ppp/secret/print', [
+                                `?name=${pppUser}`
+                            ]);
+                            if (secrets && secrets.length > 0) {
+                                secretId = secrets[0]['.id'];
+                            }
+                        } catch (lookupErr) {
+                            logger.warn(`Mikrotik: failed to lookup secret id for ${customer.pppoe_username}: ${lookupErr.message}`);
+                        }
+
+                        const setParams = secretId
+                            ? [`=.id=${secretId}`, `=profile=${selectedProfile}`, `=comment=SUSPENDED - ${reason}`]
+                            : [`=name=${pppUser}`, `=profile=${selectedProfile}`, `=comment=SUSPENDED - ${reason}`];
+
+                        await mikrotik.write('/ppp/secret/set', setParams);
+                        logger.info(`Mikrotik: Set profile to '${selectedProfile}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'})`);
+
                         const { disconnectPPPoEUser } = require('./mikrotik');
                         let disconnectResult;
                         try {
@@ -240,36 +259,14 @@ class ServiceSuspensionManager {
                         }
 
                         if (disconnectResult.success && disconnectResult.disconnected > 0) {
-                            logger.info(`Mikrotik: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${customer.pppoe_username} before changing to isolir profile`);
+                            logger.info(`Mikrotik: Disconnected ${disconnectResult.disconnected} active PPPoE session(s) for ${customer.pppoe_username} after isolir profile`);
                             await new Promise((resolve) => setTimeout(resolve, POST_DISCONNECT_SETTLE_MS));
                         } else if (disconnectResult.disconnected === 0) {
-                            logger.info(`Mikrotik: User ${customer.pppoe_username} tidak sedang online, langsung ubah profile ke isolir`);
+                            logger.info(`Mikrotik: User ${customer.pppoe_username} tidak sedang online setelah ubah profile isolir`);
                         } else {
                             logger.warn(`Mikrotik: Disconnect result: ${disconnectResult.message}`);
                         }
 
-                        // Setelah disconnect, baru ubah profile ke isolir
-                        // Cari .id secret berdasarkan name terlebih dahulu
-                        let secretId = null;
-                        try {
-                            const secrets = await mikrotik.write('/ppp/secret/print', [
-                                `?name=${pppUser}`
-                            ]);
-                            if (secrets && secrets.length > 0) {
-                                secretId = secrets[0]['.id'];
-                            }
-                        } catch (lookupErr) {
-                            logger.warn(`Mikrotik: failed to lookup secret id for ${customer.pppoe_username}: ${lookupErr.message}`);
-                        }
-
-                        // Update PPPoE user dengan profile isolir, gunakan .id bila tersedia, fallback ke =name=
-                        const setParams = secretId
-                            ? [`=.id=${secretId}`, `=profile=${selectedProfile}`, `=comment=SUSPENDED - ${reason}`]
-                            : [`=name=${pppUser}`, `=profile=${selectedProfile}`, `=comment=SUSPENDED - ${reason}`];
-
-                        await mikrotik.write('/ppp/secret/set', setParams);
-                        logger.info(`Mikrotik: Set profile to '${selectedProfile}' for ${customer.pppoe_username} (${secretId ? 'by .id' : 'by name'}) - will get isolir IP on reconnect`);
-                        
                         results.mikrotik = true;
                         logger.info(`Mikrotik: Successfully suspended PPPoE user ${customer.pppoe_username} with isolir profile`);
                     } catch (mikrotikError) {
@@ -307,8 +304,8 @@ class ServiceSuspensionManager {
                 logger.warn(`Customer ${customer.username} has no PPPoE username or static IP, trying WAN disable method`);
             }
 
-            // 2. Suspend via GenieACS (disable WAN connection) — batasi waktu agar tidak mengganjal response admin
-            if (customer.phone || customer.pppoe_username) {
+            // GenieACS hanya untuk pelanggan tanpa PPPoE/static (WAN disable). Isolir PPPoE cukup RADIUS/Mikrotik — hindari timeout pencarian device.
+            if (results.suspension_type === 'wan_disable' && (customer.phone || customer.pppoe_username)) {
                 try {
                     await Promise.race([
                         (async () => {
@@ -346,63 +343,72 @@ class ServiceSuspensionManager {
                 }
             }
 
-            // 3. Update status di billing database (skip jika billing sudah suspended — mis. setelah updateCustomerByPhone)
+            // Update status di billing database
             const alreadySuspended = String(customer?.status || '').toLowerCase() === 'suspended';
-            try {
-                if (!alreadySuspended && customer.id) {
-                    logger.info(`[SUSPEND] Updating billing status by id=${customer.id} to 'suspended' (username=${customer.username||customer.pppoe_username||'-'})`);
-                    await billingManager.setCustomerStatusById(customer.id, 'suspended');
-                    results.billing = true;
-                } else if (!alreadySuspended) {
-                    // Resolve by username first, then phone, to obtain reliable id
-                    let resolved = null;
-                    if (customer.pppoe_username) {
-                        try { resolved = await billingManager.getCustomerByUsername(customer.pppoe_username); } catch (_) {}
-                    }
-                    if (!resolved && customer.username) {
-                        try { resolved = await billingManager.getCustomerByUsername(customer.username); } catch (_) {}
-                    }
-                    if (!resolved && customer.phone) {
-                        try { resolved = await billingManager.getCustomerByPhone(customer.phone); } catch (_) {}
-                    }
-                    if (resolved && resolved.id) {
-                        logger.info(`[SUSPEND] Resolved customer id=${resolved.id} (username=${resolved.pppoe_username||resolved.username||'-'}) → set 'suspended'`);
-                        await billingManager.setCustomerStatusById(resolved.id, 'suspended');
+            if (!skipBillingStatus) {
+                try {
+                    if (!alreadySuspended && customer.id) {
+                        logger.info(`[SUSPEND] Updating billing status by id=${customer.id} to 'suspended' (username=${customer.username||customer.pppoe_username||'-'})`);
+                        await billingManager.setCustomerStatusById(customer.id, 'suspended');
                         results.billing = true;
-                    } else if (customer.phone) {
-                        logger.warn(`[SUSPEND] Falling back to update by phone=${customer.phone} (no id resolved)`);
-                        await billingManager.updateCustomer(customer.phone, { ...customer, status: 'suspended' });
+                    } else if (!alreadySuspended) {
+                        let resolved = null;
+                        if (customer.pppoe_username) {
+                            try { resolved = await billingManager.getCustomerByUsername(customer.pppoe_username); } catch (_) {}
+                        }
+                        if (!resolved && customer.username) {
+                            try { resolved = await billingManager.getCustomerByUsername(customer.username); } catch (_) {}
+                        }
+                        if (!resolved && customer.phone) {
+                            try { resolved = await billingManager.getCustomerByPhone(customer.phone); } catch (_) {}
+                        }
+                        if (resolved && resolved.id) {
+                            logger.info(`[SUSPEND] Resolved customer id=${resolved.id} (username=${resolved.pppoe_username||resolved.username||'-'}) → set 'suspended'`);
+                            await billingManager.setCustomerStatusById(resolved.id, 'suspended');
+                            results.billing = true;
+                        } else if (customer.phone) {
+                            logger.warn(`[SUSPEND] Falling back to update by phone=${customer.phone} (no id resolved)`);
+                            await billingManager.updateCustomer(customer.phone, { ...customer, status: 'suspended' });
+                            results.billing = true;
+                        } else {
+                            logger.error(`[SUSPEND] Unable to resolve customer identifier for status update`);
+                        }
+                    } else if (alreadySuspended && customer.id) {
                         results.billing = true;
-                    } else {
-                        logger.error(`[SUSPEND] Unable to resolve customer identifier for status update`);
                     }
-                } else if (alreadySuspended && customer.id) {
-                    results.billing = true;
+                } catch (billingError) {
+                    logger.error(`Billing update failed for ${customer.username}:`, billingError.message);
                 }
-            } catch (billingError) {
-                logger.error(`Billing update failed for ${customer.username}:`, billingError.message);
             }
 
-            // 4–5. Notifikasi di background agar PUT /customers tidak menunggu lama
-            void (async () => {
+            const sendSuspensionWa = async () => {
+                const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+                if (!isWaSystemMonitorEnabled('isolir_suspension_wa')) {
+                    logger.info('isolir_suspension_wa off — skip WA suspensi');
+                    return;
+                }
+                const whatsappNotifications = require('./whatsapp-notifications');
+                await whatsappNotifications.sendServiceSuspensionNotification(customer, reason);
+            };
+
+            if (awaitWhatsApp) {
                 try {
-                    const whatsappNotifications = require('./whatsapp-notifications');
-                    await whatsappNotifications.sendServiceSuspensionNotification(customer, reason);
+                    await sendSuspensionWa();
                 } catch (notificationError) {
                     logger.error(`WhatsApp notification failed for ${customer.username}:`, notificationError.message);
                 }
-            })();
-            void (async () => {
-                try {
-                    const emailNotifications = require('./email-notifications');
-                    await emailNotifications.sendServiceSuspensionNotification(customer, reason);
-                } catch (notificationError) {
-                    logger.error(`Email notification failed for ${customer.username}:`, notificationError.message);
-                }
-            })();
+            } else {
+                void (async () => {
+                    try {
+                        await sendSuspensionWa();
+                    } catch (notificationError) {
+                        logger.error(`WhatsApp notification failed for ${customer.username}:`, notificationError.message);
+                    }
+                })();
+            }
 
             return {
-                success: results.mikrotik || results.genieacs || results.billing,
+                success: results.mikrotik || results.genieacs || results.billing || results.radius,
                 results,
                 customer: customer.username,
                 reason
@@ -578,8 +584,8 @@ class ServiceSuspensionManager {
                 logger.warn(`Customer ${customer.username} has no PPPoE username or static IP, trying WAN enable method`);
             }
 
-            // 2. Restore via GenieACS (enable WAN connection) — batas waktu sama seperti suspend
-            if (customer.phone || customer.pppoe_username) {
+            // GenieACS hanya untuk wan_enable (tanpa PPPoE/static). Restore PPPoE cukup RADIUS/Mikrotik — hindari timeout pencarian device.
+            if (results.restoration_type === 'wan_enable' && (customer.phone || customer.pppoe_username)) {
                 try {
                     await Promise.race([
                         (async () => {
@@ -657,6 +663,11 @@ class ServiceSuspensionManager {
             // 4–5. Notifikasi di background
             void (async () => {
                 try {
+                    const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+                    if (!isWaSystemMonitorEnabled('isolir_restore_wa')) {
+                        logger.info('isolir_restore_wa off — skip WA restore');
+                        return;
+                    }
                     const whatsappNotifications = require('./whatsapp-notifications');
                     await whatsappNotifications.sendServiceRestorationNotification(customer, reason);
                 } catch (notificationError) {
@@ -988,8 +999,13 @@ class ServiceSuspensionManager {
 
             // Send notification
             try {
-                const whatsappNotifications = require('./whatsapp-notifications');
-                await whatsappNotifications.sendMemberIsolirNotification(member.id, reason);
+                const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+                if (!isWaSystemMonitorEnabled('member_isolir_wa')) {
+                    logger.info('member_isolir_wa off — skip WA isolir member');
+                } else {
+                    const whatsappNotifications = require('./whatsapp-notifications');
+                    await whatsappNotifications.sendMemberIsolirNotification(member.id, reason);
+                }
             } catch (notifError) {
                 logger.error(`Failed to send isolir notification: ${notifError.message}`);
             }

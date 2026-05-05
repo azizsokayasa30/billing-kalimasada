@@ -1,122 +1,21 @@
-<!-- Bottom Navigation for Collector Mobile -->
-<div class="collector-bottom-nav">
-    <a href="/collector/dashboard" class="collector-nav-item <%= currentPage === 'dashboard' ? 'active' : '' %>">
-        <i class="bi bi-house"></i>
-        <span>Home</span>
+<% var p = typeof currentPage !== 'undefined' ? currentPage : ''; %>
+<nav class="fixed bottom-0 left-0 w-full z-50 border-t border-slate-100 dark:border-slate-800 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] bg-white dark:bg-slate-900 rounded-t-lg md:hidden safe-area-pb">
+  <div class="h-16 flex justify-around items-center px-2 pb-[env(safe-area-inset-bottom,0px)] bg-white dark:bg-slate-900">
+    <a href="/collector/dashboard" class="flex flex-col items-center justify-center <%= p === 'dashboard' ? 'text-primary-container dark:text-blue-400 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-1.5' : 'text-slate-400 dark:text-slate-500 hover:text-primary-container dark:hover:text-blue-300' %> active:scale-90 transition-transform duration-150 min-w-[64px]">
+      <span class="material-symbols-outlined <%= p === 'dashboard' ? 'fill' : '' %> text-[22px]">dashboard</span>
+      <span class="font-['Inter'] text-[10px] font-semibold uppercase tracking-wider mt-0.5">Dashboard</span>
     </a>
-    
-    <a href="/collector/payment" class="collector-nav-item <%= currentPage === 'payment' ? 'active' : '' %>">
-        <i class="bi bi-plus-circle"></i>
-        <span>Bayar</span>
+    <a href="/collector/customers" class="flex flex-col items-center justify-center <%= p === 'customers' ? 'text-primary-container dark:text-blue-400 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-1.5' : 'text-slate-400 dark:text-slate-500 hover:text-primary-container dark:hover:text-blue-300' %> active:scale-90 transition-transform duration-150 min-w-[64px]">
+      <span class="material-symbols-outlined <%= p === 'customers' ? 'fill' : '' %> text-[22px]">group</span>
+      <span class="font-['Inter'] text-[10px] font-semibold uppercase tracking-wider mt-0.5">Pelanggan</span>
     </a>
-    
-    <a href="/collector/payments" class="collector-nav-item <%= currentPage === 'payments' ? 'active' : '' %>">
-        <i class="bi bi-list-ul"></i>
-        <span>Riwayat</span>
+    <a href="/collector/payments" class="flex flex-col items-center justify-center <%= p === 'payments' ? 'text-primary-container dark:text-blue-400 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-1.5' : 'text-slate-400 dark:text-slate-500 hover:text-primary-container dark:hover:text-blue-300' %> active:scale-90 transition-transform duration-150 min-w-[64px]">
+      <span class="material-symbols-outlined <%= p === 'payments' ? 'fill' : '' %> text-[22px]">payments</span>
+      <span class="font-['Inter'] text-[10px] font-semibold uppercase tracking-wider mt-0.5">Setoran</span>
     </a>
-    
-    <a href="/collector/customers" class="collector-nav-item <%= currentPage === 'customers' ? 'active' : '' %>">
-        <i class="bi bi-people"></i>
-        <span>Customer</span>
+    <a href="/collector/profile" class="flex flex-col items-center justify-center <%= p === 'profile' ? 'text-primary-container dark:text-blue-400 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-1.5' : 'text-slate-400 dark:text-slate-500 hover:text-primary-container dark:hover:text-blue-300' %> active:scale-90 transition-transform duration-150 min-w-[64px]">
+      <span class="material-symbols-outlined <%= p === 'profile' ? 'fill' : '' %> text-[22px]">account_circle</span>
+      <span class="font-['Inter'] text-[10px] font-semibold uppercase tracking-wider mt-0.5">Profil</span>
     </a>
-    
-    <a href="/collector/profile" class="collector-nav-item <%= currentPage === 'profile' ? 'active' : '' %>">
-        <i class="bi bi-person"></i>
-        <span>Profil</span>
-    </a>
-</div>
-
-<script>
-    // Hard Reload for CSS detection
-    (function() {
-    var pKey = 'simple_reload_' + location.pathname;
-    if (!sessionStorage.getItem(pKey)) {
-        sessionStorage.setItem(pKey, 'true');
-        window.location.reload();
-    }
-})();
-</script>
-
-<style>
-/* Collector Bottom Navigation Styles */
-.collector-bottom-nav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: white;
-    border-top: 1px solid #e9ecef;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    padding: 8px 0;
-    z-index: 1000;
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-}
-
-.collector-nav-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-decoration: none;
-    color: #6c757d;
-    padding: 8px 12px;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-    min-width: 60px;
-    text-align: center;
-}
-
-.collector-nav-item:hover {
-    color: #28a745;
-    background: rgba(40, 167, 69, 0.1);
-    text-decoration: none;
-}
-
-.collector-nav-item.active {
-    color: #28a745;
-    background: rgba(40, 167, 69, 0.15);
-}
-
-.collector-nav-item i {
-    font-size: 1.2rem;
-    margin-bottom: 4px;
-}
-
-.collector-nav-item span {
-    font-size: 0.75rem;
-    font-weight: 500;
-    line-height: 1;
-}
-
-/* Add bottom padding to body when bottom nav is present */
-body.has-bottom-nav {
-    padding-bottom: 70px;
-}
-
-/* Mobile specific adjustments */
-@media (max-width: 768px) {
-    .collector-bottom-nav {
-        padding: 6px 0;
-    }
-    
-    .collector-nav-item {
-        padding: 6px 8px;
-        min-width: 50px;
-    }
-    
-    .collector-nav-item i {
-        font-size: 1.1rem;
-    }
-    
-    .collector-nav-item span {
-        font-size: 0.7rem;
-    }
-}
-
-@media (max-width: 480px) {
-    .collector-nav-item span {
-        font-size: 0.65rem;
-    }
-}
-</style>
+  </div>
+</nav>

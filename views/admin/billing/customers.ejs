@@ -1692,10 +1692,16 @@
                 </div>
                 <form id="importCustomersForm">
                     <div class="modal-body">
+                        <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+                            <a href="/admin/billing/import/customers/template" class="btn btn-outline-success btn-sm" download="template-import-pelanggan.xlsx">
+                                <i class="bi bi-download"></i> Unduh template Excel
+                            </a>
+                            <small class="text-muted">Kolom lengkap + contoh baris + lembar &quot;Petunjuk&quot; agar restore data tidak ada yang tertinggal.</small>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label">Pilih File (JSON atau XLSX)</label>
                             <input type="file" id="customersFile" name="file" accept="application/json,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" class="form-control" required>
-                            <small class="form-text text-muted">Dukungan: JSON (disarankan) atau Excel XLSX. JSON bisa berupa array atau { customers: [...] }.</small>
+                            <small class="form-text text-muted">Dukungan: JSON atau Excel XLSX. Untuk XLSX disarankan pakai template di atas (header baris 1). JSON: array atau { customers: [...] } dengan field yang sama seperti template.</small>
                         </div>
                         <div class="alert alert-info" role="alert">
                             Catatan: Data dengan nomor telepon yang sama akan diupdate. Data baru akan dibuat otomatis.
@@ -1847,7 +1853,7 @@
             });
 
             // Nama pelanggan: huruf besar; tetap trigger username/email otomatis
-            $('#name').on('input', function () {
+            $('#addCustomerModal #name').on('input', function () {
                 const el = this;
                 const start = el.selectionStart;
                 const end = el.selectionEnd;
@@ -1855,11 +1861,21 @@
                 try {
                     if (start != null && end != null) el.setSelectionRange(start, end);
                 } catch (e) { /* ignore */ }
+                const u = document.querySelector('#addCustomerModal #username');
+                const em = document.querySelector('#addCustomerModal #email');
+                if (u && !String(u.value || '').trim()) delete u.dataset.manual;
+                if (em && !String(em.value || '').trim()) delete em.dataset.manual;
                 if (typeof generateCredentialsFromName === 'function') generateCredentialsFromName();
             });
-            $('#name').on('blur', function () {
+            $('#addCustomerModal #name').on('blur', function () {
                 this.value = (this.value || '').toUpperCase();
                 if (typeof generateCredentialsFromName === 'function') generateCredentialsFromName();
+            });
+            $('#addCustomerModal #username').on('input', function () {
+                this.dataset.manual = '1';
+            });
+            $('#addCustomerModal #email').on('input', function () {
+                this.dataset.manual = '1';
             });
 
             // Hapus tanda autofill agar username/email tidak "macet" saat nama dilengkapi huruf demi huruf
@@ -1968,7 +1984,9 @@
             // Reset form when modal is hidden
             $('#addCustomerModal').on('hidden.bs.modal', function() {
                 $('#addCustomerForm')[0].reset();
-                $('#username, #email').removeAttr('data-autofill-from-name');
+                $('#addCustomerModal #username, #addCustomerModal #email')
+                    .removeAttr('data-autofill-from-name')
+                    .removeAttr('data-manual');
                 $('#toggle_static_ip').prop('checked', false);
                 $('#static_ip_fields_wrap').hide();
                 $('#pppoe_password_row').toggle($('#create_pppoe_user').is(':checked'));
@@ -2132,18 +2150,16 @@
             }
         }
 
-        // Final clean function to generate both username and email from name
+        // Final clean function: username nama+DDMMYY WIB, email compact@gmail.com; hormati edit manual & autofill per huruf
         function generateCredentialsFromName() {
             try {
-                const nameField = document.getElementById('name');
-                const usernameField = document.getElementById('username');
-                const emailField = document.getElementById('email');
-                
-                // Only proceed if name field has value
+                const nameField = document.querySelector('#addCustomerModal #name');
+                const usernameField = document.querySelector('#addCustomerModal #username');
+                const emailField = document.querySelector('#addCustomerModal #email');
+
                 if (nameField && nameField.value) {
                     const fullName = nameField.value;
-                    
-                    // Tanggal WIB (satu kali untuk username)
+
                     const jakartaParts = new Intl.DateTimeFormat('en-GB', {
                         timeZone: 'Asia/Jakarta',
                         day: '2-digit',
@@ -2153,7 +2169,6 @@
                     const pickJakarta = (t) => (jakartaParts.find((x) => x.type === t) || {}).value || '00';
                     const dateStr = pickJakarta('day') + pickJakarta('month') + pickJakarta('year');
 
-                    // Nama pelanggan → huruf/angka saja tanpa spasi (dipakai untuk username & email)
                     let compact = '';
                     for (let i = 0; i < fullName.length; i++) {
                         const char = fullName[i].toLowerCase();
@@ -2165,9 +2180,9 @@
                         compact = 'user';
                     }
 
-                    // Timpa ulang selama nilai masih dari autofill (nama diketik per huruf — hindari macet di "a_...")
                     const canAutoUsername =
                         usernameField &&
+                        usernameField.dataset.manual !== '1' &&
                         (!String(usernameField.value || '').trim() ||
                             usernameField.dataset.autofillFromName === '1');
                     if (canAutoUsername) {
@@ -2182,6 +2197,7 @@
 
                     const canAutoEmail =
                         emailField &&
+                        emailField.dataset.manual !== '1' &&
                         (!String(emailField.value || '').trim() ||
                             emailField.dataset.autofillFromName === '1');
                     if (canAutoEmail) {
@@ -2736,7 +2752,7 @@
             };
             
             // Client-side validation
-            const name = $('#name').val().trim().toUpperCase();
+            const name = $('#addCustomerModal #name').val().trim().toUpperCase();
             const username = $('#username').val().trim();
             const phone = $('#phone').val().trim();
             const package_id = $('#package_id').val();
@@ -2838,6 +2854,14 @@
             .then(data => {
                 if (data.success) {
                     if (data.redirect_to_task) {
+                        if (data.prefill_installation) {
+                            try {
+                                sessionStorage.setItem('installationPrefillV1', JSON.stringify({
+                                    ...data.prefill_installation,
+                                    _ts: Date.now()
+                                }));
+                            } catch (e) { /* private mode / quota */ }
+                        }
                         setTimeout(() => {
                             showToast('success', 'Pelanggan berhasil disimpan, mengarahkan ke form buat tugas...');
                             setTimeout(() => { window.location.href = data.redirect_to_task; }, 700);

@@ -1,0 +1,244 @@
+import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint, kDebugMode;
+import '../services/api_client.dart';
+
+class CollectorProvider extends ChangeNotifier {
+  /// Ditambah dari luar (tombol sync) agar tab Pelanggan memuat ulang dengan filter chip saat ini.
+  int customersReloadNonce = 0;
+
+  Map<String, dynamic>? _overview;
+  List<dynamic> _customers = [];
+  Map<String, dynamic>? _settlement;
+  Map<String, dynamic>? _me;
+
+  String? _overviewError;
+  String? _customersError;
+  String? _settlementError;
+  String? _meError;
+
+  bool _overviewLoading = false;
+  bool _customersLoading = false;
+  bool _settlementLoading = false;
+  bool _meLoading = false;
+
+  /// Query terakhir yang sukses untuk overview (dipakai ulang saat refresh / pindah tab).
+  int? _overviewMonth;
+  int? _overviewYear;
+
+  Map<String, dynamic>? get overview => _overview;
+  List<dynamic> get customers => _customers;
+  Map<String, dynamic>? get settlement => _settlement;
+  Map<String, dynamic>? get me => _me;
+
+  String? get overviewError => _overviewError;
+  String? get customersError => _customersError;
+  String? get settlementError => _settlementError;
+  String? get meError => _meError;
+
+  bool get overviewLoading => _overviewLoading;
+  bool get customersLoading => _customersLoading;
+  bool get settlementLoading => _settlementLoading;
+  bool get meLoading => _meLoading;
+
+  int? get overviewMonth => _overviewMonth;
+  int? get overviewYear => _overviewYear;
+
+  Future<void> fetchOverview({int? month, int? year}) async {
+    _overviewLoading = true;
+    _overviewError = null;
+    notifyListeners();
+    try {
+      final m = month ?? _overviewMonth;
+      final y = year ?? _overviewYear;
+      final q = <String>[];
+      if (m != null) q.add('month=$m');
+      if (y != null) q.add('year=$y');
+      final path =
+          '/api/mobile-adapter/collector/overview${q.isEmpty ? '' : '?${q.join('&')}'}';
+      final r = await ApiClient.get(path);
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/overview');
+      if (r.statusCode == 200 && body['success'] == true) {
+        _overview = Map<String, dynamic>.from(body['data'] as Map);
+        _overviewMonth = m;
+        _overviewYear = y;
+      } else {
+        _overviewError = body['message']?.toString() ?? 'Gagal memuat';
+      }
+    } catch (e) {
+      _overviewError = e.toString();
+    } finally {
+      _overviewLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchCustomers({String status = '', String q = ''}) async {
+    _customersLoading = true;
+    _customersError = null;
+    notifyListeners();
+    try {
+      final params = <String>[];
+      if (status.isNotEmpty) params.add('status=${Uri.encodeComponent(status)}');
+      if (q.trim().isNotEmpty) params.add('q=${Uri.encodeComponent(q.trim())}');
+      final path =
+          '/api/mobile-adapter/collector/customers${params.isEmpty ? '' : '?${params.join('&')}'}';
+      final r = await ApiClient.get(path);
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/customers');
+      if (r.statusCode == 200 && body['success'] == true) {
+        final raw = body['data'];
+        if (raw is List) {
+          _customers = List<dynamic>.from(raw);
+        } else {
+          _customers = [];
+          _customersError = 'Format data pelanggan tidak valid (bukan array).';
+        }
+        if (kDebugMode) {
+          debugPrint('[collector/customers] status=$status q="$q" → ${_customers.length} baris');
+        }
+      } else {
+        _customersError = body['message']?.toString() ?? 'Gagal memuat';
+      }
+    } catch (e) {
+      _customersError = e.toString();
+    } finally {
+      _customersLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchSettlement() async {
+    _settlementLoading = true;
+    _settlementError = null;
+    notifyListeners();
+    try {
+      final r = await ApiClient.get('/api/mobile-adapter/collector/settlement');
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/settlement');
+      if (r.statusCode == 200 && body['success'] == true) {
+        _settlement = Map<String, dynamic>.from(body['data'] as Map);
+      } else {
+        _settlementError = body['message']?.toString() ?? 'Gagal memuat';
+      }
+    } catch (e) {
+      _settlementError = e.toString();
+    } finally {
+      _settlementLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void bumpCustomersReload() {
+    customersReloadNonce++;
+    notifyListeners();
+  }
+
+  /// Isolir manual (suspend layanan) untuk pelanggan di wilayah kolektor.
+  Future<String?> collectorIsolirCustomer(int customerId, {String reason = 'Isolir manual oleh kolektor (peringatan)'}) async {
+    try {
+      final r = await ApiClient.post('/api/mobile-adapter/collector/customer-isolir/$customerId', {
+        'reason': reason,
+      });
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/customer-isolir');
+      if (r.statusCode == 200 && body['success'] == true) {
+        bumpCustomersReload();
+        return null;
+      }
+      return body['message']?.toString() ?? 'Gagal isolir';
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Riwayat faktur tahun kalender berjalan (paid & unpaid) untuk detail pelanggan.
+  Future<List<Map<String, dynamic>>> fetchCustomerInvoiceHistory(int customerId) async {
+    try {
+      final r = await ApiClient.get('/api/mobile-adapter/collector/customer-invoice-history/$customerId');
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/customer-invoice-history');
+      if (r.statusCode == 200 && body['success'] == true) {
+        final raw = body['data'];
+        if (raw is List) {
+          return raw.map((e) {
+            if (e is Map) return Map<String, dynamic>.from(e);
+            return <String, dynamic>{};
+          }).where((m) => m.isNotEmpty).toList();
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Sesi PPP online/offline — selaras dengan /admin/mikrotik (RADIUS atau Mikrotik).
+  Future<Map<String, dynamic>> fetchCustomerPppSession(int customerId) async {
+    try {
+      final r = await ApiClient.get('/api/mobile-adapter/collector/customer-ppp-session/$customerId');
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/customer-ppp-session');
+      if (r.statusCode == 200 && body['success'] == true && body['data'] is Map) {
+        return Map<String, dynamic>.from(body['data'] as Map);
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  /// Tagihan belum lunas untuk pelanggan (kolektor yang sama wilayah).
+  Future<List<Map<String, dynamic>>> fetchCustomerInvoices(int customerId) async {
+    try {
+      final r = await ApiClient.get('/api/mobile-adapter/collector/customer-invoices/$customerId');
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/customer-invoices');
+      if (r.statusCode == 200 && body['success'] == true) {
+        final raw = body['data'];
+        if (raw is List) {
+          return raw.map((e) {
+            if (e is Map) return Map<String, dynamic>.from(e);
+            return <String, dynamic>{};
+          }).where((m) => m.isNotEmpty).toList();
+        }
+      }
+    } catch (_) {
+      /* caller shows empty / message */
+    }
+    return [];
+  }
+
+  Future<void> fetchMe() async {
+    _meLoading = true;
+    _meError = null;
+    notifyListeners();
+    try {
+      final r = await ApiClient.get('/api/mobile-adapter/collector/me');
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/me');
+      if (r.statusCode == 200 && body['success'] == true) {
+        _me = Map<String, dynamic>.from(body['data'] as Map);
+      } else {
+        _meError = body['message']?.toString() ?? 'Gagal memuat';
+      }
+    } catch (e) {
+      _meError = e.toString();
+    } finally {
+      _meLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Simpan nama, alamat, email, nomor HP kolektor (Bearer).
+  Future<String?> updateCollectorProfile({
+    required String name,
+    required String phone,
+    String? email,
+    String? address,
+  }) async {
+    try {
+      final r = await ApiClient.put('/api/mobile-adapter/collector/me', {
+        'name': name,
+        'phone': phone,
+        'email': email ?? '',
+        'address': address ?? '',
+      });
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/me/update');
+      if (r.statusCode == 200 && body['success'] == true) {
+        await fetchMe();
+        return null;
+      }
+      return body['message']?.toString() ?? 'Gagal menyimpan';
+    } catch (e) {
+      return e.toString();
+    }
+  }
+}

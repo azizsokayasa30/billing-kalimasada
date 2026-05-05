@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>New Task</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed": "#ffdbd0",
+                    "tertiary-container": "#450e00",
+                    "secondary-fixed": "#f9d8ff",
+                    "surface-tint": "#5a53ab",
+                    "inverse-on-surface": "#f3eeff",
+                    "surface-bright": "#fcf8ff",
+                    "on-error-container": "#93000a",
+                    "on-primary-container": "#857ed9",
+                    "outline": "#787582",
+                    "error": "#ba1a1a",
+                    "secondary-fixed-dim": "#edb1ff",
+                    "secondary": "#7e4990",
+                    "error-container": "#ffdad6",
+                    "outline-variant": "#c8c4d3",
+                    "surface-dim": "#dad5ff",
+                    "surface-container-low": "#f6f1ff",
+                    "on-secondary-fixed-variant": "#643177",
+                    "on-tertiary": "#ffffff",
+                    "on-surface-variant": "#474551",
+                    "tertiary": "#1e0300",
+                    "inverse-surface": "#2f2b55",
+                    "secondary-container": "#ebaefd",
+                    "on-primary-fixed-variant": "#423a91",
+                    "surface": "#fcf8ff",
+                    "on-secondary-container": "#6f3b81",
+                    "on-surface": "#19163f",
+                    "surface-container": "#f0ebff",
+                    "surface-variant": "#e4dfff",
+                    "on-primary-fixed": "#140166",
+                    "surface-container-highest": "#e4dfff",
+                    "surface-container-high": "#eae5ff",
+                    "on-primary": "#ffffff",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary-container": "#c87257",
+                    "on-secondary": "#ffffff",
+                    "on-secondary-fixed": "#320046",
+                    "on-error": "#ffffff",
+                    "inverse-primary": "#c5c0ff",
+                    "background": "#fcf8ff",
+                    "primary-fixed": "#e4dfff",
+                    "primary-container": "#1b0c6b",
+                    "primary": "#070038",
+                    "on-tertiary-fixed-variant": "#76321c",
+                    "tertiary-fixed-dim": "#ffb59f",
+                    "on-background": "#19163f",
+                    "primary-fixed-dim": "#c5c0ff",
+                    "on-tertiary-fixed": "#3a0a00"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "margin-mobile": "1.25rem",
+                    "stack-sm": "0.5rem",
+                    "stack-lg": "2rem",
+                    "touch-target-min": "48px",
+                    "stack-md": "1rem",
+                    "gutter": "1rem"
+            },
+            "fontFamily": {
+                    "headline-md": [
+                            "Inter"
+                    ],
+                    "body-lg": [
+                            "Inter"
+                    ],
+                    "button-text": [
+                            "Inter"
+                    ],
+                    "body-md": [
+                            "Inter"
+                    ],
+                    "label-caps": [
+                            "Public Sans"
+                    ],
+                    "headline-lg": [
+                            "Inter"
+                    ]
+            },
+            "fontSize": {
+                    "headline-md": [
+                            "22px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "26px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "button-text": [
+                            "16px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "label-caps": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "headline-lg": [
+                            "28px",
+                            {
+                                    "lineHeight": "36px",
+                                    "fontWeight": "700"
+                            }
+                    ]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-safe">
+<!-- TopAppBar -->
+<header class="bg-white dark:bg-slate-950 font-headline-md text-indigo-900 dark:text-indigo-300 font-inter font-bold tracking-tight text-lg docked full-width top-0 border-b border-slate-300 dark:border-slate-800 flat no shadows flex justify-between items-center w-full px-5 h-16 sticky z-40">
+<div class="flex items-center gap-4">
+<button class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<span class="text-xl font-black text-indigo-900 dark:text-indigo-100">Field Tasks</span>
+</div>
+<div class="flex items-center">
+<button class="font-button-text text-button-text text-primary flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-2 rounded-lg active:scale-95 transition-transform">
+                New Task
+            </button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="px-margin-mobile py-stack-lg max-w-3xl mx-auto space-y-stack-lg pb-24 md:pb-stack-lg">
+<div class="space-y-stack-sm">
+<h1 class="font-headline-lg text-headline-lg text-on-background">Create Task</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Enter details for the new field operation assignment.</p>
+</div>
+<form class="space-y-stack-md bg-surface p-6 rounded-xl border border-outline-variant shadow-sm">
+<!-- Customer Name -->
+<div class="flex flex-col gap-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase" for="customerName">Customer Name</label>
+<input class="min-h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 py-3 font-body-lg text-body-lg text-on-surface focus:border-primary focus:ring-2 focus:ring-primary-fixed focus:outline-none transition-colors" id="customerName" name="customerName" placeholder="e.g. Acme Corp" type="text"/>
+</div>
+<!-- Task Title -->
+<div class="flex flex-col gap-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase" for="taskTitle">Task Title</label>
+<input class="min-h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 py-3 font-body-lg text-body-lg text-on-surface focus:border-primary focus:ring-2 focus:ring-primary-fixed focus:outline-none transition-colors" id="taskTitle" name="taskTitle" placeholder="e.g. Quarterly Inspection" type="text"/>
+</div>
+<!-- Description -->
+<div class="flex flex-col gap-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase" for="description">Description</label>
+<textarea class="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 py-3 font-body-md text-body-md text-on-surface focus:border-primary focus:ring-2 focus:ring-primary-fixed focus:outline-none transition-colors resize-y" id="description" name="description" placeholder="Provide detailed instructions..." rows="4"></textarea>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">
+<!-- Assigned Technician -->
+<div class="flex flex-col gap-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase" for="technician">Assigned Technician</label>
+<div class="relative">
+<select class="min-h-touch-target-min w-full appearance-none rounded-lg border border-outline-variant bg-surface-container-lowest pl-4 pr-10 py-3 font-body-lg text-body-lg text-on-surface focus:border-primary focus:ring-2 focus:ring-primary-fixed focus:outline-none transition-colors" id="technician" name="technician">
+<option disabled="" selected="" value="">Select a technician</option>
+<option value="tech1">Sarah Jenkins</option>
+<option value="tech2">Marcus Wei</option>
+<option value="tech3">David O'Connor</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+<span class="material-symbols-outlined text-on-surface-variant">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<!-- Due Date -->
+<div class="flex flex-col gap-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase" for="dueDate">Due Date</label>
+<input class="min-h-touch-target-min w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-4 py-3 font-body-lg text-body-lg text-on-surface focus:border-primary focus:ring-2 focus:ring-primary-fixed focus:outline-none transition-colors" id="dueDate" name="dueDate" type="date"/>
+</div>
+</div>
+<!-- Priority -->
+<div class="flex flex-col gap-2 pt-stack-sm">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Priority</span>
+<div class="flex bg-surface-container-high p-1 rounded-lg border border-outline-variant">
+<label class="flex-1 cursor-pointer">
+<input class="peer sr-only" name="priority" type="radio" value="low"/>
+<div class="min-h-[40px] flex items-center justify-center rounded-md font-button-text text-button-text text-on-surface-variant peer-checked:bg-surface-container-lowest peer-checked:text-on-surface peer-checked:shadow-sm transition-all">
+                            Low
+                        </div>
+</label>
+<label class="flex-1 cursor-pointer">
+<input checked="" class="peer sr-only" name="priority" type="radio" value="medium"/>
+<div class="min-h-[40px] flex items-center justify-center rounded-md font-button-text text-button-text text-on-surface-variant peer-checked:bg-surface-container-lowest peer-checked:text-on-surface peer-checked:shadow-sm transition-all">
+                            Medium
+                        </div>
+</label>
+<label class="flex-1 cursor-pointer">
+<input class="peer sr-only" name="priority" type="radio" value="high"/>
+<div class="min-h-[40px] flex items-center justify-center rounded-md font-button-text text-button-text text-on-surface-variant peer-checked:bg-error-container peer-checked:text-on-error-container peer-checked:shadow-sm transition-all">
+                            High
+                        </div>
+</label>
+</div>
+</div>
+<!-- Primary Action -->
+<div class="pt-stack-lg border-t border-outline-variant mt-stack-md flex justify-end">
+<button class="min-h-touch-target-min w-full md:w-auto bg-primary text-on-primary font-button-text text-button-text rounded-lg px-8 py-3 flex items-center justify-center gap-2 hover:bg-primary-container hover:text-on-primary-container active:scale-95 transition-all shadow-md" type="button">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">save</span>
+                    Save Task
+                </button>
+</div>
+</form>
+</main>
+<!-- BottomNavBar (Hidden on md and up) -->
+<nav class="md:hidden bg-white dark:bg-slate-950 font-inter text-[12px] font-semibold uppercase tracking-wider docked full-width bottom-0 z-50 border-t-2 border-slate-200 dark:border-slate-800 shadow-none fixed bottom-0 w-full flex justify-around items-center h-20 px-4 pb-safe bg-white dark:bg-slate-950">
+<a class="flex flex-col items-center justify-center bg-indigo-50 dark:bg-indigo-900/30 text-indigo-900 dark:text-indigo-200 rounded-lg py-1 px-3 tap-highlight-transparent active:opacity-80" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">assignment</span>
+<span>Tasks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-700 dark:hover:text-indigo-100 tap-highlight-transparent active:opacity-80" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span>Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-700 dark:hover:text-indigo-100 tap-highlight-transparent active:opacity-80" href="#">
+<span class="material-symbols-outlined">history</span>
+<span>History</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 py-1 px-3 hover:text-indigo-700 dark:hover:text-indigo-100 tap-highlight-transparent active:opacity-80" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</body></html>

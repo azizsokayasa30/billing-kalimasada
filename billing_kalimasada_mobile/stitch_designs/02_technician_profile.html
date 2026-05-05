@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Technician Details - John Doe</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "tertiary": "#1e0300",
+                      "secondary": "#7e4990",
+                      "on-secondary-fixed-variant": "#643177",
+                      "on-primary-container": "#857ed9",
+                      "on-error-container": "#93000a",
+                      "primary-container": "#1b0c6b",
+                      "surface": "#fcf8ff",
+                      "secondary-fixed": "#f9d8ff",
+                      "on-secondary-fixed": "#320046",
+                      "on-surface": "#19163f",
+                      "inverse-primary": "#c5c0ff",
+                      "on-primary": "#ffffff",
+                      "primary-fixed-dim": "#c5c0ff",
+                      "surface-container-lowest": "#ffffff",
+                      "outline": "#787582",
+                      "surface-container": "#f0ebff",
+                      "secondary-fixed-dim": "#edb1ff",
+                      "error-container": "#ffdad6",
+                      "surface-container-highest": "#e4dfff",
+                      "on-primary-fixed": "#140166",
+                      "inverse-surface": "#2f2b55",
+                      "on-error": "#ffffff",
+                      "surface-tint": "#5a53ab",
+                      "outline-variant": "#c8c4d3",
+                      "tertiary-fixed-dim": "#ffb59f",
+                      "primary": "#070038",
+                      "background": "#fcf8ff",
+                      "on-secondary": "#ffffff",
+                      "surface-variant": "#e4dfff",
+                      "surface-container-high": "#eae5ff",
+                      "on-tertiary": "#ffffff",
+                      "surface-bright": "#fcf8ff",
+                      "on-background": "#19163f",
+                      "on-surface-variant": "#474551",
+                      "error": "#ba1a1a",
+                      "on-primary-fixed-variant": "#423a91",
+                      "tertiary-container": "#450e00",
+                      "surface-container-low": "#f6f1ff",
+                      "surface-dim": "#dad5ff",
+                      "tertiary-fixed": "#ffdbd0",
+                      "primary-fixed": "#e4dfff",
+                      "on-tertiary-fixed": "#3a0a00",
+                      "secondary-container": "#ebaefd",
+                      "on-tertiary-container": "#c87257",
+                      "on-secondary-container": "#6f3b81",
+                      "inverse-on-surface": "#f3eeff",
+                      "on-tertiary-fixed-variant": "#76321c"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "stack-md": "1rem",
+                      "touch-target-min": "48px",
+                      "stack-sm": "0.5rem",
+                      "stack-lg": "2rem",
+                      "gutter": "1rem",
+                      "margin-mobile": "1.25rem"
+              },
+              "fontFamily": {
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "label-caps": [
+                              "Public Sans"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "button-text": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "headline-lg": [
+                              "28px",
+                              {
+                                      "lineHeight": "36px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "22px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-caps": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "button-text": [
+                              "16px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col pt-14 pb-20 md:pb-0 md:pt-0">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-slate-50 border-b border-slate-200 text-indigo-900 md:hidden">
+<div class="flex items-center w-full h-14 px-5 max-w-full">
+<button aria-label="Go back" class="mr-4 flex items-center justify-center min-w-[48px] min-h-[48px] active:scale-95 transition-transform hover:bg-slate-100 rounded-full">
+<span class="material-symbols-outlined text-indigo-900">arrow_back</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold tracking-tight text-indigo-900">John Doe's Details</h1>
+</div>
+</header>
+<!-- Web/Desktop Navigation (Hidden on Mobile) -->
+<nav class="hidden md:flex w-full h-16 bg-surface-container-lowest border-b border-outline-variant items-center px-gutter justify-between fixed top-0 z-50">
+<div class="flex items-center gap-4">
+<button aria-label="Go back" class="mr-2 flex items-center justify-center min-w-[48px] min-h-[48px] active:scale-95 transition-transform hover:bg-surface-container rounded-full">
+<span class="material-symbols-outlined text-on-surface">arrow_back</span>
+</button>
+<span class="font-headline-md text-headline-md text-primary font-bold">John Doe's Details</span>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-grow p-margin-mobile md:p-stack-lg md:mt-16 w-full max-w-5xl mx-auto space-y-stack-lg">
+<!-- Profile Hero Card (Bento Style) -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden shadow-sm">
+<div class="p-stack-md flex flex-col md:flex-row items-center gap-stack-md relative">
+<!-- Avatar -->
+<div class="relative w-24 h-24 shrink-0 rounded-full overflow-hidden border-2 border-surface-container-highest">
+<img alt="John Doe Avatar" class="w-full h-full object-cover" data-alt="A professional headshot of a mature male field technician outdoors. He is wearing a clean navy blue utility shirt. The lighting is bright and natural, indicating a clear daytime setting. The background is slightly blurred but suggests an industrial or telecommunications site. The mood is confident and dependable, matching a corporate modern aesthetic with deep indigo tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCwItzct5ok9cMUouu3QjvuHM1562kU87yrVoMA2i5VFrhpVGMig1D0Z0uSa73JF3UBz8d67qBydBs_jsJxd_Hn3MigkFzt_JjwD13F8YtK6szW1e0Q3Sd25wNHW7gTPD8_YzPn98FiiB4r5Jzb0d9skNdOFPWaCVKrrRcV7RT00UnEn5l51LNLUMfOxzS-mGaNrgYfrf7tQbXS5XSb51Q_QtOfX7otQDGo48XcNsKYzDMh_NTOVXf1NHS6uuwIu0ylmT5qw5-nI2s"/>
+</div>
+<!-- Info -->
+<div class="flex-grow text-center md:text-left">
+<h2 class="font-headline-lg text-headline-lg text-on-surface">John Doe</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Senior Field Technician</p>
+</div>
+<!-- Status Badge -->
+<div class="absolute top-4 right-4 md:static">
+<div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#e8f5e9] text-[#1b5e20] rounded-full border border-[#c8e6c9]">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-caps text-label-caps">Online</span>
+</div>
+</div>
+</div>
+<!-- Quick Actions Divider Row -->
+<div class="border-t border-outline-variant bg-surface-container-low flex divide-x divide-outline-variant">
+<button class="flex-1 py-3 flex flex-col items-center justify-center gap-1 hover:bg-surface-container transition-colors min-h-[48px] text-primary">
+<span class="material-symbols-outlined">call</span>
+<span class="font-label-caps text-label-caps">Call</span>
+</button>
+<button class="flex-1 py-3 flex flex-col items-center justify-center gap-1 hover:bg-surface-container transition-colors min-h-[48px] text-primary">
+<span class="material-symbols-outlined">mail</span>
+<span class="font-label-caps text-label-caps">Email</span>
+</button>
+<button class="flex-1 py-3 flex flex-col items-center justify-center gap-1 hover:bg-surface-container transition-colors min-h-[48px] text-primary">
+<span class="material-symbols-outlined">assignment</span>
+<span class="font-label-caps text-label-caps">Assign</span>
+</button>
+</div>
+</div>
+<!-- Grid Layout for Details -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-lg">
+<!-- Contact Section -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-stack-md flex flex-col gap-stack-sm">
+<h3 class="font-headline-md text-headline-md text-on-surface border-b border-outline-variant pb-2 mb-2">Contact Information</h3>
+<div class="flex items-center gap-3 min-h-[48px] group">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary group-hover:bg-primary-container group-hover:text-on-primary-container transition-colors">
+<span class="material-symbols-outlined">smartphone</span>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Phone Number</p>
+<p class="font-body-lg text-body-lg text-on-surface font-semibold">+1 (555) 902-1234</p>
+</div>
+</div>
+<div class="flex items-center gap-3 min-h-[48px] group">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary group-hover:bg-primary-container group-hover:text-on-primary-container transition-colors">
+<span class="material-symbols-outlined">email</span>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Email Address</p>
+<p class="font-body-lg text-body-lg text-on-surface font-semibold break-all">john.doe@kalimasada.net</p>
+</div>
+</div>
+<div class="flex items-center gap-3 min-h-[48px] group">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary group-hover:bg-primary-container group-hover:text-on-primary-container transition-colors">
+<span class="material-symbols-outlined">location_on</span>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Current Location</p>
+<p class="font-body-lg text-body-lg text-on-surface font-semibold">Sector 4, North Hub</p>
+</div>
+</div>
+</section>
+<!-- Bio & Specializations -->
+<section class="flex flex-col gap-stack-lg">
+<!-- Bio Card -->
+<div class="bg-surface-container-low rounded-xl border border-outline-variant p-stack-md">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">info</span> Professional Summary
+                    </h3>
+<p class="font-body-md text-body-md text-on-surface leading-relaxed">
+                        Senior Field Technician specializing in fiber optic infrastructure and enterprise network deployment with 8+ years of experience.
+                    </p>
+</div>
+<!-- Specializations Card -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-stack-md flex-grow">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">verified</span> Specializations
+                    </h3>
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center px-3 py-1.5 rounded-md bg-surface-container border border-outline-variant font-button-text text-button-text text-on-surface">
+                            Fiber Splicing
+                        </span>
+<span class="inline-flex items-center px-3 py-1.5 rounded-md bg-surface-container border border-outline-variant font-button-text text-button-text text-on-surface">
+                            Network Security
+                        </span>
+<span class="inline-flex items-center px-3 py-1.5 rounded-md bg-surface-container border border-outline-variant font-button-text text-button-text text-on-surface">
+                            Microwave Backhaul
+                        </span>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<!-- Suppressed: This is a details screen with a back button, implying a temporary departure from the main flow. 
+         Following the 'Shell Visibility & Relevance' mandate: 'Automatic Suppression: You MUST exclude the navigation shell if the page intent is: Task-Focused: Any sub-page featuring a "Close" or "Back" action that implies a temporary departure from the main navigation flow.' -->
+<!-- Adding a padding div at bottom to ensure content isn't flush with screen edge on mobile if scrolled to bottom -->
+<div class="h-8 md:hidden w-full"></div>
+</body></html>

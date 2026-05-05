@@ -5,8 +5,70 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { getSettingsWithCache } = require('../config/settingsManager');
+const { notifyLeaveDecision } = require('../config/technicianFieldNotifications');
+const logger = require('../config/logger');
 
 const db = new sqlite3.Database('./data/billing.db');
+
+function normalizePhoneEmployee(raw) {
+    if (!raw) return '';
+    let p = String(raw).trim().replace(/\D/g, '');
+    if (p.startsWith('0')) p = '62' + p.slice(1);
+    if (!p.startsWith('62')) p = '62' + p;
+    return p;
+}
+
+function phoneVariantsEmployeeNoHp(rawPhone) {
+    const norm = normalizePhoneEmployee(rawPhone || '');
+    const v = new Set();
+    const raw = rawPhone != null ? String(rawPhone).trim() : '';
+    if (raw) v.add(raw);
+    if (norm) {
+        v.add(norm);
+        v.add(`+${norm}`);
+        if (norm.startsWith('62') && norm.length > 2) {
+            v.add(`0${norm.slice(2)}`);
+        }
+    }
+    return [...v].filter(Boolean);
+}
+
+function findTechnicianIdForEmployee(employeeId, cb) {
+    db.get('SELECT no_hp FROM employees WHERE id = ?', [employeeId], (err, emp) => {
+        if (err) return cb(err, null);
+        if (!emp || !emp.no_hp) return cb(null, null);
+        const variants = phoneVariantsEmployeeNoHp(emp.no_hp);
+        if (!variants.length) return cb(null, null);
+        const ph = variants.map(() => '?').join(',');
+        db.get(
+            `SELECT id FROM technicians WHERE is_active = 1 AND TRIM(phone) IN (${ph}) LIMIT 1`,
+            variants,
+            (e2, row) => {
+                if (e2) return cb(e2, null);
+                const tid = row && row.id != null ? parseInt(row.id, 10) : NaN;
+                cb(null, Number.isFinite(tid) && tid > 0 ? tid : null);
+            }
+        );
+    });
+}
+
+function pushLeaveDecisionToTechnician(leaveRow, leaveDbId, approved) {
+    if (!leaveRow || !leaveDbId) return;
+    const detail = `${String(leaveRow.request_type || '').toUpperCase()} ${leaveRow.start_date} – ${leaveRow.end_date}. ${leaveRow.reason || ''}`.trim();
+    findTechnicianIdForEmployee(leaveRow.employee_id, (err, techId) => {
+        if (err) {
+            logger.error('[admin-employees] leave notify lookup technician:', err);
+            return;
+        }
+        if (!techId) {
+            logger.warn('[admin-employees] leave notify: no technician match for employee_id', leaveRow.employee_id);
+            return;
+        }
+        notifyLeaveDecision(techId, leaveDbId, approved, detail).catch((e) => {
+            logger.error('[admin-employees] leave notify:', e && e.message);
+        });
+    });
+}
 
 // Multer setup for employee photos
 const storage = multer.diskStorage({
@@ -305,6 +367,7 @@ router.put('/api/leave-requests/:id/approve', (req, res) => {
                             return db.run('COMMIT', (commitErr) => {
                                 if (commitErr) return res.status(500).json({ success: false, error: commitErr.message });
                                 res.json({ success: true, message: 'Permintaan disetujui dan tersimpan di absensi' });
+                                pushLeaveDecisionToTechnician(leaveReq, parseInt(id, 10), true);
                             });
                         }
 
@@ -340,7 +403,7 @@ router.put('/api/leave-requests/:id/reject', (req, res) => {
     const { id } = req.params;
     const { approval_notes, approved_by } = req.body || {};
 
-    db.get('SELECT id, status FROM employee_leave_requests WHERE id = ?', [id], (err, row) => {
+    db.get('SELECT * FROM employee_leave_requests WHERE id = ?', [id], (err, row) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         if (!row) return res.status(404).json({ success: false, error: 'Permintaan tidak ditemukan' });
         if (row.status !== 'pending') {
@@ -355,6 +418,7 @@ router.put('/api/leave-requests/:id/reject', (req, res) => {
             function (updateErr) {
                 if (updateErr) return res.status(500).json({ success: false, error: updateErr.message });
                 res.json({ success: true, message: 'Permintaan ditolak' });
+                pushLeaveDecisionToTechnician(row, parseInt(id, 10), false);
             }
         );
     });

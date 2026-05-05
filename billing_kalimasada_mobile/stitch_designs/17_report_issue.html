@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Report Issue / Escalation</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Public+Sans:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-high": "#eae5ff",
+                        "inverse-primary": "#c5c0ff",
+                        "surface-container-low": "#f6f1ff",
+                        "on-background": "#19163f",
+                        "secondary-fixed": "#f9d8ff",
+                        "surface-variant": "#e4dfff",
+                        "on-tertiary": "#ffffff",
+                        "inverse-surface": "#2f2b55",
+                        "error": "#ba1a1a",
+                        "background": "#fcf8ff",
+                        "on-tertiary-fixed": "#3a0a00",
+                        "on-surface": "#19163f",
+                        "on-primary-fixed": "#140166",
+                        "on-secondary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#e4dfff",
+                        "primary": "#070038",
+                        "secondary": "#7e4990",
+                        "on-error": "#ffffff",
+                        "surface-dim": "#dad5ff",
+                        "tertiary-fixed": "#ffdbd0",
+                        "on-surface-variant": "#474551",
+                        "surface": "#fcf8ff",
+                        "on-secondary-container": "#6f3b81",
+                        "outline-variant": "#c8c4d3",
+                        "on-secondary-fixed-variant": "#643177",
+                        "on-primary-container": "#857ed9",
+                        "on-tertiary-container": "#c87257",
+                        "surface-container": "#f0ebff",
+                        "tertiary-fixed-dim": "#ffb59f",
+                        "secondary-container": "#ebaefd",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed": "#320046",
+                        "surface-bright": "#fcf8ff",
+                        "primary-container": "#1b0c6b",
+                        "tertiary-container": "#450e00",
+                        "primary-fixed-dim": "#c5c0ff",
+                        "surface-tint": "#5a53ab",
+                        "primary-fixed": "#e4dfff",
+                        "outline": "#787582",
+                        "on-tertiary-fixed-variant": "#76321c",
+                        "on-primary-fixed-variant": "#423a91",
+                        "tertiary": "#1e0300",
+                        "secondary-fixed-dim": "#edb1ff",
+                        "on-primary": "#ffffff",
+                        "inverse-on-surface": "#f3eeff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-lg": "2rem",
+                        "stack-sm": "0.5rem",
+                        "touch-target-min": "48px",
+                        "gutter": "1rem",
+                        "margin-mobile": "1.25rem",
+                        "stack-md": "1rem"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "button-text": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-caps": ["Public Sans"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["28px", { "lineHeight": "36px", "fontWeight": "700" }],
+                        "body-lg": ["18px", { "lineHeight": "26px", "fontWeight": "400" }],
+                        "button-text": ["16px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen font-body-md pt-16 pb-20">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface text-on-surface flex items-center justify-between px-5 h-16 w-full border-b border-outline-variant shadow-sm">
+<div class="flex items-center gap-4 w-full">
+<button aria-label="Go back" class="w-12 h-12 flex items-center justify-center text-on-surface hover:bg-surface-variant rounded-full transition-colors">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">arrow_back</span>
+</button>
+<h1 class="font-headline-md text-headline-md text-on-surface truncate">Report Issue</h1>
+<div class="w-12"></div> <!-- Spacer for centering -->
+</div>
+</header>
+<!-- Main Content -->
+<main class="max-w-2xl mx-auto p-margin-mobile flex flex-col gap-stack-lg">
+<!-- Category Section -->
+<section class="flex flex-col gap-stack-sm">
+<label class="font-button-text text-button-text text-on-surface" for="issue-category">Issue Category</label>
+<div class="relative">
+<select class="w-full h-touch-target-min bg-surface-container appearance-none border border-outline rounded-lg px-4 font-body-md text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" id="issue-category">
+<option disabled="" selected="" value="">Select a category...</option>
+<option value="hardware">Hardware Failure</option>
+<option value="refusal">Customer Refusal</option>
+<option value="access">Access Denied</option>
+<option value="wiring">Wiring Problem</option>
+<option value="other">Other</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-on-surface-variant">
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+</section>
+<!-- Description Section -->
+<section class="flex flex-col gap-stack-sm">
+<label class="font-button-text text-button-text text-on-surface" for="issue-description">Description</label>
+<textarea class="w-full bg-surface-container border border-outline rounded-lg p-4 font-body-md text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y min-h-[120px]" id="issue-description" placeholder="Provide specific details about the problem..." rows="4"></textarea>
+</section>
+<!-- Attach Evidence Section -->
+<section class="flex flex-col gap-stack-sm">
+<div class="flex justify-between items-center">
+<label class="font-button-text text-button-text text-on-surface">Attach Evidence</label>
+<span class="font-label-caps text-label-caps text-on-surface-variant">UP TO 3 PHOTOS</span>
+</div>
+<div class="grid grid-cols-3 gap-gutter">
+<button class="aspect-square bg-surface-variant border border-outline border-dashed rounded-lg flex flex-col items-center justify-center gap-2 hover:bg-surface-container-high transition-colors text-on-surface-variant group">
+<span class="material-symbols-outlined text-[32px] group-hover:text-primary transition-colors">add_a_photo</span>
+<span class="font-label-caps text-label-caps">Add</span>
+</button>
+<div class="aspect-square bg-surface-container rounded-lg border border-outline-variant flex items-center justify-center text-on-surface-variant opacity-50">
+<span class="material-symbols-outlined text-[32px]">image</span>
+</div>
+<div class="aspect-square bg-surface-container rounded-lg border border-outline-variant flex items-center justify-center text-on-surface-variant opacity-50">
+<span class="material-symbols-outlined text-[32px]">image</span>
+</div>
+</div>
+</section>
+<!-- Urgency Level Section -->
+<section class="flex flex-col gap-stack-sm">
+<label class="font-button-text text-button-text text-on-surface">Urgency Level</label>
+<div class="flex bg-surface-variant rounded-lg p-1 border border-outline-variant">
+<button class="flex-1 h-touch-target-min bg-surface rounded shadow-sm font-button-text text-button-text text-primary flex items-center justify-center gap-2 border border-outline-variant">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">info</span>
+                     Normal
+                 </button>
+<button class="flex-1 h-touch-target-min bg-transparent rounded font-button-text text-button-text text-on-surface-variant flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-[20px] text-error">warning</span>
+                     High (Critical)
+                 </button>
+</div>
+</section>
+<!-- Actions Section -->
+<section class="flex flex-col gap-stack-md mt-stack-lg">
+<button class="w-full h-[56px] bg-primary text-on-primary rounded-lg font-button-text text-button-text flex items-center justify-center gap-2 hover:bg-primary-container transition-colors shadow-sm">
+<span class="material-symbols-outlined">send</span>
+                Escalate to Back Office
+            </button>
+<button class="w-full h-[56px] bg-transparent text-secondary rounded-lg font-button-text text-button-text flex items-center justify-center gap-2 border-2 border-secondary hover:bg-secondary-container transition-colors">
+<span class="material-symbols-outlined">save</span>
+                Save as Draft
+            </button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 border-t border-outline-variant bg-surface flex justify-around items-center h-20 w-full px-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:hidden">
+<button class="flex flex-col items-center justify-center text-on-surface-variant py-1 px-3 hover:text-primary transition-colors">
+<span class="material-symbols-outlined mb-1">assignment</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider text-[10px]">Tasks</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-lg py-1 px-3 shadow-inner">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">report_problem</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider text-[10px]">Reports</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant py-1 px-3 hover:text-primary transition-colors">
+<span class="material-symbols-outlined mb-1">chat_bubble</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider text-[10px]">Chat</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant py-1 px-3 hover:text-primary transition-colors">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider text-[10px]">Settings</span>
+</button>
+</nav>
+<!-- SideNav for Web (Hidden on Mobile) -->
+<aside class="hidden md:flex flex-col fixed left-0 top-0 h-screen w-64 bg-surface border-r border-outline-variant pt-20 px-4 z-40">
+<nav class="flex flex-col gap-2">
+<button class="flex items-center gap-4 text-on-surface-variant py-3 px-4 rounded-lg hover:bg-surface-variant transition-colors w-full text-left">
+<span class="material-symbols-outlined">assignment</span>
+<span class="font-button-text text-button-text">Tasks</span>
+</button>
+<button class="flex items-center gap-4 bg-primary-container text-on-primary-container py-3 px-4 rounded-lg w-full text-left font-bold shadow-sm">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">report_problem</span>
+<span class="font-button-text text-button-text">Reports</span>
+</button>
+<button class="flex items-center gap-4 text-on-surface-variant py-3 px-4 rounded-lg hover:bg-surface-variant transition-colors w-full text-left">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="font-button-text text-button-text">Chat</span>
+</button>
+<button class="flex items-center gap-4 text-on-surface-variant py-3 px-4 rounded-lg hover:bg-surface-variant transition-colors w-full text-left">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-button-text text-button-text">Settings</span>
+</button>
+</nav>
+</aside>
+<!-- Adjust main content layout for web -->
+<style>
+        @media (min-width: 768px) {
+            main {
+                margin-left: 16rem; /* Match sidebar width */
+                max-width: calc(100% - 16rem);
+                padding: 2rem;
+            }
+            body {
+                padding-bottom: 0;
+            }
+        }
+    </style>
+</body></html>

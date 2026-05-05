@@ -320,6 +320,14 @@ async function sendNotification(message) {
         return false;
     }
 
+    try {
+        const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+        if (!isWaSystemMonitorEnabled('pppoe_login_logout_wa')) {
+            logger.info('Master switch pppoe_login_logout_wa off — skip PPPoE WA notification');
+            return false;
+        }
+    } catch (_) { /* ignore */ }
+
     const settings = getPPPoENotificationSettings();
     if (!settings.enabled) {
         logger.info('PPPoE notifications are disabled');

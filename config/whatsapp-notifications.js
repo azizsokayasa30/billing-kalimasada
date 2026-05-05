@@ -5,295 +5,26 @@ const fs = require('fs');
 const path = require('path');
 const { getCompanyHeader } = require('./message-templates');
 const { getProviderManager } = require('./whatsapp-provider-manager');
+const { getBuiltInWhatsAppTemplates, mergeWhatsAppTemplatesFromFile } = require('./whatsapp-template-registry');
 
 class WhatsAppNotificationManager {
     constructor() {
         this.sock = null; // Keep for backward compatibility
         this.providerManager = null;
         this.templatesFile = path.join(__dirname, '../data/whatsapp-templates.json');
-        this.templates = this.loadTemplates() || {
-            invoice_created: {
-                title: 'Tagihan Baru',
-                template: `📋 *TAGIHAN BARU*
-
-Halo {customer_name},
-
-Tagihan bulanan Anda telah dibuat:
-
-📄 *No. Invoice:* {invoice_number}
-💰 *Jumlah:* Rp {amount}
-📅 *Jatuh Tempo:* {due_date}
-📦 *Paket:* {package_name} ({package_speed})
-📝 *Catatan:* {notes}
-
-Silakan lakukan pembayaran sebelum tanggal jatuh tempo untuk menghindari denda keterlambatan.
-
-Terima kasih atas kepercayaan Anda.`,
-                enabled: true
-            },
-            due_date_reminder: {
-                title: 'Peringatan Jatuh Tempo',
-                template: `⚠️ *PERINGATAN JATUH TEMPO*
-
-Halo {customer_name},
-
-Tagihan Anda akan jatuh tempo dalam {days_remaining} hari:
-
-📄 *No. Invoice:* {invoice_number}
-💰 *Jumlah:* Rp {amount}
-📅 *Jatuh Tempo:* {due_date}
-📦 *Paket:* {package_name} ({package_speed})
-
-Silakan lakukan pembayaran segera untuk menghindari denda keterlambatan.
-
-Terima kasih.`,
-                enabled: true
-            },
-            payment_received: {
-                title: 'Pembayaran Diterima',
-                template: `✅ *PEMBAYARAN DITERIMA*
-
-Halo {customer_name},
-
-Terima kasih! Pembayaran Anda telah kami terima:
-
-📄 *No. Invoice:* {invoice_number}
-💰 *Jumlah:* Rp {amount}
-💳 *Metode Pembayaran:* {payment_method}
-📅 *Tanggal Pembayaran:* {payment_date}
-🔢 *No. Referensi:* {reference_number}
-📦 *Paket:* {package_name} {package_speed}
-
-Layanan internet Anda akan tetap aktif. Terima kasih atas kepercayaan Anda.`,
-                enabled: true
-            },
-            service_disruption: {
-                title: 'Gangguan Layanan',
-                template: `🚨 *GANGGUAN LAYANAN*
-
-Halo Pelanggan Setia,
-
-Kami informasikan bahwa sedang terjadi gangguan pada jaringan internet:
-
-📡 *Jenis Gangguan:* {disruption_type}
-📍 *Area Terdampak:* {affected_area}
-⏰ *Perkiraan Selesai:* {estimated_resolution}
-📞 *Hotline:* {support_phone}
-
-Kami sedang bekerja untuk mengatasi masalah ini secepat mungkin. Mohon maaf atas ketidaknyamanannya.
-
-Terima kasih atas pengertian Anda.`,
-                enabled: true
-            },
-            service_announcement: {
-                title: 'Pengumuman Layanan',
-                template: `📢 *PENGUMUMAN LAYANAN*
-
-Halo Pelanggan Setia,
-
-{announcement_content}
-
-Terima kasih atas perhatian Anda.`,
-                enabled: true
-            },
-
-            service_suspension: {
-                title: 'Service Suspension',
-                template: `⚠️ *LAYANAN INTERNET DINONAKTIFKAN*
-
-Halo {customer_name},
-
-Layanan internet Anda telah dinonaktifkan karena:
-📋 *Alasan:* {reason}
-
-💡 *Cara Mengaktifkan Kembali:*
-1. Lakukan pembayaran tagihan yang tertunggak
-2. Layanan akan aktif otomatis setelah pembayaran dikonfirmasi
-
-📞 *Butuh Bantuan?*
-Hubungi kami di: ${getSetting('contact_whatsapp', '0813-6888-8498')}
-
-*${getCompanyHeader()}*
-Terima kasih atas perhatian Anda.`,
-                enabled: true
-            },
-
-            service_restoration: {
-                title: 'Service Restoration',
-                template: `✅ *LAYANAN INTERNET DIAKTIFKAN*
-
-Halo {customer_name},
-
-Selamat! Layanan internet Anda telah diaktifkan kembali.
-
-📋 *Informasi:*
-• Status: AKTIF ✅
-• Paket: {package_name}
-• Kecepatan: {package_speed}
-
-Terima kasih telah melakukan pembayaran tepat waktu.
-
-*${getCompanyHeader()}*
-Info: ${getSetting('contact_whatsapp', '0813-6888-8498')}`,
-                enabled: true
-            },
-            welcome_message: {
-                title: 'Welcome Message',
-                template: `👋 *SELAMAT DATANG*
-
-Halo {customer_name},
-
-Selamat datang di layanan internet kami!
-
-📦 *Paket:* {package_name} ({package_speed})
-🌐 *PPPoE Username:* {pppoe_username}
-🔑 *PPPoE Password:* {pppoe_password}
-📞 *Support:* {support_phone}
-
-Terima kasih telah memilih layanan kami.`,
-                enabled: true
-            },
-            installation_job_assigned: {
-                title: 'Tugas Instalasi Baru',
-                template: `🔧 *TUGAS INSTALASI BARU*
-
-Halo {technician_name},
-
-Anda telah ditugaskan untuk instalasi baru:
-
-📋 *Detail Job:*
-• No. Job: {job_number}
-• Pelanggan: {customer_name}
-• Telepon: {customer_phone}
-• Alamat: {customer_address}
-
-📦 *Paket Internet:*
-• Nama: {package_name}
-• Harga: Rp {package_price}
-
-📅 *Jadwal Instalasi:*
-• Tanggal: {installation_date}
-• Waktu: {installation_time}
-
-📝 *Catatan:* {notes}
-🛠️ *Peralatan:* {equipment_needed}
-
-📍 *Lokasi:* {customer_address}
-🔐 *PPPoE Username:* {pppoe_username}
-🔑 *PPPoE Password:* {pppoe_password}
-
-*Status:* Ditugaskan
-*Prioritas:* {priority}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📱 *MENU KONFIRMASI:*
-
-1️⃣ *KONFIRMASI PENERIMAAN*
-Balas dengan: *TERIMA* atau *OK*
-
-2️⃣ *MULAI INSTALASI*
-Balas dengan: *MULAI* atau *START*
-
-3️⃣ *SELESAI INSTALASI*
-Balas dengan: *SELESAI* atau *DONE*
-
-4️⃣ *BUTUH BANTUAN*
-Balas dengan: *BANTU* atau *HELP*
-
-5️⃣ *LAPOR MASALAH*
-Balas dengan: *MASALAH* atau *ISSUE*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💡 *HELPER RESPONS CEPAT:*
-• *TERIMA* - Konfirmasi menerima tugas
-• *MULAI* - Mulai proses instalasi
-• *SELESAI* - Tandai instalasi selesai
-• *BANTU* - Minta bantuan teknis
-• *MASALAH* - Laporkan kendala
-
-📞 *Support:* ${getSetting('contact_whatsapp', '0813-6888-8498')}
-
-Silakan konfirmasi penerimaan tugas ini dengan balasan *TERIMA*.
-
-*${getCompanyHeader()}*`,
-                enabled: true
-            },
-            installation_status_update: {
-                title: 'Update Status Instalasi',
-                template: `🔄 *UPDATE STATUS INSTALASI*
-
-Halo {technician_name},
-
-Status instalasi telah diperbarui:
-
-📋 *Detail Job:*
-• No. Job: {job_number}
-• Pelanggan: {customer_name}
-• Status Baru: {new_status}
-• Waktu Update: {update_time}
-
-📝 *Catatan:* {notes}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📱 *MENU KONFIRMASI:*
-
-1️⃣ *KONFIRMASI UPDATE*
-Balas dengan: *KONFIRM* atau *OK*
-
-2️⃣ *BUTUH BANTUAN*
-Balas dengan: *BANTU* atau *HELP*
-
-3️⃣ *LAPOR MASALAH*
-Balas dengan: *MASALAH* atau *ISSUE*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-*${getCompanyHeader()}*`,
-                enabled: true
-            },
-            installation_completed: {
-                title: 'Instalasi Selesai',
-                template: `✅ *INSTALASI SELESAI*
-
-Halo {technician_name},
-
-Selamat! Instalasi telah berhasil diselesaikan:
-
-📋 *Detail Job:*
-• No. Job: {job_number}
-• Pelanggan: {customer_name}
-• Status: SELESAI ✅
-• Waktu Selesai: {completion_time}
-
-📝 *Catatan Penyelesaian:* {completion_notes}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📱 *MENU KONFIRMASI:*
-
-1️⃣ *KONFIRMASI SELESAI*
-Balas dengan: *KONFIRM* atau *OK*
-
-2️⃣ *LAPOR TAMBAHAN*
-Balas dengan: *LAPOR* atau *REPORT*
-
-3️⃣ *BUTUH BANTUAN*
-Balas dengan: *BANTU* atau *HELP*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💡 *HELPER RESPONS CEPAT:*
-• *KONFIRM* - Konfirmasi penyelesaian
-• *LAPOR* - Laporkan detail tambahan
-• *BANTU* - Minta bantuan teknis
-
-*${getCompanyHeader()}*`,
-                enabled: true
+        this._rebuildTemplatesFromDisk();
+    }
+
+    _rebuildTemplatesFromDisk() {
+        let fileData = {};
+        try {
+            if (fs.existsSync(this.templatesFile)) {
+                fileData = JSON.parse(fs.readFileSync(this.templatesFile, 'utf8'));
             }
-        };
+        } catch (error) {
+            logger.error('❌ [WHATSAPP] Error reading templates file:', error);
+        }
+        this.templates = mergeWhatsAppTemplatesFromFile(getBuiltInWhatsAppTemplates(), fileData);
     }
 
     setSock(sockInstance) {
@@ -589,6 +320,12 @@ Balas dengan: *BANTU* atau *HELP*
     // Send message to configured WhatsApp groups (no template replacements here)
     async sendToConfiguredGroups(message) {
         try {
+            const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+            if (!isWaSystemMonitorEnabled('broadcast_group_wa')) {
+                logger.info('broadcast_group_wa off — skip kirim pesan ke grup WA terdaftar');
+                return { success: true, sent: 0, failed: 0, skipped: 0 };
+            }
+
             const enabled = getSetting('whatsapp_groups.enabled', true);
             if (!enabled) {
                 return { success: true, sent: 0, failed: 0, skipped: 0 };
@@ -1214,19 +951,10 @@ Internet Tanpa Batas`;
         }
     }
 
-    // Get all templates
-    // Load templates from file
+    /** Merge file JSON with built-in defaults (e.g. after adding new template keys). */
     loadTemplates() {
-        try {
-            if (fs.existsSync(this.templatesFile)) {
-                const data = fs.readFileSync(this.templatesFile, 'utf8');
-                console.log('✅ [WHATSAPP] Loaded templates from file');
-                return JSON.parse(data);
-            }
-        } catch (error) {
-            console.error('❌ [WHATSAPP] Error loading templates:', error);
-        }
-        return null;
+        this._rebuildTemplatesFromDisk();
+        return this.templates;
     }
 
     // Save templates to file
@@ -1253,28 +981,42 @@ Internet Tanpa Batas`;
 
     // Update template
     updateTemplate(templateKey, newTemplate) {
-        if (this.templates[templateKey]) {
-            this.templates[templateKey] = newTemplate;
-            this.saveTemplates(); // Save to file after update
-            return true;
+        const defaults = getBuiltInWhatsAppTemplates();
+        if (!defaults[templateKey]) return false;
+        if (!this.templates[templateKey]) {
+            this.templates[templateKey] = { ...defaults[templateKey] };
         }
-        return false;
+        this.templates[templateKey] = {
+            title: newTemplate.title != null ? newTemplate.title : this.templates[templateKey].title,
+            template: newTemplate.template !== undefined ? newTemplate.template : this.templates[templateKey].template,
+            enabled: newTemplate.enabled !== undefined ? !!newTemplate.enabled : this.templates[templateKey].enabled
+        };
+        this.saveTemplates();
+        return true;
     }
 
     // Update multiple templates at once
     updateTemplates(templatesData) {
+        const allowed = new Set(Object.keys(getBuiltInWhatsAppTemplates()));
         let updated = 0;
         Object.keys(templatesData).forEach(key => {
-            if (this.templates[key]) {
-                this.templates[key] = templatesData[key];
-                updated++;
+            if (!allowed.has(key)) return;
+            const incoming = templatesData[key];
+            if (!this.templates[key]) {
+                this.templates[key] = { ...getBuiltInWhatsAppTemplates()[key] };
             }
+            this.templates[key] = {
+                title: incoming.title != null ? incoming.title : this.templates[key].title,
+                template: incoming.template !== undefined ? incoming.template : this.templates[key].template,
+                enabled: incoming.enabled !== undefined ? !!incoming.enabled : this.templates[key].enabled
+            };
+            updated++;
         });
-        
+
         if (updated > 0) {
-            this.saveTemplates(); // Save once after all updates
+            this.saveTemplates();
         }
-        
+
         return updated;
     }
 
@@ -1587,19 +1329,26 @@ Internet Tanpa Batas`;
                 return { success: true, skipped: true, reason: 'No active technicians' };
             }
 
-            // Build Sales Order message
-            const message = `📋 *SALES ORDER - PELANGGAN BARU*\n\n` +
-                `*No ID Pelanggan:* ${customer.customer_id || 'N/A'}\n` +
-                `*Nama Pelanggan:* ${customer.name}\n` +
-                `*No HP/WA:* ${customer.phone}\n` +
-                `*Email:* ${customer.email || 'Tidak diisi'}\n` +
-                `*Alamat:* ${customer.address || 'Tidak diisi'}\n` +
-                `*Paket:* ${customer.package_name || 'N/A'} (${customer.package_speed || 'N/A'})\n` +
-                `*PPPoE Username:* ${customer.pppoe_username || 'N/A'}\n` +
-                `*PPPoE Password:* ${customer.pppoe_password || 'N/A'}\n` +
-                `*PPPoE Profile:* ${customer.pppoe_profile || 'default'}\n\n` +
-                `✅ *Status:* Pelanggan telah di-accept dan siap untuk setting.\n\n` +
-                `Silakan lakukan instalasi sesuai dengan data di atas.`;
+            if (!this.isTemplateEnabled('sales_order_new_customer')) {
+                logger.info('Sales Order WhatsApp notification is disabled, skipping...');
+                return { success: true, skipped: true, reason: 'Template disabled' };
+            }
+
+            const message = this.replaceTemplateVariables(
+                this.templates.sales_order_new_customer.template,
+                {
+                    customer_id: String(customer.customer_id || 'N/A'),
+                    customer_name: customer.name || 'N/A',
+                    customer_phone: customer.phone || 'N/A',
+                    customer_email: customer.email || 'Tidak diisi',
+                    customer_address: customer.address || 'Tidak diisi',
+                    package_name: customer.package_name || 'N/A',
+                    package_speed: customer.package_speed || 'N/A',
+                    pppoe_username: customer.pppoe_username || 'N/A',
+                    pppoe_password: customer.pppoe_password || 'N/A',
+                    pppoe_profile: customer.pppoe_profile || 'default'
+                }
+            );
 
             // Send to all active technicians
             let sentCount = 0;

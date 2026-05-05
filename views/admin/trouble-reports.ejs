@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <%- include('../partials/hard-reload') %>
@@ -532,6 +532,7 @@
             </div>
             <div class="modal-body">
                 <form id="createTicketForm">
+                    <input type="hidden" name="customerId" id="selectedCustomerId" value="">
                     <div class="mb-3 position-relative">
                         <label class="form-label">Cari Pelanggan</label>
                         <input type="text" class="form-control" id="searchCustomer" placeholder="Ketik nama atau nomor HP (min 3 huruf)..." autocomplete="off">
@@ -630,6 +631,8 @@
                                     document.getElementById('ticketName').value = c.name;
                                     document.getElementById('ticketPhone').value = c.phone;
                                     document.getElementById('ticketLocation').value = c.address || '';
+                                    const hid = document.getElementById('selectedCustomerId');
+                                    if (hid) hid.value = c.id != null ? String(c.id) : '';
                                     searchInputCustomer.value = '';
                                     searchResultsCustomer.style.display = 'none';
                                 };

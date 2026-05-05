@@ -172,6 +172,67 @@
         <% } %>
         
         <main class="col-md-10 main-content ms-sm-auto">
+            <% 
+              const createdRaw = report.created_at || report.createdAt;
+              const updatedRaw = report.updated_at || report.updatedAt;
+              function fmtTgl(iso) {
+                if (!iso) return '-';
+                const s = String(iso).trim();
+                if (!s) return '-';
+                const normalized = s.indexOf('T') === -1 ? s.replace(' ', 'T') : s;
+                const d = new Date(normalized);
+                if (Number.isNaN(d.getTime())) return s;
+                return d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+                  + ', ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+              }
+              function parseDbDate(iso) {
+                if (!iso) return null;
+                const s = String(iso).trim();
+                if (!s) return null;
+                const normalized = s.indexOf('T') === -1 ? s.replace(' ', 'T') : s;
+                const d = new Date(normalized);
+                return Number.isNaN(d.getTime()) ? null : d;
+              }
+              function formatDurMs(ms) {
+                if (ms == null || ms < 0) return null;
+                const min = Math.floor(ms / 60000);
+                if (min < 1) return 'Kurang dari 1 menit';
+                const h = Math.floor(min / 60);
+                const m = min % 60;
+                if (h > 0 && m > 0) return h + ' jam ' + m + ' menit';
+                if (h > 0) return h + ' jam';
+                return m + ' menit';
+              }
+              const workStartedRaw = report.work_started_at || report.workStartedAt;
+              const startWork = parseDbDate(workStartedRaw);
+              const endWork = parseDbDate(updatedRaw);
+              const mobileDurRaw = report.work_duration_seconds != null && report.work_duration_seconds !== ''
+                ? parseInt(report.work_duration_seconds, 10) : NaN;
+              const mobileDurSec = Number.isFinite(mobileDurRaw) && mobileDurRaw >= 0 ? mobileDurRaw : null;
+              let workDurationMain = '';
+              let workDurationSub = '';
+              if (report.status === 'in_progress' && startWork) {
+                workDurationMain = formatDurMs(Date.now() - startWork.getTime()) + ' (masih berjalan)';
+                workDurationSub = 'Mulai kerja: ' + fmtTgl(workStartedRaw);
+              } else if ((report.status === 'resolved' || report.status === 'closed') && mobileDurSec != null) {
+                workDurationMain = formatDurMs(mobileDurSec * 1000) || '-';
+                workDurationSub = 'Diukur di aplikasi mobile saat teknisi menyelesaikan tugas (timer eksekusi).';
+              } else if ((report.status === 'resolved' || report.status === 'closed') && startWork && endWork) {
+                workDurationMain = formatDurMs(endWork.getTime() - startWork.getTime()) || '-';
+                workDurationSub = 'Perkiraan dari waktu mulai & terakhir diupdate (app lama / tanpa kirim durasi).';
+              } else if (report.status === 'resolved' || report.status === 'closed') {
+                workDurationMain = 'Tidak tersedia';
+                workDurationSub = 'Durasi dari aplikasi tidak tercatat (data lama atau penyelesaian di luar alur mobile).';
+              } else if (report.status === 'in_progress') {
+                workDurationMain = '—';
+                workDurationSub = 'Waktu mulai kerja belum tercatat.';
+              } else {
+                workDurationMain = '—';
+                workDurationSub = 'Pengerjaan belum dimulai.';
+              }
+              const completion = typeof technicianCompletion !== 'undefined' ? technicianCompletion : { description: null, photoPath: null, completedAt: null };
+              const imgBase = typeof appPublicBase !== 'undefined' ? appPublicBase : '';
+            %>
             <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-4">
                 <div>
                     <h1 class="page-title">Detail Laporan Gangguan</h1>
@@ -258,17 +319,23 @@
                                     <div class="detail-label">Tanggal Laporan</div>
                                     <div class="detail-value">
                                         <i class="bi bi-calendar-event me-2"></i>
-                                        <%= new Date(report.createdAt).toLocaleDateString('id-ID') %>
-                                        <small class="text-muted ms-2"><%= new Date(report.createdAt).toLocaleTimeString('id-ID') %></small>
+                                        <%= fmtTgl(createdRaw) %>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="detail-label">Terakhir Diupdate</div>
                                     <div class="detail-value">
                                         <i class="bi bi-clock-history me-2"></i>
-                                        <%= new Date(report.updatedAt).toLocaleDateString('id-ID') %>
-                                        <small class="text-muted ms-2"><%= new Date(report.updatedAt).toLocaleTimeString('id-ID') %></small>
+                                        <%= fmtTgl(updatedRaw) %>
                                     </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="detail-label">Durasi pengerjaan</div>
+                                    <div class="detail-value">
+                                        <i class="bi bi-stopwatch me-2"></i>
+                                        <%= workDurationMain %>
+                                    </div>
+                                    <p class="text-muted small mb-0"><%= workDurationSub %></p>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="detail-label">Prioritas</div>
@@ -290,11 +357,27 @@
                                 </div>
                             </div>
                             
+                            <% if (report.description) { %>
+                            <div class="mt-3 mb-3 small border-start border-secondary border-3 ps-3 text-muted">
+                                <span class="fw-semibold text-dark">Keluhan awal pelanggan:</span>
+                                <%= report.description %>
+                            </div>
+                            <% } %>
                             <div class="mt-4">
-                                <div class="detail-label">Deskripsi Masalah</div>
-                                <div class="p-3 bg-light rounded">
-                                    <%= report.description %>
-                                </div>
+                                <div class="detail-label">Penyelesaian teknisi (aplikasi mobile)</div>
+                                <% if (completion && completion.description) { %>
+                                    <div class="p-3 bg-light rounded mb-3" style="white-space: pre-wrap;"><%= completion.description %></div>
+                                    <% if (completion.photoPath) { %>
+                                        <div class="mb-2">
+                                            <img src="<%= imgBase ? (imgBase + completion.photoPath) : completion.photoPath %>" alt="Dokumentasi penyelesaian" class="img-fluid rounded border shadow-sm" style="max-height: 360px;">
+                                        </div>
+                                    <% } %>
+                                    <% if (completion.completedAt) { %>
+                                        <p class="text-muted small mb-0"><i class="bi bi-calendar-check me-1"></i> Dicatat: <%= fmtTgl(completion.completedAt) %></p>
+                                    <% } %>
+                                <% } else { %>
+                                    <p class="text-muted mb-0">Belum ada data penyelesaian dari teknisi (tugas belum diselesaikan di aplikasi).</p>
+                                <% } %>
                             </div>
                         </div>
                     </div>
@@ -303,40 +386,13 @@
                 <div class="col-md-4">
                     <div class="card mb-4">
                         <div class="card-body">
-                            <h5 class="card-title mb-3"><i class="bi bi-arrow-clockwise me-2"></i>Update Status</h5>
+                            <h5 class="card-title mb-2"><i class="bi bi-chat-dots me-2"></i>Kirim pesan ke pelanggan</h5>
+                            <p class="small text-muted mb-3">Status tiket diubah dari <strong>aplikasi teknisi</strong>. Di sini Anda hanya menambah pesan / catatan dan opsi kirim notifikasi WhatsApp.</p>
                             <form id="updateStatusForm">
+                                <input type="hidden" name="status" id="currentStatus" value="<%= report.status %>">
                                 <div class="mb-3">
-                                    <label for="status" class="form-label">Status Laporan</label>
-                                    <div class="status-options">
-                                        <div class="form-check form-check-inline status-radio">
-                                            <input class="form-check-input" type="radio" name="status" id="statusOpen" value="open" <%= report.status === 'open' ? 'checked' : '' %>>
-                                            <label class="form-check-label status-label open" for="statusOpen">
-                                                <i class="bi bi-exclamation-circle"></i> Belum Ditangani
-                                            </label>
-                                        </div>
-                                        <div class="form-check form-check-inline status-radio">
-                                            <input class="form-check-input" type="radio" name="status" id="statusInProgress" value="in_progress" <%= report.status === 'in_progress' ? 'checked' : '' %>>
-                                            <label class="form-check-label status-label in-progress" for="statusInProgress">
-                                                <i class="bi bi-gear"></i> Sedang Ditangani
-                                            </label>
-                                        </div>
-                                        <div class="form-check form-check-inline status-radio">
-                                            <input class="form-check-input" type="radio" name="status" id="statusResolved" value="resolved" <%= report.status === 'resolved' ? 'checked' : '' %>>
-                                            <label class="form-check-label status-label resolved" for="statusResolved">
-                                                <i class="bi bi-check-circle"></i> Terselesaikan
-                                            </label>
-                                        </div>
-                                        <div class="form-check form-check-inline status-radio">
-                                            <input class="form-check-input" type="radio" name="status" id="statusClosed" value="closed" <%= report.status === 'closed' ? 'checked' : '' %>>
-                                            <label class="form-check-label status-label closed" for="statusClosed">
-                                                <i class="bi bi-archive"></i> Ditutup
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="notes" class="form-label">Catatan Update</label>
-                                    <textarea class="form-control" id="notes" name="notes" rows="4" placeholder="Tambahkan catatan atau update terkait penanganan laporan..." required></textarea>
+                                    <label for="notes" class="form-label">Pesan atau catatan</label>
+                                    <textarea class="form-control" id="notes" name="notes" rows="4" placeholder="Tulis pesan untuk pelanggan (akan tercatat di riwayat dan bisa dikirim ke WhatsApp)…" required></textarea>
                                 </div>
                                 <div class="form-check form-switch mb-3">
                                     <input class="form-check-input" type="checkbox" id="sendNotification" name="sendNotification" checked>
@@ -345,7 +401,7 @@
                                     </label>
                                 </div>
                                 <button type="submit" class="btn btn-primary w-100 rounded-pill">
-                                    <i class="bi bi-save me-2"></i> Update Status
+                                    <i class="bi bi-send me-2"></i> Simpan &amp; kirim (sesuai opsi)
                                 </button>
                             </form>
                         </div>
@@ -401,8 +457,7 @@
                                     <span class="badge bg-primary rounded-pill">Baru</span>
                                 </div>
                                 <p class="text-muted small mb-2">
-                                    <i class="bi bi-calendar-event me-1"></i> <%= new Date(report.createdAt).toLocaleDateString('id-ID') %>
-                                    <i class="bi bi-clock ms-2 me-1"></i> <%= new Date(report.createdAt).toLocaleTimeString('id-ID') %>
+                                    <i class="bi bi-calendar-event me-1"></i> <%= fmtTgl(createdRaw) %>
                                 </p>
                                 <div class="timeline-message">
                                     <p class="mb-0">Laporan gangguan dibuat oleh pelanggan melalui <%= report.source || 'WhatsApp' %>.</p>
@@ -450,8 +505,7 @@
                                             <% } %>
                                         </div>
                                         <p class="text-muted small mb-2">
-                                            <i class="bi bi-calendar-event me-1"></i> <%= new Date(note.timestamp).toLocaleDateString('id-ID') %>
-                                            <i class="bi bi-clock ms-2 me-1"></i> <%= new Date(note.timestamp).toLocaleTimeString('id-ID') %>
+                                            <i class="bi bi-calendar-event me-1"></i> <%= fmtTgl(note.timestamp) %>
                                         </p>
                                         <div class="timeline-message">
                                             <p class="mb-0"><%= note.content %></p>
@@ -497,66 +551,6 @@
 </div>
 
 <style>
-    /* Status Radio Buttons */
-    .status-options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-bottom: 15px;
-    }
-    .status-radio {
-        margin: 0;
-    }
-    .status-radio input {
-        position: absolute;
-        opacity: 0;
-        cursor: pointer;
-        height: 0;
-        width: 0;
-    }
-    .status-label {
-        display: inline-block;
-        padding: 8px 15px;
-        border-radius: 50px;
-        cursor: pointer;
-        font-size: 0.9rem;
-        transition: all 0.3s ease;
-        border: 1px solid #dee2e6;
-        background: var(--bg-secondary, #f8f9fa);
-    }
-    .status-label.open {
-        color: #dc3545;
-    }
-    .status-label.in-progress {
-        color: #ffc107;
-    }
-    .status-label.resolved {
-        color: #198754;
-    }
-    .status-label.closed {
-        color: #6c757d;
-    }
-    .status-radio input:checked + .status-label.open {
-        background: #dc3545;
-        color: white;
-        border-color: #dc3545;
-    }
-    .status-radio input:checked + .status-label.in-progress {
-        background: #ffc107;
-        color: var(--text-primary, #212529);
-        border-color: #ffc107;
-    }
-    .status-radio input:checked + .status-label.resolved {
-        background: #198754;
-        color: white;
-        border-color: #198754;
-    }
-    .status-radio input:checked + .status-label.closed {
-        background: #6c757d;
-        color: white;
-        border-color: #6c757d;
-    }
-    
     /* Timeline Styling */
     .timeline {
         position: relative;
@@ -657,59 +651,22 @@
         const notificationMessage = document.getElementById('notificationMessage');
         const modalOkButton = document.getElementById('modalOkButton');
         
-        // Animasi untuk status radio buttons
-        const statusRadios = document.querySelectorAll('.status-radio input');
-        console.log('Found', statusRadios.length, 'radio buttons');
-        
-        statusRadios.forEach(radio => {
-            console.log('Setting up radio:', radio.id, 'value:', radio.value, 'checked:', radio.checked);
-            
-            radio.addEventListener('change', function() {
-                console.log('Radio changed to:', this.value, 'checked:', this.checked);
-                
-                // Highlight label yang dipilih dengan animasi
-                const label = this.nextElementSibling;
-                label.classList.add('animate__animated', 'animate__pulse');
-                setTimeout(() => {
-                    label.classList.remove('animate__animated', 'animate__pulse');
-                }, 500);
-            });
-            
-            // Also add click handler to label for better UX
-            const label = radio.nextElementSibling;
-            label.addEventListener('click', function(e) {
-                e.preventDefault();
-                console.log('Label clicked for:', radio.value);
-                radio.checked = true;
-                radio.dispatchEvent(new Event('change'));
-            });
-        });
-        
         // Handle form submission
         updateStatusForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            // Get form data
-            const statusRadio = document.querySelector('input[name="status"]:checked');
-            const status = statusRadio ? statusRadio.value : '';
+            const statusEl = document.getElementById('currentStatus');
+            const status = statusEl ? statusEl.value : '';
             const notes = document.getElementById('notes').value;
             const sendNotification = document.getElementById('sendNotification').checked;
             
-            // Debug logging
-            console.log('Form submission debug:');
-            console.log('  - Status radio found:', statusRadio);
-            console.log('  - Status value:', status);
-            console.log('  - Notes:', notes);
-            console.log('  - Send notification:', sendNotification);
-            
-            // Validate required fields
             if (!status) {
-                alert('Silakan pilih status laporan');
+                alert('Status tiket tidak tersedia. Muat ulang halaman.');
                 return;
             }
             
             if (!notes.trim()) {
-                alert('Silakan tambahkan catatan update');
+                alert('Silakan isi pesan atau catatan');
                 return;
             }
             
@@ -722,8 +679,6 @@
                 [notesParam]: notes,
                 sendNotification
             };
-            
-            console.log('Body data to send:', bodyData);
             
             // Tampilkan loading state pada button
             const submitBtn = this.querySelector('button[type="submit"]');
@@ -783,10 +738,6 @@
         });
     });
 </script>
-
-        </main>
-    </div>
-</div>
 
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

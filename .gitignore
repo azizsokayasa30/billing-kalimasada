@@ -9,6 +9,12 @@ yarn-error.log*
 data/billing.db
 data/billing.db-wal
 data/billing.db-shm
+/billing.db
+/database.sqlite
+config/database.sqlite
+data/sessions.db
+data/sessions.db-shm
+data/sessions.db-wal
 data/radius.db
 data/radius.db-wal
 data/radius.db-shm
@@ -67,3 +73,15 @@ settings.json
 
 # License generation script (should not be pushed)
 scripts/generate-license.js
+
+# Local / sensitive (Flutter)
+billing_kalimasada_mobile/mcp.json
+
+# Large local copy (do not commit)
+mobile-app/
+
+# User uploads (runtime)
+public/uploads/
+
+# One-off SQL/debug scripts
+scripts/tmp-*.js

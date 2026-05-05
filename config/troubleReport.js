@@ -99,11 +99,16 @@ async function createTroubleReport(reportData) {
     const id = `TR${Date.now().toString().slice(-6)}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
     const now = getLocalTimestamp();
     
+    const rawCid = reportData.customer_id ?? reportData.customerId;
+    const customerId =
+        rawCid != null && String(rawCid).trim() !== '' ? parseInt(String(rawCid), 10) : NaN;
+    const customerIdSql = Number.isFinite(customerId) && customerId > 0 ? customerId : null;
+
     const sql = `
       INSERT INTO trouble_reports (
         id, status, created_at, updated_at, name, phone, location, 
-        category, description, assigned_technician_id, priority, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        category, description, assigned_technician_id, priority, notes, customer_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
     const params = [
@@ -118,7 +123,8 @@ async function createTroubleReport(reportData) {
       reportData.description,
       reportData.assigned_technician_id || reportData.assignedTechnicianId,
       reportData.priority || 'Normal',
-      JSON.stringify([])
+      JSON.stringify([]),
+      customerIdSql
     ];
 
     db.run(sql, params, async function(err) {
@@ -224,27 +230,36 @@ async function deleteTroubleReport(id) {
 async function sendNotificationToTechnicians(report) {
   try {
     logger.info(`🔔 Mencoba mengirim notifikasi laporan gangguan ${report.id} ke teknisi dan admin`);
-    
+
+    try {
+      const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+      if (!isWaSystemMonitorEnabled('trouble_report_routing_wa')) {
+        logger.info('trouble_report_routing_wa off — skip WA laporan gangguan ke teknisi');
+        return false;
+      }
+    } catch (_) { /* ignore */ }
+
+    const whatsappNotifications = require('./whatsapp-notifications');
+    if (!whatsappNotifications.isTemplateEnabled('trouble_report_new_technician')) {
+      logger.info('Template trouble_report_new_technician nonaktif; lewati notifikasi WA ke teknisi.');
+      return false;
+    }
+
     const technicianGroupId = getSetting('technician_group_id', '');
     const companyHeader = getSetting('company_header', 'CV Lintas Multimedia');
-    
-    const message = `🚨 *LAPORAN GANGGUAN BARU*
 
-*${companyHeader}*
-
-📝 *ID Tiket*: ${report.id}
-👤 *Pelanggan*: ${report.name || 'N/A'}
-📱 *No. HP*: ${report.phone || 'N/A'}
-📍 *Lokasi*: ${report.location || 'N/A'}
-🔧 *Kategori*: ${report.category || 'N/A'}
-🕒 *Waktu Laporan*: ${formatIndonesianDateTime(new Date(report.created_at || report.createdAt))}
-
-💬 *Deskripsi Masalah*:
-${report.description || 'Tidak ada deskripsi'}
-
-📌 *Status*: ${report.status.toUpperCase()}
-
-⚠️ *PRIORITAS TINGGI* - Silakan segera ditindaklanjuti!`;
+    const tpl = whatsappNotifications.templates.trouble_report_new_technician.template;
+    const message = whatsappNotifications.replaceTemplateVariables(tpl, {
+      company_header: companyHeader,
+      report_id: String(report.id),
+      customer_name: report.name || 'N/A',
+      phone: report.phone || 'N/A',
+      location: report.location || 'N/A',
+      category: report.category || 'N/A',
+      created_at: formatIndonesianDateTime(new Date(report.created_at || report.createdAt)),
+      description: report.description || 'Tidak ada deskripsi',
+      status: (report.status || '').toString().toUpperCase()
+    });
 
     let sentSuccessfully = false;
     
@@ -276,45 +291,60 @@ ${report.description || 'Tidak ada deskripsi'}
 async function sendStatusUpdateToCustomer(report) {
   try {
     if (!report.phone) return false;
-    
+
+    try {
+      const { isWaSystemMonitorEnabled } = require('./whatsappMonitoringSettings');
+      if (!isWaSystemMonitorEnabled('trouble_report_routing_wa')) {
+        logger.info('trouble_report_routing_wa off — skip WA update gangguan ke pelanggan');
+        return false;
+      }
+    } catch (_) { /* ignore */ }
+
+    const whatsappNotifications = require('./whatsapp-notifications');
+    if (!whatsappNotifications.isTemplateEnabled('trouble_report_customer_update')) {
+      logger.info('Template trouble_report_customer_update nonaktif; lewati notifikasi WA ke pelanggan.');
+      return false;
+    }
+
     const waJid = report.phone.replace(/^0/, '62') + '@s.whatsapp.net';
     const companyHeader = getSetting('company_header', 'ISP Monitor');
-    
+
     const statusMap = {
       'open': 'Dibuka',
       'in_progress': 'Sedang Ditangani',
       'resolved': 'Terselesaikan',
       'closed': 'Ditutup'
     };
-    
-    const latestNote = report.notes && report.notes.length > 0 
-      ? report.notes[report.notes.length - 1].content 
+
+    const latestNote = report.notes && report.notes.length > 0
+      ? report.notes[report.notes.length - 1].content
       : '';
-    
-    let message = `📣 *UPDATE LAPORAN GANGGUAN*
-    
-*${companyHeader}*
 
-📝 *ID Tiket*: ${report.id}
-🕒 *Update Pada*: ${formatIndonesianDateTime(new Date(report.updated_at || report.updatedAt))}
-📌 *Status Baru*: ${statusMap[report.status] || report.status.toUpperCase()}
-
-${latestNote ? `💬 *Catatan Teknisi*:
-${latestNote}
-
-` : ''}`;
-    
+    let status_message = '';
     if (report.status === 'open') {
-      message += `Laporan Anda telah diterima dan akan segera ditindaklanjuti oleh tim teknisi kami.`;
+      status_message = 'Laporan Anda telah diterima dan akan segera ditindaklanjuti oleh tim teknisi kami.';
     } else if (report.status === 'in_progress') {
-      message += `Tim teknisi kami sedang menangani laporan Anda. Mohon kesabarannya.`;
+      status_message = 'Tim teknisi kami sedang menangani laporan Anda. Mohon kesabarannya.';
     } else if (report.status === 'resolved') {
-      message += `✅ Laporan Anda telah diselesaikan. Jika masalah sudah benar-benar teratasi, silakan tutup laporan ini melalui portal pelanggan.`;
+      status_message = '✅ Laporan Anda telah diselesaikan. Jika masalah sudah benar-benar teratasi, silakan tutup laporan ini melalui portal pelanggan.';
     } else if (report.status === 'closed') {
-      message += `🙏 Terima kasih telah menggunakan layanan kami. Laporan ini telah ditutup.`;
+      status_message = '🙏 Terima kasih telah menggunakan layanan kami. Laporan ini telah ditutup.';
     }
-    
-    message += `\n\nJika ada pertanyaan, silakan hubungi kami.`;
+
+    const technician_note_section = latestNote
+      ? `💬 *Catatan Teknisi*:\n${latestNote}\n\n`
+      : '';
+
+    const tpl = whatsappNotifications.templates.trouble_report_customer_update.template;
+    const message = whatsappNotifications.replaceTemplateVariables(tpl, {
+      company_header: companyHeader,
+      report_id: String(report.id),
+      updated_at: formatIndonesianDateTime(new Date(report.updated_at || report.updatedAt)),
+      status_label: statusMap[report.status] || (report.status || '').toString().toUpperCase(),
+      technician_note_section,
+      status_message
+    });
+
     await sendMessage(waJid, message);
     return true;
   } catch (error) {
@@ -328,6 +358,46 @@ function setSockInstance(sockInstance) {
   setSock(sockInstance);
 }
 
+/** Isi dari catatan teknisi di app mobile: [Penyelesaian teknisi] + teks + baris foto opsional */
+function extractTechnicianCompletion(report) {
+  if (!report || !Array.isArray(report.notes)) {
+    return { description: null, photoPath: null, completedAt: null };
+  }
+  const candidates = report.notes.filter(
+    (n) => n && typeof n.content === 'string' && n.content.includes('[Penyelesaian teknisi]')
+  );
+  if (candidates.length === 0) {
+    return { description: null, photoPath: null, completedAt: null };
+  }
+  candidates.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const n = candidates[0];
+  const lines = String(n.content)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length);
+  let photoPath = null;
+  const descParts = [];
+  for (const line of lines) {
+    if (line.startsWith('[Penyelesaian teknisi]')) continue;
+    const imgMatch = line.match(/(\/img\/field-completion\/[^\s]+\.(?:jpg|jpeg|png|webp))/i);
+    if (imgMatch) {
+      photoPath = imgMatch[1];
+      continue;
+    }
+    if (line.startsWith('📷')) {
+      const m2 = line.match(/(\/img\/[^\s]+)/);
+      if (m2) photoPath = m2[1];
+      continue;
+    }
+    descParts.push(line);
+  }
+  return {
+    description: descParts.join('\n').trim() || null,
+    photoPath,
+    completedAt: n.timestamp || null
+  };
+}
+
 module.exports = {
   getAllTroubleReports,
   getTroubleReportById,
@@ -337,5 +407,6 @@ module.exports = {
   updateTroubleReportStatus,
   sendNotificationToTechnicians,
   sendStatusUpdateToCustomer,
-  setSockInstance
+  setSockInstance,
+  extractTechnicianCompletion
 };
