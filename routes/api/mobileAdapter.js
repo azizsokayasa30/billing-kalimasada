@@ -360,6 +360,62 @@ function jakartaAttendanceTodayYmd() {
     }).format(new Date());
 }
 
+function extractTimePart(value) {
+    if (value == null) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const m = raw.match(/(\d{2}):(\d{2})(?::\d{2})?$/);
+    if (!m) return null;
+    return { hour: parseInt(m[1], 10), minute: parseInt(m[2], 10) };
+}
+
+function calculateLateMinutes(actualTs, shiftCheckInTime) {
+    const actual = extractTimePart(actualTs);
+    const shift = extractTimePart(shiftCheckInTime);
+    if (!actual || !shift) return 0;
+    const actualMinutes = (actual.hour * 60) + actual.minute;
+    const shiftMinutes = (shift.hour * 60) + shift.minute;
+    return Math.max(0, actualMinutes - shiftMinutes);
+}
+
+function haversineMeters(lat1, lng1, lat2, lng2) {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function parseAttendanceBranchQrPayload(rawQr) {
+    if (!rawQr) return null;
+    try {
+        const parsed = JSON.parse(String(rawQr));
+        if (!parsed || parsed.type !== 'attendance_branch') return null;
+        const out = {};
+        if (parsed.id != null) {
+            const id = parseInt(parsed.id, 10);
+            if (Number.isFinite(id) && id > 0) out.id = id;
+        }
+        if (parsed.latitude != null) {
+            const latitude = Number(parsed.latitude);
+            if (Number.isFinite(latitude)) out.latitude = latitude;
+        }
+        if (parsed.longitude != null) {
+            const longitude = Number(parsed.longitude);
+            if (Number.isFinite(longitude)) out.longitude = longitude;
+        }
+        if (parsed.branch_name != null) out.branch_name = String(parsed.branch_name);
+        return Object.keys(out).length ? out : null;
+    } catch (_) {
+        return null;
+    }
+}
+
 function mapInstallPriority(p) {
     const u = String(p || 'normal').toLowerCase();
     if (u === 'urgent' || u === 'high') return 'HIGH';
@@ -612,7 +668,11 @@ router.get('/attendance/status', verifyToken, requireTechnician, (req, res) => {
     }
     const ph = variants.map(() => '?').join(',');
     db.get(
-        `SELECT id FROM employees WHERE (status IS NULL OR LOWER(TRIM(status)) = 'aktif') AND TRIM(no_hp) IN (${ph}) LIMIT 1`,
+        `SELECT e.id, e.shift_id, s.shift_name, s.check_in_time
+         FROM employees e
+         LEFT JOIN attendance_shifts s ON e.shift_id = s.id
+         WHERE (e.status IS NULL OR LOWER(TRIM(e.status)) = 'aktif') AND TRIM(e.no_hp) IN (${ph})
+         LIMIT 1`,
         variants,
         (empErr, empRow) => {
             if (empErr) {
@@ -635,15 +695,25 @@ router.get('/attendance/status', verifyToken, requireTechnician, (req, res) => {
                     if (!row) {
                         return res.json({ success: true, data: null, employee_matched: true, date: today });
                     }
+                    const lateFromMarker = (() => {
+                        const m = String(row.notes || '').match(/\[LATE_MINUTES:(\d+)\]/);
+                        return m ? parseInt(m[1], 10) : 0;
+                    })();
+                    const lateFromShift = calculateLateMinutes(row.check_in, empRow && empRow.check_in_time);
+                    const lateMinutes = lateFromMarker > 0 ? lateFromMarker : lateFromShift;
+                    const lateNotice = lateMinutes > 0 ? `Anda terlambat ${lateMinutes} menit` : null;
                     res.json({
                         success: true,
                         employee_matched: true,
                         date: row.date,
+                        attendance_notice: lateNotice,
                         data: {
                             check_in: row.check_in,
                             check_out: row.check_out,
                             status: row.status,
-                            notes: row.notes
+                            notes: row.notes,
+                            late_minutes: lateMinutes,
+                            late_notice: lateNotice
                         }
                     });
                 }
@@ -688,7 +758,11 @@ router.post('/attendance', verifyToken, requireTechnician, (req, res) => {
     }
     const ph = variants.map(() => '?').join(',');
     db.get(
-        `SELECT id FROM employees WHERE (status IS NULL OR LOWER(TRIM(status)) = 'aktif') AND TRIM(no_hp) IN (${ph}) LIMIT 1`,
+        `SELECT e.id, e.shift_id, s.shift_name, s.check_in_time
+         FROM employees e
+         LEFT JOIN attendance_shifts s ON e.shift_id = s.id
+         WHERE (e.status IS NULL OR LOWER(TRIM(e.status)) = 'aktif') AND TRIM(e.no_hp) IN (${ph})
+         LIMIT 1`,
         variants,
         (empErr, empRow) => {
             if (empErr) {
@@ -727,35 +801,168 @@ router.post('/attendance', verifyToken, requireTechnician, (req, res) => {
                         if (row && row.check_in) {
                             return res.status(400).json({ success: false, message: 'Sudah masuk hari ini' });
                         }
-                        const extra =
-                            mode === 'qr'
-                                ? ` | qr:${qrValue.slice(0, 240)}`
-                                : ` | selfie_bytes:${photoB64 ? photoB64.length : 0}`;
-                        const notes = `${noteBase}${extra}`;
-                        if (row && row.id) {
-                            return db.run(
-                                `UPDATE employee_attendance SET status = 'hadir', check_in = ?, check_out = NULL, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                                [ts, notes, row.id],
-                                function (upErr) {
-                                    if (upErr) {
-                                        logger.error('[mobile-adapter] attendance check_in update', upErr);
-                                        return res.status(500).json({ success: false, message: upErr.message });
+                        db.get(
+                            'SELECT * FROM attendance_settings ORDER BY id DESC LIMIT 1',
+                            [],
+                            (cfgErr, cfg) => {
+                                if (cfgErr) {
+                                    logger.error('[mobile-adapter] attendance gps-config', cfgErr);
+                                    return res.status(500).json({ success: false, message: cfgErr.message });
+                                }
+
+                                const lockGpsEnabled = Number(cfg && cfg.lock_gps_enabled) === 1;
+                                const radiusMeters = Math.max(1, parseInt(cfg && cfg.lock_gps_radius_meters, 10) || 100);
+
+                                const continueCheckIn = (gpsMeta) => {
+                                    const lateMinutes = calculateLateMinutes(ts, empRow && empRow.check_in_time);
+                                    const lateNotice = lateMinutes > 0
+                                        ? `Anda terlambat ${lateMinutes} menit`
+                                        : '';
+                                    const extra =
+                                        mode === 'qr'
+                                            ? ` | qr:${qrValue.slice(0, 240)}`
+                                            : ` | selfie_bytes:${photoB64 ? photoB64.length : 0}`;
+                                    const lateMeta = lateMinutes > 0 ? ` | [LATE_MINUTES:${lateMinutes}] ${lateNotice}` : '';
+                                    const gpsInfo = gpsMeta
+                                        ? ` | [GPS_LOCK] branch:${gpsMeta.branch_name} distance:${Math.round(gpsMeta.distance_m)}m radius:${gpsMeta.radius_m}m`
+                                        : '';
+                                    const notes = `${noteBase}${extra}${lateMeta}${gpsInfo}`;
+                                    if (row && row.id) {
+                                        return db.run(
+                                            `UPDATE employee_attendance SET status = 'hadir', check_in = ?, check_out = NULL, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                                            [ts, notes, row.id],
+                                            function (upErr) {
+                                                if (upErr) {
+                                                    logger.error('[mobile-adapter] attendance check_in update', upErr);
+                                                    return res.status(500).json({ success: false, message: upErr.message });
+                                                }
+                                                logger.info('[mobile-adapter] attendance check_in ok', { attendance_id: row.id });
+                                                const checkInMessage = lateMinutes > 0 ? `Masuk berhasil. ${lateNotice}` : 'Masuk berhasil';
+                                                return res.json({
+                                                    success: true,
+                                                    message: checkInMessage,
+                                                    check_in: ts,
+                                                    late_minutes: lateMinutes,
+                                                    late_notice: lateNotice || null
+                                                });
+                                            }
+                                        );
                                     }
-                                    logger.info('[mobile-adapter] attendance check_in ok', { attendance_id: row.id });
-                                    return res.json({ success: true, message: 'Masuk berhasil', check_in: ts });
+                                    return db.run(
+                                        `INSERT INTO employee_attendance (employee_id, date, status, check_in, check_out, notes) VALUES (?, ?, 'hadir', ?, NULL, ?)`,
+                                        [eid, today, ts, notes],
+                                        function (insErr) {
+                                            if (insErr) {
+                                                logger.error('[mobile-adapter] attendance check_in insert', insErr);
+                                                return res.status(500).json({ success: false, message: insErr.message });
+                                            }
+                                            logger.info('[mobile-adapter] attendance check_in ok', { attendance_id: this.lastID });
+                                            const checkInMessage = lateMinutes > 0 ? `Masuk berhasil. ${lateNotice}` : 'Masuk berhasil';
+                                            return res.json({
+                                                success: true,
+                                                message: checkInMessage,
+                                                check_in: ts,
+                                                late_minutes: lateMinutes,
+                                                late_notice: lateNotice || null
+                                            });
+                                        }
+                                    );
+                                };
+
+                                if (!lockGpsEnabled) {
+                                    return continueCheckIn(null);
                                 }
-                            );
-                        }
-                        return db.run(
-                            `INSERT INTO employee_attendance (employee_id, date, status, check_in, check_out, notes) VALUES (?, ?, 'hadir', ?, NULL, ?)`,
-                            [eid, today, ts, notes],
-                            function (insErr) {
-                                if (insErr) {
-                                    logger.error('[mobile-adapter] attendance check_in insert', insErr);
-                                    return res.status(500).json({ success: false, message: insErr.message });
-                                }
-                                logger.info('[mobile-adapter] attendance check_in ok', { attendance_id: this.lastID });
-                                return res.json({ success: true, message: 'Masuk berhasil', check_in: ts });
+
+                                db.all(
+                                    'SELECT id, branch_name, latitude, longitude FROM attendance_branches ORDER BY id ASC',
+                                    [],
+                                    (brErr, branches) => {
+                                        if (brErr) {
+                                            logger.error('[mobile-adapter] attendance branches', brErr);
+                                            return res.status(500).json({ success: false, message: brErr.message });
+                                        }
+                                        const rows = Array.isArray(branches) ? branches : [];
+                                        if (!rows.length) {
+                                            return res.status(400).json({
+                                                success: false,
+                                                message: 'Lock GPS aktif, tetapi data branch absensi belum ada. Hubungi admin.'
+                                            });
+                                        }
+
+                                        let targetBranch = null;
+                                        if (mode === 'qr') {
+                                            const qrPayload = parseAttendanceBranchQrPayload(qrValue);
+                                            if (!qrPayload) {
+                                                return res.status(400).json({
+                                                    success: false,
+                                                    message: 'QR absensi tidak valid untuk branch.'
+                                                });
+                                            }
+                                            if (qrPayload.id) {
+                                                targetBranch = rows.find((b) => Number(b.id) === Number(qrPayload.id)) || null;
+                                            }
+                                            if (!targetBranch && Number.isFinite(qrPayload.latitude) && Number.isFinite(qrPayload.longitude)) {
+                                                targetBranch = {
+                                                    id: qrPayload.id || null,
+                                                    branch_name: qrPayload.branch_name || 'Branch QR',
+                                                    latitude: qrPayload.latitude,
+                                                    longitude: qrPayload.longitude
+                                                };
+                                            }
+                                            if (!targetBranch) {
+                                                return res.status(400).json({
+                                                    success: false,
+                                                    message: 'QR branch tidak dikenali di data branch absensi.'
+                                                });
+                                            }
+                                        } else {
+                                            let nearest = null;
+                                            rows.forEach((b) => {
+                                                const bLat = Number(b.latitude);
+                                                const bLng = Number(b.longitude);
+                                                if (!Number.isFinite(bLat) || !Number.isFinite(bLng)) return;
+                                                const d = haversineMeters(lat, lng, bLat, bLng);
+                                                if (!nearest || d < nearest.distance_m) {
+                                                    nearest = { branch: b, distance_m: d };
+                                                }
+                                            });
+                                            if (!nearest) {
+                                                return res.status(400).json({
+                                                    success: false,
+                                                    message: 'Koordinat branch absensi tidak valid. Hubungi admin.'
+                                                });
+                                            }
+                                            targetBranch = nearest.branch;
+                                        }
+
+                                        const targetLat = Number(targetBranch.latitude);
+                                        const targetLng = Number(targetBranch.longitude);
+                                        const distanceM = haversineMeters(lat, lng, targetLat, targetLng);
+                                        if (distanceM > radiusMeters) {
+                                            const roundedDistance = Math.round(distanceM);
+                                            const needCloserMeters = Math.max(0, roundedDistance - radiusMeters);
+                                            return res.status(400).json({
+                                                success: false,
+                                                code: 'ATTENDANCE_OUT_OF_RADIUS',
+                                                message: `Anda berada di luar radius absensi branch ${targetBranch.branch_name} (jarak ${roundedDistance}m, batas ${radiusMeters}m).`,
+                                                details: {
+                                                    branch_id: targetBranch.id || null,
+                                                    branch_name: targetBranch.branch_name || 'Branch',
+                                                    distance_m: roundedDistance,
+                                                    radius_m: radiusMeters,
+                                                    need_closer_m: needCloserMeters
+                                                }
+                                            });
+                                        }
+
+                                        return continueCheckIn({
+                                            branch_id: targetBranch.id || null,
+                                            branch_name: targetBranch.branch_name || 'Branch',
+                                            distance_m: distanceM,
+                                            radius_m: radiusMeters
+                                        });
+                                    }
+                                );
                             }
                         );
                     }

@@ -60,6 +60,7 @@
                                 <tr>
                                     <th>Karyawan</th>
                                     <th>Jabatan</th>
+                                    <th>Shift</th>
                                     <th>Kontak</th>
                                     <th>Tgl Masuk</th>
                                     <th class="text-end">Gaji Pokok</th>
@@ -68,7 +69,7 @@
                                 </tr>
                             </thead>
                             <tbody id="dataTableBody">
-                                <tr><td colspan="7" class="text-center py-4">Memuat data...</td></tr>
+                                <tr><td colspan="8" class="text-center py-4">Memuat data...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -133,6 +134,12 @@
                                         <input type="date" class="form-control" id="tanggal_masuk" name="tanggal_masuk">
                                     </div>
                                     <div class="col-md-6">
+                                        <label class="form-label">Shift</label>
+                                        <select class="form-select" id="shift_id" name="shift_id">
+                                            <option value="">Pilih Shift</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
                                         <label class="form-label">Gaji Pokok</label>
                                         <input type="number" class="form-control" id="gaji_pokok" name="gaji_pokok" value="0">
                                     </div>
@@ -160,13 +167,35 @@
     <script>
         let modalInstance;
         let allData = [];
+        let allShifts = [];
         
         document.addEventListener('DOMContentLoaded', () => {
             modalInstance = new bootstrap.Modal(document.getElementById('employeeModal'));
-            loadData();
+            loadShifts().then(loadData);
             
             document.getElementById('searchInput').addEventListener('input', renderTable);
         });
+
+        async function loadShifts() {
+            try {
+                const res = await fetch('/admin/employees/api/attendance-settings/shifts');
+                const json = await res.json();
+                allShifts = (json.data || []).filter(s => Number(s.is_active) === 1);
+                renderShiftOptions();
+            } catch (e) {
+                console.error(e);
+                allShifts = [];
+                renderShiftOptions();
+            }
+        }
+
+        function renderShiftOptions() {
+            const select = document.getElementById('shift_id');
+            if (!select) return;
+            select.innerHTML = '<option value="">Pilih Shift</option>' + allShifts.map(s => (
+                `<option value="${s.id}">${s.shift_name} (${s.check_in_time} - ${s.check_out_time})</option>`
+            )).join('');
+        }
 
         async function loadData() {
             try {
@@ -189,7 +218,7 @@
             });
             
             if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted">Belum ada data / tidak ditemukan.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted">Belum ada data / tidak ditemukan.</td></tr>`;
                 return;
             }
             
@@ -206,6 +235,9 @@
                     </td>
                     <td>
                         <div class="fw-bold">${e.jabatan}</div>
+                    </td>
+                    <td>
+                        <div class="small">${e.shift_name || '-'}</div>
                     </td>
                     <td>
                         <div class="small">${e.no_hp}</div>
@@ -248,6 +280,7 @@
             document.getElementById('alamat').value = e.alamat;
             document.getElementById('jabatan').value = e.jabatan;
             document.getElementById('tanggal_masuk').value = e.tanggal_masuk || '';
+            document.getElementById('shift_id').value = e.shift_id || '';
             document.getElementById('gaji_pokok').value = e.gaji_pokok;
             document.getElementById('status').value = e.status;
             

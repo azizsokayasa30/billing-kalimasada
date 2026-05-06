@@ -16,11 +16,11 @@
         .table-container { background: var(--panel-bg, #ffffff); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 0; overflow: hidden; }
         .table th { background-color: var(--table-head-bg, #f1f3f5); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; border-top: none; padding: 12px 15px; }
         .table td { vertical-align: middle; padding: 12px 15px; font-size: 0.9rem; }
-        .status-badge { font-weight: 600; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; }
-        .status-hadir { background: #d1e7dd; color: #0f5132; }
-        .status-izin { background: #fff3cd; color: #664d03; }
-        .status-sakit { background: #cff4fc; color: #055160; }
-        .status-alpha { background: #f8d7da; color: #842029; }
+        .status-badge { font-weight: 600; font-size: 0.75rem; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.2px; }
+        .status-hadir { background: #22c55e; color: #ffffff; }
+        .status-izin, .status-cuti, .status-sakit { background: #eab308; color: #111827; }
+        .status-alpha, .status-tidak-hadir, .status-tidak_hadir { background: #ef4444; color: #ffffff; }
+        .badge-late { background: #fff3cd; color: #7a4b00; border: 1px solid #f1d18a; font-size: 0.72rem; }
     </style>
     <%- include('../../partials/theme-head') %>
 </head>
@@ -155,13 +155,39 @@
         </div>
     </div>
 
+    <!-- Modal Detail Absensi -->
+    <div class="modal fade" id="attendanceDetailModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold">Detail Absensi</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body pt-3">
+                    <div class="mb-2"><span class="text-muted small">Tanggal</span><div class="fw-bold" id="detailTanggal">-</div></div>
+                    <div class="mb-2"><span class="text-muted small">Nama Karyawan</span><div class="fw-bold" id="detailNama">-</div></div>
+                    <div class="mb-2"><span class="text-muted small">NIK</span><div id="detailNik">-</div></div>
+                    <div class="mb-2"><span class="text-muted small">Status</span><div id="detailStatus">-</div></div>
+                    <div class="mb-2"><span class="text-muted small">Check-In</span><div id="detailCheckIn">-</div></div>
+                    <div class="mb-2"><span class="text-muted small">Check-Out</span><div id="detailCheckOut">-</div></div>
+                    <div><span class="text-muted small">Catatan</span><div id="detailNotes">-</div></div>
+                </div>
+                <div class="modal-footer border-top-0 pt-0">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
         let modalInstance;
+        let detailModalInstance;
         let allData = [];
         
         document.addEventListener('DOMContentLoaded', () => {
             modalInstance = new bootstrap.Modal(document.getElementById('attendanceModal'));
+            detailModalInstance = new bootstrap.Modal(document.getElementById('attendanceDetailModal'));
             
             // Set current month & year
             const now = new Date();
@@ -239,6 +265,40 @@
             return '';
         }
 
+        function parseAttendanceNotes(rawNotes) {
+            const notes = String(rawNotes || '');
+            const lateMatch = notes.match(/\[LATE_MINUTES:(\d+)\]\s*([^|]*)/);
+            const lateMinutes = lateMatch ? Number(lateMatch[1]) : 0;
+            const lateText = lateMatch && lateMatch[2] ? String(lateMatch[2]).trim() : '';
+            const clean = notes
+                .replace(/\s*\|\s*\[LATE_MINUTES:\d+\]\s*([^|]*)/g, '')
+                .replace(/\[LATE_MINUTES:\d+\]\s*([^|]*)/g, '')
+                .trim();
+            return {
+                cleanNotes: clean || '-',
+                lateMinutes: Number.isFinite(lateMinutes) ? lateMinutes : 0,
+                lateText: lateText || ''
+            };
+        }
+
+        function extractHourMinute(raw) {
+            if (raw == null) return null;
+            const s = String(raw).trim();
+            if (!s) return null;
+            const m = s.match(/(\d{2}):(\d{2})(?::\d{2})?$/);
+            if (!m) return null;
+            return { hour: Number(m[1]), minute: Number(m[2]) };
+        }
+
+        function computeLateMinutesFromShift(checkInRaw, shiftCheckInRaw) {
+            const checkIn = extractHourMinute(checkInRaw);
+            const shift = extractHourMinute(shiftCheckInRaw);
+            if (!checkIn || !shift) return 0;
+            const checkInTotal = (checkIn.hour * 60) + checkIn.minute;
+            const shiftTotal = (shift.hour * 60) + shift.minute;
+            return Math.max(0, checkInTotal - shiftTotal);
+        }
+
         function renderTable() {
             const tbody = document.getElementById('dataTableBody');
             const term = document.getElementById('searchInput').value.toLowerCase();
@@ -257,6 +317,12 @@
             
             tbody.innerHTML = filtered.map(a => {
                 const dt = new Date(a.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                const noteInfo = parseAttendanceNotes(a.notes);
+                const lateByShift = computeLateMinutesFromShift(a.check_in, a.shift_check_in_time);
+                const effectiveLateMinutes = noteInfo.lateMinutes > 0 ? noteInfo.lateMinutes : lateByShift;
+                const lateBadge = effectiveLateMinutes > 0
+                    ? `<span class="badge badge-late mt-1">Terlambat ${effectiveLateMinutes} menit</span>`
+                    : '';
                 return `
                 <tr>
                     <td class="fw-bold">${dt}</td>
@@ -265,12 +331,15 @@
                     <td class="text-center">${formatCheckCell(a.check_in)}</td>
                     <td class="text-center">${formatCheckCell(a.check_out)}</td>
                     <td class="text-center">
-                        <span class="status-badge status-${a.status}">${a.status.toUpperCase()}</span>
+                        <span class="status-badge status-${a.status}">${String(a.status).toLowerCase() === 'alpha' ? 'TIDAK HADIR' : String(a.status).toUpperCase()}</span>
                     </td>
-                    <td><div class="small text-muted">${a.notes || '-'}</div></td>
+                    <td>
+                        <div class="small text-muted">${noteInfo.cleanNotes}</div>
+                        ${lateBadge}
+                    </td>
                     <td class="text-end">
                         <div class="admin-action-btns">
-                            <button type="button" class="btn btn-sm btn-primary" onclick='editData(${JSON.stringify(a).replace(/'/g, "&apos;")})' title="Ubah data absensi" aria-label="Ubah data absensi">Edit</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick='viewData(${JSON.stringify(a).replace(/'/g, "&apos;")})' title="Lihat detail absensi" aria-label="Lihat detail absensi">Lihat</button>
                         </div>
                     </td>
                 </tr>
@@ -283,15 +352,23 @@
             modalInstance.show();
         }
 
-        function editData(a) {
-            document.getElementById('attendanceForm').reset();
-            document.getElementById('employee_id').value = a.employee_id;
-            document.getElementById('date').value = a.date.split('T')[0] || a.date;
-            document.getElementById('status').value = a.status;
-            document.getElementById('check_in').value = timeInputFromAttendance(a.check_in);
-            document.getElementById('check_out').value = timeInputFromAttendance(a.check_out);
-            document.getElementById('notes').value = a.notes || '';
-            modalInstance.show();
+        function viewData(a) {
+            const dateOnly = (a.date || '').split('T')[0] || a.date;
+            const dt = dateOnly ? new Date(dateOnly).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+            const noteInfo = parseAttendanceNotes(a.notes);
+            const lateByShift = computeLateMinutesFromShift(a.check_in, a.shift_check_in_time);
+            const effectiveLateMinutes = noteInfo.lateMinutes > 0 ? noteInfo.lateMinutes : lateByShift;
+            const detailNotesHtml = effectiveLateMinutes > 0
+                ? `${noteInfo.cleanNotes}<br><span class="badge badge-late mt-1">Terlambat ${effectiveLateMinutes} menit</span>`
+                : noteInfo.cleanNotes;
+            document.getElementById('detailTanggal').textContent = dt;
+            document.getElementById('detailNama').textContent = a.nama_lengkap || '-';
+            document.getElementById('detailNik').textContent = a.nik || '-';
+            document.getElementById('detailStatus').textContent = (a.status || '-').toUpperCase();
+            document.getElementById('detailCheckIn').textContent = formatCheckCell(a.check_in);
+            document.getElementById('detailCheckOut').textContent = formatCheckCell(a.check_out);
+            document.getElementById('detailNotes').innerHTML = detailNotesHtml;
+            detailModalInstance.show();
         }
 
         async function saveData(ev) {

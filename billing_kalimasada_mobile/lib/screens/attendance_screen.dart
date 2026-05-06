@@ -36,6 +36,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   bool _isActionLoading = false;
   String _status = 'awaiting'; // 'awaiting', 'checked_in', 'checked_out'
   Map<String, dynamic>? _attendanceData;
+  String? _attendanceNotice;
   Timer? _timer;
   DateTime _currentTime = DateTime.now();
 
@@ -118,22 +119,33 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         if (response['success'] == true) {
           _employeeMatched = response['employee_matched'] != false;
           final data = response['data'];
+          final responseNotice = response['attendance_notice']?.toString();
           if (data == null) {
             _status = 'awaiting';
             _attendanceData = null;
+            _attendanceNotice = responseNotice;
           } else if (data['check_out'] != null) {
             _status = 'checked_out';
             _attendanceData = Map<String, dynamic>.from(
               data as Map<dynamic, dynamic>,
             );
+            _attendanceNotice =
+                responseNotice ??
+                _attendanceData?['late_notice']?.toString() ??
+                _extractLateNoticeFromNotes(_attendanceData?['notes']);
           } else if (data['check_in'] != null) {
             _status = 'checked_in';
             _attendanceData = Map<String, dynamic>.from(
               data as Map<dynamic, dynamic>,
             );
+            _attendanceNotice =
+                responseNotice ??
+                _attendanceData?['late_notice']?.toString() ??
+                _extractLateNoticeFromNotes(_attendanceData?['notes']);
           } else {
             _status = 'awaiting';
             _attendanceData = null;
+            _attendanceNotice = responseNotice;
           }
           _log(
             'Status: $_status (karyawan DB: ${_employeeMatched ? "cocok" : "tidak cocok"})',
@@ -152,6 +164,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  String? _extractLateNoticeFromNotes(dynamic rawNotes) {
+    final notes = (rawNotes ?? '').toString();
+    if (notes.trim().isEmpty) return null;
+    final marker = RegExp(r'\[LATE_MINUTES:(\d+)\]\s*([^|]*)');
+    final m = marker.firstMatch(notes);
+    if (m == null) return null;
+    final minutes = int.tryParse((m.group(1) ?? '').trim()) ?? 0;
+    final text = (m.group(2) ?? '').trim();
+    if (text.isNotEmpty) return text;
+    if (minutes > 0) return 'Anda terlambat $minutes menit';
+    return null;
   }
 
   Future<Position?> _determinePosition() async {
@@ -331,10 +356,34 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         }
       } else {
         _log('Error HTTP ${res.statusCode}');
+        String errorMessage = 'Server ${res.statusCode}';
+        try {
+          final err = ApiClient.decodeJsonObject(res, debugLabel: 'absensi-error');
+          final baseMessage = err['message']?.toString() ?? errorMessage;
+          final details = err['details'];
+          if (details is Map) {
+            final d = Map<String, dynamic>.from(details);
+            final branchName = d['branch_name']?.toString() ?? 'branch';
+            final distance = int.tryParse('${d['distance_m'] ?? ''}');
+            final radius = int.tryParse('${d['radius_m'] ?? ''}');
+            final needCloser = int.tryParse('${d['need_closer_m'] ?? ''}');
+            if (distance != null && radius != null) {
+              final needText = (needCloser != null && needCloser > 0)
+                  ? '\nDekati lokasi sekitar $needCloser meter lagi.'
+                  : '';
+              errorMessage =
+                  'Jarak ke $branchName: $distance m (maksimal $radius m).$needText';
+            } else {
+              errorMessage = baseMessage;
+            }
+          } else {
+            errorMessage = baseMessage;
+          }
+        } catch (_) {}
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Server ${res.statusCode}'),
+              content: Text(errorMessage),
               backgroundColor: Colors.red,
             ),
           );
@@ -779,6 +828,44 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
+
+                    if (_attendanceNotice != null &&
+                        _attendanceNotice!.trim().isNotEmpty) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF4E5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFFD8A8)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(top: 2),
+                              child: Icon(
+                                Icons.access_time_filled_rounded,
+                                color: Color(0xFFB45309),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _attendanceNotice!,
+                                style: const TextStyle(
+                                  color: Color(0xFF92400E),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     if (_status == 'awaiting') ...[
                       if (!_employeeMatched)

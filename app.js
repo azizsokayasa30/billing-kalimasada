@@ -359,13 +359,15 @@ const employeeSync = {
                     email TEXT,
                     jabatan TEXT,
                     area_id INTEGER,
+                    shift_id INTEGER,
                     tanggal_masuk DATE,
                     status TEXT DEFAULT 'aktif' CHECK(status IN ('aktif', 'nonaktif')),
                     gaji_pokok DECIMAL(15,2) DEFAULT 0,
                     foto_path TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (area_id) REFERENCES areas(id)
+                    FOREIGN KEY (area_id) REFERENCES areas(id),
+                    FOREIGN KEY (shift_id) REFERENCES attendance_shifts(id)
                 )`,
                 `CREATE TABLE IF NOT EXISTS employee_attendance (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -447,6 +449,13 @@ const employeeSync = {
                 db.run(sql, (err) => {
                     if (err) console.error('Failed to ensure employee table:', err.message);
                 });
+            });
+
+            // Migrate older databases that do not have employee shift assignment yet
+            db.run('ALTER TABLE employees ADD COLUMN shift_id INTEGER', (err) => {
+                if (err && !err.message.includes('duplicate column')) {
+                    console.error('Failed to add shift_id to employees:', err.message);
+                }
             });
         };
         

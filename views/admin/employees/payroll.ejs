@@ -143,6 +143,9 @@
                         </div>
                     </div>
                     <div class="modal-footer border-top-0 pt-0">
+                        <button type="button" class="btn btn-sm btn-outline-danger me-auto d-none" id="btnDeletePayroll" onclick="deletePayroll()">
+                            <i class="bi bi-trash me-1"></i> Hapus Payroll
+                        </button>
                         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
                         <button type="submit" class="btn btn-sm btn-primary px-4" id="btnSave">Simpan</button>
                     </div>
@@ -159,6 +162,7 @@
         let modalInstance;
         let allData = [];
         let baseGajiPokok = 0;
+        let selectedPayroll = null;
         
         document.addEventListener('DOMContentLoaded', () => {
             modalInstance = new bootstrap.Modal(document.getElementById('payrollModal'));
@@ -250,8 +254,13 @@
 
         function editData(p) {
             document.getElementById('payrollForm').reset();
+            selectedPayroll = p;
             document.getElementById('payroll_id').value = p.id;
             document.getElementById('empNameLabel').textContent = p.nama_lengkap + ' (' + p.nik + ')';
+            const btnDelete = document.getElementById('btnDeletePayroll');
+            btnDelete.classList.remove('d-none');
+            btnDelete.disabled = p.status === 'paid';
+            btnDelete.title = p.status === 'paid' ? 'Payroll dengan status paid tidak bisa dihapus' : '';
             
             baseGajiPokok = Number(p.gaji_pokok);
             document.getElementById('gaji_pokok').value = 'Rp ' + baseGajiPokok.toLocaleString('id-ID');
@@ -300,6 +309,40 @@
                 } else alert('Error: ' + json.error);
             } catch (e) { alert('Terjadi kesalahan'); }
             finally { btn.disabled = false; btn.textContent = 'Simpan'; }
+        }
+
+        async function deletePayroll() {
+            const id = document.getElementById('payroll_id').value;
+            if (!id) return;
+            if (selectedPayroll && selectedPayroll.status === 'paid') {
+                alert('Payroll dengan status paid tidak bisa dihapus');
+                return;
+            }
+
+            const empName = selectedPayroll ? selectedPayroll.nama_lengkap : 'karyawan ini';
+            const ok = confirm(`Hapus payroll untuk ${empName}? Tindakan ini tidak bisa dibatalkan.`);
+            if (!ok) return;
+
+            const btnDelete = document.getElementById('btnDeletePayroll');
+            const prevHtml = btnDelete.innerHTML;
+            btnDelete.disabled = true;
+            btnDelete.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Menghapus...';
+
+            try {
+                const res = await fetch('/admin/employees/api/payroll/' + id, { method: 'DELETE' });
+                const json = await res.json();
+                if (json.success) {
+                    modalInstance.hide();
+                    loadData();
+                } else {
+                    alert('Error: ' + (json.error || 'Gagal menghapus payroll'));
+                }
+            } catch (e) {
+                alert('Terjadi kesalahan saat menghapus payroll');
+            } finally {
+                btnDelete.disabled = false;
+                btnDelete.innerHTML = prevHtml;
+            }
         }
 
         function getSlipTemplate(p, m, y, tb) {

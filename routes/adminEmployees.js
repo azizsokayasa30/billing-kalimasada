@@ -145,8 +145,9 @@ router.get('/api/areas', (req, res) => {
 
 router.get('/api/data', (req, res) => {
     const query = `
-        SELECT e.* 
+        SELECT e.*, s.shift_name, s.check_in_time, s.check_out_time
         FROM employees e
+        LEFT JOIN attendance_shifts s ON e.shift_id = s.id
         ORDER BY e.created_at DESC
     `;
     db.all(query, [], (err, rows) => {
@@ -156,14 +157,15 @@ router.get('/api/data', (req, res) => {
 });
 
 router.post('/api/data', upload.single('foto'), (req, res) => {
-    const { nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok } = req.body;
+    const { nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok, shift_id } = req.body;
     const foto_path = req.file ? `/public/uploads/employees/${req.file.filename}` : null;
     
     const query = `
-        INSERT INTO employees (nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok, foto_path)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO employees (nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok, shift_id, foto_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    const values = [nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status || 'aktif', gaji_pokok || 0, foto_path];
+    const normalizedShiftId = shift_id ? parseInt(shift_id, 10) : null;
+    const values = [nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status || 'aktif', gaji_pokok || 0, Number.isNaN(normalizedShiftId) ? null : normalizedShiftId, foto_path];
     
     db.run(query, values, function(err) {
         if (err) {
@@ -177,7 +179,7 @@ router.post('/api/data', upload.single('foto'), (req, res) => {
 
 router.put('/api/data/:id', upload.single('foto'), (req, res) => {
     const { id } = req.params;
-    const { nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok } = req.body;
+    const { nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok, shift_id } = req.body;
     
     db.get("SELECT foto_path FROM employees WHERE id = ?", [id], (err, row) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
@@ -194,10 +196,11 @@ router.put('/api/data/:id', upload.single('foto'), (req, res) => {
 
         const query = `
             UPDATE employees 
-            SET nama_lengkap = ?, nik = ?, alamat = ?, no_hp = ?, email = ?, jabatan = ?, tanggal_masuk = ?, status = ?, gaji_pokok = ?, foto_path = ?, updated_at = CURRENT_TIMESTAMP
+            SET nama_lengkap = ?, nik = ?, alamat = ?, no_hp = ?, email = ?, jabatan = ?, tanggal_masuk = ?, status = ?, gaji_pokok = ?, shift_id = ?, foto_path = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         `;
-        const values = [nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok || 0, foto_path, id];
+        const normalizedShiftId = shift_id ? parseInt(shift_id, 10) : null;
+        const values = [nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok || 0, Number.isNaN(normalizedShiftId) ? null : normalizedShiftId, foto_path, id];
         
         db.run(query, values, function(err) {
             if (err) return res.status(500).json({ success: false, error: err.message });
@@ -228,9 +231,10 @@ router.get('/api/attendance', (req, res) => {
     const { month, year } = req.query;
     
     let query = `
-        SELECT a.*, e.nama_lengkap, e.nik 
+        SELECT a.*, e.nama_lengkap, e.nik, e.shift_id, s.check_in_time AS shift_check_in_time, s.shift_name
         FROM employee_attendance a
         JOIN employees e ON a.employee_id = e.id
+        LEFT JOIN attendance_shifts s ON e.shift_id = s.id
     `;
     
     let values = [];
@@ -667,6 +671,23 @@ router.put('/api/payroll/:id', (req, res) => {
         db.run(query, [tunjangan || 0, bonus || 0, potongan || 0, total_gaji, status, payment_date || null, id], function(err) {
             if (err) return res.status(500).json({ success: false, error: err.message });
             res.json({ success: true, message: 'Data penggajian berhasil diupdate', total_gaji });
+        });
+    });
+});
+
+router.delete('/api/payroll/:id', (req, res) => {
+    const { id } = req.params;
+
+    db.get('SELECT id, status FROM employee_payroll WHERE id = ?', [id], (err, row) => {
+        if (err) return res.status(500).json({ success: false, error: err.message });
+        if (!row) return res.status(404).json({ success: false, error: 'Data payroll tidak ditemukan' });
+        if (row.status === 'paid') {
+            return res.status(400).json({ success: false, error: 'Payroll dengan status paid tidak bisa dihapus' });
+        }
+
+        db.run('DELETE FROM employee_payroll WHERE id = ?', [id], function(deleteErr) {
+            if (deleteErr) return res.status(500).json({ success: false, error: deleteErr.message });
+            res.json({ success: true, message: 'Data payroll berhasil dihapus' });
         });
     });
 });
