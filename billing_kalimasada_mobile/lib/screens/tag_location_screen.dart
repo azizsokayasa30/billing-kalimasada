@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/api_client.dart';
 import '../widgets/odp_map_marker.dart';
@@ -12,19 +13,33 @@ class TagLocationScreen extends StatefulWidget {
   State<TagLocationScreen> createState() => _TagLocationScreenState();
 }
 
-class _TagLocationScreenState extends State<TagLocationScreen> {
+class _TagLocationScreenState extends State<TagLocationScreen>
+    with SingleTickerProviderStateMixin {
   final MapController _mapController = MapController();
   final TextEditingController _odpCodeController = TextEditingController();
   final TextEditingController _capacityController = TextEditingController(text: '8'); // Default 8 port
   final TextEditingController _notesController = TextEditingController();
   
   LatLng? _selectedLocation;
+  LatLng? _currentGpsLocation;
   bool _isLoading = false;
+  bool _isLocating = false;
+  late final AnimationController _gpsPulseController;
 
   final LatLng _defaultLocation = const LatLng(-7.404620, 109.724536);
 
   @override
+  void initState() {
+    super.initState();
+    _gpsPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1700),
+    )..repeat();
+  }
+
+  @override
   void dispose() {
+    _gpsPulseController.dispose();
     _odpCodeController.dispose();
     _capacityController.dispose();
     _notesController.dispose();
@@ -37,9 +52,105 @@ class _TagLocationScreenState extends State<TagLocationScreen> {
     });
   }
 
-  void _moveToCurrentLocation() {
-    // We could use Geolocator here, but for now we just snap to default or existing
-    _mapController.move(_selectedLocation ?? _defaultLocation, 16.0);
+  Future<void> _moveToCurrentLocation() async {
+    if (_isLocating) return;
+    setState(() => _isLocating = true);
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Layanan lokasi nonaktif. Aktifkan GPS terlebih dahulu.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Izin lokasi diperlukan untuk fitur My Location.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      final gps = LatLng(pos.latitude, pos.longitude);
+      if (!mounted) return;
+      setState(() {
+        _currentGpsLocation = gps;
+      });
+      _mapController.move(gps, 18.0);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengambil lokasi GPS: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLocating = false);
+    }
+  }
+
+  Widget _buildGpsPulseMarker() {
+    return AnimatedBuilder(
+      animation: _gpsPulseController,
+      builder: (context, _) {
+        final pulse = Curves.easeOut.transform(_gpsPulseController.value);
+        final ringScale = 1.0 + (pulse * 1.2);
+        final ringOpacity = (0.30 * (1 - pulse)).clamp(0.0, 1.0);
+        return SizedBox(
+          width: 42,
+          height: 42,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Transform.scale(
+                scale: ringScale,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1A73E8).withValues(alpha: ringOpacity),
+                  ),
+                ),
+              ),
+              Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF1A73E8),
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _saveLocation() async {
@@ -165,6 +276,18 @@ class _TagLocationScreenState extends State<TagLocationScreen> {
                                 ),
                               ],
                             ),
+                          if (_currentGpsLocation != null)
+                            MarkerLayer(
+                              markers: [
+                                Marker(
+                                  point: _currentGpsLocation!,
+                                  width: 34,
+                                  height: 34,
+                                  alignment: Alignment.center,
+                                  child: _buildGpsPulseMarker(),
+                                ),
+                              ],
+                            ),
                         ],
                       ),
                       Positioned(
@@ -178,7 +301,16 @@ class _TagLocationScreenState extends State<TagLocationScreen> {
                             boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
                           ),
                           child: IconButton(
-                            icon: const Icon(Icons.my_location, color: Color(0xFF070038)),
+                            icon: _isLocating
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF070038),
+                                    ),
+                                  )
+                                : const Icon(Icons.my_location, color: Color(0xFF070038)),
                             onPressed: _moveToCurrentLocation,
                           ),
                         ),
@@ -200,6 +332,18 @@ class _TagLocationScreenState extends State<TagLocationScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Tambah ODP Baru',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF070038),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 
                 // ODP Code Section
                 Container(

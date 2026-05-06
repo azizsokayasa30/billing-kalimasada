@@ -10,357 +10,582 @@ class NetworkStatusScreen extends StatefulWidget {
   State<NetworkStatusScreen> createState() => _NetworkStatusScreenState();
 }
 
-class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
+class _NetworkStatusScreenState extends State<NetworkStatusScreen>
+    with WidgetsBindingObserver {
+  static const Color _primary = Color(0xFF532AA8);
+  static const Color _surface = Color(0xFFF8F9FF);
+  static const Color _outline = Color(0xFFCBC3D5);
+  static const Color _text = Color(0xFF0B1C30);
+  static const Color _subtleText = Color(0xFF494453);
+
   Timer? _timer;
-  String _rxMbps = "0.0";
-  String _txMbps = "0.0";
-  String _totalMbps = "0.0";
+  bool _pollingActive = false;
+  bool _requestInFlight = false;
+  bool _loading = true;
+  bool _refreshing = false;
+  String? _error;
+  int _active = 0;
+  int _offline = 0;
+  int _total = 0;
+  DateTime? _lastUpdatedAt;
+  List<Map<String, dynamic>> _routers = [];
+  final Map<String, List<_TrafficPoint>> _trafficHistory = {};
 
   @override
   void initState() {
     super.initState();
-    _fetchTraffic();
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchTraffic());
+    WidgetsBinding.instance.addObserver(this);
+    _fetchNetworkStatus();
+    _startPolling();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _stopPolling();
     super.dispose();
   }
 
-  Future<void> _fetchTraffic() async {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startPolling();
+      _fetchNetworkStatus(silent: true);
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _stopPolling();
+    }
+  }
+
+  void _startPolling() {
+    _timer?.cancel();
+    _pollingActive = true;
+    _timer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _fetchNetworkStatus(silent: true),
+    );
+  }
+
+  void _stopPolling() {
+    _timer?.cancel();
+    _timer = null;
+    _pollingActive = false;
+  }
+
+  int _toInt(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse('${value ?? ''}') ?? 0;
+  }
+
+  Future<void> _fetchNetworkStatus({bool silent = false}) async {
+    if (_requestInFlight) return;
+    _requestInFlight = true;
+    if (!silent && mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else if (silent && mounted) {
+      setState(() => _refreshing = true);
+    }
     try {
-      final response = await ApiClient.get('/api/dashboard/traffic');
+      final response = await ApiClient.get('/api/mobile-adapter/network-status');
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
         if (data['success'] == true) {
-          final rxBits = int.tryParse(data['rx'].toString()) ?? 0;
-          final txBits = int.tryParse(data['tx'].toString()) ?? 0;
-          if (mounted) {
-            setState(() {
-              final rxM = (rxBits / 1000000);
-              final txM = (txBits / 1000000);
-              _rxMbps = rxM.toStringAsFixed(2);
-              _txMbps = txM.toStringAsFixed(2);
-              _totalMbps = (rxM + txM).toStringAsFixed(2);
-            });
+          final summary = (data['summary'] is Map)
+              ? Map<String, dynamic>.from(data['summary'] as Map)
+              : <String, dynamic>{};
+          final routersRaw = data['routers'];
+          final routers = (routersRaw is List)
+              ? routersRaw
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList()
+              : <Map<String, dynamic>>[];
+          if (!mounted) return;
+          for (final r in routers) {
+            final rid = '${r['id'] ?? r['name'] ?? 'router'}';
+            final rx = (r['rx_mbps'] is num)
+                ? (r['rx_mbps'] as num).toDouble()
+                : double.tryParse('${r['rx_mbps'] ?? ''}') ?? 0;
+            final tx = (r['tx_mbps'] is num)
+                ? (r['tx_mbps'] as num).toDouble()
+                : double.tryParse('${r['tx_mbps'] ?? ''}') ?? 0;
+            final list = _trafficHistory.putIfAbsent(rid, () => <_TrafficPoint>[]);
+            list.add(_TrafficPoint(rx: rx, tx: tx, at: DateTime.now()));
+            if (list.length > 36) {
+              list.removeRange(0, list.length - 36);
+            }
           }
+          setState(() {
+            _active = _toInt(summary['active']);
+            _offline = _toInt(summary['offline']);
+            _total = _toInt(summary['total']);
+            _routers = routers;
+            _lastUpdatedAt = DateTime.now();
+            _error = null;
+          });
+        } else {
+          if (!mounted) return;
+          setState(() {
+            _error = data['message']?.toString() ?? 'Gagal memuat status jaringan';
+          });
         }
+      } else {
+        if (!mounted) return;
+        setState(() => _error = 'Server ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('Error fetching traffic: $e');
+      if (!mounted) return;
+      setState(() => _error = 'Gagal memuat status jaringan: $e');
+    } finally {
+      _requestInFlight = false;
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    const bgBackground = Color(0xFFFCF8FF);
-    const textOnSurface = Color(0xFF19163F);
-    const textOnSurfaceVariant = Color(0xFF474551);
-    const primaryColor = Color(0xFF070038);
-    const surfaceTint = Color(0xFF5A53AB);
-
     return Scaffold(
-      backgroundColor: bgBackground,
+      backgroundColor: _surface,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1B0C6B)),
+          icon: const Icon(Icons.arrow_back, color: _primary),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'Network Status',
+          'Status Jaringan',
           style: TextStyle(
-            color: Color(0xFF1B0C6B),
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+            color: _primary,
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
           ),
         ),
-        centerTitle: false,
+        actions: [
+          IconButton(
+            icon: _refreshing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.settings, color: _primary),
+            onPressed: _loading ? null : () => _fetchNetworkStatus(),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: const Color(0xFFE2E8F0), height: 1),
+          child: Container(color: _outline, height: 1),
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Bandwidth Usage Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: const [
-                Text(
-                  'Bandwidth Usage',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryColor),
-                ),
-                Text(
-                  'LIVE TRAFFIC (Mbps)',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: surfaceTint),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Live Signal Graph Placeholder
-            Container(
-              height: 192,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0EBFF),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFC8C4D3)),
-              ),
-              child: Stack(
-                children: [
-                  // Graph illustration
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: 120,
-                      decoration: const BoxDecoration(
-                        image: DecorationImage(
-                          image: NetworkImage(
-                              'https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop'), // Placeholder for graph
-                          fit: BoxFit.cover,
-                          opacity: 0.3,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 16,
-                    left: 16,
-                    child: Row(
-                      children: [
-                        Row(
-                          children: [
-                            Container(width: 12, height: 2, color: primaryColor),
-                            const SizedBox(width: 6),
-                            Text('DOWNLOAD: $_rxMbps Mbps', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textOnSurfaceVariant)),
-                          ],
-                        ),
-                        const SizedBox(width: 16),
-                        Row(
-                          children: [
-                            Container(width: 12, height: 2, color: const Color(0xFFEBAEFD)),
-                            const SizedBox(width: 6),
-                            Text('UPLOAD: $_txMbps Mbps', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textOnSurfaceVariant)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    top: 16,
-                    right: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: bgBackground,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFC8C4D3)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+        padding: const EdgeInsets.all(16),
+        child: _loading
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: CircularProgressIndicator(color: _primary)),
+              )
+            : _error != null
+                ? _errorCard(_error!)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
                         children: [
-                          Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
-                          const SizedBox(width: 8),
-                          Text('$_totalMbps Mbps', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textOnSurface)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(color: _outline),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: _pollingActive
+                                        ? const Color(0xFF10B981)
+                                        : const Color(0xFFBA1A1A),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _pollingActive ? 'LIVE (5s)' : 'PAUSED',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: _pollingActive
+                                        ? const Color(0xFF137333)
+                                        : const Color(0xFF8A1212),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(99),
+                              border: Border.all(color: _outline),
+                            ),
+                            child: Text(
+                              _lastUpdatedAt == null
+                                  ? 'Belum ada update'
+                                  : 'Update: ${_fmtTime(_lastUpdatedAt!)}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: _subtleText,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _bentoSummary(),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Routers Inventory',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: _text,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (_routers.isEmpty) _emptyCard(),
+                      ..._routers.map(_routerCard),
+                      const SizedBox(height: 24),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Key Metrics Cards
-            Row(
-              children: [
-                Expanded(child: _buildMetricCard(icon: Icons.signal_cellular_alt, title: 'Rx Power', value: '-18.5', unit: 'dBm', status: 'Healthy')),
-                const SizedBox(width: 16),
-                Expanded(child: _buildMetricCard(icon: Icons.device_thermostat, title: 'Temperature', value: '42', unit: '°C', status: 'Normal')),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildMetricCard(icon: Icons.bolt, title: 'Voltage', value: '3.3', unit: 'V', status: 'Stable', isWide: true),
-            const SizedBox(height: 24),
-
-            // Equipment Path (Topology)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: bgBackground,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFC8C4D3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Equipment Path',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryColor),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildPathStep(title: 'OLT Hub', subtitle: 'Central Office Node A', status: 'Online', isLast: false, isConnected: true),
-                  _buildPathStep(title: 'ODP-JBG-01', subtitle: 'Distribution Point 01', status: 'Active', isLast: false, isConnected: true),
-                  _buildPathStep(title: 'Customer ONT', subtitle: 'Target Device', status: 'Connected', isLast: true, isConnected: true),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Diagnostic Tools
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.troubleshoot, color: Colors.white),
-              label: const Text('Run Full Diagnostic', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B0C6B), // primary-container
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF6F1FF),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFC8C4D3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: const BoxDecoration(
-                      color: bgBackground,
-                      border: Border(bottom: BorderSide(color: Color(0xFFC8C4D3))),
-                    ),
-                    child: const Text('Recent Logs', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryColor)),
-                  ),
-                  _buildLogItem('10:42', 'Ping test successful (Avg: 12ms)'),
-                  _buildLogItem('10:40', 'Authentication verified on ODP-JBG-01'),
-                  _buildLogItem('10:38', 'Optical link established (-18.5 dBm)', isLast: true),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-          ],
-        ),
       ),
     );
   }
 
-  Widget _buildMetricCard({required IconData icon, required String title, required String value, required String unit, required String status, bool isWide = false}) {
+  String _fmtTime(DateTime dt) {
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    final ss = dt.second.toString().padLeft(2, '0');
+    return '$hh:$mm:$ss';
+  }
+
+  Widget _bentoSummary() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFF4FF),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _outline),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Global PPPoE',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _subtleText,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    const Text(
+                      'Status Semua Router',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: _primary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Total user PPPoE: $_total',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _subtleText,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(color: _outline),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.speed, size: 16, color: Color(0xFF683D00)),
+                    SizedBox(width: 6),
+                    Text(
+                      'Live',
+                      style: TextStyle(
+                        color: Color(0xFF683D00),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _miniCard(
+                label: 'Active Nodes',
+                value: '$_active',
+                valueColor: _primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _miniCard(
+                label: 'Critical Alerts',
+                value: '$_offline',
+                valueColor: const Color(0xFFBA1A1A),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _miniCard({
+    required String label,
+    required String value,
+    required Color valueColor,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0EBFF),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFC8C4D3)),
+        color: const Color(0xFFE5EEFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _subtleText,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _routerCard(Map<String, dynamic> router) {
+    final name = (router['name']?.toString().trim().isNotEmpty == true)
+        ? router['name'].toString()
+        : 'Router Mikrotik';
+    final id = router['id']?.toString() ?? '-';
+    final active = _toInt(router['active']);
+    final offline = _toInt(router['offline']);
+    final total = _toInt(router['total']);
+    final status = (router['status'] ?? '').toString().toLowerCase();
+    final isOnline = status == 'online';
+    final rxMbps = (router['rx_mbps'] is num)
+        ? (router['rx_mbps'] as num).toDouble()
+        : double.tryParse('${router['rx_mbps'] ?? ''}') ?? 0;
+    final txMbps = (router['tx_mbps'] is num)
+        ? (router['tx_mbps'] as num).toDouble()
+        : double.tryParse('${router['tx_mbps'] ?? ''}') ?? 0;
+    final dotColor = isOnline ? const Color(0xFF10B981) : const Color(0xFFBA1A1A);
+    final samples = _trafficHistory[id] ?? const <_TrafficPoint>[];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isOnline ? _outline : const Color(0xFFBA1A1A).withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        children: [
           Row(
             children: [
-              Icon(icon, color: const Color(0xFF5A53AB)),
-              const SizedBox(width: 8),
-              Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF5A53AB))),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: _text,
+                      ),
+                    ),
+                    Text(
+                      'ID: $id',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _subtleText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: dotColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: dotColor.withValues(alpha: 0.55),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.lan, size: 18, color: _primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Active: $active',
+                      style: const TextStyle(
+                        color: _primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.wifi_off, size: 18, color: Color(0xFFBA1A1A)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Inactive: $offline',
+                      style: const TextStyle(
+                        color: Color(0xFFBA1A1A),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                'Total: $total',
+                style: const TextStyle(
+                  color: _subtleText,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              text: value,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF070038)),
-              children: [
-                TextSpan(text: ' $unit', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.normal, color: Color(0xFF474551))),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.only(top: 8),
-            decoration: BoxDecoration(border: Border(top: BorderSide(color: const Color(0xFFC8C4D3).withOpacity(0.3)))),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle, size: 16, color: Color(0xFF10B981)),
-                const SizedBox(width: 4),
-                Text(status, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF474551))),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPathStep({required String title, required String subtitle, required String status, required bool isLast, required bool isConnected}) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 24,
-            child: Stack(
-              alignment: Alignment.topCenter,
-              children: [
-                if (!isLast)
-                  Positioned(
-                    top: 12,
-                    bottom: -24, // overlap next step
-                    child: Container(width: 2, color: const Color(0xFFC8C4D3)),
-                  ),
-                Container(
-                  width: 20,
-                  height: 20,
-                  margin: const EdgeInsets.only(top: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: isConnected ? const Color(0xFF10B981) : const Color(0xFF5A53AB), width: 2),
-                  ),
-                  child: Center(
-                    child: isLast
-                        ? const Icon(Icons.check, size: 14, color: Color(0xFF10B981))
-                        : Container(width: 10, height: 10, decoration: const BoxDecoration(color: Color(0xFF5A53AB), shape: BoxShape.circle)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF070038))),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: const Color(0xFFE6F4EA), borderRadius: BorderRadius.circular(4)),
-                        child: Text(status, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF137333), letterSpacing: 0.5)),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.download_rounded, size: 16, color: _primary),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${rxMbps.toStringAsFixed(2)} Mbps',
+                      style: const TextStyle(
+                        color: _primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
-                  ),
-                  Text(subtitle, style: const TextStyle(fontSize: 14, color: Color(0xFF474551))),
-                ],
+                    ),
+                  ],
+                ),
               ),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Icon(Icons.upload_rounded, size: 16, color: _subtleText),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${txMbps.toStringAsFixed(2)} Mbps',
+                      style: const TextStyle(
+                        color: _subtleText,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: 72,
+              color: const Color(0xFFDCE9FF),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: _MrtgMiniChart(samples: samples),
             ),
           ),
         ],
@@ -368,19 +593,126 @@ class _NetworkStatusScreenState extends State<NetworkStatusScreen> {
     );
   }
 
-  Widget _buildLogItem(String time, String message, {bool isLast = false}) {
+  Widget _errorCard(String message) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        border: isLast ? null : Border(bottom: BorderSide(color: const Color(0xFFC8C4D3).withOpacity(0.5))),
+        color: const Color(0xFFFFE9E9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFFFCACA)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 48, child: Text(time, style: const TextStyle(color: Color(0xFF474551), fontSize: 14))),
-          Expanded(child: Text(message, style: const TextStyle(color: Color(0xFF19163F), fontSize: 14))),
-        ],
+      child: Text(
+        message,
+        style: const TextStyle(
+          color: Color(0xFF8A1212),
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
+
+  Widget _emptyCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _outline),
+      ),
+      child: const Text(
+        'Belum ada router Mikrotik aktif yang terbaca di backend.',
+        style: TextStyle(color: _subtleText, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+class _TrafficPoint {
+  const _TrafficPoint({
+    required this.rx,
+    required this.tx,
+    required this.at,
+  });
+  final double rx;
+  final double tx;
+  final DateTime at;
+}
+
+class _MrtgMiniChart extends StatelessWidget {
+  const _MrtgMiniChart({required this.samples});
+  final List<_TrafficPoint> samples;
+
+  @override
+  Widget build(BuildContext context) {
+    if (samples.length < 2) {
+      return const Center(
+        child: Text(
+          'Menunggu data trafik...',
+          style: TextStyle(fontSize: 11, color: Color(0xFF494453)),
+        ),
+      );
+    }
+    return CustomPaint(
+      painter: _MrtgMiniChartPainter(samples: samples),
+      child: const SizedBox.expand(),
+    );
+  }
+}
+
+class _MrtgMiniChartPainter extends CustomPainter {
+  _MrtgMiniChartPainter({required this.samples});
+  final List<_TrafficPoint> samples;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final maxVal = samples.fold<double>(
+      1,
+      (m, s) => [m, s.rx, s.tx].reduce((a, b) => a > b ? a : b),
+    );
+
+    final grid = Paint()
+      ..color = const Color(0xFFB9C9E6)
+      ..strokeWidth = 1;
+    for (var i = 1; i <= 3; i++) {
+      final y = size.height * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+
+    Offset pointAt(int i, double v) {
+      final x = size.width * i / (samples.length - 1);
+      final y = size.height - ((v / maxVal) * (size.height - 2));
+      return Offset(x, y.clamp(1, size.height - 1));
+    }
+
+    final rxPath = Path();
+    final txPath = Path();
+    for (var i = 0; i < samples.length; i++) {
+      final rp = pointAt(i, samples[i].rx);
+      final tp = pointAt(i, samples[i].tx);
+      if (i == 0) {
+        rxPath.moveTo(rp.dx, rp.dy);
+        txPath.moveTo(tp.dx, tp.dy);
+      } else {
+        rxPath.lineTo(rp.dx, rp.dy);
+        txPath.lineTo(tp.dx, tp.dy);
+      }
+    }
+
+    final rxPaint = Paint()
+      ..color = const Color(0xFF2F855A)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final txPaint = Paint()
+      ..color = const Color(0xFF2B6CB0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    canvas.drawPath(rxPath, rxPaint);
+    canvas.drawPath(txPath, txPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MrtgMiniChartPainter oldDelegate) =>
+      oldDelegate.samples != samples;
 }

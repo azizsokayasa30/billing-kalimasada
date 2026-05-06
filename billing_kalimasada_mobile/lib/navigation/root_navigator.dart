@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../theme/colors.dart';
 import '../store/auth_provider.dart';
 import '../store/notification_provider.dart';
+import '../store/customer_provider.dart';
+import '../store/task_provider.dart';
 import '../screens/login_screen.dart';
 import '../screens/technician_dashboard.dart';
 import '../screens/collector/collector_home_tab.dart';
@@ -61,11 +63,15 @@ class _TechnicianTabsState extends State<_TechnicianTabs> {
   /// Dipakai saat buka tab Tugas (mis. filter Tiket dari dashboard); `null` = Semua.
   String? _taskListInitialFilter;
   NotificationProvider? _notificationProvider;
+  Set<int> _seenUnreadTroubleNotifIds = <int>{};
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _notificationProvider ??= context.read<NotificationProvider>();
+    if (_notificationProvider == null) {
+      _notificationProvider = context.read<NotificationProvider>();
+      _notificationProvider!.addListener(_onNotificationProviderChanged);
+    }
   }
 
   @override
@@ -81,8 +87,35 @@ class _TechnicianTabsState extends State<_TechnicianTabs> {
 
   @override
   void dispose() {
+    _notificationProvider?.removeListener(_onNotificationProviderChanged);
     _notificationProvider?.stopPolling();
     super.dispose();
+  }
+
+  void _onNotificationProviderChanged() {
+    final notif = _notificationProvider;
+    if (notif == null || !mounted) return;
+
+    final unreadTroubleIds = <int>{};
+    for (final item in notif.items) {
+      final kind = (item['kind'] ?? '').toString().toUpperCase();
+      final unread = item['unread'] == true;
+      if (kind != 'TR' || !unread) continue;
+      final rawId = item['id'];
+      final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+      if (id != null) unreadTroubleIds.add(id);
+    }
+
+    final hasNewTroubleNotif = unreadTroubleIds.any(
+      (id) => !_seenUnreadTroubleNotifIds.contains(id),
+    );
+    _seenUnreadTroubleNotifIds = unreadTroubleIds;
+    if (!hasNewTroubleNotif) return;
+
+    // Saat tiket gangguan baru masuk, sinkronkan data agar badge/status pelanggan
+    // dan angka pelanggan aktif di dashboard langsung ikut berubah.
+    context.read<TaskProvider>().fetchTasks(refresh: true);
+    context.read<CustomerProvider>().fetchDashboardStats();
   }
 
   void _navigateToTab(int index, {String? taskListFilter}) {

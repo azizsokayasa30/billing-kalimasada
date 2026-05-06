@@ -778,19 +778,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              Color(0xFF166534),
-                              Color(0xFF15803D),
+                              Color(0xFF2A8A58),
+                              Color(0xFF237548),
                             ],
                           )
                         : const LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              Color(0xFF4ADE80),
-                              Color(0xFF22C55E),
+                              Color(0xFF5CCF89),
+                              Color(0xFF3EB770),
                             ],
                           ),
-                    shadowColor: _workActive ? const Color(0xFF166534) : const Color(0xFF22C55E),
+                    shadowColor: _workActive ? const Color(0xFF2A8A58) : const Color(0xFF5CCF89),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -849,11 +849,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Color(0xFFF87171),
-                        Color(0xFFEF4444),
+                        Color(0xFFF08F8F),
+                        Color(0xFFE26A6A),
                       ],
                     ),
-                    shadowColor: const Color(0xFFEF4444),
+                    shadowColor: const Color(0xFFF08F8F),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -951,7 +951,15 @@ class _SmoothActionButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(borderRadius),
               splashColor: Colors.white24,
               highlightColor: Colors.white12,
-              child: Center(child: child),
+              child: Center(
+                child: IconTheme(
+                  data: const IconThemeData(color: Colors.white),
+                  child: DefaultTextStyle.merge(
+                    style: const TextStyle(color: Colors.white),
+                    child: child,
+                  ),
+                ),
+              ),
             ),
           ),
         ),

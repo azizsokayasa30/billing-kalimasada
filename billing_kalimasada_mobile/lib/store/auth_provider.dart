@@ -102,6 +102,33 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<String?> updateTechnicianProfile({
+    required String name,
+    required String phone,
+    String? email,
+    String? address,
+  }) async {
+    if (_role != 'technician' || _token == null) {
+      return 'Akun teknisi tidak aktif';
+    }
+    try {
+      final response = await ApiClient.put('/api/mobile-adapter/me', {
+        'name': name,
+        'phone': phone,
+        'email': email ?? '',
+        'address': address ?? '',
+      });
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        await refreshTechnicianProfile();
+        return null;
+      }
+      return data['message']?.toString() ?? 'Gagal menyimpan';
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<void> logout() async {
     _token = null;
     _role = null;

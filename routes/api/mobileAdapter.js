@@ -570,6 +570,99 @@ router.get('/customers', verifyToken, allowFieldOps, (req, res) => {
     });
 });
 
+router.get('/customers/:customerId/ppp-session', verifyToken, requireTechnician, async (req, res) => {
+    const customerId = parseInt(String(req.params.customerId), 10);
+    if (!Number.isFinite(customerId) || customerId <= 0) {
+        return res.status(400).json({ success: false, message: 'ID pelanggan tidak valid' });
+    }
+    try {
+        const customer = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT id, pppoe_username, username FROM customers WHERE id = ?',
+                [customerId],
+                (err, row) => (err ? reject(err) : resolve(row || null))
+            );
+        });
+        if (!customer) {
+            return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+        }
+        const login =
+            (customer.pppoe_username && String(customer.pppoe_username).trim()) ||
+            (customer.username && String(customer.username).trim()) ||
+            '';
+        if (!login) {
+            return res.json({
+                success: true,
+                data: {
+                    online: false,
+                    login_checked: '',
+                    mac_address: null,
+                    ip_address: null,
+                    uptime: null
+                }
+            });
+        }
+
+        const {
+            getUserAuthModeAsync,
+            getActivePPPoEConnectionsRadius,
+            getMikrotikConnectionForRouter,
+            getMikrotikConnection
+        } = require('../../config/mikrotik');
+        const authMode = await getUserAuthModeAsync();
+
+        let session = null;
+        if (authMode === 'radius') {
+            const active = await getActivePPPoEConnectionsRadius();
+            if (Array.isArray(active)) {
+                session = active.find((a) => String(a.name || '').trim() === login) || null;
+            }
+        } else {
+            const routers = await new Promise((resolve, reject) => {
+                db.all('SELECT * FROM routers ORDER BY id ASC', [], (err, rows) =>
+                    err ? reject(err) : resolve(rows || [])
+                );
+            });
+            for (const r of (Array.isArray(routers) ? routers : [])) {
+                try {
+                    const conn = await getMikrotikConnectionForRouter(r);
+                    const rows = await conn.write('/ppp/active/print', [`?name=${login}`]);
+                    if (Array.isArray(rows) && rows.length > 0) {
+                        session = rows[0];
+                        break;
+                    }
+                } catch (_) {}
+            }
+            if (!session) {
+                try {
+                    const conn = await getMikrotikConnection();
+                    if (conn) {
+                        const rows = await conn.write('/ppp/active/print', [`?name=${login}`]);
+                        if (Array.isArray(rows) && rows.length > 0) {
+                            session = rows[0];
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+
+        return res.json({
+            success: true,
+            data: {
+                online: Boolean(session),
+                auth_mode: authMode || 'unknown',
+                login_checked: login,
+                mac_address: session ? (session['caller-id'] || session.caller_id || null) : null,
+                ip_address: session ? (session.address || session.ip || null) : null,
+                uptime: session ? (session.uptime || null) : null
+            }
+        });
+    } catch (error) {
+        logger.error('[mobile-adapter] customers/:id/ppp-session', error);
+        return res.status(500).json({ success: false, message: error.message || 'Gagal memuat sesi PPPoE' });
+    }
+});
+
 router.get('/customers/search', verifyToken, allowFieldOps, (req, res) => {
     const q = (req.query.q && String(req.query.q).trim()) || '';
     if (q.length < 1) {
@@ -633,29 +726,177 @@ router.get('/me', verifyToken, requireTechnician, (req, res) => {
             return res.status(404).json({ success: false, message: 'Profil teknisi tidak ditemukan' });
         }
         if (row.password) delete row.password;
-        resolveEmployeePhotoPath(db, row, (ePh, relPath) => {
-            if (ePh) {
-                logger.warn('[mobile-adapter] /me foto karyawan:', ePh.message);
+        const variants = phoneVariantsForEmployeeLookup(req.user.phone || req.user.username || row.phone || '');
+        const ph = variants.map(() => '?').join(',');
+        const employeeQuery = variants.length
+            ? `SELECT * FROM employees WHERE (status IS NULL OR LOWER(TRIM(status)) = 'aktif') AND TRIM(no_hp) IN (${ph}) LIMIT 1`
+            : null;
+
+        const finalize = (employeeRow) => {
+            resolveEmployeePhotoPath(db, row, (ePh, relPath) => {
+                if (ePh) {
+                    logger.warn('[mobile-adapter] /me foto karyawan:', ePh.message);
+                }
+                const employeeEmail = employeeRow
+                    ? (employeeRow.email || employeeRow.email_karyawan || employeeRow.mail || null)
+                    : null;
+                const employeeAddress = employeeRow
+                    ? (employeeRow.address || employeeRow.alamat || employeeRow.address_detail || '')
+                    : '';
+                const data = {
+                    id: row.id,
+                    name: row.name,
+                    role: 'technician',
+                    position: row.role || 'technician',
+                    phone: row.phone,
+                    email: employeeEmail || row.email || null,
+                    address: employeeAddress || row.notes || '',
+                    area_coverage: row.area_coverage || '',
+                    notes: row.notes || '',
+                    whatsapp_group_id: row.whatsapp_group_id || null,
+                    join_date: row.join_date || null,
+                    last_login: row.last_login || null,
+                    created_at: row.created_at || null,
+                    support_whatsapp: getSetting('contact_whatsapp', '') || ''
+                };
+                if (relPath) {
+                    data.photo_url = buildPhotoUrl(relPath);
+                }
+                res.json({ success: true, data });
+            });
+        };
+
+        if (!employeeQuery) {
+            return finalize(null);
+        }
+        db.get(employeeQuery, variants, (empErr, empRow) => {
+            if (empErr) {
+                logger.warn('[mobile-adapter] /me employee fallback failed:', empErr.message);
+                return finalize(null);
             }
-            const data = {
-                id: row.id,
-                name: row.name,
-                role: 'technician',
-                position: row.role || 'technician',
-                phone: row.phone,
-                email: row.email || null,
-                area_coverage: row.area_coverage || '',
-                notes: row.notes || '',
-                whatsapp_group_id: row.whatsapp_group_id || null,
-                join_date: row.join_date || null,
-                last_login: row.last_login || null,
-                created_at: row.created_at || null,
-                support_whatsapp: getSetting('contact_whatsapp', '') || ''
-            };
-            if (relPath) {
-                data.photo_url = buildPhotoUrl(relPath);
+            return finalize(empRow || null);
+        });
+    });
+});
+
+router.put('/me', verifyToken, requireTechnician, (req, res) => {
+    const techId = parseInt(req.user.id, 10);
+    if (!Number.isFinite(techId)) {
+        return res.status(400).json({ success: false, message: 'ID teknisi tidak valid' });
+    }
+    const body = req.body || {};
+    const name = body.name != null ? String(body.name).trim() : '';
+    const phone = body.phone != null ? String(body.phone).trim() : '';
+    const email = body.email != null ? String(body.email).trim() : '';
+    const address = body.address != null ? String(body.address).trim() : '';
+
+    if (!name) {
+        return res.status(400).json({ success: false, message: 'Nama wajib diisi' });
+    }
+    if (!phone) {
+        return res.status(400).json({ success: false, message: 'Nomor HP wajib diisi' });
+    }
+
+    db.all('PRAGMA table_info(technicians)', [], (techColsErr, techColsRows) => {
+        if (techColsErr || !Array.isArray(techColsRows)) {
+            logger.error('[mobile-adapter] /me PUT technician schema failed', techColsErr);
+            return res.status(500).json({ success: false, message: 'Gagal membaca schema teknisi' });
+        }
+        const techCols = new Set(techColsRows.map((c) => String(c.name || '').toLowerCase()));
+        const techSets = [];
+        const techVals = [];
+        if (techCols.has('name')) {
+            techSets.push('name = ?');
+            techVals.push(name);
+        }
+        if (techCols.has('phone')) {
+            techSets.push('phone = ?');
+            techVals.push(phone);
+        }
+        if (techCols.has('email')) {
+            techSets.push('email = ?');
+            techVals.push(email || null);
+        }
+        if (techCols.has('notes')) {
+            techSets.push('notes = ?');
+            techVals.push(address || null);
+        }
+        if (!techSets.length) {
+            return res.status(500).json({ success: false, message: 'Kolom profil teknisi tidak ditemukan' });
+        }
+
+        const techUpdateSql = `UPDATE technicians SET ${techSets.join(', ')} WHERE id = ?`;
+        techVals.push(techId);
+        db.run(techUpdateSql, techVals, function (err) {
+            if (err) {
+                const msg = err && err.message ? String(err.message) : '';
+                if (msg.includes('UNIQUE') && msg.toLowerCase().includes('phone')) {
+                    return res.status(400).json({ success: false, message: 'Nomor HP sudah dipakai teknisi lain' });
+                }
+                logger.error('[mobile-adapter] /me PUT', err);
+                return res.status(500).json({ success: false, message: err.message || 'Gagal menyimpan profil' });
             }
-            res.json({ success: true, data });
+            if (this.changes === 0) {
+                return res.status(404).json({ success: false, message: 'Profil teknisi tidak ditemukan' });
+            }
+            // Sinkronkan juga data karyawan (employees) agar form teknisi konsisten
+            // dengan sumber data karyawan yang dipakai sistem absensi.
+            const variants = phoneVariantsForEmployeeLookup(req.user.phone || req.user.username || '');
+            if (!variants.length) {
+                return res.json({ success: true, message: 'Profil berhasil diperbarui' });
+            }
+            const ph = variants.map(() => '?').join(',');
+            const selectSql =
+                `SELECT id FROM employees WHERE (status IS NULL OR LOWER(TRIM(status)) = 'aktif') AND TRIM(no_hp) IN (${ph}) LIMIT 1`;
+            db.get(selectSql, variants, (empErr, empRow) => {
+                if (empErr || !empRow || !empRow.id) {
+                    if (empErr) {
+                        logger.warn('[mobile-adapter] /me PUT employee lookup failed:', empErr.message);
+                    }
+                    return res.json({ success: true, message: 'Profil berhasil diperbarui' });
+                }
+                db.all('PRAGMA table_info(employees)', [], (colErr, colRows) => {
+                    if (colErr || !Array.isArray(colRows)) {
+                        if (colErr) {
+                            logger.warn('[mobile-adapter] /me PUT employee schema failed:', colErr.message);
+                        }
+                        return res.json({ success: true, message: 'Profil berhasil diperbarui' });
+                    }
+                    const cols = new Set(colRows.map((c) => String(c.name || '').toLowerCase()));
+                    const sets = [];
+                    const vals = [];
+                    if (cols.has('name')) {
+                        sets.push('name = ?');
+                        vals.push(name);
+                    }
+                    if (cols.has('no_hp')) {
+                        sets.push('no_hp = ?');
+                        vals.push(phone);
+                    }
+                    if (cols.has('email')) {
+                        sets.push('email = ?');
+                        vals.push(email || null);
+                    }
+                    if (cols.has('address')) {
+                        sets.push('address = ?');
+                        vals.push(address || null);
+                    } else if (cols.has('alamat')) {
+                        sets.push('alamat = ?');
+                        vals.push(address || null);
+                    }
+                    if (!sets.length) {
+                        return res.json({ success: true, message: 'Profil berhasil diperbarui' });
+                    }
+                    const updateSql = `UPDATE employees SET ${sets.join(', ')} WHERE id = ?`;
+                    vals.push(empRow.id);
+                    db.run(updateSql, vals, (upErr) => {
+                        if (upErr) {
+                            logger.warn('[mobile-adapter] /me PUT employee update failed:', upErr.message);
+                        }
+                        return res.json({ success: true, message: 'Profil berhasil diperbarui' });
+                    });
+                });
+            });
         });
     });
 });
@@ -801,7 +1042,7 @@ router.post('/attendance', verifyToken, requireTechnician, (req, res) => {
                         if (row && row.check_in) {
                             return res.status(400).json({ success: false, message: 'Sudah masuk hari ini' });
                         }
-                        db.get(
+                        return db.get(
                             'SELECT * FROM attendance_settings ORDER BY id DESC LIMIT 1',
                             [],
                             (cfgErr, cfg) => {
@@ -2066,6 +2307,109 @@ router.get('/network-map', verifyToken, requireTechnician, async (req, res) => {
         res.status(500).json({
             success: false,
             message: error.message || 'Gagal memuat data network map'
+        });
+    }
+});
+
+router.get('/network-status', verifyToken, requireTechnician, async (req, res) => {
+    try {
+        const {
+            getUserAuthModeAsync,
+            getMikrotikConnectionForRouter,
+            getResourceInfoForRouter
+        } = require('../../config/mikrotik');
+        const authMode = await getUserAuthModeAsync();
+
+        const routers = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT *
+                 FROM routers
+                 ORDER BY id ASC`,
+                [],
+                (err, rows) => {
+                    if (err) return reject(err);
+                    resolve(Array.isArray(rows) ? rows : []);
+                }
+            );
+        });
+
+        const routerRows = routers.length
+            ? routers
+            : [{ id: 'default', name: 'Mikrotik Default', nas_ip: null, nas_identifier: null }];
+
+        const routerStats = await Promise.all(
+            routerRows.map(async (r) => {
+                const name = r.name || r.nas_identifier || r.nas_ip || `Router ${r.id}`;
+                try {
+                    const conn = await getMikrotikConnectionForRouter(r);
+                    if (!conn) {
+                        return {
+                            id: r.id,
+                            name,
+                            active: 0,
+                            offline: 0,
+                            total: 0,
+                            status: 'offline',
+                            error: 'Koneksi router gagal'
+                        };
+                    }
+                    const [actives, secrets, resourceInfo] = await Promise.all([
+                        conn.write('/ppp/active/print'),
+                        conn.write('/ppp/secret/print'),
+                        getResourceInfoForRouter(r)
+                    ]);
+                    const activeCount = Array.isArray(actives) ? actives.length : 0;
+                    const totalSecrets = Array.isArray(secrets) ? secrets.length : 0;
+                    const traffic = resourceInfo && resourceInfo.success && resourceInfo.data
+                        ? resourceInfo.data
+                        : null;
+                    return {
+                        id: r.id,
+                        name,
+                        active: activeCount,
+                        offline: Math.max(totalSecrets - activeCount, 0),
+                        total: totalSecrets,
+                        rx_mbps: Number(traffic && traffic.totalNetworkInMbps) || 0,
+                        tx_mbps: Number(traffic && traffic.totalNetworkOutMbps) || 0,
+                        status: 'online'
+                    };
+                } catch (e) {
+                    logger.warn('[mobile-adapter] network-status router failed:', e.message || e);
+                    return {
+                        id: r.id,
+                        name,
+                        active: 0,
+                        offline: 0,
+                        total: 0,
+                        status: 'offline',
+                        error: (e && e.message) ? e.message : 'Router tidak merespons'
+                    };
+                }
+            })
+        );
+
+        const summary = routerStats.reduce(
+            (acc, item) => {
+                acc.active += Number(item.active) || 0;
+                acc.offline += Number(item.offline) || 0;
+                acc.total += Number(item.total) || 0;
+                return acc;
+            },
+            { active: 0, offline: 0, total: 0 }
+        );
+
+        return res.json({
+            success: true,
+            mode: 'mikrotik',
+            auth_mode: authMode,
+            summary,
+            routers: routerStats
+        });
+    } catch (e) {
+        logger.error('[mobile-adapter] network-status:', e);
+        return res.status(500).json({
+            success: false,
+            message: e.message || 'Gagal memuat status jaringan'
         });
     }
 });

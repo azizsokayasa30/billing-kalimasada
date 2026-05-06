@@ -4,8 +4,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/api_client.dart';
 import '../store/customer_provider.dart';
 import '../store/auth_provider.dart';
+import 'dart:convert';
 
 class CustomerDetailScreen extends StatefulWidget {
   final Map<String, dynamic> customer;
@@ -18,6 +20,7 @@ class CustomerDetailScreen extends StatefulWidget {
 
 class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   late Map<String, dynamic> customer;
+  Map<String, dynamic>? _pppSession;
 
   double? _toDouble(dynamic v) {
     if (v is num) return v.toDouble();
@@ -55,6 +58,23 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   void initState() {
     super.initState();
     customer = Map<String, dynamic>.from(widget.customer);
+    _loadPppSession();
+  }
+
+  Future<void> _loadPppSession() async {
+    final id = customer['id'];
+    if (id == null) return;
+    try {
+      final res = await ApiClient.get('/api/mobile-adapter/customers/$id/ppp-session');
+      if (res.statusCode != 200) return;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (data['success'] == true && data['data'] is Map) {
+        if (!mounted) return;
+        setState(() {
+          _pppSession = Map<String, dynamic>.from(data['data'] as Map);
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -91,7 +111,6 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     const bgBackground = Color(0xFFFCF8FF);
     const bgSurfaceContainerLowest = Color(0xFFFFFFFF);
     const bgSurfaceContainer = Color(0xFFF0EBFF);
-    const bgSurfaceContainerHigh = Color(0xFFEAE5FF);
 
     const primaryColor = Color(0xFF070038);
     const errorColor = Color(0xFFBA1A1A);
@@ -246,36 +265,6 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                       color: statusColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: bgSurfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: outlineVariant),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.network_ping,
-                                    size: 14,
-                                    color: textOnSurfaceVariant,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Ping: 14ms', // Placeholder
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: textOnSurfaceVariant,
                                     ),
                                   ),
                                 ],
@@ -649,7 +638,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                               ),
                             ),
                             Text(
-                              customer['ip_address'] ?? 'DHCP/Dynamic',
+                              _pppSession?['ip_address']?.toString() ??
+                                  customer['ip_address']?.toString() ??
+                                  'DHCP/Dynamic',
                               style: const TextStyle(
                                 fontSize: 16,
                                 color: textOnBackground,
@@ -659,11 +650,11 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                           ],
                         ),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               'MAC ADDRESS',
                               style: TextStyle(
                                 fontSize: 12,
@@ -673,8 +664,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                               ),
                             ),
                             Text(
-                              '00:1A:2B:3C:4D:5E', // Placeholder
-                              style: TextStyle(
+                              _pppSession?['mac_address']?.toString() ?? '-',
+                              style: const TextStyle(
                                 fontSize: 16,
                                 color: textOnBackground,
                                 fontFamily: 'monospace',
@@ -690,12 +681,12 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
 
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'ONT SERIAL',
+                            const Text(
+                              'IP PPPoE ACTIVE',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
@@ -704,8 +695,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                               ),
                             ),
                             Text(
-                              'ONT-992-KXL-1', // Placeholder
-                              style: TextStyle(
+                              _pppSession?['ip_address']?.toString() ?? '-',
+                              style: const TextStyle(
                                 fontSize: 16,
                                 color: textOnBackground,
                                 fontFamily: 'monospace',
@@ -719,7 +710,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'PORT STATUS',
+                              'UPTIME PPPoE ACTIVE',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
@@ -728,15 +719,11 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                               ),
                             ),
                             Text(
-                              status == 'active'
-                                  ? 'UP (1000FDX)'
-                                  : 'DOWN', // Placeholder
-                              style: TextStyle(
+                              _pppSession?['uptime']?.toString() ?? '-',
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: status == 'active'
-                                    ? const Color(0xFF0D5930)
-                                    : errorColor,
+                                color: textOnBackground,
                               ),
                             ),
                           ],

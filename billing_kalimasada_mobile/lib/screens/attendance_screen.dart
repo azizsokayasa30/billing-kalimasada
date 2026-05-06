@@ -95,6 +95,44 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     });
   }
 
+  double? _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value == null) return null;
+    return double.tryParse(value.toString().trim());
+  }
+
+  String _buildAttendanceErrorMessage(
+    Map<String, dynamic> payload, {
+    String fallback = 'Gagal memproses absensi',
+  }) {
+    final baseMessage = payload['message']?.toString().trim();
+    final detailsRaw = payload['details'];
+    final details = detailsRaw is Map
+        ? Map<String, dynamic>.from(detailsRaw)
+        : null;
+    if (details == null) {
+      return (baseMessage == null || baseMessage.isEmpty) ? fallback : baseMessage;
+    }
+
+    final branchName =
+        details['branch_name']?.toString().trim().isNotEmpty == true
+            ? details['branch_name'].toString().trim()
+            : 'branch';
+    final distance = _toDouble(details['distance_m']);
+    final radius = _toDouble(details['radius_m']);
+    final needCloser = _toDouble(details['need_closer_m']);
+    if (distance != null && radius != null) {
+      final distanceText = distance.round();
+      final radiusText = radius.round();
+      final needText = (needCloser != null && needCloser > 0)
+          ? '\nDekati lokasi sekitar ${needCloser.round()} meter lagi.'
+          : '';
+      return 'Gagal absen: Anda di luar radius $branchName.\nJarak Anda $distanceText m (maksimal $radiusText m).$needText';
+    }
+
+    return (baseMessage == null || baseMessage.isEmpty) ? fallback : baseMessage;
+  }
+
   Future<void> _fetchStatus() async {
     setState(() => _isLoading = true);
     try {
@@ -345,10 +383,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           await _fetchStatus();
         } else {
           _log('Server: ${response['message']}');
+          final errorMessage = _buildAttendanceErrorMessage(
+            response,
+            fallback: 'Gagal memproses absensi',
+          );
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(response['message']?.toString() ?? 'Gagal'),
+                content: Text(errorMessage),
                 backgroundColor: Colors.red,
               ),
             );
@@ -359,26 +401,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         String errorMessage = 'Server ${res.statusCode}';
         try {
           final err = ApiClient.decodeJsonObject(res, debugLabel: 'absensi-error');
-          final baseMessage = err['message']?.toString() ?? errorMessage;
-          final details = err['details'];
-          if (details is Map) {
-            final d = Map<String, dynamic>.from(details);
-            final branchName = d['branch_name']?.toString() ?? 'branch';
-            final distance = int.tryParse('${d['distance_m'] ?? ''}');
-            final radius = int.tryParse('${d['radius_m'] ?? ''}');
-            final needCloser = int.tryParse('${d['need_closer_m'] ?? ''}');
-            if (distance != null && radius != null) {
-              final needText = (needCloser != null && needCloser > 0)
-                  ? '\nDekati lokasi sekitar $needCloser meter lagi.'
-                  : '';
-              errorMessage =
-                  'Jarak ke $branchName: $distance m (maksimal $radius m).$needText';
-            } else {
-              errorMessage = baseMessage;
-            }
-          } else {
-            errorMessage = baseMessage;
-          }
+          errorMessage = _buildAttendanceErrorMessage(
+            err,
+            fallback: errorMessage,
+          );
         } catch (_) {}
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -443,6 +469,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final sheetDateFmt = DateFormat('dd/MM/yyyy');
     final apiDateFmt = DateFormat('yyyy-MM-dd');
     final model = _LeaveSheetModel();
+    var sheetClosed = false;
 
     showModalBottomSheet<void>(
       context: context,
@@ -538,7 +565,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   ),
                 );
               } finally {
-                if (context.mounted) {
+                if (!sheetClosed && sheetContext.mounted) {
                   setModalState(() => model.submitting = false);
                 }
               }
@@ -696,9 +723,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
       },
     ).whenComplete(() {
-      model.dispose();
-      reasonController.dispose();
-      durationController.dispose();
+      sheetClosed = true;
+      // Jangan dispose manual di sini: pada beberapa device, animasi penutupan
+      // bottom sheet masih melakukan rebuild singkat sehingga controller bisa
+      // tersentuh lagi dan memicu "used after being disposed".
     });
   }
 

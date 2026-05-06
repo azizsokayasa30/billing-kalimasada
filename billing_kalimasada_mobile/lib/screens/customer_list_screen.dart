@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../store/customer_provider.dart';
+import '../store/task_provider.dart';
 import 'customer_detail_screen.dart';
 
 class CustomerListScreen extends StatefulWidget {
@@ -19,7 +20,6 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   // Colors from Stitch design
   final Color _bgBackground = const Color(0xFFFCF8FF);
   final Color _bgSurfaceContainerLowest = const Color(0xFFFFFFFF);
-  final Color _bgSurfaceContainerLow = const Color(0xFFF6F1FF);
   final Color _bgSurfaceContainer = const Color(0xFFF0EBFF);
   final Color _bgSurfaceContainerHigh = const Color(0xFFEAE5FF);
 
@@ -179,9 +179,27 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           ),
         ),
       ),
-      body: Consumer<CustomerProvider>(
-        builder: (context, provider, child) {
+      body: Consumer2<CustomerProvider, TaskProvider>(
+        builder: (context, provider, taskProvider, child) {
           final stats = provider.stats;
+          final openTroubleCustomerIds = <int>{};
+          for (final rawTask in taskProvider.tasks) {
+            final task = rawTask is Map
+                ? Map<String, dynamic>.from(rawTask)
+                : <String, dynamic>{};
+            final type = (task['type'] ?? '').toString().toUpperCase();
+            final status = (task['status'] ?? '').toString().toLowerCase();
+            if (type != 'TR' || status == 'closed' || status == 'selesai') {
+              continue;
+            }
+            final rawCustomerId = task['customer_id'];
+            final customerId = rawCustomerId is int
+                ? rawCustomerId
+                : int.tryParse(rawCustomerId?.toString() ?? '');
+            if (customerId != null) {
+              openTroubleCustomerIds.add(customerId);
+            }
+          }
 
           return Column(
             children: [
@@ -237,7 +255,11 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                       status: widget.initialFilter,
                     );
                   },
-                  child: _buildCustomerListBody(context, provider),
+                  child: _buildCustomerListBody(
+                    context,
+                    provider,
+                    openTroubleCustomerIds: openTroubleCustomerIds,
+                  ),
                 ),
               ),
               const SizedBox(height: 80), // Padding for bottom navbar
@@ -251,6 +273,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   Widget _buildCustomerListBody(
     BuildContext context,
     CustomerProvider provider,
+    {required Set<int> openTroubleCustomerIds}
   ) {
     if (provider.loading && provider.customers.isEmpty) {
       return _scrollableRefreshBody(
@@ -302,9 +325,16 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         final customer = provider.customers[index];
         final rawStatus =
             customer['status']?.toString().toLowerCase() ?? 'active';
+        final rawCustomerId = customer['id'];
+        final customerId = rawCustomerId is int
+            ? rawCustomerId
+            : int.tryParse(rawCustomerId?.toString() ?? '');
+        final hasOpenTroubleTicket =
+            customerId != null && openTroubleCustomerIds.contains(customerId);
         // Layar filter Gangguan: pelanggan dari tiket aktif (status DB masih aktif) tetap tampil sebagai gangguan
         final showAsGangguan =
             rawStatus == 'isolated' ||
+            hasOpenTroubleTicket ||
             (widget.initialFilter == 'isolated' && rawStatus != 'suspended');
 
         // Default to active colors

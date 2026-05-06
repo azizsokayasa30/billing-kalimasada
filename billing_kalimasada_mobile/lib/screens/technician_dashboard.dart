@@ -73,12 +73,26 @@ class _TechnicianDashboardState extends State<TechnicianDashboard>
     final provider = context.watch<CustomerProvider>();
     final taskProvider = context.watch<TaskProvider>();
     final stats = provider.stats;
-    final activeTasks = taskProvider.tasks
-        .where((t) => t['status'] != 'closed')
-        .length;
+    final openTasks = taskProvider.tasks.where((t) {
+      final s = (t['status'] ?? '').toString().toLowerCase();
+      return s != 'closed' && s != 'selesai';
+    }).toList();
+    final activeTasks = openTasks.length;
+    final troubleCustomerIds = <int>{};
+    for (final t in openTasks) {
+      final type = (t['type'] ?? '').toString().toUpperCase();
+      if (type != 'TR') continue;
+      final rawCid = t['customer_id'];
+      final cid = rawCid is int
+          ? rawCid
+          : int.tryParse(rawCid?.toString() ?? '');
+      if (cid != null) troubleCustomerIds.add(cid);
+    }
     final totalPlg = (stats['total'] as num?)?.toInt() ?? 0;
-    final activePlg = (stats['active'] as num?)?.toInt() ?? 0;
-    final gangguanCount = (stats['isolated'] as num?)?.toInt() ?? 0;
+    final activePlgRaw = (stats['active'] as num?)?.toInt() ?? 0;
+    final isolatedRaw = (stats['isolated'] as num?)?.toInt() ?? 0;
+    final gangguanCount = math.max(isolatedRaw, troubleCustomerIds.length);
+    final activePlg = math.max(0, activePlgRaw - troubleCustomerIds.length);
     final numFmt = NumberFormat.decimalPattern('id_ID');
 
     // Design Colors from Stitch
@@ -514,7 +528,7 @@ class _TechnicianDashboardState extends State<TechnicianDashboard>
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Network',
+                                    'Status Jaringan',
                                     style: TextStyle(
                                       color: textOnBackground,
                                       fontWeight: FontWeight.w600,

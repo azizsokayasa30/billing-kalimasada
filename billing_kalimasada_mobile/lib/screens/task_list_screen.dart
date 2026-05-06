@@ -12,7 +12,11 @@ class TaskListScreen extends StatefulWidget {
   /// `'Tiket'` | `'PSB'` | `'Semua'` — filter chip saat layar dibuka (mis. dari dashboard Gangguan).
   final String? initialTaskTypeFilter;
 
-  const TaskListScreen({super.key, this.onNavigateToTab, this.initialTaskTypeFilter});
+  const TaskListScreen({
+    super.key,
+    this.onNavigateToTab,
+    this.initialTaskTypeFilter,
+  });
 
   @override
   State<TaskListScreen> createState() => _TaskListScreenState();
@@ -50,7 +54,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
     const bgBackground = Color(0xFFFCF8FF);
     const textOnSurface = Color(0xFF19163F);
     const textOnSurfaceVariant = Color(0xFF474551);
-    
+
     return Scaffold(
       backgroundColor: bgBackground,
       appBar: AppBar(
@@ -61,8 +65,17 @@ class _TaskListScreenState extends State<TaskListScreen> {
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
+                style: const TextStyle(
+                  color: Color(0xFF19163F),
+                  fontSize: 16,
+                ),
+                cursorColor: Color(0xFF1B0C6B),
                 decoration: const InputDecoration(
                   hintText: 'Cari tugas, pelanggan...',
+                  hintStyle: TextStyle(
+                    color: Color(0xFF787582),
+                    fontSize: 14,
+                  ),
                   border: InputBorder.none,
                 ),
                 onChanged: (value) {
@@ -72,7 +85,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 },
               )
             : const Text(
-                'FieldOps Precision',
+                'Tugas Saya',
                 style: TextStyle(
                   color: Color(0xFF1B0C6B),
                   fontSize: 20,
@@ -115,7 +128,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(color: const Color(0xFFC8C4D3).withValues(alpha: 0.5), height: 1),
+          child: Container(
+            color: const Color(0xFFC8C4D3).withValues(alpha: 0.5),
+            height: 1,
+          ),
         ),
       ),
       body: Consumer<TaskProvider>(
@@ -125,7 +141,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
           }
 
           var tasks = provider.tasks;
-          
+
           if (_selectedType != 'Semua') {
             tasks = tasks.where((t) {
               final type = t['type']?.toString().toUpperCase() ?? '';
@@ -143,8 +159,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
               final customer = (t['customer'] ?? '').toString().toLowerCase();
               final address = (t['address'] ?? '').toString().toLowerCase();
               return title.contains(_searchQuery) ||
-                     customer.contains(_searchQuery) ||
-                     address.contains(_searchQuery);
+                  customer.contains(_searchQuery) ||
+                  address.contains(_searchQuery);
             }).toList();
           }
 
@@ -179,7 +195,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                       ],
                     ),
                   ),
-                  
+
                   // Filters
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -202,22 +218,34 @@ class _TaskListScreenState extends State<TaskListScreen> {
                               _selectedType = result;
                             });
                           },
-                          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                            const PopupMenuItem<String>(
-                              value: 'Semua',
-                              child: Text('Semua', style: TextStyle(color: Colors.black)),
-                            ),
-                            const PopupMenuItem<String>(
-                              value: 'Tiket',
-                              child: Text('Tiket', style: TextStyle(color: Colors.black)),
-                            ),
-                            const PopupMenuItem<String>(
-                              value: 'PSB',
-                              child: Text('PSB', style: TextStyle(color: Colors.black)),
-                            ),
-                          ],
+                          itemBuilder: (BuildContext context) =>
+                              <PopupMenuEntry<String>>[
+                                const PopupMenuItem<String>(
+                                  value: 'Semua',
+                                  child: Text(
+                                    'Semua',
+                                    style: TextStyle(color: Colors.black),
+                                  ),
+                                ),
+                                const PopupMenuItem<String>(
+                                  value: 'Tiket',
+                                  child: Text(
+                                    'Tiket',
+                                    style: TextStyle(color: Colors.black),
+                                  ),
+                                ),
+                                const PopupMenuItem<String>(
+                                  value: 'PSB',
+                                  child: Text(
+                                    'PSB',
+                                    style: TextStyle(color: Colors.black),
+                                  ),
+                                ),
+                              ],
                           child: _buildFilterButton(
-                            label: _selectedType == 'Semua' ? 'TIKET/PSB' : _selectedType.toUpperCase(),
+                            label: _selectedType == 'Semua'
+                                ? 'TIKET/PSB'
+                                : _selectedType.toUpperCase(),
                             suffixIcon: Icons.arrow_drop_down,
                             bgColor: Colors.white,
                             textColor: textOnSurfaceVariant,
@@ -226,11 +254,16 @@ class _TaskListScreenState extends State<TaskListScreen> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 10),
-                  
+
                   if (provider.error != null && tasks.isEmpty)
-                    Center(child: Text(provider.error!, style: const TextStyle(color: Colors.red)))
+                    Center(
+                      child: Text(
+                        provider.error!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    )
                   else if (tasks.isEmpty)
                     const Center(
                       child: Padding(
@@ -242,10 +275,12 @@ class _TaskListScreenState extends State<TaskListScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Column(
-                        children: tasks.map((task) => _buildTaskCard(task)).toList(),
+                        children: tasks
+                            .map((task) => _buildTaskCard(task))
+                            .toList(),
                       ),
                     ),
-                  
+
                   const SizedBox(height: 64),
                 ],
               ),
@@ -254,28 +289,40 @@ class _TaskListScreenState extends State<TaskListScreen> {
         },
       ),
 
-      floatingActionButton: isTechnician ? null : FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const NewTaskScreen()),
-          );
-        },
-        backgroundColor: const Color(0xFF070038),
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isTechnician
+          ? null
+          : FloatingActionButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const NewTaskScreen(),
+                  ),
+                );
+              },
+              backgroundColor: const Color(0xFF070038),
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.add),
+            ),
     );
   }
 
-  Widget _buildFilterButton({IconData? icon, required String label, IconData? suffixIcon, required Color bgColor, required Color textColor}) {
+  Widget _buildFilterButton({
+    IconData? icon,
+    required String label,
+    IconData? suffixIcon,
+    required Color bgColor,
+    required Color textColor,
+  }) {
     return Container(
       height: 34,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF787582).withValues(alpha: 0.5)),
+        border: Border.all(
+          color: const Color(0xFF787582).withValues(alpha: 0.5),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -303,11 +350,19 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   Widget _buildTaskCard(Map<String, dynamic> task) {
+    final rawPriority = task['priority']?.toString().toUpperCase() ?? '';
+    final priorityLabel = switch (rawPriority) {
+      'HIGH' || 'CRITICAL' => 'URGENT',
+      'MEDIUM' => 'MEDIUM',
+      'LOW' || 'NORMAL' || '' => 'NORMAL',
+      _ => rawPriority,
+    };
+
     Color priorityColor;
     Color priorityBgColor;
     IconData priorityIcon;
-    
-    switch (task['priority']?.toString().toUpperCase()) {
+
+    switch (rawPriority) {
       case 'HIGH':
       case 'CRITICAL':
         priorityColor = const Color(0xFF93000A);
@@ -329,9 +384,13 @@ class _TaskListScreenState extends State<TaskListScreen> {
     }
 
     final type = task['type']?.toString().toUpperCase() ?? '';
+    final typeLabel = type == 'TR'
+        ? 'TIKET GANGGUAN'
+        : (task['sector']?.toString() ??
+              (type == 'INSTALL' ? 'PSB' : 'UMUM'));
     Color typeColor;
     Color typeBgColor;
-    
+
     if (type == 'TR') {
       typeColor = const Color(0xFFBA1A1A); // Red
       typeBgColor = const Color(0xFFFFDAD6);
@@ -363,10 +422,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 4,
-                color: typeColor,
-              ),
+              Container(width: 4, color: typeColor),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
@@ -376,36 +432,60 @@ class _TaskListScreenState extends State<TaskListScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: priorityBgColor,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(priorityIcon, size: 12, color: priorityColor),
-                                const SizedBox(width: 3),
-                                Text(
-                                  task['priority']?.toString() ?? 'NORMAL',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: priorityColor,
-                                  ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'PRIORITAS',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF474551),
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: priorityBgColor,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      priorityIcon,
+                                      size: 12,
+                                      color: priorityColor,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      priorityLabel,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: priorityColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: typeBgColor,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              task['sector'] ?? (type == 'TR' ? 'TIKET' : type == 'INSTALL' ? 'PSB' : 'UMUM'),
+                              typeLabel,
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -431,14 +511,19 @@ class _TaskListScreenState extends State<TaskListScreen> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.apartment, size: 14, color: Color(0xFF787582)),
+                          const Icon(
+                            Icons.apartment,
+                            size: 14,
+                            color: Color(0xFF787582),
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  task['customer']?.toString() ?? 'Nama Pelanggan',
+                                  task['customer']?.toString() ??
+                                      'Nama Pelanggan',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -463,11 +548,16 @@ class _TaskListScreenState extends State<TaskListScreen> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.location_on, size: 14, color: Color(0xFF787582)),
+                          const Icon(
+                            Icons.location_on,
+                            size: 14,
+                            color: Color(0xFF787582),
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              task['address']?.toString() ?? 'Alamat tidak tersedia',
+                              task['address']?.toString() ??
+                                  'Alamat tidak tersedia',
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -484,7 +574,11 @@ class _TaskListScreenState extends State<TaskListScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.phone, size: 14, color: Color(0xFF787582)),
+                            const Icon(
+                              Icons.phone,
+                              size: 14,
+                              color: Color(0xFF787582),
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -503,7 +597,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                       const SizedBox(height: 8),
                       const Divider(height: 1, color: Color(0xFFE4DFFF)),
                       const SizedBox(height: 6),
-                      
+
                       // Action buttons based on priority
                       if (task['priority'] == 'HIGH')
                         SizedBox(
@@ -513,26 +607,46 @@ class _TaskListScreenState extends State<TaskListScreen> {
                               final id = task['id']?.toString();
                               final type = task['type']?.toString();
                               if (id != null && type != null) {
-                                context.read<TaskProvider>().updateTaskStatus(id, type, 'mulai');
+                                context.read<TaskProvider>().updateTaskStatus(
+                                  id,
+                                  type,
+                                  'mulai',
+                                );
                               }
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => JobExecutionScreen(task: task),
+                                  builder: (context) =>
+                                      JobExecutionScreen(task: task),
                                 ),
                               ).then((_) {
                                 if (context.mounted) {
-                                  context.read<TaskProvider>().fetchTasks(refresh: true);
+                                  context.read<TaskProvider>().fetchTasks(
+                                    refresh: true,
+                                  );
                                 }
                               });
                             },
-                            icon: const Icon(Icons.play_arrow, color: Colors.white, size: 18),
-                            label: const Text('Start Job', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                            icon: const Icon(
+                              Icons.play_arrow,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            label: const Text(
+                              'Start Job',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF070038),
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               minimumSize: const Size(0, 40),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         )
@@ -543,12 +657,25 @@ class _TaskListScreenState extends State<TaskListScreen> {
                               child: OutlinedButton(
                                 onPressed: () {},
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFF787582)),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  side: const BorderSide(
+                                    color: Color(0xFF787582),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
                                   minimumSize: const Size(0, 40),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
-                                child: const Text('Details', style: TextStyle(color: Color(0xFF19163F), fontWeight: FontWeight.w600, fontSize: 13)),
+                                child: const Text(
+                                  'Details',
+                                  style: TextStyle(
+                                    color: Color(0xFF19163F),
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -558,26 +685,46 @@ class _TaskListScreenState extends State<TaskListScreen> {
                                   final id = task['id']?.toString();
                                   final type = task['type']?.toString();
                                   if (id != null && type != null) {
-                                    context.read<TaskProvider>().updateTaskStatus(id, type, 'mulai');
+                                    context
+                                        .read<TaskProvider>()
+                                        .updateTaskStatus(id, type, 'mulai');
                                   }
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => JobExecutionScreen(task: task),
+                                      builder: (context) =>
+                                          JobExecutionScreen(task: task),
                                     ),
                                   ).then((_) {
                                     if (context.mounted) {
-                                      context.read<TaskProvider>().fetchTasks(refresh: true);
+                                      context.read<TaskProvider>().fetchTasks(
+                                        refresh: true,
+                                      );
                                     }
                                   });
                                 },
-                                icon: const Icon(Icons.play_arrow, color: Colors.white, size: 18),
-                                label: const Text('Start', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                                icon: const Icon(
+                                  Icons.play_arrow,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                label: const Text(
+                                  'Start',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF070038),
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
                                   minimumSize: const Size(0, 40),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
                               ),
                             ),
@@ -591,11 +738,14 @@ class _TaskListScreenState extends State<TaskListScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => TaskDetailScreen(task: task),
+                                  builder: (context) =>
+                                      TaskDetailScreen(task: task),
                                 ),
                               ).then((_) {
                                 if (context.mounted) {
-                                  context.read<TaskProvider>().fetchTasks(refresh: true);
+                                  context.read<TaskProvider>().fetchTasks(
+                                    refresh: true,
+                                  );
                                 }
                               });
                             },
@@ -603,9 +753,18 @@ class _TaskListScreenState extends State<TaskListScreen> {
                               side: const BorderSide(color: Color(0xFF787582)),
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               minimumSize: const Size(0, 40),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
-                            child: const Text('LIHAT', style: TextStyle(color: Color(0xFF19163F), fontWeight: FontWeight.w600, fontSize: 13)),
+                            child: const Text(
+                              'LIHAT',
+                              style: TextStyle(
+                                color: Color(0xFF19163F),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
                           ),
                         ),
                     ],
@@ -619,4 +778,3 @@ class _TaskListScreenState extends State<TaskListScreen> {
     );
   }
 }
-
