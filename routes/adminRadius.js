@@ -816,6 +816,32 @@ router.get('/radius/backups', adminAuth, async (req, res) => {
   }
 });
 
+// POST: Simpan Pengaturan Auto Backup
+router.post('/radius/auto-backup-settings', adminAuth, async (req, res) => {
+  try {
+    const { enabled, interval } = req.body;
+    const db = require('../config/billing').db;
+    
+    await new Promise((resolve, reject) => {
+      db.run(`INSERT INTO app_settings (key, value) VALUES (?, ?)
+              ON CONFLICT(key) DO UPDATE SET value=excluded.value`, 
+              ['radius_autobackup_enabled', enabled], (err) => err ? reject(err) : resolve());
+    });
+    
+    await new Promise((resolve, reject) => {
+      db.run(`INSERT INTO app_settings (key, value) VALUES (?, ?)
+              ON CONFLICT(key) DO UPDATE SET value=excluded.value`, 
+              ['radius_autobackup_interval', interval], (err) => err ? reject(err) : resolve());
+    });
+    
+    logger.info(`Auto backup settings updated: enabled=${enabled}, interval=${interval} days`);
+    res.json({ success: true, message: 'Pengaturan Auto Backup berhasil disimpan' });
+  } catch (error) {
+    logger.error('Error saving auto backup settings:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 module.exports = router;
 
 

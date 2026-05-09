@@ -102,6 +102,30 @@ async function backupRadius() {
         // 6. Cleanup temp directory
         await execAsync(`rm -rf ${tempDir}`);
         
+        // 7. Cleanup old backups (keep only 3 most recent)
+        try {
+            const files = await fs.readdir(backupDir);
+            const backupFiles = [];
+            for (const file of files) {
+                if (file.endsWith('.tar.gz') && !file.startsWith('temp-')) {
+                    const stats = await fs.stat(path.join(backupDir, file));
+                    backupFiles.push({ file, created: stats.birthtime });
+                }
+            }
+            backupFiles.sort((a, b) => b.created - a.created);
+            
+            if (backupFiles.length > 3) {
+                logger.info(`Ditemukan ${backupFiles.length} file backup. Menghapus backup lama (batas maksimal 3)...`);
+                const filesToDelete = backupFiles.slice(3);
+                for (const backup of filesToDelete) {
+                    await fs.unlink(path.join(backupDir, backup.file));
+                    logger.info(`Berhasil menghapus backup lama: ${backup.file}`);
+                }
+            }
+        } catch (cleanupError) {
+            logger.warn(`Gagal menghapus file backup lama: ${cleanupError.message}`);
+        }
+        
         logger.info(`RADIUS backup completed: ${backupFilePath}`);
         
         return {

@@ -73,7 +73,7 @@
             <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">
-                        <i class="bi bi-circle"></i> Service Suspension
+                        <i class="bi bi-shield-x"></i> Service Suspension
                     </h1>
                 </div>
 
@@ -129,18 +129,42 @@
 
                 <!-- Isolir Profile Setting -->
                 <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="card">
+                    <!-- Card 1: Toggle Auto Isolir -->
+                    <div class="col-md-4">
+                        <div class="card h-100 border-primary">
+                            <div class="card-header bg-primary text-white">
+                                <strong><i class="bi bi-power me-2"></i>Status Auto Isolir</strong>
+                            </div>
+                            <div class="card-body d-flex flex-column justify-content-center text-center">
+                                <% const autoSuspensionEnabled = appSettings.auto_suspension_enabled === true || appSettings.auto_suspension_enabled === 'true'; %>
+                                <div class="mb-3">
+                                    <div class="form-check form-switch d-inline-block fs-3 m-0 p-0">
+                                        <input class="form-check-input mx-auto" type="checkbox" role="switch" id="toggleAutoSuspension" <%= autoSuspensionEnabled ? 'checked' : '' %> style="float: none; margin-left: 0; cursor: pointer; width: 3em; height: 1.5em;">
+                                    </div>
+                                </div>
+                                <h4 class="mb-3">
+                                    <span class="badge <%= autoSuspensionEnabled ? 'bg-success' : 'bg-danger' %> rounded-pill px-4 py-2" id="autoSuspensionBadge">
+                                        <%= autoSuspensionEnabled ? 'AKTIF (ON)' : 'NON-AKTIF (OFF)' %>
+                                    </span>
+                                </h4>
+                                <p class="text-muted small mb-0">Jika aktif (ON), sistem akan otomatis mengisolir pelanggan yang melewati batas waktu pembayaran & Grace Period. Jika OFF, pengecekan isolir otomatis akan dihentikan sementara.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Profile Isolir -->
+                    <div class="col-md-4">
+                        <div class="card h-100">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
                                     <strong>Profile Isolir (RADIUS)</strong>
                                 <% } else { %>
-                                    <strong>Pilih Profile Isolir (Mikrotik)</strong>
+                                    <strong>Pilih Profile (Mikrotik)</strong>
                                 <% } %>
                                 <div>
                                     <% if (typeof authMode !== 'undefined' && authMode !== 'radius') { %>
-                                        <button class="btn btn-sm btn-outline-secondary me-2" id="reloadIsolirProfilesBtn">
-                                            <i class="bi bi-arrow-clockwise me-1"></i>Reload
+                                        <button class="btn btn-sm btn-outline-secondary me-1" id="reloadIsolirProfilesBtn" title="Reload Profile">
+                                            <i class="bi bi-arrow-clockwise"></i>
                                         </button>
                                     <% } %>
                                     <button class="btn btn-sm btn-primary" id="saveIsolirProfileBtn">
@@ -151,22 +175,24 @@
                             <div class="card-body">
                                 <label for="isolirProfileSelect" class="form-label">Profile Isolir</label>
                                 <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
-                                    <input type="text" id="isolirProfileSelect" class="form-control" value="isolir" readonly>
+                                    <input type="text" id="isolirProfileSelect" class="form-control mb-3" value="isolir" readonly>
                                     <small class="text-muted">
                                         <i class="bi bi-info-circle"></i> Di mode RADIUS, sistem menggunakan groupname <strong>'isolir'</strong> di tabel <code>radusergroup</code>. 
                                         Pastikan group 'isolir' sudah ada di <code>radgroupreply</code>. Profile isolir tidak menggunakan rate-limit (biarkan loss) untuk redirect web isolir.
                                     </small>
                                 <% } else { %>
-                                    <select id="isolirProfileSelect" class="form-select">
+                                    <select id="isolirProfileSelect" class="form-select mb-3">
                                         <option value="default">Loading...</option>
                                     </select>
-                                    <small class="text-muted">Dipakai saat Suspend. Profil dari Mikrotik dengan highlight pada profil aktif dari settings.json</small>
+                                    <small class="text-muted">Dipakai saat proses Suspend otomatis. Profil ini diambil dari daftar profil Mikrotik Anda dengan highlight pada profil yang saat ini sedang aktif di pengaturan.</small>
                                 <% } %>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="card">
+
+                    <!-- Card 3: Grace Period -->
+                    <div class="col-md-4">
+                        <div class="card h-100">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <strong>Pengaturan Grace Period</strong>
                                 <button class="btn btn-sm btn-success" id="saveGracePeriodBtn">
@@ -174,9 +200,48 @@
                                 </button>
                             </div>
                             <div class="card-body">
-                                <label for="gracePeriodInput" class="form-label">Grace Period (Hari)</label>
-                                <input type="number" id="gracePeriodInput" class="form-control" min="1" max="30" placeholder="Masukkan jumlah hari">
-                                <small class="text-muted">Jumlah hari setelah tagihan overdue sebelum customer di-suspend otomatis. Current: <span id="currentGracePeriod"><%= appSettings.suspension_grace_period_days || '3' %></span> hari</small>
+                                <label for="gracePeriodInput" class="form-label">Toleransi Keterlambatan (Hari)</label>
+                                <div class="input-group mb-3">
+                                    <input type="number" id="gracePeriodInput" class="form-control" min="1" max="30" placeholder="Contoh: 3">
+                                    <span class="input-group-text">Hari</span>
+                                </div>
+                                <small class="text-muted">Jumlah hari kelonggaran setelah tagihan pelanggan berstatus "overdue" (jatuh tempo) sebelum sistem otomatis melakukan suspend/isolir. Setting saat ini: <strong><span id="currentGracePeriod"><%= appSettings.suspension_grace_period_days || '3' %></span> hari</strong>.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Update Masal Tanggal Isolir -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card border-primary">
+                            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                                <strong><i class="bi bi-calendar-event me-2"></i>Update Masal Tanggal Isolir / Jatuh Tempo</strong>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-3">Gunakan fitur ini untuk menyamakan siklus penagihan/isolir seluruh pelanggan secara masal. Sangat berguna untuk integrasi awal atau penyeragaman SOP.</p>
+                                <div class="row align-items-end">
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label fw-bold">Tipe Tagihan</label>
+                                        <select class="form-select" id="bulkRenewalType">
+                                            <option value="renewal">Setiap X Hari (Renewal)</option>
+                                            <option value="fix_date">Tanggal Tetap (Fix Date)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4 mb-3" id="bulkBillingDayCol">
+                                        <label class="form-label fw-bold">Jumlah Hari (Siklus) <small class="text-muted fw-normal ms-1">(Contoh: 30)</small></label>
+                                        <input type="number" class="form-control" id="bulkBillingDay" value="30" min="1" max="365">
+                                    </div>
+                                    <div class="col-md-4 mb-3" id="bulkFixDateCol" style="display:none;">
+                                        <label class="form-label fw-bold">Tanggal Isolir/Tagihan <small class="text-muted fw-normal ms-1">(Tgl 1-28)</small></label>
+                                        <input type="number" class="form-control" id="bulkFixDate" value="1" min="1" max="28">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <button class="btn btn-primary w-100" id="btnUpdateBulkDate">
+                                            <i class="bi bi-cloud-upload me-2"></i>Update Masal
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -552,6 +617,64 @@
                 });
         }
 
+        // Handle toggle bulk form
+        $('#bulkRenewalType').change(function() {
+            if ($(this).val() === 'fix_date') {
+                $('#bulkBillingDayCol').hide();
+                $('#bulkFixDateCol').show();
+            } else {
+                $('#bulkBillingDayCol').show();
+                $('#bulkFixDateCol').hide();
+            }
+        });
+
+        // Handle bulk update isolir date
+        $('#btnUpdateBulkDate').click(function() {
+            const renewal_type = $('#bulkRenewalType').val();
+            const billing_day = $('#bulkBillingDay').val();
+            const fix_date = $('#bulkFixDate').val();
+
+            Swal.fire({
+                title: 'Update Masal?',
+                text: "Anda yakin ingin mengubah tipe dan siklus tagihan/isolir SELURUH pelanggan? Tindakan ini akan diterapkan ke seluruh data pelanggan yang ada di database dan mengubah tanggal penagihan invoice mereka.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#0d6efd',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Ya, Lanjutkan'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const btn = $(this);
+                    const originalText = btn.html();
+                    btn.prop('disabled', true).html('<i class="bi bi-arrow-repeat bx-spin me-2"></i>Memproses...');
+
+                    fetch('/admin/billing/service-suspension/bulk-update-isolir-date', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ renewal_type, billing_day, fix_date })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data && data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Berhasil',
+                                text: data.message || 'Siklus tagihan seluruh pelanggan telah diupdate.'
+                            });
+                        } else {
+                            Swal.fire('Gagal', data.message || 'Terjadi kesalahan sistem', 'error');
+                        }
+                    })
+                    .catch(err => {
+                        Swal.fire('Gagal', 'Terjadi kesalahan koneksi', 'error');
+                    })
+                    .finally(() => {
+                        btn.prop('disabled', false).html(originalText);
+                    });
+                }
+            });
+        });
+
         // Get current isolir profile setting
         function loadCurrentIsolirProfile() {
             fetch('/admin/billing/service-suspension/isolir-profile')
@@ -695,6 +818,43 @@
                         loadIsolirProfiles(current);
                     });
             <% } %>
+        });
+
+        // Toggle Auto Suspension
+        $('#toggleAutoSuspension').change(function() {
+            const isEnabled = $(this).is(':checked');
+            const badge = $('#autoSuspensionBadge');
+            
+            // Temporary loading state
+            badge.removeClass('bg-success bg-danger').addClass('bg-secondary').text('Saving...');
+            $(this).prop('disabled', true);
+
+            fetch('/admin/billing/service-suspension/toggle-feature', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: isEnabled })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success) {
+                    showToast('success', 'Berhasil', 'Fitur Auto Isolir ' + (isEnabled ? 'Diaktifkan' : 'Dimatikan'));
+                    badge.removeClass('bg-secondary').addClass(isEnabled ? 'bg-success' : 'bg-danger').text(isEnabled ? 'ON' : 'OFF');
+                } else {
+                    showToast('error', 'Gagal', data.message || 'Gagal mengubah pengaturan');
+                    // Revert UI
+                    $(this).prop('checked', !isEnabled);
+                    badge.removeClass('bg-secondary').addClass(!isEnabled ? 'bg-success' : 'bg-danger').text(!isEnabled ? 'ON' : 'OFF');
+                }
+            })
+            .catch(err => {
+                showToast('error', 'Gagal', 'Terjadi kesalahan koneksi');
+                // Revert UI
+                $(this).prop('checked', !isEnabled);
+                badge.removeClass('bg-secondary').addClass(!isEnabled ? 'bg-success' : 'bg-danger').text(!isEnabled ? 'ON' : 'OFF');
+            })
+            .finally(() => {
+                $(this).prop('disabled', false);
+            });
         });
 
         // Load current grace period setting

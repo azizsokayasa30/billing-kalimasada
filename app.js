@@ -703,6 +703,10 @@ app.use('/admin/trouble', blockTechnicianAccess, adminAuth, adminTroubleReportRo
 const adminBillingRouter = require('./routes/adminBilling');
 app.use('/admin/billing', blockTechnicianAccess, adminAuth, adminBillingRouter);
 
+// Import dan gunakan route adminGoodsInvoice
+const adminGoodsInvoiceRouter = require('./routes/adminGoodsInvoice');
+app.use('/admin/billing/goods-invoices', blockTechnicianAccess, adminAuth, adminGoodsInvoiceRouter);
+
 // Import dan gunakan route adminInstallationJobs
 const adminInstallationJobsRouter = require('./routes/adminInstallationJobs');
 app.use('/admin/installations', blockTechnicianAccess, adminAuth, adminInstallationJobsRouter);

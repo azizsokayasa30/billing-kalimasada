@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Print Invoice Penjualan - <%= invoice.invoice_number %></title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        
+        body { 
+            font-family: 'Inter', sans-serif; 
+            color: #334155; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f8fafc;
+        }
+        
+        .invoice-box { 
+            max-width: 800px; 
+            margin: auto; 
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            overflow: hidden;
+        }
+
+        /* ISP Header Styling */
+        .invoice-header {
+            background: linear-gradient(135deg, #0e5699 0%, #1e3a8a 100%);
+            color: #ffffff;
+            padding: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 5px solid #eab308; /* Yellow accent */
+        }
+
+        .company-brand {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .company-logo {
+            background: #fff;
+            padding: 5px;
+            border-radius: 4px;
+            max-width: 140px;
+            max-height: 60px;
+            object-fit: contain;
+        }
+
+        .company-info h2 {
+            margin: 0 0 5px 0;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: #fff;
+        }
+
+        .company-info p {
+            margin: 0;
+            font-size: 13px;
+            color: #cbd5e1;
+            line-height: 1.4;
+        }
+
+        .invoice-title-block {
+            text-align: right;
+        }
+
+        .invoice-title-block h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #fff;
+        }
+
+        .invoice-title-block .inv-number {
+            font-size: 14px;
+            font-weight: 600;
+            color: #eab308; /* Yellow text */
+            margin-top: 5px;
+        }
+
+        .invoice-body {
+            padding: 30px;
+        }
+
+        .billing-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+
+        .billing-info h3 {
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin: 0 0 10px 0;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 5px;
+            display: inline-block;
+        }
+
+        .billing-info p {
+            margin: 3px 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .billing-info strong {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        .meta-info {
+            text-align: right;
+        }
+
+        .meta-table {
+            border-collapse: collapse;
+            float: right;
+        }
+
+        .meta-table td {
+            padding: 4px 0 4px 15px;
+            font-size: 14px;
+        }
+
+        .meta-table td:first-child {
+            color: #64748b;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .meta-table td:last-child {
+            color: #0f172a;
+            font-weight: 600;
+            text-align: left;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-paid {
+            background-color: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+
+        .status-unpaid {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        /* Items Table */
+        .item-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .item-table th {
+            background-color: #f8fafc;
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 2px solid #cbd5e1;
+        }
+
+        .item-table td {
+            padding: 15px;
+            font-size: 14px;
+            color: #334155;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .item-table th.center, .item-table td.center { text-align: center; }
+        .item-table th.right, .item-table td.right { text-align: right; }
+
+        .item-table tr.total-row td {
+            background-color: #f8fafc;
+            font-size: 16px;
+        }
+
+        .item-table tr.total-row td.total-label {
+            font-weight: 700;
+            color: #0f172a;
+            text-align: right;
+            padding-right: 15px;
+        }
+
+        .item-table tr.total-row td.total-amount {
+            font-weight: 800;
+            color: #0e5699;
+            font-size: 18px;
+        }
+
+        /* Footer */
+        .notes-section {
+            background: #f8fafc;
+            border-left: 4px solid #eab308;
+            padding: 15px;
+            margin-bottom: 30px;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .notes-section h4 {
+            margin: 0 0 5px 0;
+            font-size: 13px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .notes-section p {
+            margin: 0;
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+
+        .invoice-footer {
+            text-align: center;
+            padding: 20px 30px;
+            background-color: #f1f5f9;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        .invoice-footer p {
+            margin: 0 0 5px 0;
+        }
+
+        .invoice-footer strong {
+            color: #0e5699;
+        }
+
+        .print-btn { 
+            display: block; 
+            width: 150px; 
+            margin: 0 auto 20px; 
+            padding: 12px; 
+            text-align: center; 
+            background: #0e5699; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            border: none; 
+            font-size: 15px;
+            font-weight: 600;
+            font-family: inherit;
+            box-shadow: 0 2px 4px rgba(14, 86, 153, 0.3);
+            transition: background 0.3s;
+        }
+        
+        .print-btn:hover {
+            background: #1e3a8a;
+        }
+
+        @media print {
+            body { padding: 0; margin: 0; background: #fff; }
+            .invoice-box { box-shadow: none; border: none; max-width: 100%; border-radius: 0; }
+            .no-print { display: none !important; }
+            /* Force background colors for print */
+            .invoice-header {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                background: #0e5699 !important; /* Fallback for gradient */
+            }
+            .item-table th, .item-table tr.total-row td, .notes-section, .invoice-footer {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .status-paid, .status-unpaid {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .invoice-header {
+                border-bottom: 5px solid #eab308 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-btn no-print" onclick="window.print()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: -2px; margin-right: 5px;">
+            <path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/>
+            <path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2H5zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4V3zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2H5zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1z"/>
+        </svg>
+        Cetak Invoice
+    </button>
+    
+    <div class="invoice-box">
+        <!-- HEADER -->
+        <div class="invoice-header">
+            <div class="company-brand">
+                <% if (appSettings && appSettings.logo_filename) { %>
+                    <img src="/public/img/<%= appSettings.logo_filename %>" class="company-logo" alt="Logo">
+                <% } %>
+                <div class="company-info">
+                    <h2><%= appSettings ? appSettings.company_header : 'KALIMASADA ISP' %></h2>
+                    <p><%- appSettings ? (appSettings.company_address || '-').replace(/\n/g, '<br>') : '-' %></p>
+                </div>
+            </div>
+            <div class="invoice-title-block">
+                <h1>INVOICE</h1>
+                <div class="inv-number"># <%= invoice.invoice_number %></div>
+            </div>
+        </div>
+
+        <div class="invoice-body">
+            <!-- BILLING INFO -->
+            <div class="billing-row">
+                <div class="billing-info">
+                    <h3>Ditagihkan Kepada</h3>
+                    <p><strong><%= invoice.customer_name %></strong></p>
+                    <p><%- invoice.customer_phone ? invoice.customer_phone + '<br>' : '' %></p>
+                    <p><%= invoice.customer_address || '' %></p>
+                </div>
+                <div class="billing-info meta-info">
+                    <table class="meta-table">
+                        <tr>
+                            <td>Tanggal Invoice:</td>
+                            <td><%= new Date(invoice.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) %></td>
+                        </tr>
+                        <tr>
+                            <td>Status:</td>
+                            <td>
+                                <% if(invoice.status === 'paid') { %>
+                                    <span class="status-badge status-paid">LUNAS</span>
+                                <% } else { %>
+                                    <span class="status-badge status-unpaid">BELUM LUNAS</span>
+                                <% } %>
+                            </td>
+                        </tr>
+                        <% if(invoice.status === 'paid' && invoice.payment_date) { %>
+                        <tr>
+                            <td>Tanggal Bayar:</td>
+                            <td><%= new Date(invoice.payment_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) %></td>
+                        </tr>
+                        <% } %>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ITEMS TABLE -->
+            <table class="item-table">
+                <thead>
+                    <tr>
+                        <th width="5%">No</th>
+                        <th width="45%">Deskripsi Item</th>
+                        <th width="10%" class="center">Qty</th>
+                        <th width="20%" class="right">Harga Satuan</th>
+                        <th width="20%" class="right">Total Harga</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% items.forEach((item, index) => { %>
+                    <tr>
+                        <td class="center"><%= index + 1 %></td>
+                        <td><strong><%= item.item_name %></strong></td>
+                        <td class="center"><%= item.quantity %></td>
+                        <td class="right">Rp <%= item.unit_price.toLocaleString('id-ID') %></td>
+                        <td class="right">Rp <%= item.total_price.toLocaleString('id-ID') %></td>
+                    </tr>
+                    <% }); %>
+                    <tr class="total-row">
+                        <td colspan="4" class="total-label">Total Pembayaran</td>
+                        <td class="right total-amount">Rp <%= invoice.total_amount.toLocaleString('id-ID') %></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- NOTES -->
+            <% if(invoice.notes) { %>
+            <div class="notes-section">
+                <h4>Catatan Tambahan</h4>
+                <p><%= invoice.notes %></p>
+            </div>
+            <% } %>
+
+            <!-- Company Notes -->
+            <% if (appSettings && appSettings.invoice_notes && appSettings.invoice_notes.trim() !== '') { %>
+            <div class="notes-section">
+                <h4>Informasi Penting</h4>
+                <p><%= appSettings.invoice_notes %></p>
+            </div>
+            <% } %>
+
+            <!-- Payment Instructions -->
+            <div style="margin-bottom: 30px;">
+                <h4 style="font-size: 13px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.5px; margin: 0 0 10px 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; display: inline-block;">Cara Pembayaran</h4>
+                <div style="display: flex; gap: 20px;">
+                    <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px;">
+                        <h5 style="margin: 0 0 10px 0; font-size: 14px; color: #0f172a;">Transfer Bank</h5>
+                        <p style="margin: 0; font-size: 13px; color: #475569; line-height: 1.5;">
+                            <strong>Bank:</strong> <%= appSettings ? appSettings.payment_bank_name : '-' %><br>
+                            <strong>No. Rekening:</strong> <%= appSettings ? appSettings.payment_account_number : '-' %><br>
+                            <strong>Atas Nama:</strong> <%= appSettings ? appSettings.payment_account_holder : '-' %>
+                        </p>
+                    </div>
+                    <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px;">
+                        <h5 style="margin: 0 0 10px 0; font-size: 14px; color: #0f172a;">Pembayaran Tunai</h5>
+                        <p style="margin: 0; font-size: 13px; color: #475569; line-height: 1.5;">
+                            Pembayaran dapat dilakukan di kantor kami:<br>
+                            <strong>Alamat:</strong> <%= appSettings ? appSettings.payment_cash_address : '-' %><br>
+                            <strong>Jam Operasional:</strong> <%= appSettings ? appSettings.payment_cash_hours : '-' %>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="invoice-footer" style="text-align: left; padding: 20px 30px; background-color: #f1f5f9; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 13px; display: flex; justify-content: space-between;">
+            <div style="width: 60%;">
+                <p style="margin: 0 0 5px 0;"><strong style="color: #0f172a;">Terima kasih telah mempercayai layanan kami!</strong></p>
+                <p style="margin: 0 0 5px 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: -2px; margin-right: 5px;"><path d="M3.654 1.328a.678.678 0 0 0-1.015-.063L1.605 2.3c-.483.484-.661 1.169-.45 1.77a17.568 17.568 0 0 0 4.168 6.608 17.569 17.569 0 0 0 6.608 4.168c.601.211 1.286.033 1.77-.45l1.034-1.034a.678.678 0 0 0-.063-1.015l-2.307-1.794a.678.678 0 0 0-.58-.122l-2.19.547a1.745 1.745 0 0 1-1.657-.459L5.482 8.062a1.745 1.745 0 0 1-.46-1.657l.548-2.19a.678.678 0 0 0-.122-.58L3.654 1.328zM1.884.511a1.745 1.745 0 0 1 2.612.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.678.678 0 0 0 .178.643l2.457 2.457a.678.678 0 0 0 .644.178l2.189-.547a1.745 1.745 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.634 18.634 0 0 1-7.01-4.42 18.634 18.634 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877L1.885.511z"/></svg> <%= appSettings ? appSettings.contact_phone : '-' %><br>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: -2px; margin-right: 5px;"><path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414.05 3.555ZM0 4.697v7.104l5.803-3.558L0 4.697ZM6.761 8.83l-6.57 4.027A2 2 0 0 0 2 14h12a2 2 0 0 0 1.808-1.144l-6.57-4.027L8 9.586l-1.239-.757Zm3.436-.586L16 11.801V4.697l-5.803 3.546Z"/></svg> <%= appSettings ? appSettings.contact_email : '-' %><br>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: -2px; margin-right: 5px;"><path d="M12.166 8.94c-.524 1.062-1.234 2.12-1.96 3.07A31.493 31.493 0 0 1 8 14.58a31.481 31.481 0 0 1-2.206-2.57c-.726-.95-1.436-2.008-1.96-3.07C3.304 7.867 3 6.862 3 6a5 5 0 0 1 10 0c0 .862-.305 1.867-.834 2.94zM8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10z"/><path d="M8 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 1a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg> <%= appSettings ? appSettings.contact_address : '-' %>
+                </p>
+            </div>
+            <div style="width: 40%; text-align: right;">
+                <p style="margin: 0 0 5px 0; color: #0f172a;"><%= appSettings ? appSettings.footerInfo : '' %></p>
+                <p style="margin: 0 0 5px 0;">
+                    Invoice ini dibuat secara otomatis oleh sistem.<br>
+                    Mohon simpan sebagai bukti pembayaran.
+                </p>
+                <p style="margin: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: -2px; margin-right: 5px;"><path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/></svg> WhatsApp: <%= appSettings ? appSettings.contact_whatsapp : '-' %><br>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: -2px; margin-right: 5px;"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm7.5-6.923c-.67.204-1.335.82-1.887 1.855A7.97 7.97 0 0 0 5.145 4H7.5V1.077zM4.09 4a9.267 9.267 0 0 1 .64-1.539 6.7 6.7 0 0 1 .597-.933A7.025 7.025 0 0 0 2.251 4H4.09zm-1.8 2h2.281a15.356 15.356 0 0 0-.012 1.992H1.144A6.98 6.98 0 0 0 2.29 6zm0 4h2.281a15.356 15.356 0 0 0 .012 1.992H1.144A6.98 6.98 0 0 0 2.29 10zm1.839 2A9.267 9.267 0 0 0 4.73 10.46a6.7 6.7 0 0 0-.597-.933A7.025 7.025 0 0 1 2.251 12H4.09zm1.539 0c.67-.204 1.335-.82 1.887-1.855A7.97 7.97 0 0 1 5.145 12H7.5v2.923zM8.5 14.923c.67-.204 1.335-.82 1.887-1.855A7.97 7.97 0 0 0 10.855 12H8.5v2.923zM11.91 12a9.267 9.267 0 0 0-.64-1.539 6.7 6.7 0 0 0-.597-.933A7.025 7.025 0 0 1 13.749 12h-1.839zm1.8-2h-2.281a15.356 15.356 0 0 1 .012-1.992h3.42A6.98 6.98 0 0 1 13.71 10zm0-4h-2.281a15.356 15.356 0 0 1-.012-1.992h3.42A6.98 6.98 0 0 1 13.71 6zm-1.839-2A9.267 9.267 0 0 1 11.27 5.54a6.7 6.7 0 0 1 .597.933A7.025 7.025 0 0 0 13.749 4h-1.839zm-1.539 0c-.67.204-1.335.82-1.887 1.855A7.97 7.97 0 0 0 10.855 4H8.5V1.077zM8.5 5h2.355a14.28 14.28 0 0 1-.065 1.992H8.5V5zM7.5 7.008H5.145a14.28 14.28 0 0 1 .065-2.008H7.5v2.008zM8.5 9h2.355a14.28 14.28 0 0 1-.065 1.992H8.5V9zM7.5 11H5.145a14.28 14.28 0 0 1 .065-1.992H7.5V11z"/></svg> Website: <%= appSettings ? appSettings.company_website : '-' %>
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Auto print dialog on load
+        window.onload = function() {
+            setTimeout(() => {
+                window.print();
+            }, 800); // Slight delay for fonts to load
+        };
+    </script>
+</body>
+</html>

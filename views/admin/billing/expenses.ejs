@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manajemen Pengeluaran - Admin Portal</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="/vendor/boxicons/boxicons.min.css" rel="stylesheet">
     <!-- Admin Mobile Optimizations -->
     <link href="/css/admin-mobile.css" rel="stylesheet">
@@ -31,6 +32,9 @@
                         <button type="button" class="btn btn-outline-success me-2" onclick="exportToCSV()">
                             <i class="bi bi-download"></i> Export CSV
                         </button>
+                        <a href="/admin/billing/finance-categories" class="btn btn-outline-info me-2">
+                            <i class="bi bi-tags"></i> Kelola Kategori
+                        </a>
                         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
                             <i class="bi bi-plus-lg"></i> Tambah Pengeluaran
                         </button>
@@ -317,33 +321,35 @@
         // Set default date to today
         document.getElementById('expense_date').value = new Date().toISOString().split('T')[0];
 
-        // Account Expenses options based on category
-        const accountExpensesOptions = {
-            'Harga Pokok Penjualan (HPP)': [
-                'Biaya bandwidth/upstream internet',
-                'Sewa tower / POP / data center',
-                'Infrastruktur jaringan (fiber, radio, router, OLT)',
-                'Perangkat pelanggan (ONT/Radio)',
-                'Maintenance jaringan (langsung ke layanan)',
-                'Basic Fee XR (BFXR)',
-                'Lainnya (Yang Berhubungan Dengan HPP)'
-            ],
-            'Beban Operasional (OPEX)': [
-                'Gaji staf kantor & CS',
-                'Listrik kantor',
-                'Sewa kantor',
-                'ATK & administrasi',
-                'Iklan & promosi',
-                'Komisi penjualan',
-                'Transportasi teknisi',
-                'Beban Lainnya (Berkaitan Dengan Operational)'
-            ],
-            'Beban Lainnya': [
-                'Bunga pinjaman',
-                'Penyusutan & amortisasi',
-                'Beban Lain-Lain'
-            ]
-        };
+        let accountExpensesOptions = {};
+
+        // Load categories from DB
+        async function loadExpenseCategories() {
+            try {
+                const res = await fetch('/admin/billing/api/finance-categories?type=expense');
+                const data = await res.json();
+                if (data.success) {
+                    const categorySelect = document.getElementById('category');
+                    const editCategorySelect = document.getElementById('edit_category');
+                    
+                    categorySelect.innerHTML = '<option value="">Pilih Kategori Expenses</option>';
+                    editCategorySelect.innerHTML = '<option value="">Pilih Kategori Expenses</option>';
+                    
+                    data.data.forEach(cat => {
+                        const opt = `<option value="${cat.name}">${cat.name}</option>`;
+                        categorySelect.innerHTML += opt;
+                        editCategorySelect.innerHTML += opt;
+                        
+                        let subs = [];
+                        try { subs = JSON.parse(cat.subcategories) || []; } catch(e) {}
+                        accountExpensesOptions[cat.name] = subs;
+                    });
+                }
+            } catch(e) {
+                console.error("Error loading categories:", e);
+            }
+        }
+        loadExpenseCategories();
 
         // Function to update account expenses dropdown
         function updateAccountExpenses(categorySelectId, accountSelectId) {

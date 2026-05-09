@@ -142,6 +142,67 @@ class InvoiceScheduler {
 
         logger.info('Service suspension/restoration scheduler initialized - will run daily at 10:00 and 11:00');
 
+        // Schedule RADIUS Auto Backup every day at 02:00 AM
+        cron.schedule('0 2 * * *', async () => {
+            try {
+                logger.info('Checking RADIUS Auto Backup settings...');
+                const { getSettingsWithCache } = require('./settingsManager');
+                const db = require('./billing').db;
+                
+                // Retrieve app settings
+                const appSettings = await new Promise((resolve) => {
+                    db.all('SELECT key, value FROM app_settings', (err, rows) => {
+                        const settingsObj = {};
+                        if (!err && rows) {
+                            rows.forEach(row => { settingsObj[row.key] = row.value; });
+                        }
+                        resolve(settingsObj);
+                    });
+                });
+                
+                if (appSettings.radius_autobackup_enabled === 'true') {
+                    const interval = parseInt(appSettings.radius_autobackup_interval) || 7;
+                    
+                    const { listBackups, backupRadius } = require('../utils/radiusBackup');
+                    const backups = await listBackups();
+                    
+                    let shouldBackup = true;
+                    
+                    if (backups && backups.length > 0) {
+                        // listBackups sorts by creation date descending (newest first)
+                        const newestBackupDate = new Date(backups[0].created);
+                        const now = new Date();
+                        const diffTime = Math.abs(now - newestBackupDate);
+                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                        
+                        if (diffDays < interval) {
+                            shouldBackup = false;
+                            logger.info(`RADIUS Auto Backup skipped. Last backup was ${diffDays} days ago, interval is ${interval} days.`);
+                        }
+                    }
+                    
+                    if (shouldBackup) {
+                        logger.info(`Starting RADIUS Auto Backup (Interval: ${interval} days)...`);
+                        const result = await backupRadius();
+                        if (result.success) {
+                            logger.info(`✅ RADIUS Auto Backup completed successfully: ${result.fileName}`);
+                        } else {
+                            logger.error(`❌ RADIUS Auto Backup failed: ${result.message}`);
+                        }
+                    }
+                } else {
+                    logger.debug('RADIUS Auto Backup is disabled.');
+                }
+            } catch (error) {
+                logger.error('Error in RADIUS Auto Backup scheduler:', error);
+            }
+        }, {
+            scheduled: true,
+            timezone: getServerTimezone()
+        });
+        
+        logger.info('RADIUS Auto Backup scheduler initialized - will run daily at 02:00 AM');
+
         // Schedule voucher cleanup every 6 hours (00:00, 06:00, 12:00, 18:00)
         cron.schedule('0 0,6,12,18 * * *', async () => {
             try {

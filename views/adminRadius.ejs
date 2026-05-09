@@ -208,6 +208,35 @@
               </div>
             </div>
 
+            <!-- Auto Backup Settings -->
+            <div class="row mt-4">
+              <div class="col-12">
+                <div class="card border-info mb-3">
+                  <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-clock-history"></i> Pengaturan Auto Backup</h6>
+                    <form id="autoBackupForm" class="row align-items-center">
+                      <div class="col-md-4">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" id="autoBackupEnabled" <%= (typeof appSettings !== 'undefined' && appSettings.radius_autobackup_enabled === 'true') ? 'checked' : '' %>>
+                          <label class="form-check-label" for="autoBackupEnabled">Aktifkan Auto Backup</label>
+                        </div>
+                      </div>
+                      <div class="col-md-5">
+                        <div class="input-group input-group-sm">
+                          <span class="input-group-text">Backup setiap</span>
+                          <input type="number" class="form-control" id="autoBackupInterval" min="1" value="<%= (typeof appSettings !== 'undefined' && appSettings.radius_autobackup_interval) ? appSettings.radius_autobackup_interval : '7' %>">
+                          <span class="input-group-text">Hari</span>
+                        </div>
+                      </div>
+                      <div class="col-md-3 text-end">
+                        <button type="button" id="saveAutoBackupBtn" class="btn btn-sm btn-info">Simpan Pengaturan</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- List of Backups -->
             <div class="mt-3">
               <h6><i class="bi bi-list-ul"></i> Daftar Backup</h6>
@@ -467,6 +496,41 @@ $(document).ready(function() {
       btn.html('<i class="bi bi-download"></i> Buat Backup');
       resultDiv.html('<div class="alert alert-success">Backup berhasil dibuat. File akan terunduh otomatis.</div>');
     }, 3000);
+  });
+
+  // Save Auto Backup Settings
+  $('#saveAutoBackupBtn').on('click', function() {
+    const btn = $(this);
+    const enabled = $('#autoBackupEnabled').is(':checked') ? 'true' : 'false';
+    const interval = $('#autoBackupInterval').val() || 7;
+    
+    btn.prop('disabled', true);
+    btn.html('<span class="spinner-border spinner-border-sm"></span> Menyimpan...');
+    
+    $.ajax({
+      url: '/admin/radius/auto-backup-settings',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({
+        enabled: enabled,
+        interval: interval
+      }),
+      success: function(response) {
+        btn.prop('disabled', false);
+        btn.html('Simpan Pengaturan');
+        
+        if (response.success) {
+          alert('Pengaturan Auto Backup berhasil disimpan!');
+        } else {
+          alert('Gagal menyimpan pengaturan: ' + (response.message || 'Unknown error'));
+        }
+      },
+      error: function(xhr) {
+        btn.prop('disabled', false);
+        btn.html('Simpan Pengaturan');
+        alert('Terjadi kesalahan saat menyimpan pengaturan: ' + (xhr.responseJSON?.message || 'Unknown error'));
+      }
+    });
   });
 
   // Restore functionality

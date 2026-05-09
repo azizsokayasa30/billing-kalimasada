@@ -273,7 +273,7 @@
                     <div class="card-header">
                         <h5 class="mb-0">Customers Without Cable Routes (<%= customersWithoutCable.length %>)</h5>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body" style="max-height: 600px; overflow-y: auto;">
                         <div class="row">
                             <% customersWithoutCable.forEach(customer => { %>
                             <div class="col-md-6 col-lg-4 mb-3">

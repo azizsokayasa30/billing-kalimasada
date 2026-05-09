@@ -186,7 +186,7 @@ const FORCED_APP_VERSION = 'v5.4';
         </div>
         
         <!-- INVOICING -->
-        <% const invoicePages = ['invoices', 'auto-invoice', 'invoices-by-type', 'invoice-list']; %>
+        <% const invoicePages = ['invoices', 'goods_invoices', 'auto-invoice', 'invoices-by-type', 'invoice-list']; %>
         <% const invoiceExpanded = typeof page !== 'undefined' && invoicePages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -216,11 +216,15 @@ const FORCED_APP_VERSION = 'v5.4';
                     <i class="bi bi-receipt"></i>
                     <span class="sb-item-text">Semua Invoice</span>
                 </a>
+                <a href="/admin/billing/goods-invoices" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'goods_invoices' ? 'active' : '' %>">
+                    <i class="bi bi-cart"></i>
+                    <span class="sb-item-text">Invoice Penjualan</span>
+                </a>
             </div>
         </div>
         
         <!-- KEUANGAN -->
-        <% const financePages = ['payment-settings', 'all-payments', 'collectors', 'collector-reports', 'collector-remittance', 'financial-report', 'report-voucher', 'report-pppoe', 'reports', 'expenses', 'income']; %>
+        <% const financePages = ['payment-settings', 'all-payments', 'collectors', 'collector-reports', 'collector-remittance', 'financial-report', 'report-voucher', 'report-pppoe', 'reports', 'expenses', 'income', 'finance-categories']; %>
         <% const financeExpanded = typeof page !== 'undefined' && financePages.includes(page); %>
         <div class="sb-section">
             <div class="sb-section-title sb-collapsible"
@@ -246,17 +250,15 @@ const FORCED_APP_VERSION = 'v5.4';
                     <i class="bi bi-people"></i>
                     <span class="sb-item-text">Tim Kolektor</span>
                 </a>
+                <!-- Disembunyikan karena fungsinya dirangkap di Terima Setoran
                 <a href="/admin/billing/collector-reports" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-reports' ? 'active' : '' %>">
                     <i class="bi bi-bar-chart"></i>
                     <span class="sb-item-text">Laporan Kolektor</span>
                 </a>
+                -->
                 <a href="/admin/billing/collector-remittance" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'collector-remittance' ? 'active' : '' %>">
                     <i class="bi bi-cash"></i>
                     <span class="sb-item-text">Terima Setoran</span>
-                </a>
-                <a href="/admin/billing/financial-report" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'financial-report' ? 'active' : '' %>">
-                    <i class="bi bi-graph-up"></i>
-                    <span class="sb-item-text">Laporan Keuangan</span>
                 </a>
                 <a href="/admin/billing/reports/voucher" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'report-voucher' ? 'active' : '' %>">
                     <i class="bi bi-ticket-perforated"></i>
@@ -266,10 +268,12 @@ const FORCED_APP_VERSION = 'v5.4';
                     <i class="bi bi-router"></i>
                     <span class="sb-item-text">Laporan PPPoE</span>
                 </a>
+                <!--
                 <a href="/admin/billing/reports" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'reports' ? 'active' : '' %>">
                     <i class="bi bi-graph-up-arrow"></i>
                     <span class="sb-item-text">Laporan Analisis</span>
                 </a>
+                -->
                 <a href="/admin/billing/expenses" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'expenses' ? 'active' : '' %>">
                     <i class="bi bi-cash-coin"></i>
                     <span class="sb-item-text">Manajemen Pengeluaran</span>
@@ -277,6 +281,14 @@ const FORCED_APP_VERSION = 'v5.4';
                 <a href="/admin/billing/income" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'income' ? 'active' : '' %>">
                     <i class="bi bi-cash-stack"></i>
                     <span class="sb-item-text">Manajemen Pemasukan</span>
+                </a>
+                <a href="/admin/billing/finance-categories" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'finance-categories' ? 'active' : '' %>">
+                    <i class="bi bi-tags"></i>
+                    <span class="sb-item-text">Kategori Keuangan</span>
+                </a>
+                <a href="/admin/billing/financial-report" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'financial-report' ? 'active' : '' %>">
+                    <i class="bi bi-graph-up"></i>
+                    <span class="sb-item-text">Laporan Keuangan</span>
                 </a>
             </div>
         </div>

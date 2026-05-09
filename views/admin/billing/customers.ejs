@@ -779,12 +779,25 @@
                     </div>
                     <div class="card-body">
                         <!-- Server-side Filter Bar -->
-                        <form method="GET" action="/admin/billing/customers" class="row mb-4 bg-light p-3 rounded border mx-0">
+                        <form method="GET" action="/admin/billing/customers" class="mb-4 bg-light p-3 rounded border mx-0">
                             <!-- Preserve time filters and customer_type -->
                             <% if(typeof selectedMonth !== 'undefined') { %><input type="hidden" name="month" value="<%= selectedMonth %>"><% } %>
                             <% if(typeof selectedYear !== 'undefined') { %><input type="hidden" name="year" value="<%= selectedYear %>"><% } %>
                             <% if(typeof filters !== 'undefined' && filters.customer_type) { %><input type="hidden" name="customer_type" value="<%= filters.customer_type %>"><% } %>
-                            <div class="col-md-2 mb-2">
+                            
+                            <!-- Global Search -->
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-primary text-white"><i class="bi bi-search"></i></span>
+                                        <input type="text" class="form-control" name="search" placeholder="Cari nama, username, no. hp, alamat... (Mencari di seluruh halaman data)" value="<%= (typeof filters !== 'undefined' && filters.search) ? filters.search : '' %>">
+                                        <button class="btn btn-primary" type="submit">Cari Pelanggan</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                            <div class="col-md-3 mb-2">
                                 <label class="form-label small fw-bold text-muted uppercase">Filter Paket</label>
                                 <select name="package_id" class="form-select form-select-sm shadow-sm border-primary">
                                     <option value="">Semua Paket</option>
@@ -814,7 +827,7 @@
                                     <% } %>
                                 </select>
                             </div>
-                            <div class="col-md-3 mb-2">
+                            <div class="col-md-2 mb-2">
                                 <label class="form-label small fw-bold text-muted uppercase">Kolektor</label>
                                 <select name="collector_id" class="form-select form-select-sm shadow-sm border-primary">
                                     <option value="">Semua Kolektor</option>
@@ -826,12 +839,13 @@
                                 </select>
                             </div>
                             <div class="col-md-2 mb-2 d-flex align-items-end gap-1">
-                                <button type="submit" class="btn btn-primary btn-sm flex-fill" title="Terapkan Filter">
+                                <button type="submit" class="btn btn-secondary btn-sm flex-fill" title="Terapkan Filter">
                                     <i class="bi bi-funnel-fill"></i> Filter
                                 </button>
-                                <a href="/admin/billing/customers" class="btn btn-secondary btn-sm flex-fill text-center" title="Reset Filter">
+                                <a href="/admin/billing/customers" class="btn btn-outline-danger btn-sm flex-fill text-center" title="Reset Pencarian & Filter">
                                     <i class="bi bi-arrow-counterclockwise"></i> Reset
                                 </a>
+                            </div>
                             </div>
                         </form>
                         </div>
@@ -946,6 +960,75 @@
                                 </tbody>
                             </table>
                         </div>
+                        
+                        <!-- Server-Side Pagination -->
+                        <% if (typeof pagination !== 'undefined') { %>
+                            <%
+                                const buildQuery = (pageNum) => {
+                                    let q = `?page=${pageNum}&limit=${pagination.limit}`;
+                                    if (typeof search !== 'undefined' && search) q += `&search=${encodeURIComponent(search)}`;
+                                    if (typeof filters !== 'undefined') {
+                                        if (filters.package_id) q += `&package_id=${encodeURIComponent(filters.package_id)}`;
+                                        if (filters.payment_status) q += `&payment_status=${encodeURIComponent(filters.payment_status)}`;
+                                        if (filters.area) q += `&area=${encodeURIComponent(filters.area)}`;
+                                        if (filters.collector_id) q += `&collector_id=${encodeURIComponent(filters.collector_id)}`;
+                                        if (filters.customer_type) q += `&customer_type=${encodeURIComponent(filters.customer_type)}`;
+                                    }
+                                    if (typeof statusFilter !== 'undefined' && statusFilter) q += `&status=${encodeURIComponent(statusFilter)}`;
+                                    if (typeof selectedMonth !== 'undefined') q += `&month=${selectedMonth}`;
+                                    if (typeof selectedYear !== 'undefined') q += `&year=${selectedYear}`;
+                                    if (typeof routerFilter !== 'undefined' && routerFilter) q += `&router=${routerFilter}`;
+                                    return q;
+                                };
+                            %>
+                            
+                            <% if (pagination.totalPages > 1) { %>
+                                <nav aria-label="Page navigation" class="mt-4">
+                                    <ul class="pagination justify-content-center">
+                                        <li class="page-item <%= !pagination.hasPrevPage ? 'disabled' : '' %>">
+                                            <a class="page-link" href="<%= buildQuery(pagination.currentPage - 1) %>" aria-label="Previous">
+                                                <span aria-hidden="true">&laquo; Sebelumnya</span>
+                                            </a>
+                                        </li>
+
+                                        <% 
+                                            let startPage = Math.max(1, pagination.currentPage - 2);
+                                            let endPage = Math.min(pagination.totalPages, pagination.currentPage + 2);
+                                            if (startPage > 1) { 
+                                        %>
+                                            <li class="page-item"><a class="page-link" href="<%= buildQuery(1) %>">1</a></li>
+                                            <% if (startPage > 2) { %>
+                                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                                            <% } %>
+                                        <% } %>
+
+                                        <% for(let i = startPage; i <= endPage; i++) { %>
+                                            <li class="page-item <%= pagination.currentPage === i ? 'active' : '' %>">
+                                                <a class="page-link" href="<%= buildQuery(i) %>"><%= i %></a>
+                                            </li>
+                                        <% } %>
+
+                                        <% if (endPage < pagination.totalPages) { %>
+                                            <% if (endPage < pagination.totalPages - 1) { %>
+                                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                                            <% } %>
+                                            <li class="page-item"><a class="page-link" href="<%= buildQuery(pagination.totalPages) %>"><%= pagination.totalPages %></a></li>
+                                        <% } %>
+
+                                        <li class="page-item <%= !pagination.hasNextPage ? 'disabled' : '' %>">
+                                            <a class="page-link" href="<%= buildQuery(pagination.currentPage + 1) %>" aria-label="Next">
+                                                <span aria-hidden="true">Selanjutnya &raquo;</span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                            <% } %>
+                            
+                            <div class="text-center text-muted small mt-2">
+                                Menampilkan halaman <%= pagination.currentPage %> dari <%= Math.max(1, pagination.totalPages) %> (Total <%= pagination.totalCount %> pelanggan)
+                            </div>
+                        <% } %>
+
                     </div>
                 </div>
             </main>
@@ -1783,6 +1866,7 @@
     <script>
         $(document).ready(function() {
             const dt = $('#customersTable').DataTable({
+                searching: false,
                 language: {
                     url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/id.json',
                     emptyTable: "Tidak ada data yang tersedia",

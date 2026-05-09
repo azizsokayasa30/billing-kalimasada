@@ -481,7 +481,8 @@ router.get('/cables', adminAuth, getAppSettings, async (req, res) => {
             db.all(`
                 SELECT c.* FROM customers c
                 LEFT JOIN cable_routes cr ON c.id = cr.customer_id
-                WHERE cr.id IS NULL AND c.latitude IS NOT NULL AND c.longitude IS NOT NULL
+                WHERE cr.id IS NULL OR c.cable_status = 'unrouted'
+                GROUP BY c.id
                 ORDER BY c.name
             `, [], (err, rows) => {
                 if (err) reject(err);

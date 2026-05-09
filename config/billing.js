@@ -902,6 +902,45 @@
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`,
 
+                // Tabel kategori keuangan (pemasukan dan pengeluaran dinamis)
+                `CREATE TABLE IF NOT EXISTS finance_categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL, -- 'income' atau 'expense'
+                    name TEXT NOT NULL,
+                    subcategories TEXT, -- JSON array of strings for expense account_expenses
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+
+                // Tabel Goods Invoices (Invoice Barang)
+                `CREATE TABLE IF NOT EXISTS goods_invoices (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    invoice_number TEXT UNIQUE NOT NULL,
+                    customer_name TEXT NOT NULL,
+                    customer_phone TEXT,
+                    customer_address TEXT,
+                    subtotal DECIMAL(15,2) NOT NULL DEFAULT 0,
+                    tax_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+                    total_amount DECIMAL(15,2) NOT NULL,
+                    status TEXT DEFAULT 'unpaid',
+                    payment_method TEXT,
+                    payment_date DATETIME,
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+
+                // Tabel Goods Invoice Items (Item Barang)
+                `CREATE TABLE IF NOT EXISTS goods_invoice_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    invoice_id INTEGER NOT NULL,
+                    item_name TEXT NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 1,
+                    unit_price DECIMAL(15,2) NOT NULL,
+                    total_price DECIMAL(15,2) NOT NULL,
+                    FOREIGN KEY (invoice_id) REFERENCES goods_invoices(id) ON DELETE CASCADE
+                )`,
+
                 // Tabel voucher_revenue
                 `CREATE TABLE IF NOT EXISTS voucher_revenue (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -6735,9 +6774,28 @@ async handlePaymentWebhook(payload, gateway) {
                         FROM income inc
                         WHERE DATE(inc.income_date) BETWEEN ? AND ?
                         
+                        UNION ALL
+                        
+                        SELECT 
+                            'income' as type,
+                            gi.payment_date as date,
+                            gi.total_amount as amount,
+                            gi.payment_method,
+                            'Invoice Penjualan' as gateway_name,
+                            gi.invoice_number as invoice_number,
+                            gi.customer_name as customer_name,
+                            gi.customer_phone as customer_phone,
+                            gi.notes as description,
+                            gi.notes,
+                            '' as collector_name,
+                            0 as commission_amount
+                        FROM goods_invoices gi
+                        WHERE DATE(gi.payment_date) BETWEEN ? AND ?
+                        AND gi.status = 'paid'
+                        
                         ORDER BY date DESC
                     `;
-                    params.push(startDate, endDate, startDate, endDate, startDate, endDate);
+                    params.push(startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate);
                 } else if (type === 'expense') {
                     // Laporan pengeluaran dari tabel expenses
                     sql = `
@@ -6847,6 +6905,25 @@ async handlePaymentWebhook(payload, gateway) {
                         UNION ALL
                         
                         SELECT 
+                            'income' as type,
+                            gi.payment_date as date,
+                            gi.total_amount as amount,
+                            gi.payment_method,
+                            'Invoice Penjualan' as gateway_name,
+                            gi.invoice_number as invoice_number,
+                            gi.customer_name as customer_name,
+                            gi.customer_phone as customer_phone,
+                            gi.notes as description,
+                            gi.notes,
+                            '' as collector_name,
+                            0 as commission_amount
+                        FROM goods_invoices gi
+                        WHERE DATE(gi.payment_date) BETWEEN ? AND ?
+                        AND gi.status = 'paid'
+                        
+                        UNION ALL
+                        
+                        SELECT 
                             'expense' as type,
                             e.expense_date as date,
                             e.amount as amount,
@@ -6864,7 +6941,7 @@ async handlePaymentWebhook(payload, gateway) {
                         
                         ORDER BY date DESC
                     `;
-                    params.push(startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate);
+                    params.push(startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate);
                 }
 
                 this.db.all(sql, params, async (err, rows) => {
@@ -7043,11 +7120,34 @@ async handlePaymentWebhook(payload, gateway) {
                 const voucherInvoices = await this.getVoucherInvoices(startDate, endDate);
                 const voucherStats = this.calculateVoucherStats(voucherInvoices);
                 
-                // 3. Pendapatan lain-lain dari Manajemen Pendapatan
+                // 3. Pendapatan dari Invoice Penjualan (Goods Invoices)
+                let goodsInvoiceTotal = 0;
+                try {
+                    const goodsInvoices = await new Promise((res, rej) => {
+                        this.db.all(`SELECT SUM(total_amount) as total FROM goods_invoices WHERE status = 'paid' AND DATE(payment_date) BETWEEN ? AND ?`, [startDate, endDate], (err, row) => {
+                            if (err) res([{ total: 0 }]); else res(row);
+                        });
+                    });
+                    goodsInvoiceTotal = goodsInvoices[0]?.total || 0;
+                } catch(e) {
+                    console.log("[calculateProfitLoss] No goods_invoices table or error:", e.message);
+                }
+
+                // 4. Pendapatan lain-lain dari Manajemen Pendapatan
                 const incomes = await this.getIncomes(startDate, endDate);
                 const otherIncomeTotal = incomes.reduce((sum, inc) => sum + (inc.amount || 0), 0);
                 
-                // 4. Pengeluaran dengan rincian
+                // Group incomes by category
+                const incomesByCategory = incomes.reduce((acc, inc) => {
+                    const category = inc.category || 'Lainnya';
+                    if (!acc[category]) {
+                        acc[category] = 0;
+                    }
+                    acc[category] += (inc.amount || 0);
+                    return acc;
+                }, {});
+
+                // 5. Pengeluaran dengan rincian
                 const expenses = await this.getExpenses(startDate, endDate);
                 
                 // Group expenses by category and account_expenses
@@ -7153,7 +7253,7 @@ async handlePaymentWebhook(payload, gateway) {
                                 console.log(`[calculateProfitLoss] Member Payment Total: ${memberPaymentTotal}, Date Range: ${startDate} to ${endDate}`);
                                 const monthlyPaymentTotal = pppoePaymentTotal + memberPaymentTotal;
                                 const voucherRevenue = voucherStats.total_revenue || 0;
-                                const totalRevenue = monthlyPaymentTotal + voucherRevenue + otherIncomeTotal;
+                                const totalRevenue = monthlyPaymentTotal + voucherRevenue + goodsInvoiceTotal + otherIncomeTotal;
                                 const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
                                 const netProfit = totalRevenue - totalExpenses;
                                 
@@ -7163,7 +7263,9 @@ async handlePaymentWebhook(payload, gateway) {
                                         memberPayment: memberPaymentTotal,
                                         monthlyPayment: monthlyPaymentTotal, // Keep for backward compatibility
                                         voucher: voucherRevenue,
+                                        goodsInvoice: goodsInvoiceTotal,
                                         otherIncome: otherIncomeTotal,
+                                        byCategory: incomesByCategory,
                                         total: totalRevenue
                                     },
                                     expenses: {
@@ -7283,7 +7385,7 @@ async handlePaymentWebhook(payload, gateway) {
                     reject(err);
                 } else {
                     // Hitung total komisi dari expenses
-                    const expenseSql = `
+                    let expenseSql = `
                         SELECT SUM(amount) as total_commission_expenses
                         FROM expenses 
                         WHERE category = 'Operasional' AND description LIKE 'Komisi Kolektor%'

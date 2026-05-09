@@ -9667,6 +9667,71 @@ router.post('/service-suspension/isolir-profile', adminAuth, async (req, res) =>
     }
 });
 
+// Toggle auto suspension feature
+router.post('/service-suspension/toggle-feature', adminAuth, async (req, res) => {
+    try {
+        const { enabled } = req.body;
+        if (typeof enabled !== 'boolean' && enabled !== 'true' && enabled !== 'false') {
+            return res.status(400).json({ success: false, message: 'Status tidak valid' });
+        }
+
+        const isEnabled = enabled === true || enabled === 'true';
+        const ok = setSetting('auto_suspension_enabled', isEnabled);
+        
+        if (!ok) {
+            return res.status(500).json({ success: false, message: 'Gagal menyimpan ke settings.json' });
+        }
+
+        clearSettingsCache();
+        res.json({ success: true, enabled: isEnabled });
+    } catch (error) {
+        logger.error('Toggle auto suspension feature error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Bulk update isolir date
+router.post('/service-suspension/bulk-update-isolir-date', adminAuth, async (req, res) => {
+    try {
+        const { renewal_type, billing_day, fix_date } = req.body;
+        
+        let updateQuery = '';
+        let params = [];
+
+        if (renewal_type === 'fix_date') {
+            const fDate = parseInt(fix_date, 10);
+            if (isNaN(fDate) || fDate < 1 || fDate > 28) {
+                return res.status(400).json({ success: false, message: 'Tanggal fix date harus antara 1-28' });
+            }
+            updateQuery = 'UPDATE customers SET renewal_type = ?, fix_date = ?';
+            params = ['fix_date', fDate];
+        } else {
+            const bDay = parseInt(billing_day, 10);
+            if (isNaN(bDay) || bDay < 1 || bDay > 365) {
+                return res.status(400).json({ success: false, message: 'Billing day (siklus) tidak valid' });
+            }
+            updateQuery = 'UPDATE customers SET renewal_type = ?, billing_day = ?';
+            params = ['renewal', bDay];
+        }
+
+        const db = new sqlite3.Database(path.join(__dirname, '../data/billing.db'));
+        db.run(updateQuery, params, function(err) {
+            db.close();
+            if (err) {
+                logger.error('Bulk update isolir date error:', err);
+                return res.status(500).json({ success: false, message: 'Database error: ' + err.message });
+            }
+            res.json({ 
+                success: true, 
+                message: `Berhasil mengupdate siklus tagihan untuk ${this.changes} pelanggan.` 
+            });
+        });
+    } catch (error) {
+        logger.error('Bulk update isolir date unhandled error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // Payment Monitor
 router.get('/payment-monitor', getAppSettings, async (req, res) => {
     try {
@@ -9722,6 +9787,87 @@ router.post('/invoices/:id/restore', async (req, res) => {
         logger.error('Error manual restore:', error);
         return res.status(500).json({ success: false, message: error.message });
     }
+});
+
+// API untuk Kelola Kategori Keuangan
+router.get('/api/finance-categories', async (req, res) => {
+    try {
+        const { type } = req.query;
+        let query = 'SELECT * FROM finance_categories';
+        const params = [];
+        if (type) {
+            query += ' WHERE type = ?';
+            params.push(type);
+        }
+        query += ' ORDER BY name ASC';
+        
+        const db = new sqlite3.Database(path.join(__dirname, '../data/billing.db'));
+        db.all(query, params, (err, rows) => {
+            db.close();
+            if (err) return res.status(500).json({ success: false, message: err.message });
+            res.json({ success: true, data: rows });
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+router.post('/api/finance-categories', async (req, res) => {
+    try {
+        const { type, name, subcategories } = req.body;
+        if (!type || !name) return res.status(400).json({ success: false, message: 'Type dan Name wajib diisi' });
+        
+        const subCatStr = subcategories ? JSON.stringify(subcategories) : null;
+        const db = new sqlite3.Database(path.join(__dirname, '../data/billing.db'));
+        db.run('INSERT INTO finance_categories (type, name, subcategories) VALUES (?, ?, ?)', [type, name, subCatStr], function(err) {
+            db.close();
+            if (err) return res.status(500).json({ success: false, message: err.message });
+            res.json({ success: true, data: { id: this.lastID, type, name, subcategories } });
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+router.put('/api/finance-categories/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, subcategories } = req.body;
+        if (!name) return res.status(400).json({ success: false, message: 'Name wajib diisi' });
+        
+        const subCatStr = subcategories ? JSON.stringify(subcategories) : null;
+        const db = new sqlite3.Database(path.join(__dirname, '../data/billing.db'));
+        db.run('UPDATE finance_categories SET name = ?, subcategories = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [name, subCatStr, id], function(err) {
+            db.close();
+            if (err) return res.status(500).json({ success: false, message: err.message });
+            res.json({ success: true, message: 'Kategori berhasil diupdate' });
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+router.delete('/api/finance-categories/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const db = new sqlite3.Database(path.join(__dirname, '../data/billing.db'));
+        db.run('DELETE FROM finance_categories WHERE id = ?', [id], function(err) {
+            db.close();
+            if (err) return res.status(500).json({ success: false, message: err.message });
+            res.json({ success: true, message: 'Kategori berhasil dihapus' });
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// UI untuk Kelola Kategori Keuangan
+router.get('/finance-categories', getAppSettings, async (req, res) => {
+    res.render('admin/billing/finance-categories', {
+        title: 'Kelola Kategori Keuangan',
+        appSettings: req.appSettings,
+        page: 'finance-categories'
+    });
 });
 
 // Route untuk mengelola expenses

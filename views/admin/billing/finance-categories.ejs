@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> - Admin Portal</title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/vendor/boxicons/boxicons.min.css" rel="stylesheet">
+    <!-- Admin Mobile Optimizations -->
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <style>
+        .main-content { min-height: 100vh; }
+        .text-purple { color: #6f42c1 !important; }
+    </style>
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <%- include('../../partials/billing-sidebar') %>
+            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2"><i class="bi bi-tags"></i> <%= title %></h1>
+                    <div>
+                        <a href="/admin/billing/income" class="btn btn-outline-success me-2">
+                            <i class="bi bi-arrow-left"></i> Pemasukan
+                        </a>
+                        <a href="/admin/billing/expenses" class="btn btn-outline-danger">
+                            <i class="bi bi-arrow-left"></i> Pengeluaran
+                        </a>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Kategori Pemasukan -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Kategori Pemasukan</h5>
+                                <button class="btn btn-sm btn-light" onclick="openAddModal('income')">
+                                    <i class="bi bi-plus"></i> Tambah
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover" id="incomeCategoriesTable">
+                                        <thead>
+                                            <tr>
+                                                <th>Nama Kategori</th>
+                                                <th class="text-end">Aksi</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Diisi oleh JS -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Kategori Pengeluaran -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Kategori Pengeluaran</h5>
+                                <button class="btn btn-sm btn-light" onclick="openAddModal('expense')">
+                                    <i class="bi bi-plus"></i> Tambah
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover" id="expenseCategoriesTable">
+                                        <thead>
+                                            <tr>
+                                                <th>Nama Kategori</th>
+                                                <th>Sub Kategori (Account)</th>
+                                                <th class="text-end">Aksi</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Diisi oleh JS -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal Form Kategori -->
+    <div class="modal fade" id="categoryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Tambah Kategori</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="categoryForm">
+                    <div class="modal-body">
+                        <input type="hidden" id="categoryId" name="id">
+                        <input type="hidden" id="categoryType" name="type">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Nama Kategori *</label>
+                            <input type="text" class="form-control" id="categoryName" name="name" required>
+                        </div>
+                        
+                        <div class="mb-3" id="subcategoriesDiv" style="display: none;">
+                            <label class="form-label">Sub Kategori / Account Expenses</label>
+                            <p class="text-muted small mb-1">Masukkan satu sub-kategori per baris.</p>
+                            <textarea class="form-control" id="categorySub" name="subcategories" rows="6"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-primary">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        const categoryModal = new bootstrap.Modal(document.getElementById('categoryModal'));
+        let categoriesData = [];
+
+        function loadCategories() {
+            fetch('/admin/billing/api/finance-categories')
+                .then(res => res.json())
+                .then(data => {
+                    if(data.success) {
+                        categoriesData = data.data;
+                        renderIncomeCategories();
+                        renderExpenseCategories();
+                    }
+                });
+        }
+
+        function renderIncomeCategories() {
+            const tbody = document.querySelector('#incomeCategoriesTable tbody');
+            tbody.innerHTML = '';
+            categoriesData.filter(c => c.type === 'income').forEach(cat => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${cat.name}</td>
+                        <td class="text-end">
+                            <button class="btn btn-primary mb-1" onclick="openEditModal(${cat.id})"><i class="bi bi-pencil"></i> Edit</button>
+                            <button class="btn btn-danger mb-1" onclick="deleteCategory(${cat.id})"><i class="bi bi-trash"></i> Hapus</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderExpenseCategories() {
+            const tbody = document.querySelector('#expenseCategoriesTable tbody');
+            tbody.innerHTML = '';
+            categoriesData.filter(c => c.type === 'expense').forEach(cat => {
+                let subs = [];
+                try {
+                    subs = JSON.parse(cat.subcategories) || [];
+                } catch(e) {}
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${cat.name}</td>
+                        <td><small class="text-muted">${subs.join(', ') || '-'}</small></td>
+                        <td class="text-end">
+                            <button class="btn btn-primary mb-1" onclick="openEditModal(${cat.id})"><i class="bi bi-pencil"></i> Edit</button>
+                            <button class="btn btn-danger mb-1" onclick="deleteCategory(${cat.id})"><i class="bi bi-trash"></i> Hapus</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function openAddModal(type) {
+            document.getElementById('categoryForm').reset();
+            document.getElementById('categoryId').value = '';
+            document.getElementById('categoryType').value = type;
+            document.getElementById('modalTitle').textContent = type === 'income' ? 'Tambah Kategori Pemasukan' : 'Tambah Kategori Pengeluaran';
+            document.getElementById('subcategoriesDiv').style.display = type === 'expense' ? 'block' : 'none';
+            categoryModal.show();
+        }
+
+        function openEditModal(id) {
+            const cat = categoriesData.find(c => c.id === id);
+            if(!cat) return;
+            
+            document.getElementById('categoryForm').reset();
+            document.getElementById('categoryId').value = cat.id;
+            document.getElementById('categoryType').value = cat.type;
+            document.getElementById('categoryName').value = cat.name;
+            
+            if(cat.type === 'expense') {
+                document.getElementById('subcategoriesDiv').style.display = 'block';
+                let subs = [];
+                try { subs = JSON.parse(cat.subcategories) || []; } catch(e) {}
+                document.getElementById('categorySub').value = subs.join('\n');
+            } else {
+                document.getElementById('subcategoriesDiv').style.display = 'none';
+            }
+            
+            document.getElementById('modalTitle').textContent = 'Edit Kategori';
+            categoryModal.show();
+        }
+
+        document.getElementById('categoryForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const id = document.getElementById('categoryId').value;
+            const type = document.getElementById('categoryType').value;
+            const name = document.getElementById('categoryName').value;
+            const subStr = document.getElementById('categorySub').value;
+            
+            let subcategories = null;
+            if(type === 'expense' && subStr.trim()) {
+                subcategories = subStr.split('\n').map(s => s.trim()).filter(s => s);
+            }
+
+            const payload = { type, name, subcategories };
+            const url = id ? `/admin/billing/api/finance-categories/${id}` : `/admin/billing/api/finance-categories`;
+            const method = id ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    categoryModal.hide();
+                    Swal.fire('Sukses', data.message || 'Berhasil disimpan', 'success');
+                    loadCategories();
+                } else {
+                    Swal.fire('Error', data.message, 'error');
+                }
+            });
+        });
+
+        function deleteCategory(id) {
+            Swal.fire({
+                title: 'Hapus Kategori?',
+                text: "Kategori ini akan dihapus. Data transaksi yang sudah menggunakan kategori ini tidak akan terhapus namun mungkin akan kehilangan referensinya di dropdown.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, hapus!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(`/admin/billing/api/finance-categories/${id}`, { method: 'DELETE' })
+                        .then(res => res.json())
+                        .then(data => {
+                            if(data.success) {
+                                Swal.fire('Terhapus!', 'Kategori berhasil dihapus.', 'success');
+                                loadCategories();
+                            } else {
+                                Swal.fire('Error', data.message, 'error');
+                            }
+                        });
+                }
+            });
+        }
+
+        // Init
+        document.addEventListener('DOMContentLoaded', loadCategories);
+    </script>
+</body>
+</html>

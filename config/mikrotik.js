@@ -877,6 +877,19 @@ async function syncPackageLimitsToRadius({ groupname, upload_limit, download_lim
                 [normalizedGroupname, rateLimitStr]
             );
             logger.info(`✅ Rate limit untuk group ${normalizedGroupname}: ${rateLimitStr}`);
+        } else {
+            // Pastikan profile tetap ada di radgroupreply agar muncul di UI
+            const [existing] = await conn.execute(
+                "SELECT COUNT(*) as count FROM radgroupreply WHERE groupname = ?",
+                [normalizedGroupname]
+            );
+            if (existing[0].count === 0) {
+                await conn.execute(
+                    "INSERT INTO radgroupreply (groupname, attribute, op, value) VALUES (?, 'Reply-Message', ':=', 'Profile created from billing')",
+                    [normalizedGroupname]
+                );
+                logger.info(`✅ Dummy attribute ditambahkan untuk group ${normalizedGroupname} agar muncul di UI`);
+            }
         }
         
         await conn.end();

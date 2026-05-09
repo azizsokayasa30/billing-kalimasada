@@ -7,6 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manajemen Pemasukan - Admin Portal</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="/vendor/boxicons/boxicons.min.css" rel="stylesheet">
     <!-- Admin Mobile Optimizations -->
     <link href="/css/admin-mobile.css" rel="stylesheet">
@@ -32,6 +33,9 @@
                         <button type="button" class="btn btn-outline-success me-2" onclick="exportToCSV()">
                             <i class="bi bi-download"></i> Export CSV
                         </button>
+                        <a href="/admin/billing/finance-categories" class="btn btn-outline-info me-2">
+                            <i class="bi bi-tags"></i> Kelola Kategori
+                        </a>
                         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addIncomeModal">
                             <i class="bi bi-plus-lg"></i> Tambah Pemasukan
                         </button>
@@ -220,12 +224,6 @@
                             <label for="category" class="form-label">Kategori *</label>
                             <select class="form-select" id="category" name="category" required>
                                 <option value="">Pilih Kategori</option>
-                                <option value="Penjualan">Penjualan</option>
-                                <option value="Layanan">Layanan</option>
-                                <option value="Investasi">Investasi</option>
-                                <option value="Hibah">Hibah</option>
-                                <option value="Bunga Bank">Bunga Bank</option>
-                                <option value="Lainnya">Lainnya</option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -279,12 +277,6 @@
                             <label for="edit_category" class="form-label">Kategori *</label>
                             <select class="form-select" id="edit_category" name="category" required>
                                 <option value="">Pilih Kategori</option>
-                                <option value="Penjualan">Penjualan</option>
-                                <option value="Layanan">Layanan</option>
-                                <option value="Investasi">Investasi</option>
-                                <option value="Hibah">Hibah</option>
-                                <option value="Bunga Bank">Bunga Bank</option>
-                                <option value="Lainnya">Lainnya</option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -319,6 +311,30 @@
     <script>
         // Set default date to today
         document.getElementById('income_date').value = new Date().toISOString().split('T')[0];
+
+        // Load categories from DB
+        async function loadIncomeCategories() {
+            try {
+                const res = await fetch('/admin/billing/api/finance-categories?type=income');
+                const data = await res.json();
+                if (data.success) {
+                    const categorySelect = document.getElementById('category');
+                    const editCategorySelect = document.getElementById('edit_category');
+                    
+                    categorySelect.innerHTML = '<option value="">Pilih Kategori</option>';
+                    editCategorySelect.innerHTML = '<option value="">Pilih Kategori</option>';
+                    
+                    data.data.forEach(cat => {
+                        const opt = `<option value="${cat.name}">${cat.name}</option>`;
+                        categorySelect.innerHTML += opt;
+                        editCategorySelect.innerHTML += opt;
+                    });
+                }
+            } catch(e) {
+                console.error("Error loading categories:", e);
+            }
+        }
+        loadIncomeCategories();
 
         // Export to CSV function
         function exportToCSV() {
