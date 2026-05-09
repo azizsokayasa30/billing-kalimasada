@@ -565,6 +565,52 @@ async function getPppoeLoginOnlineStatus(login) {
     return { online: results.some(Boolean), authMode: 'mikrotik' };
 }
 
+/**
+ * Sekali panggil: himpunan nama login PPPoE yang sedang online (semua NAS / RADIUS).
+ * Dipakai mobile-adapter network-map agar tidak memanggil getPppoeLoginOnlineStatus per pelanggan (sangat berat).
+ */
+async function getActivePppoeLoginNamesSet() {
+    const set = new Set();
+    const authMode = await getUserAuthModeAsync();
+    if (authMode === 'radius') {
+        const active = await getActivePPPoEConnectionsRadius();
+        for (const a of active || []) {
+            const n = a && a.name != null ? String(a.name).trim() : '';
+            if (n) set.add(n);
+        }
+        return set;
+    }
+    const routers = await getAllRoutersFromBillingDb();
+    if (!routers.length) {
+        try {
+            const conn = await getMikrotikConnection();
+            if (conn) {
+                const active = await conn.write('/ppp/active/print');
+                for (const row of active || []) {
+                    const n = row && row.name != null ? String(row.name).trim() : '';
+                    if (n) set.add(n);
+                }
+            }
+        } catch (e) {
+            logger.warn(`[getActivePppoeLoginNamesSet] single NAS: ${e.message}`);
+        }
+        return set;
+    }
+    for (const r of routers) {
+        try {
+            const conn = await getMikrotikConnectionForRouter(r);
+            const active = await conn.write('/ppp/active/print');
+            for (const row of active || []) {
+                const n = row && row.name != null ? String(row.name).trim() : '';
+                if (n) set.add(n);
+            }
+        } catch (e) {
+            logger.warn(`[getActivePppoeLoginNamesSet] router ${r.name}: ${e.message}`);
+        }
+    }
+    return set;
+}
+
 // Fungsi untuk mendapatkan statistik RADIUS (total users, active, offline) - HANYA PPPoE, BUKAN voucher DAN BUKAN member
 async function getRadiusStatistics() {
     const conn = await getRadiusConnection();
@@ -9529,6 +9575,7 @@ module.exports = {
     getRadiusStatistics,
     getPPPoEUsersRadius,
     getActivePPPoEConnectionsRadius,
+    getActivePppoeLoginNamesSet,
     getPppoeLoginOnlineStatus,
     updatePPPoEUserRadiusPassword,
     assignPackageRadius,

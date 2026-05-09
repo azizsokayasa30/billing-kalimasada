@@ -14,7 +14,7 @@ const FORCED_APP_VERSION = 'v5.4';
             </button>
             <img src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?ts=<%= Date.now() %>" alt="Logo" style="height: 28px; border-radius: 6px;">
             <div class="d-flex flex-column ms-2">
-                <span style="font-size: 14px; font-weight: 700; color: var(--sb-text);"><%= typeof settings !== 'undefined' && settings.company_header ? settings.company_header : (typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : 'Net digital Group') %></span>
+                <span style="font-size: 14px; font-weight: 700; color: var(--sb-text);"><%= typeof settings !== 'undefined' && settings.company_header ? settings.company_header : (typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : 'KALIMASADA') %></span>
                 <small style="font-size: 10px; color: var(--sb-subtle);">Admin Panel</small>
             </div>
         </div>
@@ -44,7 +44,7 @@ const FORCED_APP_VERSION = 'v5.4';
             <img id="logoImage" src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?v=<%= new Date().getTime() %>" alt="Logo" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
         </div>
         <div class="sb-brand">
-            <span class="sb-brand-name"><%= typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Net digital Group') %></span>
+            <span class="sb-brand-name"><%= typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'KALIMASADA') %></span>
             <span class="sb-brand-tag">Admin Panel</span>
         </div>
     </div>
@@ -491,15 +491,6 @@ const FORCED_APP_VERSION = 'v5.4';
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // Hard Reload for CSS detection
-    (function() {
-        var pKey = 'simple_reload_' + location.pathname;
-        if (!sessionStorage.getItem(pKey)) {
-            sessionStorage.setItem(pKey, 'true');
-            window.location.reload();
-        }
-    })();
-
     const sidebar = document.getElementById('adminSidebar');
     const sidebarToggle = document.getElementById('sidebarToggle');
     const hamburgerBtn = document.getElementById('hamburgerBtn');

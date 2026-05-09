@@ -355,6 +355,44 @@ router.get('/api/mapping/new', adminAuth, async (req, res) => {
                 });
             })
         ]);
+
+        // Enrich customer mapping with realtime PPPoE active status from MikroTik/RADIUS.
+        let enrichedCustomers = Array.isArray(customers) ? [...customers] : [];
+        try {
+            const { getPppoeLoginOnlineStatus } = require('../config/mikrotik');
+            enrichedCustomers = await Promise.all(
+                enrichedCustomers.map(async (customer) => {
+                    const pppoeLogin = customer && customer.pppoe_username ? String(customer.pppoe_username).trim() : '';
+                    if (!pppoeLogin) {
+                        return {
+                            ...customer,
+                            pppoe_active: null,
+                            network_down: false,
+                            down_reason: null
+                        };
+                    }
+                    try {
+                        const status = await getPppoeLoginOnlineStatus(pppoeLogin);
+                        const isActive = Boolean(status && status.online);
+                        return {
+                            ...customer,
+                            pppoe_active: isActive,
+                            network_down: !isActive,
+                            down_reason: isActive ? null : 'PPPoE inactive'
+                        };
+                    } catch (_) {
+                        return {
+                            ...customer,
+                            pppoe_active: null,
+                            network_down: false,
+                            down_reason: null
+                        };
+                    }
+                })
+            );
+        } catch (pppErr) {
+            console.warn('⚠️ Failed to enrich PPPoE active status for customers:', pppErr.message);
+        }
         
         // Load ONU devices secara terpisah setelah customers tersedia
                     console.log('🔍 Loading ONU devices from GenieACS...');
@@ -538,7 +576,8 @@ router.get('/api/mapping/new', adminAuth, async (req, res) => {
         
         // Hitung statistik
         const statistics = {
-            totalCustomers: customers.length,
+            totalCustomers: enrichedCustomers.length,
+            downCustomers: enrichedCustomers.filter((c) => c.network_down === true).length,
             totalONU: onuDevices.length,
             onlineONU: onuDevices.filter(d => d.status === 'Online').length,
             offlineONU: onuDevices.filter(d => d.status === 'Offline').length,
@@ -552,6 +591,7 @@ router.get('/api/mapping/new', adminAuth, async (req, res) => {
         // Format cables untuk frontend dengan koordinat array
         const formattedCables = cables.map(cable => ({
             id: cable.id,
+            customer_id: cable.customer_id,
             coordinates: [
                 [cable.odp_latitude, cable.odp_longitude],
                 [cable.customer_latitude, cable.customer_longitude]
@@ -588,7 +628,7 @@ router.get('/api/mapping/new', adminAuth, async (req, res) => {
         
         // Debug sample data
         console.log('🔍 Sample data being sent:');
-        console.log('- Sample customer:', customers[0]);
+        console.log('- Sample customer:', enrichedCustomers[0]);
         console.log('- Sample ODP:', odps[0]);
         console.log('- Sample formatted cable:', formattedCables[0]);
         console.log('- Sample formatted backbone cable:', formattedBackboneCables[0]);
@@ -597,7 +637,7 @@ router.get('/api/mapping/new', adminAuth, async (req, res) => {
         res.json({
             success: true,
             data: {
-                customers: customers,
+                customers: enrichedCustomers,
                 onuDevices: onuDevices,
                 odps: odps,
                 cables: formattedCables,

@@ -28,6 +28,16 @@ class ApiClient {
   /// Origin API (tanpa path), mis. untuk `Image.network` logo `/public/img/...`.
   static String get apiOrigin => _baseUrl;
 
+  /// Mengenali flag sukses respons API walau ada proxy yang mengubah tipe (`true`, `1`, `"true"`).
+  static bool jsonSuccess(dynamic value) {
+    if (value == true || value == 1) return true;
+    if (value is String) {
+      final s = value.trim().toLowerCase();
+      return s == 'true' || s == '1';
+    }
+    return false;
+  }
+
   static Uri _uri(String endpoint) {
     final path = endpoint.startsWith('/') ? endpoint : '/$endpoint';
     return Uri.parse(_baseUrl).resolve(path);

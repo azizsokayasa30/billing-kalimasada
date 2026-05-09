@@ -109,6 +109,7 @@ process.on('unhandledRejection', (reason, promise) => {
 })();
 
 const express = require('express');
+const compression = require('compression');
 const path = require('path');
 const axios = require('axios');
 const logger = require('./config/logger');
@@ -496,6 +497,7 @@ const unifiedAuthRouter = require('./routes/unifiedAuth');
 const { blockTechnicianAccess } = require('./middleware/technicianAccessControl');
 
 // Middleware dasar - Optimized
+app.use(compression()); // Tambahkan kompresi gzip/brotli untuk mempercepat loading di web & mobile
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -508,7 +510,7 @@ app.use(cors({
 
 // Static files dengan cache
 app.use('/public', express.static(path.join(__dirname, 'public'), {
-  maxAge: '1h', // Cache static files untuk 1 jam
+  maxAge: '7d', // Cache static files untuk 7 hari
   etag: true
 }));
 const sessionDataDir = path.join(__dirname, 'data');
@@ -828,7 +830,13 @@ const rxPowerMonitor = require('./config/rxPowerMonitor');
 // Tambahkan view engine dan static
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.use(express.static(path.join(__dirname, 'public')));
+if (process.env.NODE_ENV === 'production') {
+  app.set('view cache', true); // Optimasi EJS caching untuk prod
+}
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '7d',
+  etag: true
+}));
 
 // Import dan gunakan route API dashboard traffic
 const apiDashboardRouter = require('./routes/apiDashboard');

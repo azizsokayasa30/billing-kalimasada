@@ -619,7 +619,13 @@ router.get('/wa-status', async (req, res) => {
 router.post('/wa-refresh', async (req, res) => {
     try {
         const { deleteWhatsAppSession } = require('../config/whatsapp');
-        await deleteWhatsAppSession();
+        const result = await deleteWhatsAppSession();
+        if (!result || result.success !== true) {
+            return res.status(500).json({
+                success: false,
+                error: (result && result.message) || 'Gagal mereset sesi WhatsApp'
+            });
+        }
         
         // Tunggu sebentar sebelum memeriksa status baru
         setTimeout(() => {
@@ -638,7 +644,13 @@ router.post('/wa-refresh', async (req, res) => {
 router.post('/wa-delete', async (req, res) => {
     try {
         const { deleteWhatsAppSession } = require('../config/whatsapp');
-        await deleteWhatsAppSession();
+        const result = await deleteWhatsAppSession();
+        if (!result || result.success !== true) {
+            return res.status(500).json({
+                success: false,
+                error: (result && result.message) || 'Gagal menghapus sesi WhatsApp'
+            });
+        }
         res.json({ 
             success: true, 
             message: 'Sesi WhatsApp telah dihapus. Silakan pindai QR code baru untuk terhubung kembali.' 

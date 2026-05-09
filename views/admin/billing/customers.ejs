@@ -3,15 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <!-- Hard Reload for CSS detection -->
-    <script>
-    (function() {
-    var pKey = 'simple_reload_' + location.pathname;
-    if (!sessionStorage.getItem(pKey)) {
-        sessionStorage.setItem(pKey, 'true');
-        window.location.reload();
-    }
-})();
-    </script>
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title || 'Kelola Pelanggan' %> - <%= typeof isTechnicianView !== 'undefined' && isTechnicianView ? 'Portal Teknisi' : 'Admin Portal' %></title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
@@ -1057,6 +1049,7 @@
                             <input type="email" class="form-control" id="email" name="email" placeholder="Akan otomatis terisi dari nama (contoh: Test@cvlmedia.my.id)">
                             <small class="form-text text-muted">Email akan digunakan untuk notifikasi. Jika kosong, format otomatis: namapelanggan@gmail.com</small>
                         </div>
+                        <div id="addCustomerPppoeBlock">
                         <div class="mb-3">
                             <label for="pppoe_username" class="form-label">PPPoE Username (opsional)</label>
                             <div class="input-group">
@@ -1086,6 +1079,7 @@
                                 <button class="btn btn-outline-secondary w-100" type="button" id="genPppoePassBtn">Generate</button>
                             </div>
                         </div>
+                        </div><!-- /addCustomerPppoeBlock -->
                         
                         <!-- IP statik: default off -->
                         <div class="card border-secondary mb-3" id="add_static_ip_card">
@@ -1252,7 +1246,8 @@
                                 <% if (packages && packages.length > 0) { %>
                                     <% packages.forEach(function(package) { %>
                                         <option value="<%= package.id %>" 
-                                                data-profile="<%= package.pppoe_profile || 'default' %>"
+                                                data-profile="<%= (package.pppoe_profile && String(package.pppoe_profile).trim() !== '') ? package.pppoe_profile : '' %>"
+                                                data-billing-only="<%= (package.pppoe_profile && String(package.pppoe_profile).trim() !== '') ? '0' : '1' %>"
                                                 data-router-id="<%= package.router_id || '' %>"
                                                 style="display: none;"><%= package.name %> - Rp <%= parseFloat(package.price).toLocaleString('id-ID') %></option>
                                     <% }); %>
@@ -1260,6 +1255,7 @@
                             </select>
                             <small class="form-text text-muted">Pilih paket berlangganan untuk pelanggan ini.</small>
                         </div>
+                        <div id="addCustomerPppoeProfileNasBlock">
                         <div class="mb-3">
                             <label for="pppoe_profile" class="form-label">PPPoE Profile</label>
                             <input type="text" class="form-control" id="pppoe_profile" name="pppoe_profile" placeholder="Profile akan otomatis terisi sesuai paket">
@@ -1288,6 +1284,7 @@
                                 <input type="hidden" id="router_id_hidden" name="router_id" value="RADIUS">
                             <% } %>
                         </div>
+                        </div><!-- /addCustomerPppoeProfileNasBlock -->
                         <div class="mb-3">
                             <label for="auto_suspension" class="form-label">Auto Suspension</label>
                             <select class="form-control" id="auto_suspension" name="auto_suspension">
@@ -1391,6 +1388,7 @@
                             <label for="edit_email" class="form-label">Email</label>
                             <input type="email" class="form-control" id="edit_email" name="email" placeholder="customer@example.com">
                         </div>
+                        <div id="editCustomerPppoeBlock">
                         <div class="mb-3">
                             <label for="edit_pppoe_username" class="form-label">PPPoE Username (opsional)</label>
                             <div class="input-group">
@@ -1404,6 +1402,7 @@
                             </div>
                             <small class="form-text text-muted">Klik tombol refresh untuk mengambil daftar PPPoE users dari RADIUS Server</small>
                         </div>
+                        </div><!-- /editCustomerPppoeBlock -->
                         
                         <!-- Static IP Configuration Section for Edit -->
                         <div class="card border-info mb-3">
@@ -1572,7 +1571,8 @@
                                 <% if (packages && packages.length > 0) { %>
                                     <% packages.forEach(function(package) { %>
                                         <option value="<%= package.id %>" 
-                                                data-profile="<%= package.pppoe_profile || 'default' %>"
+                                                data-profile="<%= (package.pppoe_profile && String(package.pppoe_profile).trim() !== '') ? package.pppoe_profile : '' %>"
+                                                data-billing-only="<%= (package.pppoe_profile && String(package.pppoe_profile).trim() !== '') ? '0' : '1' %>"
                                                 data-router-id="<%= package.router_id || '' %>"
                                                 style="display: none;"><%= package.name %> - Rp <%= parseFloat(package.price).toLocaleString('id-ID') %></option>
                                     <% }); %>
@@ -1580,6 +1580,7 @@
                             </select>
                             <small class="form-text text-muted">Pilih paket berlangganan untuk pelanggan ini.</small>
                         </div>
+                        <div id="editCustomerPppoeProfileNasBlock">
                         <div class="mb-3">
                             <label for="edit_pppoe_profile" class="form-label">PPPoE Profile</label>
                             <input type="text" class="form-control" id="edit_pppoe_profile" name="pppoe_profile" placeholder="Profile akan otomatis terisi sesuai paket">
@@ -1608,6 +1609,7 @@
                                 <input type="hidden" id="edit_router_id_hidden" name="router_id" value="RADIUS">
                             <% } %>
                         </div>
+                        </div><!-- /editCustomerPppoeProfileNasBlock -->
                         <div class="mb-3">
                             <label for="edit_auto_suspension" class="form-label">Auto Suspension</label>
                             <select class="form-control" id="edit_auto_suspension" name="auto_suspension">
@@ -1701,16 +1703,29 @@
                         <div class="mb-3">
                             <label class="form-label">Pilih File (JSON atau XLSX)</label>
                             <input type="file" id="customersFile" name="file" accept="application/json,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" class="form-control" required>
-                            <small class="form-text text-muted">Dukungan: JSON atau Excel XLSX. Untuk XLSX disarankan pakai template di atas (header baris 1). JSON: array atau { customers: [...] } dengan field yang sama seperti template.</small>
+                            <small class="form-text text-muted">Dukungan: JSON atau Excel XLSX. Harap perhatikan format kolom dengan baik, jangan ubah atau geser nama kolom. Proses impor dilakukan upload dulu &gt; import agar lebih stabil.</small>
                         </div>
+                        <div id="importProgressWrap" class="mb-3 d-none">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small id="importProgressLabel" class="text-muted">Menunggu proses...</small>
+                                <small id="importProgressValue" class="text-muted">0%</small>
+                            </div>
+                            <div class="progress" style="height: 10px;">
+                                <div id="importProgressBar" class="progress-bar progress-bar-animated bg-success" role="progressbar" style="width: 0%;" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+                            </div>
+                        </div>
+                        <div id="importStageSummary" class="alert alert-secondary d-none" role="alert"></div>
                         <div class="alert alert-info" role="alert">
                             Catatan: Data dengan nomor telepon yang sama akan diupdate. Data baru akan dibuat otomatis.
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" class="btn btn-warning">
-                            <i class="bi bi-cloud-upload"></i> Import
+                        <button type="button" class="btn btn-outline-primary" id="stageCustomersBtn">
+                            <i class="bi bi-cloud-upload"></i> Upload ke Server
+                        </button>
+                        <button type="button" class="btn btn-warning" id="commitImportBtn" disabled>
+                            <i class="bi bi-play-circle"></i> Import
                         </button>
                     </div>
                 </form>
@@ -1812,6 +1827,12 @@
                 // Show only packages that match selected router_id or have no router_id (null/empty)
                 let visibleCount = 0;
                 allPackageOptions.forEach(opt => {
+                    if (opt.getAttribute('data-billing-only') === '1') {
+                        opt.style.display = '';
+                        visibleCount++;
+                        console.log('  âœ“ Showing non-PPPoE package:', opt.textContent);
+                        return;
+                    }
                     const packageRouterId = opt.getAttribute('data-router-id');
                     // Show if: router not selected, OR package has no router_id, OR package router_id matches selected
                     if (!selectedRouterId || !packageRouterId || packageRouterId === selectedRouterId) {
@@ -1905,6 +1926,7 @@
                 filterPackagesByNAS('router_id', 'package_id');
                 $('#toggle_static_ip').prop('checked', false);
                 $('#static_ip_fields_wrap').hide();
+                if (typeof updateProfileField === 'function') updateProfileField();
             });
             
             $('#editCustomerModal').on('shown.bs.modal', function() {
@@ -1913,6 +1935,7 @@
                 if (currentRouterId) {
                     filterPackagesByNAS('edit_router_id', 'edit_package_id');
                 }
+                if (typeof updateEditProfileField === 'function') updateEditProfileField();
             });
 
             // Update bulk delete button state
@@ -2093,48 +2116,447 @@
                 window.location.href = '/admin/billing/export/customers.xlsx';
             });
 
-            // Import customers JSON
+            const stripHtml = (html) => String(html || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const composeImportDetails = (summary, errors) => {
+                const s = summary || {};
+                const created = Number(s.created || 0);
+                const updated = Number(s.updated || 0);
+                const failed = Number(s.failed || 0);
+                const success = Number(s.success_count || (created + updated));
+                const detailLines = [
+                    `Total data: ${s.total || 0}`,
+                    `Sukses diproses (create + update): ${success}`,
+                    `Pelanggan baru (bertambah): ${created}`,
+                    `Pelanggan existing terupdate: ${updated}`,
+                    `Gagal: ${failed}`
+                ];
+                if (updated > 0) {
+                    detailLines.push(`<small class="text-muted">Catatan: angka sukses termasuk data update, jadi kenaikan total pelanggan baru mengikuti nilai "Pelanggan baru (bertambah)".</small>`);
+                }
+                if (s.radius_sync) {
+                    const r = s.radius_sync || {};
+                    detailLines.push(`<br><strong>Sinkron PPPoE ke RADIUS</strong>`);
+                    detailLines.push(`Dicoba sync: ${r.attempted || 0}`);
+                    detailLines.push(`Berhasil sync: ${r.success || 0}`);
+                    detailLines.push(`Gagal sync: ${r.failed || 0}`);
+                    detailLines.push(`Dilewati: ${r.skipped || 0}`);
+                }
+                if (failed > 0 && errors && errors.length) {
+                    const contohError = errors.slice(0, 15).map(e => {
+                        const rowInfo = `Baris ${e.row || '-'}`;
+                        const nameInfo = e.name ? ` | Nama: ${e.name}` : '';
+                        const phoneInfo = e.phone ? ` | HP: ${e.phone}` : '';
+                        return `${rowInfo}${nameInfo}${phoneInfo}: ${e.error}`;
+                    }).join('<br>');
+                    detailLines.push(`<br><strong>Contoh error:</strong><br>${contohError}`);
+                }
+                return detailLines.join('<br>');
+            };
+            const recoverImportResult = async ({ sourceType, sinceMs, maxAttempts = 8, intervalMs = 2000 }) => {
+                for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                    try {
+                        const qs = new URLSearchParams({
+                            source_type: String(sourceType || '').toLowerCase(),
+                            since_ms: String(sinceMs || 0),
+                            max_age_sec: '3600'
+                        });
+                        const resp = await fetch(`/admin/billing/import/customers/last-operation?${qs.toString()}`, { cache: 'no-store' });
+                        if (resp.ok) {
+                            const payload = await resp.json();
+                            if (payload && payload.success && payload.found && payload.operation) {
+                                return payload.operation;
+                            }
+                        }
+                    } catch (_) {
+                        // keep retrying, likely server still processing
+                    }
+                    await sleep(intervalMs);
+                }
+                return null;
+            };
+            const pollCommitJobStatus = async ({ jobId, maxAttempts = 900, intervalMs = 1000, onProgress }) => {
+                let transientErrorCount = 0;
+                for (let i = 0; i < maxAttempts; i++) {
+                    try {
+                        const resp = await fetch(`/admin/billing/import/customers/commit-status/${encodeURIComponent(jobId)}`, {
+                            cache: 'no-store'
+                        });
+                        const raw = await resp.text();
+                        let payload = null;
+                        try {
+                            payload = raw ? JSON.parse(raw) : null;
+                        } catch (_) {
+                            payload = null;
+                        }
+                        if (!resp.ok || !payload) {
+                            throw new Error((payload && (payload.message || payload.error)) || (raw && raw.slice(0, 300)) || `HTTP ${resp.status}`);
+                        }
+
+                        transientErrorCount = 0;
+                        if (typeof onProgress === 'function' && payload.progress) {
+                            onProgress(payload.progress, payload.status);
+                        }
+                        if (payload.status === 'finished') {
+                            return payload;
+                        }
+                        if (payload.status === 'failed') {
+                            throw new Error(payload.message || 'Job import gagal');
+                        }
+                    } catch (pollError) {
+                        transientErrorCount += 1;
+                        // Tolerate temporary network hiccups during long imports.
+                        if (transientErrorCount >= 20) {
+                            throw new Error(`Koneksi ke server tidak stabil saat membaca status import (${transientErrorCount}x gagal berturut-turut).`);
+                        }
+                    }
+                    await sleep(intervalMs);
+                }
+                throw new Error('Proses import terlalu lama atau timeout saat polling status');
+            };
+            const openImportResultDialog = (options) => {
+                try {
+                    showImportDecisionDialog(options);
+                    return true;
+                } catch (dialogError) {
+                    console.error('Gagal menampilkan dialog hasil import:', dialogError);
+                    return false;
+                }
+            };
+
+            let stagedImportData = null;
+            const fileInput = document.getElementById('customersFile');
+            const stageSummary = document.getElementById('importStageSummary');
+            const stageBtn = document.getElementById('stageCustomersBtn');
+            const commitBtn = document.getElementById('commitImportBtn');
+            const importProgressWrap = document.getElementById('importProgressWrap');
+            const importProgressBar = document.getElementById('importProgressBar');
+            const importProgressLabel = document.getElementById('importProgressLabel');
+            const importProgressValue = document.getElementById('importProgressValue');
+            let importProgressTimer = null;
+
+            const setProgress = (value, label, colorClass = 'bg-success') => {
+                const pct = Math.min(100, Math.max(0, Number(value) || 0));
+                importProgressWrap.classList.remove('d-none');
+                importProgressBar.classList.remove('bg-warning', 'bg-success', 'bg-danger', 'bg-info');
+                importProgressBar.classList.add(colorClass);
+                importProgressBar.style.width = `${pct}%`;
+                const solidColor =
+                    colorClass === 'bg-danger' ? '#dc3545' :
+                    colorClass === 'bg-info' ? '#0dcaf0' :
+                    '#16a34a';
+                importProgressBar.style.setProperty('background-color', solidColor, 'important');
+                importProgressBar.style.setProperty('background-image', 'none', 'important');
+                importProgressBar.style.setProperty('box-shadow', 'none', 'important');
+                importProgressBar.setAttribute('aria-valuenow', String(pct));
+                importProgressValue.textContent = `${Math.round(pct)}%`;
+                if (label) importProgressLabel.textContent = label;
+            };
+            const startProgress = ({ from = 0, to = 85, step = 4, everyMs = 450, label = 'Memproses...' } = {}) => {
+                if (importProgressTimer) clearInterval(importProgressTimer);
+                setProgress(from, label, 'bg-success');
+                importProgressTimer = setInterval(() => {
+                    const current = Number(importProgressBar.getAttribute('aria-valuenow') || 0);
+                    const next = Math.min(to, current + step);
+                    setProgress(next, label, 'bg-success');
+                    if (next >= to) {
+                        clearInterval(importProgressTimer);
+                        importProgressTimer = null;
+                    }
+                }, everyMs);
+            };
+            const finishProgress = (success, label) => {
+                if (importProgressTimer) {
+                    clearInterval(importProgressTimer);
+                    importProgressTimer = null;
+                }
+                setProgress(100, label || (success ? 'Selesai' : 'Gagal'), success ? 'bg-success' : 'bg-danger');
+                importProgressBar.classList.remove('progress-bar-animated');
+            };
+            const resetProgress = () => {
+                if (importProgressTimer) {
+                    clearInterval(importProgressTimer);
+                    importProgressTimer = null;
+                }
+                importProgressWrap.classList.add('d-none');
+                importProgressBar.classList.add('progress-bar-animated');
+                setProgress(0, 'Menunggu proses...', 'bg-success');
+                importProgressWrap.classList.add('d-none');
+            };
+
+            const resetImportStageState = () => {
+                stagedImportData = null;
+                commitBtn.disabled = true;
+                stageSummary.classList.add('d-none');
+                stageSummary.classList.remove('alert-success', 'alert-warning', 'alert-danger');
+                stageSummary.classList.add('alert-secondary');
+                stageSummary.innerHTML = '';
+                resetProgress();
+            };
+
+            resetImportStageState();
+            fileInput.addEventListener('change', resetImportStageState);
+            $('#importCustomersModal').on('hidden.bs.modal', function() {
+                resetImportStageState();
+            });
             $('#importCustomersForm').on('submit', function(e) {
                 e.preventDefault();
-                const fileInput = document.getElementById('customersFile');
+            });
+
+            stageBtn.addEventListener('click', async function() {
                 if (!fileInput.files || fileInput.files.length === 0) {
-                    showToast('error', 'Silakan pilih file JSON terlebih dahulu');
+                    showToast('error', 'Silakan pilih file JSON/XLSX terlebih dahulu');
                     return;
                 }
 
                 const formData = new FormData();
                 formData.append('file', fileInput.files[0]);
 
-                const submitBtn = $(this).find('button[type="submit"]');
-                const originalText = submitBtn.html();
-                submitBtn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Mengunggah...');
+                const originalText = stageBtn.innerHTML;
+                stageBtn.disabled = true;
+                commitBtn.disabled = true;
+                stageBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Uploading...';
+                startProgress({ from: 8, to: 70, step: 8, everyMs: 350, label: 'Upload file ke server...' });
 
-                const isXlsx = /\.xlsx$/i.test(fileInput.files[0].name);
-                const url = isXlsx ? '/admin/billing/import/customers/xlsx' : '/admin/billing/import/customers/json';
-                fetch(url, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const s = data.summary || {};
-                        showToast('success', `Import selesai. Dibuat: ${s.created||0}, Diupdate: ${s.updated||0}, Gagal: ${s.failed||0}`);
-                        $('#importCustomersModal').modal('hide');
-                        setTimeout(() => location.reload(), 1200);
-                    } else {
-                        showToast('error', data.message || 'Gagal import data pelanggan');
+                try {
+                    const resp = await fetch('/admin/billing/import/customers/stage', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const raw = await resp.text();
+                    let data = null;
+                    try {
+                        data = raw ? JSON.parse(raw) : null;
+                    } catch (_) {
+                        data = null;
                     }
-                })
-                .catch(err => {
-                    console.error(err);
-                    showToast('error', 'Terjadi kesalahan saat import');
-                })
-                .finally(() => {
-                    submitBtn.prop('disabled', false).html(originalText);
-                });
+                    if (!resp.ok || !data || !data.success) {
+                        throw new Error((data && (data.message || data.error)) || (raw && raw.slice(0, 400)) || `HTTP ${resp.status}`);
+                    }
+
+                    stagedImportData = {
+                        stage_id: data.stage_id,
+                        source_type: data.source_type,
+                        total_rows: Number(data.total_rows || 0)
+                    };
+                    commitBtn.disabled = false;
+                    stageSummary.classList.remove('d-none', 'alert-secondary', 'alert-danger');
+                    stageSummary.classList.add('alert-success');
+                    stageSummary.innerHTML = `
+                        <strong>Upload berhasil.</strong><br>
+                        File: ${data.original_name || '-'}<br>
+                        Jenis: ${(data.source_type || '-').toUpperCase()}<br>
+                        Jumlah data terdeteksi: ${stagedImportData.total_rows}
+                    `;
+                    finishProgress(true, 'Upload selesai');
+                    showToast('success', 'Upload berhasil', `Data terdeteksi: ${stagedImportData.total_rows} pelanggan`);
+                } catch (err) {
+                    const errMessage = String(err.message || 'Unknown error');
+                    stageSummary.classList.remove('d-none', 'alert-secondary', 'alert-success');
+                    stageSummary.classList.add('alert-danger');
+                    stageSummary.innerHTML = `<strong>Upload gagal.</strong> ${errMessage}`;
+                    finishProgress(false, 'Upload gagal');
+                    showToast('error', 'Upload gagal', errMessage);
+                } finally {
+                    stageBtn.disabled = false;
+                    stageBtn.innerHTML = originalText;
+                }
+            });
+
+            commitBtn.addEventListener('click', async function() {
+                if (!stagedImportData || !stagedImportData.stage_id) {
+                    showToast('warning', 'Silakan upload file dulu sebelum import');
+                    return;
+                }
+
+                const originalCommitText = commitBtn.innerHTML;
+                const importStartedAt = Date.now();
+                commitBtn.disabled = true;
+                stageBtn.disabled = true;
+                commitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importing...';
+                startProgress({ from: 12, to: 92, step: 3, everyMs: 500, label: 'Import data pelanggan...' });
+
+                try {
+                    const resp = await fetch(`/admin/billing/import/customers/commit/${encodeURIComponent(stagedImportData.stage_id)}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({})
+                    });
+                    const raw = await resp.text();
+                    let data = null;
+                    try {
+                        data = raw ? JSON.parse(raw) : null;
+                    } catch (_) {
+                        data = null;
+                    }
+                    if (!resp.ok || !data || !data.success) {
+                        throw new Error((data && (data.message || data.error)) || (raw && raw.slice(0, 400)) || `HTTP ${resp.status}`);
+                    }
+                    if (!data.job_id) {
+                        throw new Error('Job import tidak terbentuk. Silakan coba lagi.');
+                    }
+
+                    setProgress(96, 'Menunggu proses import di server...', 'bg-success');
+                    const finalData = await pollCommitJobStatus({
+                        jobId: data.job_id,
+                        onProgress: (progress) => {
+                            const total = Number(progress.total_rows || 0);
+                            const processed = Number(progress.processed_rows || 0);
+                            const success = Number(progress.success_rows || 0);
+                            const failed = Number(progress.failed_rows || 0);
+                            const pct = Number(progress.percentage || 0);
+                            const label = total > 0
+                                ? `Import pelanggan: ${processed}/${total} diproses, berhasil ${success}, gagal ${failed}`
+                                : `Import pelanggan: diproses ${processed}, berhasil ${success}, gagal ${failed}`;
+                            setProgress(Math.min(99, Math.max(1, pct)), label, 'bg-success');
+                        }
+                    });
+                    data = finalData;
+
+                    const s = data.summary || {};
+                    const hasFailures = (s.failed || 0) > 0;
+                    const hasSuccess = ((s.created || 0) + (s.updated || 0)) > 0;
+                    const title = hasFailures ? 'Import selesai dengan kegagalan' : 'Import berhasil';
+                    const detailsHtml = composeImportDetails(s, data.errors || []);
+                    const modalShown = openImportResultDialog({
+                        title,
+                        detailsHtml,
+                        operationId: data.operation_id || null,
+                        canRevert: Boolean(stagedImportData.source_type === 'xlsx' && hasFailures && hasSuccess && data.operation_id)
+                    });
+                    if (!modalShown) {
+                        showToast(hasFailures ? 'warning' : 'success', title, stripHtml(detailsHtml));
+                    }
+                    finishProgress(true, hasFailures ? 'Import selesai (dengan beberapa kegagalan)' : 'Import selesai');
+                    $('#importCustomersModal').modal('hide');
+                } catch (err) {
+                    const errMessage = String(err.message || 'Unknown error');
+                    const looksLikeNetworkFailure =
+                        /failed to fetch/i.test(errMessage) ||
+                        /networkerror/i.test(errMessage) ||
+                        /load failed/i.test(errMessage);
+
+                    if (looksLikeNetworkFailure) {
+                        startProgress({ from: 92, to: 98, step: 1, everyMs: 600, label: 'Menyinkronkan hasil import...' });
+                        const recoveredOp = await recoverImportResult({
+                            sourceType: stagedImportData.source_type,
+                            sinceMs: importStartedAt
+                        });
+                        if (recoveredOp && recoveredOp.summary) {
+                            const s = recoveredOp.summary;
+                            const hasFailures = (s.failed || 0) > 0;
+                            const hasSuccess = ((s.created || 0) + (s.updated || 0)) > 0;
+                            const title = hasFailures
+                                ? 'Import selesai (koneksi sempat terputus)'
+                                : 'Import berhasil (koneksi sempat terputus)';
+                            const detailsHtml = composeImportDetails(s, []);
+                            const modalShown = openImportResultDialog({
+                                title,
+                                detailsHtml,
+                                operationId: recoveredOp.id || null,
+                                canRevert: Boolean(stagedImportData.source_type === 'xlsx' && hasFailures && hasSuccess && recoveredOp.id)
+                            });
+                            if (!modalShown) {
+                                showToast(hasFailures ? 'warning' : 'success', title, stripHtml(detailsHtml));
+                            }
+                            finishProgress(true, 'Sinkronisasi hasil selesai');
+                            $('#importCustomersModal').modal('hide');
+                            return;
+                        }
+                    }
+
+                    const fallbackDetails = `Terjadi kesalahan saat import.<br><strong>Detail:</strong> ${errMessage}`;
+                    const modalShown = openImportResultDialog({
+                        title: 'Import gagal',
+                        detailsHtml: fallbackDetails,
+                        operationId: null,
+                        canRevert: false
+                    });
+                    if (!modalShown) {
+                        showToast('error', 'Import gagal', errMessage);
+                    }
+                    finishProgress(false, 'Import gagal');
+                } finally {
+                    commitBtn.innerHTML = originalCommitText;
+                    stageBtn.disabled = false;
+                    commitBtn.disabled = false;
+                }
             });
         });
+
+        function showImportDecisionDialog({ title, detailsHtml, operationId, canRevert }) {
+            const existing = document.getElementById('importDecisionModal');
+            if (existing) existing.remove();
+
+            const modalHtml = `
+                <div class="modal fade" id="importDecisionModal" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">${title}</h5>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert ${canRevert ? 'alert-warning' : 'alert-success'} mb-0">
+                                    ${detailsHtml}
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                ${canRevert ? '<button type="button" class="btn btn-outline-danger" id="btnRevertImport">Revert</button>' : ''}
+                                <button type="button" class="btn btn-primary" id="btnSubmitImport">Submit</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const el = document.getElementById('importDecisionModal');
+            const modal = new bootstrap.Modal(el, { backdrop: 'static', keyboard: false });
+
+            el.querySelector('#btnSubmitImport').addEventListener('click', function () {
+                modal.hide();
+                location.reload();
+            });
+
+            const revertBtn = el.querySelector('#btnRevertImport');
+            if (revertBtn) {
+                revertBtn.addEventListener('click', async function () {
+                    if (!operationId) {
+                        showToast('error', 'Operation ID tidak ditemukan, tidak bisa revert.');
+                        return;
+                    }
+                    const original = revertBtn.innerHTML;
+                    revertBtn.disabled = true;
+                    revertBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Reverting...';
+                    try {
+                        const resp = await fetch(`/admin/billing/import/customers/revert/${encodeURIComponent(operationId)}`, {
+                            method: 'POST'
+                        });
+                        const data = await resp.json();
+                        if (!data.success) throw new Error(data.message || 'Gagal revert');
+                        const s = data.summary || {};
+                        showToast('success', `Revert berhasil. Created dibatalkan: ${s.reverted_created || 0}, Updated dipulihkan: ${s.reverted_updated || 0}`);
+                        modal.hide();
+                        location.reload();
+                    } catch (err) {
+                        showToast('error', err.message || 'Terjadi kesalahan saat revert');
+                    } finally {
+                        revertBtn.disabled = false;
+                        revertBtn.innerHTML = original;
+                    }
+                });
+            }
+
+            el.addEventListener('hidden.bs.modal', () => {
+                // Prevent modal from disappearing tanpa aksi explicit submit/revert
+                // Jika ditutup secara paksa via script/browser, tampilkan lagi.
+                if (document.body.contains(el)) {
+                    el.remove();
+                }
+            });
+
+            modal.show();
+        }
 
         // Test function to manually set credentials
         function testGenerateCredentials() {
@@ -2235,9 +2657,26 @@
         function updateProfileField() {
             const packageSelect = document.getElementById('package_id');
             const profileInput = document.getElementById('pppoe_profile');
+            if (!packageSelect || !profileInput) return;
             const selectedOption = packageSelect.options[packageSelect.selectedIndex];
-            
-            if (selectedOption && selectedOption.dataset.profile) {
+            const billingOnly = selectedOption && selectedOption.getAttribute('data-billing-only') === '1';
+
+            const pppoeBlock = document.getElementById('addCustomerPppoeBlock');
+            const nasProfBlock = document.getElementById('addCustomerPppoeProfileNasBlock');
+            if (pppoeBlock) pppoeBlock.style.display = billingOnly ? 'none' : '';
+            if (nasProfBlock) nasProfBlock.style.display = billingOnly ? 'none' : '';
+
+            const createCb = document.getElementById('create_pppoe_user');
+            if (createCb) {
+                createCb.checked = !billingOnly;
+                createCb.disabled = billingOnly;
+            }
+
+            if (billingOnly) {
+                profileInput.value = '';
+                const pu = document.getElementById('pppoe_username');
+                if (pu) pu.value = '';
+            } else if (selectedOption && selectedOption.dataset.profile) {
                 profileInput.value = selectedOption.dataset.profile;
             }
         }
@@ -2246,9 +2685,18 @@
         function updateEditProfileField() {
             const packageSelect = document.getElementById('edit_package_id');
             const profileInput = document.getElementById('edit_pppoe_profile');
+            if (!packageSelect || !profileInput) return;
             const selectedOption = packageSelect.options[packageSelect.selectedIndex];
-            
-            if (selectedOption && selectedOption.dataset.profile) {
+            const billingOnly = selectedOption && selectedOption.getAttribute('data-billing-only') === '1';
+
+            const pppoeBlock = document.getElementById('editCustomerPppoeBlock');
+            const nasProfBlock = document.getElementById('editCustomerPppoeProfileNasBlock');
+            if (pppoeBlock) pppoeBlock.style.display = billingOnly ? 'none' : '';
+            if (nasProfBlock) nasProfBlock.style.display = billingOnly ? 'none' : '';
+
+            if (billingOnly) {
+                profileInput.value = '';
+            } else if (selectedOption && selectedOption.dataset.profile) {
                 profileInput.value = selectedOption.dataset.profile;
             }
         }
@@ -2760,6 +3208,7 @@
             const address = safeValAdd('#address');
             const createPppoe = $('#create_pppoe_user').is(':checked');
             const pppoeUser = $('#pppoe_username').val().trim();
+            const addBillingOnlyPkg = $('#package_id option:selected').attr('data-billing-only') === '1';
             
             if (!name || !username || !phone || !package_id) {
                 showToast('error', 'Nama, username, telepon, dan paket wajib diisi');
@@ -2775,7 +3224,7 @@
                 showToast('error', 'Username hanya boleh berisi huruf kecil, angka, dan underscore');
                 return;
             }
-            if (createPppoe && !pppoeUser) {
+            if (createPppoe && !addBillingOnlyPkg && !pppoeUser) {
                 showToast('error', 'Isi PPPoE Username jika ingin membuat user di Mikrotik');
                 return;
             }
@@ -2800,7 +3249,7 @@
             formData.append('address', safeValAdd('#address'));
             formData.append('package_id', package_id);
             formData.append('odp_id', safeValAdd('#odp_id'));
-            formData.append('pppoe_profile', safeValAdd('#pppoe_profile') || 'default');
+            formData.append('pppoe_profile', addBillingOnlyPkg ? '' : (safeValAdd('#pppoe_profile') || 'default'));
             formData.append('auto_suspension', safeValAdd('#auto_suspension'));
             formData.append('create_pppoe_user', createPppoe ? 1 : 0);
             formData.append('pppoe_password', safeValAdd('#pppoe_password'));
@@ -2945,11 +3394,13 @@
                                     $('#edit_package_id option').show();
                                     $('#edit_package_id').val(packageId);
                                 }
+                                if (typeof updateEditProfileField === 'function') updateEditProfileField();
                             }, 200);
                         } else {
                             const packageId = customer.package_id || '';
                             $('#edit_package_id').val(packageId);
                             console.log('Set package_id in edit form (no router filter):', packageId);
+                            if (typeof updateEditProfileField === 'function') updateEditProfileField();
                         }
                         $('#edit_auto_suspension').val(customer.auto_suspension !== undefined ? customer.auto_suspension : 1);
                         $('#edit_status').val(customer.status);
@@ -3085,7 +3536,8 @@
             }
             formData.append('package_id', package_id.toString());
             formData.append('odp_id', $('#edit_odp_id').length ? ($('#edit_odp_id').val() || '') : '');
-            formData.append('pppoe_profile', safeVal('#edit_pppoe_profile') || 'default');
+            const editBillingOnlyPkg = $('#edit_package_id option:selected').attr('data-billing-only') === '1';
+            formData.append('pppoe_profile', editBillingOnlyPkg ? '' : (safeVal('#edit_pppoe_profile') || 'default'));
             formData.append('auto_suspension', $('#edit_auto_suspension').length ? $('#edit_auto_suspension').val() : '');
             formData.append('status', $('#edit_status').length ? $('#edit_status').val() : '');
             formData.append('billing_day', (function() {
@@ -3588,7 +4040,7 @@
 
         // Initialize map picker with enhanced features
         function initMapPicker() {
-            // Default location (Jakarta)
+            // Default center map (Jakarta) hanya untuk view peta, bukan nilai koordinat form.
             const defaultLat = -6.2088;
             const defaultLng = 106.8456;
             
@@ -3637,12 +4089,10 @@
                 });
             };
             
-            // Add initial marker and store globally
-            window.mapPickerMarker = createCustomMarker(defaultLat, defaultLng).addTo(window.mapPickerMap);
-            
-            // Update coordinates display
-            document.getElementById('selectedLat').textContent = defaultLat.toFixed(8);
-            document.getElementById('selectedLng').textContent = defaultLng.toFixed(8);
+            // Jangan set marker awal agar user tidak otomatis tersimpan ke koordinat default.
+            window.mapPickerMarker = null;
+            document.getElementById('selectedLat').textContent = '-';
+            document.getElementById('selectedLng').textContent = '-';
             
             // Handle map click
             window.mapPickerMap.on('click', function(e) {
@@ -3728,7 +4178,7 @@
             }
         }
         
-        // Reset map to default location
+        // Reset map: kembali ke center default TANPA mengisi koordinat.
         function resetMapLocation() {
             const defaultLat = -6.2088;
             const defaultLng = 106.8456;
@@ -3741,13 +4191,12 @@
                     window.mapPickerMap.removeLayer(window.mapPickerMarker);
                 }
                 
-                // Add new marker
-                window.mapPickerMarker = createCustomMarker(defaultLat, defaultLng).addTo(window.mapPickerMap);
+                // Hapus marker agar tidak ada titik terpilih default.
+                window.mapPickerMarker = null;
+                document.getElementById('selectedLat').textContent = '-';
+                document.getElementById('selectedLng').textContent = '-';
                 
-                document.getElementById('selectedLat').textContent = defaultLat.toFixed(8);
-                document.getElementById('selectedLng').textContent = defaultLng.toFixed(8);
-                
-                showToast('Peta direset ke lokasi default', 'info');
+                showToast('Peta direset. Belum ada titik lokasi terpilih', 'info');
             }
         }
         

@@ -525,15 +525,6 @@
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script>
-        // Hard Reload for CSS detection
-        (function() {
-    var pKey = 'simple_reload_' + location.pathname;
-    if (!sessionStorage.getItem(pKey)) {
-        sessionStorage.setItem(pKey, 'true');
-        window.location.reload();
-    }
-})();
-
         $(document).ready(function() {
             // Track current active tab for customer
             let customerAuthMode = 'password'; // 'password' or 'otp'

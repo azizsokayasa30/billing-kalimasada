@@ -55,8 +55,8 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
     setState(() => _isLoading = true);
     try {
       final response = await ApiClient.get('/api/mobile-adapter/network-map');
-      final data = jsonDecode(response.body);
-      if (data['success'] == true) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (ApiClient.jsonSuccess(data['success'])) {
         setState(() {
           final payload = Map<String, dynamic>.from(data['data'] ?? {});
           _odps = List<dynamic>.from(payload['odps'] ?? const []);

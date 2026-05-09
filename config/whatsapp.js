@@ -744,6 +744,8 @@ async function connectToWhatsApp() {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const rawMessage = lastDisconnect?.error?.output?.payload?.message || lastDisconnect?.error?.message || '';
                 const errorMessage = String(rawMessage).toLowerCase();
+                const prevQrCode = global.whatsappStatus?.qrCode || null;
+                const hasPendingQr = !!prevQrCode;
                 let shouldReconnect = true;
 
                 // Handle "Closing open session in favor of incoming prekey bundle" - ini bukan logout, ini normal session refresh
@@ -784,10 +786,11 @@ async function connectToWhatsApp() {
                 // Update status global
                 global.whatsappStatus = {
                     connected: false,
-                    qrCode: null,
+                    // Jangan hilangkan QR yang sudah dihasilkan agar admin panel tetap bisa scan.
+                    qrCode: hasPendingQr ? prevQrCode : null,
                     phoneNumber: null,
                     connectedSince: null,
-                    status: 'disconnected',
+                    status: hasPendingQr ? 'qr_code' : 'disconnected',
                     reason: rawMessage || 'connection_closed'
                 };
                 
@@ -4860,8 +4863,19 @@ function startConnectionStateMonitoring(sock) {
     connectionStateInterval = setInterval(async () => {
         try {
             if (sock) {
+                const waStatus = global.whatsappStatus || {};
+                const statusLabel = String(waStatus.status || '').toLowerCase();
+                const isQrPhase =
+                    statusLabel === 'qr_code' ||
+                    statusLabel === 'connecting' ||
+                    statusLabel === 'session_deleted';
+
                 // Cek apakah socket masih valid
                 if (!sock.user || !sock.ev) {
+                    // Saat fase QR, sock.user memang belum ada. Jangan reconnect paksa agar QR tetap valid untuk dipindai.
+                    if (isQrPhase) {
+                        return;
+                    }
                     console.warn('⚠️ Connection state: Socket invalid, akan reconnect...');
                     if (connectionStateInterval) {
                         clearInterval(connectionStateInterval);
@@ -4877,6 +4891,10 @@ function startConnectionStateMonitoring(sock) {
                 // Cek status koneksi dari global
                 const status = global.whatsappStatus;
                 if (!status || !status.connected) {
+                    const st = String(status?.status || '').toLowerCase();
+                    if (st === 'qr_code' || st === 'connecting' || st === 'session_deleted') {
+                        return;
+                    }
                     console.warn('⚠️ Connection state: Status disconnected, akan reconnect...');
                     if (connectionStateInterval) {
                         clearInterval(connectionStateInterval);
@@ -5054,16 +5072,13 @@ async function deleteWhatsAppSession() {
     try {
         const sessionDir = getSetting('whatsapp_session_path', './whatsapp-session');
         const fs = require('fs');
-        const path = require('path');
         
-        // Hapus semua file di direktori sesi
+        // Hapus direktori sesi secara rekursif agar aman untuk struktur multi-file/subfolder.
         if (fs.existsSync(sessionDir)) {
-            const files = fs.readdirSync(sessionDir);
-            for (const file of files) {
-                fs.unlinkSync(path.join(sessionDir, file));
-            }
-            console.log(`Menghapus ${files.length} file sesi WhatsApp`);
+            fs.rmSync(sessionDir, { recursive: true, force: true });
+            console.log(`Direktori sesi WhatsApp dihapus: ${sessionDir}`);
         }
+        fs.mkdirSync(sessionDir, { recursive: true });
         
         console.log('Sesi WhatsApp berhasil dihapus');
         
@@ -5083,6 +5098,12 @@ async function deleteWhatsAppSession() {
             } catch (error) {
                 console.log('Error saat logout:', error);
             }
+            try {
+                if (sock.ev && typeof sock.ev.removeAllListeners === 'function') {
+                    sock.ev.removeAllListeners();
+                }
+            } catch (_) {}
+            sock = null;
         }
         
         // Mulai ulang koneksi setelah 2 detik

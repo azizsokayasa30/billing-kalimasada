@@ -22,6 +22,46 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   late Map<String, dynamic> customer;
   Map<String, dynamic>? _pppSession;
 
+  String _pickString(Map<String, dynamic>? source, List<String> keys) {
+    if (source == null) return '';
+    for (final k in keys) {
+      final v = source[k];
+      if (v == null) continue;
+      final s = v.toString().trim();
+      if (s.isNotEmpty && s.toLowerCase() != 'null') return s;
+    }
+    return '';
+  }
+
+  int? _uptimeSecondsFromText(String raw) {
+    final text = raw.trim().toLowerCase();
+    if (text.isEmpty || text == '-') return null;
+    if (RegExp(r'^\d+$').hasMatch(text)) {
+      return int.tryParse(text);
+    }
+    final dMatch = RegExp(r'(\d+)\s*d').firstMatch(text);
+    final hMatch = RegExp(r'(\d+)\s*h').firstMatch(text);
+    final mMatch = RegExp(r'(\d+)\s*m').firstMatch(text);
+    final sMatch = RegExp(r'(\d+)\s*s').firstMatch(text);
+    final d = int.tryParse(dMatch?.group(1) ?? '0') ?? 0;
+    final h = int.tryParse(hMatch?.group(1) ?? '0') ?? 0;
+    final m = int.tryParse(mMatch?.group(1) ?? '0') ?? 0;
+    final s = int.tryParse(sMatch?.group(1) ?? '0') ?? 0;
+    final total = (d * 86400) + (h * 3600) + (m * 60) + s;
+    return total > 0 ? total : null;
+  }
+
+  String _formatUptimeDdHhMmSs(String raw) {
+    final secs = _uptimeSecondsFromText(raw);
+    if (secs == null) return raw.trim().isEmpty ? '-' : raw;
+    final d = secs ~/ 86400;
+    final h = (secs % 86400) ~/ 3600;
+    final m = (secs % 3600) ~/ 60;
+    final s = secs % 60;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(d)}:${two(h)}:${two(m)}:${two(s)}';
+  }
+
   double? _toDouble(dynamic v) {
     if (v is num) return v.toDouble();
     return double.tryParse(v?.toString() ?? '');
@@ -664,7 +704,17 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                               ),
                             ),
                             Text(
-                              _pppSession?['mac_address']?.toString() ?? '-',
+                              () {
+                                final mac = _pickString(_pppSession, const [
+                                  'mac_address',
+                                  'caller-id',
+                                  'caller_id',
+                                  'callerid',
+                                  'mac-address',
+                                  'mac'
+                                ]);
+                                return mac.isEmpty ? '-' : mac;
+                              }(),
                               style: const TextStyle(
                                 fontSize: 16,
                                 color: textOnBackground,
@@ -719,11 +769,19 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                               ),
                             ),
                             Text(
-                              _pppSession?['uptime']?.toString() ?? '-',
+                              () {
+                                final uptime = _pickString(_pppSession, const [
+                                  'uptime',
+                                  'session_time',
+                                ]);
+                                return uptime.isEmpty
+                                    ? '-'
+                                    : _formatUptimeDdHhMmSs(uptime);
+                              }(),
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: textOnBackground,
+                                color: Color(0xFF16A34A),
                               ),
                             ),
                           ],

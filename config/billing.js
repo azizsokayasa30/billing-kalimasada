@@ -464,12 +464,12 @@
                 this.db = new sqlite3.Database(this.dbPath);
                 console.log('Billing database connected');
                 
-                // Enable foreign key constraints for cascade delete
-                this.db.run("PRAGMA foreign_keys = ON", (err) => {
+                // Enable foreign key constraints and performance PRAGMAs
+                this.db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -20000; PRAGMA temp_store = MEMORY;", (err) => {
                     if (err) {
-                        console.error('Error enabling foreign keys:', err);
+                        console.error('Error enabling PRAGMA optimizations:', err);
                     } else {
-                        console.log('✅ Foreign keys enabled for cascade delete');
+                        console.log('✅ Database optimizations enabled (WAL, memory temp_store, cache_size)');
                     }
                 });
                 
@@ -1479,6 +1479,15 @@
                 upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
                 burst_threshold, burst_time 
             } = packageData;
+
+            const billingOnly = Boolean(packageData.billing_only);
+            const resolvedPppoeProfile = billingOnly
+                ? null
+                : (pppoe_profile !== undefined && pppoe_profile !== null && String(pppoe_profile).trim() !== ''
+                    ? String(pppoe_profile).trim()
+                    : 'default');
+            const resolvedRouterId = billingOnly ? null : (router_id !== undefined && router_id !== null && router_id !== '' ? router_id : null);
+            const resolvedNasIp = billingOnly ? null : (nas_ip !== undefined && nas_ip !== null && String(nas_ip).trim() !== '' ? String(nas_ip).trim() : null);
             
             const sql = `INSERT INTO packages (
                 name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip,
@@ -1492,10 +1501,10 @@
                 price, 
                 tax_rate !== undefined ? tax_rate : 11.00, 
                 description, 
-                pppoe_profile || 'default', 
+                resolvedPppoeProfile, 
                 image || null, 
-                router_id || null,
-                nas_ip || null,
+                resolvedRouterId,
+                resolvedNasIp,
                 upload_limit || null,
                 download_limit || null,
                 burst_limit_upload || null,
@@ -1506,7 +1515,13 @@
                 if (err) {
                     reject(err);
                 } else {
-                    resolve({ id: this.lastID, ...packageData });
+                    resolve({
+                        id: this.lastID,
+                        ...packageData,
+                        pppoe_profile: resolvedPppoeProfile,
+                        router_id: resolvedRouterId,
+                        nas_ip: resolvedNasIp
+                    });
                 }
             });
         });
@@ -1565,6 +1580,15 @@
                 upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
                 burst_threshold, burst_time 
             } = packageData;
+
+            const billingOnly = Boolean(packageData.billing_only);
+            const resolvedPppoeProfile = billingOnly
+                ? null
+                : (pppoe_profile !== undefined && pppoe_profile !== null && String(pppoe_profile).trim() !== ''
+                    ? String(pppoe_profile).trim()
+                    : 'default');
+            const resolvedRouterId = billingOnly ? null : (router_id !== undefined && router_id !== null && router_id !== '' ? router_id : null);
+            const resolvedNasIp = billingOnly ? null : (nas_ip !== undefined && nas_ip !== null && String(nas_ip).trim() !== '' ? String(nas_ip).trim() : null);
             
             const sql = `UPDATE packages SET 
                 name = ?, speed = ?, price = ?, tax_rate = ?, description = ?, pppoe_profile = ?, 
@@ -1579,10 +1603,10 @@
                 price, 
                 tax_rate || 0, 
                 description, 
-                pppoe_profile || 'default', 
+                resolvedPppoeProfile, 
                 image || null, 
-                router_id || null,
-                nas_ip || null,
+                resolvedRouterId,
+                resolvedNasIp,
                 upload_limit || null,
                 download_limit || null,
                 burst_limit_upload || null,
@@ -1594,7 +1618,13 @@
                 if (err) {
                     reject(err);
                 } else {
-                    resolve({ id, ...packageData });
+                    resolve({
+                        id,
+                        ...packageData,
+                        pppoe_profile: resolvedPppoeProfile,
+                        router_id: resolvedRouterId,
+                        nas_ip: resolvedNasIp
+                    });
                 }
             });
         });
@@ -1625,12 +1655,21 @@
             
             // Simpan reference database untuk digunakan di callback
             const db = this.db;
+            const skipExternalSync = Boolean(customerData && customerData.__skip_external_sync);
+            const skipGenieacsSync = skipExternalSync || Boolean(customerData && customerData.__skip_genieacs_sync);
+            const skipRadiusSync = skipExternalSync || Boolean(customerData && customerData.__skip_radius_sync);
             
             const { name, username, password, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path } = customerData;
             
             // Username = login portal (UNIQUE). PPPoE = terpisah. Bentrok sering terjadi bila pola nama+tanggal sama.
             let finalUsername = (username && String(username).trim()) || this.generateUsername(phone);
-            const autoPPPoEUsername = pppoe_username || this.generatePPPoEUsername(phone);
+            const autoPPPoEUsername = customerData.__billing_only_package
+                ? ((pppoe_username != null && String(pppoe_username).trim()) || '')
+                : (pppoe_username || this.generatePPPoEUsername(phone));
+            const pppoeUserStored =
+                autoPPPoEUsername != null && String(autoPPPoEUsername).trim() !== ''
+                    ? String(autoPPPoEUsername).trim()
+                    : null;
             
             // Generate customer_id (6 digit numerik)
             let generatedCustomerId;
@@ -1656,8 +1695,13 @@
             const sql = `INSERT INTO customers (customer_id, username, password, name, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path, join_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
             // Default coordinates untuk Jakarta jika tidak ada koordinat
-            const finalLatitude = latitude !== undefined ? parseFloat(latitude) : -6.2088;
-            const finalLongitude = longitude !== undefined ? parseFloat(longitude) : 106.8456;
+            // Jika tag lokasi tidak diisi, simpan NULL agar teknisi bisa update di lapangan.
+            const finalLatitude = latitude !== undefined && latitude !== null && `${latitude}`.trim() !== ''
+                ? parseFloat(latitude)
+                : null;
+            const finalLongitude = longitude !== undefined && longitude !== null && `${longitude}`.trim() !== ''
+                ? parseFloat(longitude)
+                : null;
 
             const insertParams = (loginUser) => [
                 generatedCustomerId,
@@ -1665,7 +1709,7 @@
                 password || null,
                 name,
                 phone,
-                autoPPPoEUsername,
+                pppoeUserStored,
                 email,
                 address,
                 area || null,
@@ -1759,7 +1803,7 @@
                     
                     // Jika ada nomor telepon dan PPPoE username, coba tambahkan tag ke GenieACS
                     // Tambahkan timeout dan error handling untuk mencegah delay
-                    if (phone && autoPPPoEUsername) {
+                    if (!skipGenieacsSync && phone && pppoeUserStored) {
                         try {
                             // Timeout untuk operasi GenieACS
                             const genieacsPromise = new Promise(async (resolve, reject) => {
@@ -1768,14 +1812,14 @@
                                 try {
                                     const genieacs = require('./genieacs');
                                     // Cari device berdasarkan PPPoE Username
-                                    const device = await genieacs.findDeviceByPPPoE(autoPPPoEUsername);
+                                    const device = await genieacs.findDeviceByPPPoE(pppoeUserStored);
                                     
                                     if (device) {
                                         // Tambahkan tag nomor telepon ke device
                                         await genieacs.addTagToDevice(device._id, phone);
-                                        console.log(`✅ Successfully added phone tag ${phone} to device ${device._id} for customer ${finalUsername} (PPPoE: ${autoPPPoEUsername})`);
+                                        console.log(`✅ Successfully added phone tag ${phone} to device ${device._id} for customer ${finalUsername} (PPPoE: ${pppoeUserStored})`);
                                     } else {
-                                        console.log(`ℹ️ No device found with PPPoE Username ${autoPPPoEUsername} for customer ${finalUsername} - this is normal for new customers`);
+                                        console.log(`ℹ️ No device found with PPPoE Username ${pppoeUserStored} for customer ${finalUsername} - this is normal for new customers`);
                                     }
                                     clearTimeout(timeout);
                                     resolve();
@@ -1790,7 +1834,7 @@
                             console.log(`⚠️ GenieACS integration skipped for customer ${finalUsername} (timeout or error): ${genieacsError.message}`);
                             // Jangan reject, karena customer sudah berhasil dibuat di billing
                         }
-                    } else if (phone && finalUsername) {
+                    } else if (!skipGenieacsSync && phone && finalUsername && !customerData.__billing_only_package) {
                         // Fallback: coba dengan username jika pppoe_username tidak ada
                         try {
                             // Timeout untuk operasi GenieACS
@@ -1821,17 +1865,19 @@
                         }
                     }
                     
-                    try {
-                        const radiusSyncResult = await syncCustomerToRadius({
-                            ...customerData,
-                            username: finalUsername,
-                            pppoe_username: autoPPPoEUsername
-                        }, customerData);
-                        if (!radiusSyncResult.success && !radiusSyncResult.skipped) {
-                            logger.warn(`[BILLING] RADIUS sync create warning for ${autoPPPoEUsername}: ${radiusSyncResult.message}`);
+                    if (!skipRadiusSync) {
+                        try {
+                            const radiusSyncResult = await syncCustomerToRadius({
+                                ...customerData,
+                                username: finalUsername,
+                                pppoe_username: pppoeUserStored || ''
+                            }, customerData);
+                            if (!radiusSyncResult.success && !radiusSyncResult.skipped) {
+                                logger.warn(`[BILLING] RADIUS sync create warning for ${pppoeUserStored || '(none)'}: ${radiusSyncResult.message}`);
+                            }
+                        } catch (radiusSyncError) {
+                            logger.warn(`[BILLING] RADIUS sync create error for ${pppoeUserStored || '(none)'}: ${radiusSyncError.message}`);
                         }
-                    } catch (radiusSyncError) {
-                        logger.warn(`[BILLING] RADIUS sync create error for ${autoPPPoEUsername}: ${radiusSyncError.message}`);
                     }
 
             resolve(customer);
@@ -2742,6 +2788,9 @@ ${year && month ? `
             
             // Simpan reference database untuk digunakan di callback
             const db = this.db;
+            const skipExternalSync = Boolean(customerData && customerData.__skip_external_sync);
+            const skipGenieacsSync = skipExternalSync || Boolean(customerData && customerData.__skip_genieacs_sync);
+            const skipRadiusSync = skipExternalSync || Boolean(customerData && customerData.__skip_radius_sync);
             
             const { name, username, password, phone, pppoe_username, email, address, area, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, renewal_type, fix_date, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path } = customerData;
             
@@ -2806,7 +2855,7 @@ ${year && month ? `
                     } else {
                         // Jika nomor telepon atau PPPoE username berubah, update tag di GenieACS
                         const newPhone = phone || oldPhone;
-                        if (newPhone && (newPhone !== oldPhone || pppoe_username !== oldPPPoE)) {
+                        if (!skipGenieacsSync && newPhone && (newPhone !== oldPhone || pppoe_username !== oldPPPoE)) {
                             try {
                                 // Timeout untuk operasi GenieACS
                                 const genieacsPromise = new Promise(async (resolve, reject) => {
@@ -2929,20 +2978,22 @@ ${year && month ? `
                             }
                         }
                         
-                        try {
-                            const finalPPPoEUsername = pppoe_username !== undefined ? pppoe_username : oldCustomer.pppoe_username;
-                            const finalUsername = username || oldCustomer.username;
-                            const radiusSyncResult = await syncCustomerToRadius({
-                                ...oldCustomer,
-                                ...customerData,
-                                username: finalUsername,
-                                pppoe_username: finalPPPoEUsername
-                            }, customerData);
-                            if (!radiusSyncResult.success && !radiusSyncResult.skipped) {
-                                logger.warn(`[BILLING] RADIUS sync update warning for ${finalPPPoEUsername || finalUsername}: ${radiusSyncResult.message}`);
+                        if (!skipRadiusSync) {
+                            try {
+                                const finalPPPoEUsername = pppoe_username !== undefined ? pppoe_username : oldCustomer.pppoe_username;
+                                const finalUsername = username || oldCustomer.username;
+                                const radiusSyncResult = await syncCustomerToRadius({
+                                    ...oldCustomer,
+                                    ...customerData,
+                                    username: finalUsername,
+                                    pppoe_username: finalPPPoEUsername
+                                }, customerData);
+                                if (!radiusSyncResult.success && !radiusSyncResult.skipped) {
+                                    logger.warn(`[BILLING] RADIUS sync update warning for ${finalPPPoEUsername || finalUsername}: ${radiusSyncResult.message}`);
+                                }
+                            } catch (radiusSyncError) {
+                                logger.warn(`[BILLING] RADIUS sync update error for ${oldCustomer.username}: ${radiusSyncError.message}`);
                             }
-                        } catch (radiusSyncError) {
-                            logger.warn(`[BILLING] RADIUS sync update error for ${oldCustomer.username}: ${radiusSyncError.message}`);
                         }
 
                         resolve({ username: oldCustomer.username, ...customerData });

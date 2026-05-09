@@ -164,10 +164,10 @@
         
         .cable-line.disconnected {
             stroke: #dc3545;
-            stroke-width: 2;
-            stroke-dasharray: 5, 5;
-            animation: dash-red 1.5s linear infinite;
-            opacity: 0.7;
+            stroke-width: 3;
+            stroke-dasharray: 10, 5;
+            animation: dash 1.5s linear infinite;
+            opacity: 0.95;
         }
         
         .cable-line:hover {
@@ -644,6 +644,11 @@
             background: linear-gradient(135deg, #6c757d, #495057);
             border: 2px solid #495057;
         }
+
+        .customer-icon-container.down .customer-icon-bg {
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            border: 2px solid #991b1b;
+        }
         
         .customer-status-indicator {
             position: absolute;
@@ -664,6 +669,11 @@
         .customer-status-indicator.inactive {
             background: #6c757d;
         }
+
+        .customer-status-indicator.down {
+            background: #ef4444;
+            animation: pulse-red 1.8s infinite;
+        }
         
         @keyframes pulse-blue {
             0% {
@@ -675,6 +685,12 @@
             100% { 
                 box-shadow: 0 0 0 0 rgba(0, 123, 255, 0);
             }
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
         }
         
         /* Hover effect for Customer icons */
@@ -972,6 +988,10 @@
         
         .legend-color.offline {
             background: linear-gradient(45deg, #dc3545, #e74c3c);
+        }
+
+        .legend-color.customer-down {
+            background: #ef4444;
         }
         
         .legend-color.cable-connected {
@@ -1348,6 +1368,12 @@
                                     <i class="fas fa-user text-primary"></i> Customers
                                 </label>
                             </div>
+                            <div class="form-check ms-3">
+                                <input class="form-check-input" type="checkbox" id="filterDownCustomers">
+                                <label class="form-check-label" for="filterDownCustomers">
+                                    <i class="fas fa-triangle-exclamation text-danger"></i> Filter Pelanggan Down
+                                </label>
+                            </div>
                             
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="showONU" checked>
@@ -1379,6 +1405,10 @@
                             <div class="stats-item">
                                 <span>Customers:</span>
                                 <span id="totalCustomers">-</span>
+                            </div>
+                            <div class="stats-item">
+                                <span class="status-offline">Down Customers:</span>
+                                <span id="downCustomers" class="status-offline">-</span>
                             </div>
                             <div class="stats-item">
                                 <span>ONU Devices:</span>
@@ -1415,6 +1445,10 @@
                                 <div class="legend-item">
                                     <div class="legend-color offline"></div>
                                     <span>ONU Offline</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color customer-down"></div>
+                                    <span>Pelanggan Down (PPPoE)</span>
                                 </div>
                                 <div class="legend-item">
                                     <div class="legend-color cable-connected"></div>
@@ -1456,7 +1490,10 @@
         // Global variables
         let map;
         let networkData = {};
+        let showOnlyDownCustomers = false;
         let customerLayer, onuLayer, odpLayer, cableLayer, backboneLayer;
+        let autoRefreshTimer = null;
+        const AUTO_REFRESH_MS = 60000;
 
         // Initialize map
         function initMap() {
@@ -1466,7 +1503,8 @@
             const defaultLng = <%= typeof defaultMapLng !== 'undefined' && defaultMapLng != null ? Number(defaultMapLng) : 106.8456 %>;
             const defaultZoom = <%= typeof defaultMapZoom !== 'undefined' && defaultMapZoom != null ? parseInt(String(defaultMapZoom), 10) : 13 %>;
             map = L.map('map', {
-                zoomControl: false
+                zoomControl: false,
+                maxZoom: 19
             }).setView([defaultLat, defaultLng], defaultZoom);
             
             // Add enhanced tile layers with multiple options
@@ -1483,7 +1521,8 @@
             });
             
             const satelliteTheme = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: '� Esri � DigitalGlobe � GeoEye � i-cubed � USDA FSA � USGS � AeroGRID � IGN � IGP'
+                attribution: '� Esri � DigitalGlobe � GeoEye � i-cubed � USDA FSA � USGS � AeroGRID � IGN � IGP',
+                maxZoom: 19
             });
             
             // Add default satellite theme
@@ -1517,6 +1556,7 @@
                 position: 'topright',
                 collapsed: true
             }).addTo(map);
+
             
             // Ensure layer control is always visible and positioned correctly
             setTimeout(() => {
@@ -1561,10 +1601,19 @@
             });
         }
         
-        function createCustomerIcon() {
+        function createCustomerIcon(customer) {
+            const isDown = customer && customer.network_down === true;
+            const statusClass = isDown ? 'down' : ((customer && customer.status === 'active') ? 'active' : 'inactive');
+            const indicatorClass = isDown ? 'down' : ((customer && customer.status === 'active') ? 'active' : 'inactive');
+            const iconClass = isDown ? 'fas fa-triangle-exclamation' : 'fas fa-home';
             return L.divIcon({
                 className: 'custom-customer-icon',
-                html: '<div class="customer-marker"><i class="fas fa-home"></i></div>',
+                html: `
+                    <div class="customer-icon-container ${statusClass}">
+                        <div class="customer-icon-bg"><i class="${iconClass}"></i></div>
+                        <div class="customer-status-indicator ${indicatorClass}"></div>
+                    </div>
+                `,
                 iconSize: [25, 25],
                 iconAnchor: [12, 12]
             });
@@ -1686,9 +1735,10 @@
             console.log(`?? Rendering ${customers.length} customers...`);
             
             customers.forEach(customer => {
+                if (showOnlyDownCustomers && customer.network_down !== true) return;
                 if (customer.latitude && customer.longitude) {
                     const marker = L.marker([customer.latitude, customer.longitude], {
-                        icon: createCustomerIcon()
+                        icon: createCustomerIcon(customer)
                     }).addTo(customerLayer);
                     
                     const popupContent = `
@@ -1700,6 +1750,8 @@
                                 <p><strong>Phone:</strong> ${customer.phone || 'N/A'}</p>
                                 <p><strong>Address:</strong> ${customer.address || 'N/A'}</p>
                                 <p><strong>Status:</strong> <span class="status-${customer.status}">${customer.status}</span></p>
+                                <p><strong>PPPoE Active:</strong> <span class="badge bg-${customer.pppoe_active === true ? 'success' : customer.pppoe_active === false ? 'danger' : 'secondary'}">${customer.pppoe_active === true ? 'YES' : customer.pppoe_active === false ? 'NO' : 'UNKNOWN'}</span></p>
+                                ${customer.network_down === true ? '<p><strong>Network:</strong> <span class="badge bg-danger">DOWN</span></p>' : ''}
                                 <p><strong>Package:</strong> ${customer.package || 'N/A'}</p>
                             </div>
                             <div class="popup-footer">
@@ -1875,9 +1927,21 @@
                     // Determine cable status based on connected ONU status
                     let cableStatus = 'connected';
                     let cableClass = 'cable-line connected';
+                    const connectedCustomer = Array.isArray(networkData.customers)
+                        ? networkData.customers.find((c) =>
+                            (cable.customer_id && String(c.id) === String(cable.customer_id)) ||
+                            (cable.customer_name && c.name && String(c.name).trim() === String(cable.customer_name).trim())
+                        )
+                        : null;
+
+                    // Priority rule: customer PPPoE inactive/network down => cable must be disconnected.
+                    if (connectedCustomer && connectedCustomer.network_down === true) {
+                        cableStatus = 'disconnected';
+                        cableClass = 'cable-line disconnected';
+                    }
                     
                     // Check if cable is connected to any offline ONU
-                    if (networkData.onuDevices) {
+                    if (cableStatus === 'connected' && networkData.onuDevices) {
                         const connectedONU = networkData.onuDevices.find(onu => 
                             onu.odpName === cable.from || onu.odpName === cable.to
                         );
@@ -1890,44 +1954,43 @@
                     // Create the polyline with animation
                     const polyline = L.polyline(cable.coordinates, {
                         color: cableStatus === 'connected' ? '#28a745' : '#dc3545',
-                        weight: cableStatus === 'connected' ? 3 : 2,
+                        weight: 4,
                         opacity: 0.8,
-                        dashArray: cableStatus === 'connected' ? '10, 5' : '5, 5',
+                        dashArray: '10, 5',
                         lineCap: 'round',
-                        className: cableClass
+                        className: cableClass,
+                        cableStatus: cableStatus
                     });
                     
                     // Add animation effect
-                    if (cableStatus === 'connected') {
-                        // Wait for the path to be rendered
-                        setTimeout(() => {
-                            try {
-                                if (polyline._path) {
-                                    const length = polyline._path.getTotalLength ? polyline._path.getTotalLength() : 100;
-                                    polyline._path.style.strokeDasharray = '10, 5';
-                                    polyline._path.style.strokeDashoffset = length;
+                    // Wait for the path to be rendered
+                    setTimeout(() => {
+                        try {
+                            if (polyline._path) {
+                                const length = polyline._path.getTotalLength ? polyline._path.getTotalLength() : 100;
+                                polyline._path.style.strokeDasharray = '10, 5';
+                                polyline._path.style.strokeDashoffset = length;
+                                
+                                // Animate the dash offset
+                                const animate = () => {
+                                    if (!polyline._path) return;
                                     
-                                    // Animate the dash offset
-                                    const animate = () => {
-                                        if (!polyline._path) return;
-                                        
-                                        const currentOffset = parseFloat(polyline._path.style.strokeDashoffset) || 0;
-                                        if (currentOffset <= -length) {
-                                            polyline._path.style.strokeDashoffset = length;
-                                        } else {
-                                            polyline._path.style.strokeDashoffset = currentOffset - 0.5;
-                                        }
-                                        requestAnimationFrame(animate);
-                                    };
-                                    
-                                    // Start animation
+                                    const currentOffset = parseFloat(polyline._path.style.strokeDashoffset) || 0;
+                                    if (currentOffset <= -length) {
+                                        polyline._path.style.strokeDashoffset = length;
+                                    } else {
+                                        polyline._path.style.strokeDashoffset = currentOffset - 0.5;
+                                    }
                                     requestAnimationFrame(animate);
-                                }
-                            } catch (error) {
-                                console.error('Error animating cable:', error);
+                                };
+                                
+                                // Start animation
+                                requestAnimationFrame(animate);
                             }
-                        }, 500 + (index * 100)); // Add delay to ensure path is rendered
-                    }
+                        } catch (error) {
+                            console.error('Error animating cable:', error);
+                        }
+                    }, 500 + (index * 100)); // Add delay to ensure path is rendered
                     
                     // Add popup with cable info
                     polyline.bindPopup(`
@@ -1960,7 +2023,7 @@
                     
                     polyline.on('mouseout', function() {
                         this.setStyle({
-                            weight: cableStatus === 'connected' ? 3 : 2,
+                            weight: 4,
                             opacity: 0.8
                         });
                     });
@@ -2014,6 +2077,9 @@
             if (cableLayer) {
                 cableLayer.eachLayer(function(layer) {
                     if (layer instanceof L.Polyline) {
+                        if (layer.options && layer.options.cableStatus === 'disconnected') {
+                            return;
+                        }
                         createDataFlowAnimation(layer, 'cable');
                     }
                 });
@@ -2124,6 +2190,7 @@
         function updateStatistics() {
             if (networkData.statistics) {
                 document.getElementById('totalCustomers').textContent = networkData.statistics.totalCustomers || 0;
+                document.getElementById('downCustomers').textContent = networkData.statistics.downCustomers || 0;
                 document.getElementById('totalONU').textContent = networkData.statistics.totalONU || 0;
                 document.getElementById('onlineONU').textContent = networkData.statistics.onlineONU || 0;
                 document.getElementById('offlineONU').textContent = networkData.statistics.offlineONU || 0;
@@ -2182,6 +2249,14 @@
             } else {
                 map.removeLayer(customerLayer);
                 console.log('? Customer layer hidden');
+            }
+        });
+
+        document.getElementById('filterDownCustomers').addEventListener('change', function() {
+            showOnlyDownCustomers = this.checked;
+            if (customerLayer) customerLayer.clearLayers();
+            if (networkData.customers?.length > 0) {
+                renderCustomers(networkData.customers);
             }
         });
 
@@ -3332,6 +3407,11 @@ Please wait a few minutes for the device to come back online.`);
         document.addEventListener('DOMContentLoaded', function() {
             initMap();
             initMobileToggles();
+            autoRefreshTimer = window.setInterval(() => {
+                if (document.hidden) return;
+                console.log('🔄 Auto-refresh mapping data (60s)');
+                loadNetworkData();
+            }, AUTO_REFRESH_MS);
             
             // Inject per-field save buttons for SSID and WiFi password in Edit ONU modal
             try {
@@ -3475,6 +3555,13 @@ Please wait a few minutes for the device to come back online.`);
                     saveCustomer();
                 }
             });
+        });
+
+        window.addEventListener('beforeunload', function() {
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+                autoRefreshTimer = null;
+            }
         });
         
         // Functions for popup WiFi editing

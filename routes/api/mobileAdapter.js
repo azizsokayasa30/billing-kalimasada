@@ -28,9 +28,31 @@ function requireCollector(req, res, next) {
 
 function parseCollectorId(req) {
     const u = req.user || {};
-    const raw = u.id != null && u.id !== '' ? u.id : u.sub != null && u.sub !== '' ? u.sub : u.user_id;
+    const raw =
+        u.id != null && u.id !== ''
+            ? u.id
+            : u.sub != null && u.sub !== ''
+                ? u.sub
+                : u.user_id != null && u.user_id !== ''
+                    ? u.user_id
+                    : u.userId;
     const id = parseInt(String(raw), 10);
     return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+/** ID numerik teknisi dari JWT (id / sub / user_id) — hindari NaN bila token pakai string non-angka. */
+function parseTechnicianId(req) {
+    return parseCollectorId(req);
+}
+
+/** SQLite3 kadang mengembalikan BIGINT; JSON.stringify gagal → klien Flutter error. */
+function sqliteJsonSafeRow(row) {
+    if (!row || typeof row !== 'object') return row;
+    const out = {};
+    for (const [k, v] of Object.entries(row)) {
+        out[k] = typeof v === 'bigint' ? Number(v) : v;
+    }
+    return out;
 }
 
 function collectorCustomerIsIsolir(c) {
@@ -416,6 +438,20 @@ function parseAttendanceBranchQrPayload(rawQr) {
     }
 }
 
+function toDhmsFromSeconds(rawSeconds) {
+    const secs = Number(rawSeconds);
+    if (!Number.isFinite(secs) || secs < 0) return null;
+    const total = Math.floor(secs);
+    const d = Math.floor(total / 86400);
+    const h = Math.floor((total % 86400) / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m ${s}s`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
 function mapInstallPriority(p) {
     const u = String(p || 'normal').toLowerCase();
     if (u === 'urgent' || u === 'high') return 'HIGH';
@@ -519,9 +555,9 @@ router.get('/customers', verifyToken, allowFieldOps, (req, res) => {
     let where = '1=1';
     if (status) {
         const role = req.user && req.user.role;
-        const techId = role === 'technician' ? parseInt(req.user.id, 10) : NaN;
+        const techId = role === 'technician' ? parseTechnicianId(req) : null;
         const isGangguanFilter = status.toLowerCase() === 'isolated';
-        if (isGangguanFilter && role === 'technician' && Number.isFinite(techId)) {
+        if (isGangguanFilter && role === 'technician' && techId) {
             // App "Gangguan" = status isolated + pelanggan yang punya tiket gangguan aktif ditugaskan ke teknisi ini
             const trMatch = sqlTroubleTicketCustomerMatch('cu', 'tr');
             where += ` AND (
@@ -562,10 +598,13 @@ router.get('/customers', verifyToken, allowFieldOps, (req, res) => {
             logger.error('[mobile-adapter] customers:', err);
             return res.status(500).json({ success: false, message: 'Gagal memuat pelanggan' });
         }
-        const list = (rows || []).map((r) => ({
-            ...r,
-            ip_address: r.pppoe_username ? 'PPPoE' : 'DHCP/Dynamic'
-        }));
+        const list = (rows || []).map((r) => {
+            const safe = sqliteJsonSafeRow(r);
+            return {
+                ...safe,
+                ip_address: safe.pppoe_username ? 'PPPoE' : 'DHCP/Dynamic'
+            };
+        });
         res.json({ success: true, data: list });
     });
 });
@@ -612,12 +651,8 @@ router.get('/customers/:customerId/ppp-session', verifyToken, requireTechnician,
         const authMode = await getUserAuthModeAsync();
 
         let session = null;
-        if (authMode === 'radius') {
-            const active = await getActivePPPoEConnectionsRadius();
-            if (Array.isArray(active)) {
-                session = active.find((a) => String(a.name || '').trim() === login) || null;
-            }
-        } else {
+        let mikrotikSession = null;
+        const findMikrotikSessionByLogin = async (pppoeLogin) => {
             const routers = await new Promise((resolve, reject) => {
                 db.all('SELECT * FROM routers ORDER BY id ASC', [], (err, rows) =>
                     err ? reject(err) : resolve(rows || [])
@@ -626,35 +661,76 @@ router.get('/customers/:customerId/ppp-session', verifyToken, requireTechnician,
             for (const r of (Array.isArray(routers) ? routers : [])) {
                 try {
                     const conn = await getMikrotikConnectionForRouter(r);
-                    const rows = await conn.write('/ppp/active/print', [`?name=${login}`]);
+                    const rows = await conn.write('/ppp/active/print', [`?name=${pppoeLogin}`]);
                     if (Array.isArray(rows) && rows.length > 0) {
-                        session = rows[0];
-                        break;
+                        return rows[0];
                     }
                 } catch (_) {}
             }
-            if (!session) {
-                try {
-                    const conn = await getMikrotikConnection();
-                    if (conn) {
-                        const rows = await conn.write('/ppp/active/print', [`?name=${login}`]);
-                        if (Array.isArray(rows) && rows.length > 0) {
-                            session = rows[0];
-                        }
-                    }
-                } catch (_) {}
+            try {
+                const conn = await getMikrotikConnection();
+                if (!conn) return null;
+                const rows = await conn.write('/ppp/active/print', [`?name=${pppoeLogin}`]);
+                if (Array.isArray(rows) && rows.length > 0) {
+                    return rows[0];
+                }
+            } catch (_) {}
+            return null;
+        };
+
+        if (authMode === 'radius') {
+            const active = await getActivePPPoEConnectionsRadius();
+            if (Array.isArray(active)) {
+                session = active.find((a) => String(a.name || '').trim() === login) || null;
             }
+            // Radius radacct sering tidak menyimpan MAC/caller-id; lengkapi dari session aktif MikroTik bila ada.
+            mikrotikSession = await findMikrotikSessionByLogin(login);
+        } else {
+            session = await findMikrotikSessionByLogin(login);
+            mikrotikSession = session;
         }
+
+        const source = mikrotikSession || session;
+        const macAddress = source
+            ? (
+                source['caller-id'] ||
+                source.caller_id ||
+                source.callerid ||
+                source['mac-address'] ||
+                source.mac_address ||
+                source.mac ||
+                null
+            )
+            : null;
+        const ipAddress = source
+            ? (
+                source.address ||
+                source.ip ||
+                source.framedipaddress ||
+                null
+            )
+            : null;
+        const rawUptime = source
+            ? (
+                source.uptime ||
+                source.session_time ||
+                null
+            )
+            : null;
+        const uptime =
+            typeof rawUptime === 'number' || /^\d+$/.test(String(rawUptime || ''))
+                ? (toDhmsFromSeconds(rawUptime) || String(rawUptime))
+                : (rawUptime || null);
 
         return res.json({
             success: true,
             data: {
-                online: Boolean(session),
+                online: Boolean(session || mikrotikSession),
                 auth_mode: authMode || 'unknown',
                 login_checked: login,
-                mac_address: session ? (session['caller-id'] || session.caller_id || null) : null,
-                ip_address: session ? (session.address || session.ip || null) : null,
-                uptime: session ? (session.uptime || null) : null
+                mac_address: macAddress,
+                ip_address: ipAddress,
+                uptime: uptime
             }
         });
     } catch (error) {
@@ -713,8 +789,8 @@ router.put('/customers/:customerId/location', verifyToken, requireTechnician, (r
 
 // --- Profil teknisi (sinkron dengan data web / tabel technicians) ---
 router.get('/me', verifyToken, requireTechnician, (req, res) => {
-    const techId = parseInt(req.user.id, 10);
-    if (!Number.isFinite(techId)) {
+    const techId = parseTechnicianId(req);
+    if (!techId) {
         return res.status(400).json({ success: false, message: 'ID teknisi tidak valid' });
     }
     db.get('SELECT * FROM technicians WHERE id = ? AND is_active = 1', [techId], (err, row) => {
@@ -780,8 +856,8 @@ router.get('/me', verifyToken, requireTechnician, (req, res) => {
 });
 
 router.put('/me', verifyToken, requireTechnician, (req, res) => {
-    const techId = parseInt(req.user.id, 10);
-    if (!Number.isFinite(techId)) {
+    const techId = parseTechnicianId(req);
+    if (!techId) {
         return res.status(400).json({ success: false, message: 'ID teknisi tidak valid' });
     }
     const body = req.body || {};
@@ -1378,8 +1454,8 @@ router.get('/dashboard', verifyToken, allowFieldOps, (req, res) => {
             return res.status(500).json({ success: false, message: err.message });
         }
         const role = req.user && req.user.role;
-        const techId = role === 'technician' ? parseInt(req.user.id, 10) : NaN;
-        if (role === 'technician' && Number.isFinite(techId)) {
+        const techId = role === 'technician' ? parseTechnicianId(req) : null;
+        if (role === 'technician' && techId) {
             const trMatch = sqlTroubleTicketCustomerMatch('cu', 'tr');
             const gangSql = `SELECT COUNT(DISTINCT id) AS n FROM (
                 SELECT c.id FROM customers c WHERE LOWER(c.status) = 'isolated'
@@ -1409,16 +1485,23 @@ router.get('/dashboard', verifyToken, allowFieldOps, (req, res) => {
 // --- Tasks: instalasi + tiket gangguan untuk teknisi login ---
 // ?history=1 → hanya tugas selesai (untuk riwayat profil). Tanpa param → hanya tugas aktif.
 router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
-    const techId = parseInt(req.user.id, 10);
-    if (!Number.isFinite(techId)) {
+    const role = req.user && req.user.role;
+    const isAdmin = role === 'admin';
+    const techId = parseTechnicianId(req);
+    if (!isAdmin && !techId) {
         return res.status(400).json({ success: false, message: 'ID teknisi tidak valid' });
     }
 
     const history = String(req.query.history || '') === '1';
 
-    const installWhere = history
-        ? `ij.assigned_technician_id = ? AND LOWER(ij.status) IN ('completed','cancelled')`
-        : `ij.assigned_technician_id = ? AND LOWER(ij.status) NOT IN ('completed','cancelled')`;
+    const installWhere = isAdmin
+        ? history
+            ? `LOWER(ij.status) IN ('completed','cancelled')`
+            : `LOWER(ij.status) NOT IN ('completed','cancelled')`
+        : history
+            ? `ij.assigned_technician_id = ? AND LOWER(ij.status) IN ('completed','cancelled')`
+            : `ij.assigned_technician_id = ? AND LOWER(ij.status) NOT IN ('completed','cancelled')`;
+    const installParams = isAdmin ? [] : [techId];
 
     const installSql = `
         SELECT ij.*, p.name AS package_name,
@@ -1449,17 +1532,22 @@ router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
         LIMIT 200
     `;
 
-    const troubleWhere = history
-        ? `(assigned_technician_id = ? OR CAST(assigned_technician_id AS TEXT) = ?)
+    const troubleWhere = isAdmin
+        ? history
+            ? `LOWER(status) IN ('closed','resolved')`
+            : `LOWER(status) NOT IN ('closed','resolved')`
+        : history
+            ? `(assigned_technician_id = ? OR CAST(assigned_technician_id AS TEXT) = ?)
             AND LOWER(status) IN ('closed','resolved')`
-        : `(
+            : `(
                 assigned_technician_id = ?
                 OR CAST(assigned_technician_id AS TEXT) = ?
                 OR IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0')
             )
             AND LOWER(status) NOT IN ('closed','resolved')`;
+    const troubleParams = isAdmin ? [] : [techId, String(techId)];
 
-    db.all(installSql, [techId], (err1, installRows) => {
+    db.all(installSql, installParams, (err1, installRows) => {
         if (err1) {
             logger.error('[mobile-adapter] tasks install:', err1);
             return res.status(500).json({ success: false, message: 'Gagal memuat tugas instalasi' });
@@ -1469,7 +1557,7 @@ router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
              WHERE ${troubleWhere}
              ORDER BY updated_at DESC, created_at DESC
              LIMIT 200`,
-            [techId, String(techId)],
+            troubleParams,
             async (err2, troubleRows) => {
                 if (err2) {
                     logger.error('[mobile-adapter] tasks trouble:', err2);
@@ -1600,14 +1688,19 @@ function attendanceDayScore(row) {
 /** Sen–Min kalender minggu berjalan (Asia/Jakarta), + agregat tugas selesai & skor absensi per hari. */
 router.get('/performance/week', verifyToken, requireTechnician, (req, res) => {
     const role = req.user && req.user.role;
-    const techId = parseInt(req.user.id, 10);
-    if (role === 'admin' || !Number.isFinite(techId)) {
-        const now = new Date();
-        let anchor = now;
-        for (let i = 0; i < jakartaWeekdayMon0(now); i++) {
-            anchor = jakartaAddDaysFromInstant(anchor, -1);
-        }
-        const todayYmd = jakartaYmdFromInstant(now);
+    const techId = parseTechnicianId(req);
+    const isAdmin = role === 'admin';
+
+    const now = new Date();
+    let anchor = now;
+    for (let i = 0; i < jakartaWeekdayMon0(now); i++) {
+        anchor = jakartaAddDaysFromInstant(anchor, -1);
+    }
+    const weekStartYmd = jakartaYmdFromInstant(anchor);
+    const weekEndYmd = jakartaYmdFromInstant(jakartaAddDaysFromInstant(anchor, 6));
+    const todayYmd = jakartaYmdFromInstant(now);
+
+    const replyPerfEmptyZeros = () => {
         const daysEmpty = [];
         let cur = anchor;
         for (let i = 0; i < 7; i++) {
@@ -1627,19 +1720,82 @@ router.get('/performance/week', verifyToken, requireTechnician, (req, res) => {
                 days: daysEmpty,
                 tasks_week_total: 0,
                 attendance_week_avg: 0,
-                employee_matched: false
+                employee_matched: false,
+                tasks_week_max_per_day: 0
             }
         });
+    };
+
+    if (!isAdmin && !techId) {
+        return replyPerfEmptyZeros();
     }
 
-    const now = new Date();
-    let anchor = now;
-    for (let i = 0; i < jakartaWeekdayMon0(now); i++) {
-        anchor = jakartaAddDaysFromInstant(anchor, -1);
+    if (isAdmin) {
+        const installSqlAdmin = `
+        SELECT substr(COALESCE(updated_at, created_at), 1, 10) AS d, COUNT(*) AS c
+        FROM installation_jobs
+        WHERE LOWER(status) IN ('completed','cancelled')
+          AND substr(COALESCE(updated_at, created_at), 1, 10) >= ?
+          AND substr(COALESCE(updated_at, created_at), 1, 10) <= ?
+        GROUP BY substr(COALESCE(updated_at, created_at), 1, 10)
+    `;
+        const troubleSqlAdmin = `
+        SELECT substr(COALESCE(updated_at, created_at), 1, 10) AS d, COUNT(*) AS c
+        FROM trouble_reports
+        WHERE LOWER(status) IN ('closed','resolved')
+          AND substr(COALESCE(updated_at, created_at), 1, 10) >= ?
+          AND substr(COALESCE(updated_at, created_at), 1, 10) <= ?
+        GROUP BY substr(COALESCE(updated_at, created_at), 1, 10)
+    `;
+        db.all(installSqlAdmin, [weekStartYmd, weekEndYmd], (aErr1, installAgg) => {
+            if (aErr1) {
+                logger.error('[mobile-adapter] performance/week admin install:', aErr1);
+                return res.status(500).json({ success: false, message: 'Gagal memuat performa tugas' });
+            }
+            db.all(troubleSqlAdmin, [weekStartYmd, weekEndYmd], (aErr2, troubleAgg) => {
+                if (aErr2) {
+                    logger.error('[mobile-adapter] performance/week admin trouble:', aErr2);
+                    return res.status(500).json({ success: false, message: 'Gagal memuat performa tiket' });
+                }
+                const taskByDay = {};
+                for (const row of installAgg || []) {
+                    if (row && row.d) taskByDay[row.d] = (taskByDay[row.d] || 0) + toFiniteNumber(row.c);
+                }
+                for (const row of troubleAgg || []) {
+                    if (row && row.d) taskByDay[row.d] = (taskByDay[row.d] || 0) + toFiniteNumber(row.c);
+                }
+                const days = [];
+                let cur = anchor;
+                let tasksWeekTotal = 0;
+                let maxTasks = 0;
+                for (let i = 0; i < 7; i++) {
+                    const ymd = jakartaYmdFromInstant(cur);
+                    const tc = toFiniteNumber(taskByDay[ymd]);
+                    if (tc > maxTasks) maxTasks = tc;
+                    tasksWeekTotal += tc;
+                    days.push({
+                        date: ymd,
+                        weekday: PERF_WEEKDAY_ID[i],
+                        is_today: ymd === todayYmd,
+                        tasks_completed: tc,
+                        attendance_score: 0
+                    });
+                    cur = jakartaAddDaysFromInstant(cur, 1);
+                }
+                res.json({
+                    success: true,
+                    data: {
+                        days,
+                        tasks_week_total: tasksWeekTotal,
+                        attendance_week_avg: 0,
+                        employee_matched: false,
+                        tasks_week_max_per_day: maxTasks
+                    }
+                });
+            });
+        });
+        return;
     }
-    const weekStartYmd = jakartaYmdFromInstant(anchor);
-    const weekEndYmd = jakartaYmdFromInstant(jakartaAddDaysFromInstant(anchor, 6));
-    const todayYmd = jakartaYmdFromInstant(now);
 
     const installSql = `
         SELECT substr(COALESCE(updated_at, created_at), 1, 10) AS d, COUNT(*) AS c
@@ -1770,7 +1926,13 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
     if (!status) {
         return res.status(400).json({ success: false, message: 'Status wajib diisi' });
     }
-    const techId = parseInt(req.user.id, 10);
+    const roleUser = req.user && req.user.role;
+    const isAdminTask = roleUser === 'admin';
+    const techId = parseTechnicianId(req);
+    if (!isAdminTask && !techId) {
+        return res.status(400).json({ success: false, message: 'ID teknisi tidak valid' });
+    }
+    const actorHistoryId = isAdminTask ? 0 : techId;
     const rawStatus = String(status).toLowerCase();
 
     if (type === 'INSTALL') {
@@ -1829,9 +1991,14 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
                 }
             }
 
+            const installPickSql = isAdminTask
+                ? `SELECT * FROM installation_jobs WHERE id = ?`
+                : `SELECT * FROM installation_jobs WHERE id = ? AND assigned_technician_id = ?`;
+            const installPickParams = isAdminTask ? [jobId] : [jobId, techId];
+
             db.get(
-                `SELECT * FROM installation_jobs WHERE id = ? AND assigned_technician_id = ?`,
-                [jobId, techId],
+                installPickSql,
+                installPickParams,
                 (gErr, job) => {
                     if (gErr) {
                         logger.error('[mobile-adapter] install complete get:', gErr);
@@ -1866,10 +2033,15 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
                         setCols.push('customer_latitude = ?', 'customer_longitude = ?');
                         uParams.push(compLat, compLng);
                     }
-                    uParams.push(jobId, techId);
-                    const updateSql = `UPDATE installation_jobs SET ${setCols.join(', ')} WHERE id = ? AND assigned_technician_id = ?`;
+                    let updInstallSql = `UPDATE installation_jobs SET ${setCols.join(', ')} WHERE id = ? AND assigned_technician_id = ?`;
+                    if (isAdminTask) {
+                        uParams.push(jobId);
+                        updInstallSql = `UPDATE installation_jobs SET ${setCols.join(', ')} WHERE id = ?`;
+                    } else {
+                        uParams.push(jobId, techId);
+                    }
 
-                    db.run(updateSql, uParams, async function (uErr) {
+                    db.run(updInstallSql, uParams, async function (uErr) {
                             if (uErr) {
                                 return res.status(500).json({ success: false, message: uErr.message });
                             }
@@ -1892,7 +2064,7 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
                                 `INSERT INTO installation_job_status_history (
                                     job_id, old_status, new_status, changed_by_type, changed_by_id, notes
                                 ) VALUES (?, ?, 'completed', 'technician', ?, ?)`,
-                                [jobId, job.status, techId, completion_description.slice(0, 500)],
+                                [jobId, job.status, actorHistoryId, completion_description.slice(0, 500)],
                                 (histErr) => {
                                     if (histErr) {
                                         logger.warn('[mobile-adapter] install history:', histErr.message);
@@ -1955,6 +2127,27 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
         if (dbStatus === 'in_progress') {
             // Pakai jam zona aplikasi (bukan SQLite CURRENT_TIMESTAMP = UTC) agar durasi di app mobile sinkron.
             const wallNow = getLocalTimestamp();
+            if (isAdminTask) {
+                db.run(
+                    `UPDATE installation_jobs SET status = ?, updated_at = ?,
+                     work_started_at = COALESCE(work_started_at, ?)
+                     WHERE id = ?`,
+                    [dbStatus, wallNow, wallNow, jobId],
+                    function (err) {
+                        if (err) {
+                            return res.status(500).json({ success: false, message: err.message });
+                        }
+                        if (this.changes === 0) {
+                            return res.status(404).json({
+                                success: false,
+                                message: 'Tugas tidak ditemukan atau bukan milik Anda'
+                            });
+                        }
+                        res.json({ success: true, message: 'Status diperbarui' });
+                    }
+                );
+                return;
+            }
             db.run(
                 `UPDATE installation_jobs SET status = ?, updated_at = ?,
                  work_started_at = COALESCE(work_started_at, ?)
@@ -1965,7 +2158,31 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
                         return res.status(500).json({ success: false, message: err.message });
                     }
                     if (this.changes === 0) {
-                        return res.status(404).json({ success: false, message: 'Tugas tidak ditemukan atau bukan milik Anda' });
+                        return res.status(404).json({
+                            success: false,
+                            message: 'Tugas tidak ditemukan atau bukan milik Anda'
+                        });
+                    }
+                    res.json({ success: true, message: 'Status diperbarui' });
+                }
+            );
+            return;
+        }
+
+        if (isAdminTask) {
+            db.run(
+                `UPDATE installation_jobs SET status = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+                [dbStatus, jobId],
+                function (err) {
+                    if (err) {
+                        return res.status(500).json({ success: false, message: err.message });
+                    }
+                    if (this.changes === 0) {
+                        return res.status(404).json({
+                            success: false,
+                            message: 'Tugas tidak ditemukan atau bukan milik Anda'
+                        });
                     }
                     res.json({ success: true, message: 'Status diperbarui' });
                 }
@@ -1982,7 +2199,10 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
                     return res.status(500).json({ success: false, message: err.message });
                 }
                 if (this.changes === 0) {
-                    return res.status(404).json({ success: false, message: 'Tugas tidak ditemukan atau bukan milik Anda' });
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Tugas tidak ditemukan atau bukan milik Anda'
+                    });
                 }
                 res.json({ success: true, message: 'Status diperbarui' });
             }
@@ -2010,6 +2230,16 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
 
         if (dbStatus === 'in_progress') {
             const wallNow = getLocalTimestamp();
+            if (isAdminTask) {
+                db.run(
+                    `UPDATE trouble_reports SET status = ?, updated_at = ?,
+                     work_started_at = COALESCE(work_started_at, ?)
+                     WHERE id = ?`,
+                    [dbStatus, wallNow, wallNow, id],
+                    done
+                );
+                return;
+            }
             db.run(
                 `UPDATE trouble_reports SET status = ?, updated_at = ?,
                  work_started_at = COALESCE(work_started_at, ?),
@@ -2044,16 +2274,18 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
                 return res.status(400).json({ success: false, message: pe.message || 'Foto tidak valid' });
             }
 
-            db.get(
-                `SELECT id FROM trouble_reports
+            const trPickSql = isAdminTask
+                ? `SELECT id FROM trouble_reports WHERE id = ?`
+                : `SELECT id FROM trouble_reports
                  WHERE id = ?
                    AND (
                         assigned_technician_id = ?
                         OR CAST(assigned_technician_id AS TEXT) = ?
                         OR IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0')
-                   )`,
-                [id, techId, String(techId)],
-                (qErr, row) => {
+                   )`;
+            const trPickParams = isAdminTask ? [id] : [id, techId, String(techId)];
+
+            db.get(trPickSql, trPickParams, (qErr, row) => {
                     if (qErr) {
                         return res.status(500).json({ success: false, message: qErr.message });
                     }
@@ -2090,6 +2322,17 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
             return;
         }
 
+        if (isAdminTask) {
+            db.run(
+                `UPDATE trouble_reports
+             SET status = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+                [dbStatus, id],
+                done
+            );
+            return;
+        }
+
         db.run(
             `UPDATE trouble_reports
              SET status = ?, updated_at = CURRENT_TIMESTAMP,
@@ -2114,8 +2357,12 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
 
 // --- Notifikasi tugas (admin → teknisi, in-app + badge di mobile) ---
 router.get('/notifications', verifyToken, requireTechnician, (req, res) => {
-    const techId = parseInt(req.user.id, 10);
-    if (!Number.isFinite(techId)) {
+    const roleNt = req.user && req.user.role;
+    if (roleNt === 'admin') {
+        return res.json({ success: true, data: { items: [], unread_count: 0 } });
+    }
+    const techId = parseTechnicianId(req);
+    if (!techId) {
         return res.status(400).json({ success: false, message: 'ID teknisi tidak valid' });
     }
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
@@ -2160,9 +2407,13 @@ router.get('/notifications', verifyToken, requireTechnician, (req, res) => {
 });
 
 router.post('/notifications/:notifId/read', verifyToken, requireTechnician, (req, res) => {
-    const techId = parseInt(req.user.id, 10);
+    const roleNt = req.user && req.user.role;
+    if (roleNt === 'admin') {
+        return res.json({ success: true, message: 'Ditandai dibaca' });
+    }
+    const techId = parseTechnicianId(req);
     const nid = parseInt(req.params.notifId, 10);
-    if (!Number.isFinite(techId) || !Number.isFinite(nid)) {
+    if (!techId || !Number.isFinite(nid)) {
         return res.status(400).json({ success: false, message: 'Data tidak valid' });
     }
     db.run(
@@ -2182,8 +2433,12 @@ router.post('/notifications/:notifId/read', verifyToken, requireTechnician, (req
 });
 
 router.post('/notifications/read-all', verifyToken, requireTechnician, (req, res) => {
-    const techId = parseInt(req.user.id, 10);
-    if (!Number.isFinite(techId)) {
+    const roleNt = req.user && req.user.role;
+    if (roleNt === 'admin') {
+        return res.json({ success: true, message: 'Semua ditandai dibaca', updated: 0 });
+    }
+    const techId = parseTechnicianId(req);
+    if (!techId) {
         return res.status(400).json({ success: false, message: 'ID teknisi tidak valid' });
     }
     db.run(
@@ -2236,7 +2491,7 @@ router.get('/network-map', verifyToken, requireTechnician, async (req, res) => {
 
         const customers = await new Promise((resolve, reject) => {
             db.all(
-                `SELECT id, name, phone, status, latitude, longitude, odp_id
+                `SELECT id, name, phone, status, latitude, longitude, odp_id, pppoe_username, username
                  FROM customers
                  WHERE latitude IS NOT NULL AND longitude IS NOT NULL`,
                 [],
@@ -2274,6 +2529,34 @@ router.get('/network-map', verifyToken, requireTechnician, async (req, res) => {
             );
         });
 
+        let onlineLoginSet = new Set();
+        try {
+            const { getActivePppoeLoginNamesSet } = require('../../config/mikrotik');
+            onlineLoginSet = await getActivePppoeLoginNamesSet();
+        } catch (e) {
+            logger.warn('[mobile-adapter] network-map PPPoE batch:', e.message || e);
+        }
+        const enrichedCustomers = (customers || []).map((r) => {
+            const login =
+                (r.pppoe_username && String(r.pppoe_username).trim()) ||
+                (r.username && String(r.username).trim()) ||
+                '';
+            let pppoeActive = null;
+            if (login) {
+                pppoeActive = onlineLoginSet.has(login);
+            }
+            const networkDown = pppoeActive === false;
+            return {
+                ...sqliteJsonSafeRow(r),
+                pppoe_active: pppoeActive,
+                network_down: networkDown,
+                down_reason: networkDown ? 'PPPoE inactive' : null
+            };
+        });
+        const downCustomerIdSet = new Set(
+            enrichedCustomers.filter((c) => c.network_down === true).map((c) => Number(c.id))
+        );
+
         res.json({
             success: true,
             data: {
@@ -2282,13 +2565,18 @@ router.get('/network-map', verifyToken, requireTechnician, async (req, res) => {
                     latitude: parseFloat(r.latitude),
                     longitude: parseFloat(r.longitude)
                 })),
-                customers: customers.map((r) => ({
+                customers: enrichedCustomers.map((r) => ({
                     ...r,
                     latitude: parseFloat(r.latitude),
                     longitude: parseFloat(r.longitude)
                 })),
                 cableRoutes: cableRoutes.map((r) => ({
                     ...r,
+                    status:
+                        r.status === 'connected' && downCustomerIdSet.has(Number(r.customer_id))
+                            ? 'disconnected'
+                            : r.status,
+                    network_down: downCustomerIdSet.has(Number(r.customer_id)),
                     customer_lat: parseFloat(r.customer_lat),
                     customer_lng: parseFloat(r.customer_lng),
                     odp_lat: parseFloat(r.odp_lat),

@@ -276,6 +276,51 @@
                 </a>
             </div>
 
+            <!-- ====== OPERASIONAL HARI INI ====== -->
+            <% const ops = (typeof operationalStats !== 'undefined' && operationalStats) ? operationalStats : {}; %>
+            <% 
+                const pendingInstallations = Number(ops.pendingInstallations || 0);
+                const pendingTroubleTickets = Number(ops.pendingTroubleTickets || 0);
+                const employeesAttendedToday = Number(ops.employeesAttendedToday || 0);
+
+                const clsPendingInstallations = pendingInstallations === 0 ? 'stat-emerald' : (pendingInstallations <= 5 ? 'stat-amber' : 'stat-rose');
+                const clsPendingTrouble = pendingTroubleTickets === 0 ? 'stat-emerald' : (pendingTroubleTickets <= 10 ? 'stat-amber' : 'stat-rose');
+                const clsAttendanceToday = employeesAttendedToday >= 5 ? 'stat-emerald' : (employeesAttendedToday >= 1 ? 'stat-amber' : 'stat-rose');
+            %>
+            <div class="db-section-label"><i class="bi bi-clipboard2-data-fill me-2"></i>Operasional Hari Ini</div>
+            <div class="row mb-4">
+                <div class="col-lg-4 mb-3">
+                    <a href="/admin/installations" class="stat-card-big <%= clsPendingInstallations %> h-100 d-block text-decoration-none" id="sc-pending-installations">
+                        <div class="sc-header">
+                            <span class="sc-label">Pending Job Instalasi</span>
+                            <span class="sc-badge"><i class="bi bi-tools me-1"></i> Teknisi</span>
+                        </div>
+                        <div class="sc-value"><%= pendingInstallations %></div>
+                        <div class="sc-sub">Status scheduled / assigned / in progress</div>
+                    </a>
+                </div>
+                <div class="col-lg-4 mb-3">
+                    <a href="/admin/trouble" class="stat-card-big <%= clsPendingTrouble %> h-100 d-block text-decoration-none" id="sc-pending-trouble">
+                        <div class="sc-header">
+                            <span class="sc-label">Pending Tiket Gangguan</span>
+                            <span class="sc-badge"><i class="bi bi-exclamation-triangle-fill me-1"></i> Trouble</span>
+                        </div>
+                        <div class="sc-value"><%= pendingTroubleTickets %></div>
+                        <div class="sc-sub">Tiket open / pending / in progress</div>
+                    </a>
+                </div>
+                <div class="col-lg-4 mb-3">
+                    <a href="/admin/employees/attendance" class="stat-card-big <%= clsAttendanceToday %> h-100 d-block text-decoration-none" id="sc-attendance-today">
+                        <div class="sc-header">
+                            <span class="sc-label">Karyawan Sudah Absen</span>
+                            <span class="sc-badge"><i class="bi bi-calendar-check-fill me-1"></i> Hari Ini</span>
+                        </div>
+                        <div class="sc-value"><%= employeesAttendedToday %></div>
+                        <div class="sc-sub">Jumlah karyawan unik yang tercatat absen hari ini</div>
+                    </a>
+                </div>
+            </div>
+
             <!-- ====== NAS MONITORING ====== -->
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div class="db-section-label m-0"><i class="bi bi-router-fill me-2"></i>Monitoring NAS & Traffic</div>

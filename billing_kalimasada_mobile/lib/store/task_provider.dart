@@ -57,11 +57,12 @@ class TaskProvider extends ChangeNotifier {
       final response = await ApiClient.get('/api/mobile-adapter/tasks');
       
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          _tasks = data['data'];
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (ApiClient.jsonSuccess(data['success'])) {
+          final raw = data['data'];
+          _tasks = raw is List ? raw : <dynamic>[];
         } else {
-          _error = data['message'];
+          _error = data['message']?.toString();
         }
       } else {
         _error = 'Gagal memuat data tugas';
@@ -85,7 +86,7 @@ class TaskProvider extends ChangeNotifier {
       final response = await ApiClient.get('/api/mobile-adapter/performance/week');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        if (data['success'] == true && data['data'] is Map) {
+        if (ApiClient.jsonSuccess(data['success']) && data['data'] is Map) {
           final inner = Map<String, dynamic>.from(data['data'] as Map);
           final rawDays = inner['days'];
           final list = <Map<String, dynamic>>[];

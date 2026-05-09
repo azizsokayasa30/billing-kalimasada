@@ -24,7 +24,20 @@
         }
         .qr-container { max-width: 100%; margin: 0 auto; padding: 20px; border-radius: 12px; }
         #wa-qr-container { min-height: 250px; align-items: center; }
-        #wa-qr-div { padding: 10px; border-radius: 8px; box-shadow: var(--km-shadow-sm); }
+        #wa-qr-div {
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: var(--km-shadow-sm);
+            background: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #wa-qr-div canvas,
+        #wa-qr-div img {
+            display: block;
+            background: #ffffff;
+        }
         .command-card { border-radius: 8px; padding: 15px; margin-bottom: 15px; transition: all 0.3s ease; }
         .command-card:hover { box-shadow: var(--km-shadow-md); transform: translateY(-2px); }
         .command-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
@@ -1292,7 +1305,7 @@ $(function() {
     });
     // WhatsApp QR & Status - Didefinisikan di scope global agar bisa diakses dari semua block
     window.loadWAStatus = function() {
-        $.ajax({
+        return $.ajax({
             url: '/admin/settings/wa-status',
             method: 'GET',
             dataType: 'json',
@@ -1339,13 +1352,15 @@ $(function() {
                                 // Coba buat QR code langsung
                                 new QRCode(qrDiv[0], {
                                     text: res.qr,
-                                    width: 220,
-                                    height: 220,
+                                    // QR WhatsApp cukup padat, gunakan ukuran lebih besar supaya mudah dipindai kamera.
+                                    width: 320,
+                                    height: 320,
                                     colorDark: '#000000',
                                     colorLight: '#ffffff',
                                     correctLevel: QRCode.CorrectLevel.M || 2
                                 });
                                 console.log('QR Code generated successfully');
+                                $('#wa-status').append(`<div class="text-info small mt-2"><i class="bi bi-info-circle"></i> Scan dari WhatsApp > Perangkat tertaut. QR akan berubah otomatis tiap beberapa detik.</div>`);
                             } catch (e) {
                                 console.error('Error generating QR code:', e);
                                 // Fallback: tampilkan QR sebagai text atau image
@@ -1390,18 +1405,53 @@ $(function() {
     // loadWAStatus() akan dipanggil oleh toggleBaileysContent() saat enabled
     // Jangan panggil loadWAStatus() di sini karena akan dipanggil setelah toggleBaileysContent()
     
+    let waRefreshPolling = null;
     $('#btnRefreshQR').on('click', function(e) {
         e.preventDefault();
         // Hanya refresh jika Baileys enabled
-        if ($('#baileys_enabled').is(':checked')) {
-            $.post('/admin/settings/wa-refresh', function() {
-                if (typeof window.loadWAStatus === 'function') {
-                    window.loadWAStatus();
-                } else if (typeof loadWAStatus === 'function') {
-                    loadWAStatus();
-                }
-            });
+        if (!$('#baileys_enabled').is(':checked')) {
+            showNotification('warning', 'Baileys belum diaktifkan. Centang "Enable Baileys" terlebih dahulu.');
+            return;
         }
+        const $btn = $(this);
+        const originalHtml = $btn.html();
+        $btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Refreshing...');
+
+        $.post('/admin/settings/wa-refresh')
+            .done(function(resp) {
+                showNotification('info', (resp && resp.message) || 'Sesi direset, menunggu QR code baru...');
+
+                // Bersihkan polling lama jika ada
+                if (waRefreshPolling) {
+                    clearInterval(waRefreshPolling);
+                    waRefreshPolling = null;
+                }
+
+                let attempts = 0;
+                const maxAttempts = 20; // ~40 detik (tiap 2 detik)
+                waRefreshPolling = setInterval(function() {
+                    attempts += 1;
+                    if (typeof window.loadWAStatus === 'function') {
+                        window.loadWAStatus();
+                    }
+                    // Stop polling jika QR sudah muncul di container
+                    const hasQrDom = $('#wa-qr-div canvas').length > 0 || $('#wa-qr-div img').length > 0;
+                    if (hasQrDom || attempts >= maxAttempts) {
+                        clearInterval(waRefreshPolling);
+                        waRefreshPolling = null;
+                        if (!hasQrDom && attempts >= maxAttempts) {
+                            showNotification('warning', 'QR belum muncul. Coba refresh sekali lagi atau restart PM2.');
+                        }
+                    }
+                }, 2000);
+            })
+            .fail(function(xhr) {
+                const msg = (xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) || 'Gagal refresh QR';
+                showNotification('danger', msg);
+            })
+            .always(function() {
+                $btn.prop('disabled', false).html(originalHtml);
+            });
     });
     $('#btnDeleteSession').on('click', function(e) {
         e.preventDefault();

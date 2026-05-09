@@ -131,23 +131,57 @@ router.post('/add', adminAuth, async (req, res) => {
             cleanPhone = '0' + cleanPhone.slice(2);
         }
 
-        // Check if phone already exists
+        // Hash password if provided
+        const hashedPassword = password ? bcrypt.hashSync(password, 10) : null;
+
+        // Check if phone already exists (including inactive rows)
         const existingTechnician = await new Promise((resolve, reject) => {
-            db.get('SELECT id FROM technicians WHERE phone = ?', [cleanPhone], (err, row) => {
+            db.get('SELECT id, name, role, is_active FROM technicians WHERE phone = ?', [cleanPhone], (err, row) => {
                 if (err) reject(err);
                 else resolve(row);
             });
         });
 
         if (existingTechnician) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Nomor telepon sudah terdaftar' 
+            // Jika teknisi lama nonaktif, aktifkan kembali agar admin tidak terjebak "nomor belum ada di list".
+            if (Number(existingTechnician.is_active) === 0) {
+                const reactivated = await new Promise((resolve, reject) => {
+                    const sql = `
+                        UPDATE technicians
+                        SET name = ?, role = ?, area_coverage = ?, whatsapp_group_id = ?, password = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    `;
+                    db.run(
+                        sql,
+                        [name, role, notes || 'Area Default', whatsapp_group_id || null, hashedPassword, existingTechnician.id],
+                        function (err) {
+                            if (err) reject(err);
+                            else resolve({ changes: this.changes });
+                        }
+                    );
+                });
+
+                if (reactivated.changes > 0) {
+                    logger.info(`Technician reactivated: ${name} (${cleanPhone}) with role: ${role}`);
+                    return res.json({
+                        success: true,
+                        message: 'Teknisi lama ditemukan dan berhasil diaktifkan kembali',
+                        technician: {
+                            id: existingTechnician.id,
+                            name,
+                            phone: cleanPhone,
+                            role,
+                            area_coverage: notes || 'Area Default'
+                        }
+                    });
+                }
+            }
+
+            return res.status(400).json({
+                success: false,
+                message: 'Nomor telepon sudah terdaftar'
             });
         }
-
-        // Hash password if provided
-        const hashedPassword = password ? bcrypt.hashSync(password, 10) : null;
 
         // Insert new technician
         const result = await new Promise((resolve, reject) => {

@@ -6,6 +6,7 @@ const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 const billingManager = require('../config/billing');
 const logger = require('../config/logger');
+const { syncCustomerToRadius } = require('../utils/radiusCustomerSync');
 const serviceSuspension = require('../config/serviceSuspension');
 const { getSetting, getSettingsWithCache, setSetting, clearSettingsCache } = require('../config/settingsManager');
 const { getPaymentGatewayConfig, setActivePaymentGateway, updatePaymentGatewayConfig: updatePaymentGatewayConfigStore } = require('../config/paymentGatewayConfig');
@@ -91,11 +92,172 @@ router.use(express.json());
 // Enable form submissions (application/x-www-form-urlencoded)
 router.use(express.urlencoded({ extended: true }));
 
+// One-time bypass import mode:
+// - Active by default for the next single customer import request
+// - After consumed once, automatically returns to normal import rules
+let oneTimeImportBypassRemaining = 1;
+const consumeOneTimeImportBypass = () => {
+    if (oneTimeImportBypassRemaining > 0) {
+        oneTimeImportBypassRemaining -= 1;
+        return true;
+    }
+    return false;
+};
+
 // Helper: validate optional base URL (allow empty, otherwise must start with http/https)
 const isValidOptionalHttpUrl = (v) => {
     const s = String(v ?? '').trim();
     if (!s) return true;
     return /^https?:\/\//i.test(s);
+};
+
+/** True jika paket punya profil PPPoE/RADIUS (kolom pppoe_profile terisi). Paket billing-only menyimpan NULL di kolom ini. */
+function packageUsesPPPoEProfile(pkg) {
+    if (!pkg || pkg.pppoe_profile == null) return false;
+    return String(pkg.pppoe_profile).trim() !== '';
+}
+
+/** Gabungan profil dari form + definisi paket; paket non-PPPoE menghasilkan null (bukan string 'default'). */
+function resolveCustomerPppoeProfile(explicitProfile, packageRow, fallbackCustomerProfile) {
+    const ex = explicitProfile != null ? String(explicitProfile).trim() : '';
+    if (ex) return ex;
+    if (packageRow && packageUsesPPPoEProfile(packageRow)) {
+        return String(packageRow.pppoe_profile).trim();
+    }
+    const fb = fallbackCustomerProfile != null ? String(fallbackCustomerProfile).trim() : '';
+    return fb || null;
+}
+
+/** Impor pelanggan: normalisasi join_date ke YYYY-MM-DD. Mendukung dd-mm-yy, serial Excel, tanggal JS, dan dd-MonthName-yyyy (mis. 01-October-2024). */
+function parseCustomerImportJoinDate(value) {
+    if (value === null || value === undefined || value === '') return null;
+    if (value instanceof Date && !isNaN(value.getTime())) {
+        return value.toISOString().slice(0, 10);
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const jsDate = new Date(Math.round((value - 25569) * 86400 * 1000));
+        return isNaN(jsDate.getTime()) ? null : jsDate.toISOString().slice(0, 10);
+    }
+    const asString = String(value).trim();
+    if (!asString) return null;
+
+    // e.g. 01-October-2024, 1-Oct-2024 (English month; case-insensitive)
+    const dMonthYear = asString.match(/^(\d{1,2})-([A-Za-z]+)-(\d{4})$/);
+    if (dMonthYear) {
+        const day = parseInt(dMonthYear[1], 10);
+        const monthKey = dMonthYear[2].toLowerCase();
+        const year = parseInt(dMonthYear[3], 10);
+        const MONTHS = {
+            january: 1,
+            february: 2,
+            march: 3,
+            april: 4,
+            may: 5,
+            june: 6,
+            july: 7,
+            august: 8,
+            september: 9,
+            october: 10,
+            november: 11,
+            december: 12,
+            jan: 1,
+            feb: 2,
+            mar: 3,
+            apr: 4,
+            jun: 6,
+            jul: 7,
+            aug: 8,
+            sep: 9,
+            oct: 10,
+            nov: 11,
+            dec: 12
+        };
+        const month = MONTHS[monthKey];
+        if (month && year >= 1900 && year <= 2100 && day >= 1 && day <= 31) {
+            const parsed = new Date(Date.UTC(year, month - 1, day));
+            if (
+                !isNaN(parsed.getTime()) &&
+                parsed.getUTCFullYear() === year &&
+                parsed.getUTCMonth() === month - 1 &&
+                parsed.getUTCDate() === day
+            ) {
+                return `${year.toString().padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            }
+        }
+        return null;
+    }
+
+    const ddmmyy = asString.match(/^(\d{2})-(\d{2})-(\d{2})$/);
+    if (ddmmyy) {
+        const day = parseInt(ddmmyy[1], 10);
+        const month = parseInt(ddmmyy[2], 10);
+        const yy = parseInt(ddmmyy[3], 10);
+        const fullYear = yy >= 70 ? (1900 + yy) : (2000 + yy);
+        const parsedDdmmyy = new Date(Date.UTC(fullYear, month - 1, day));
+        if (
+            !isNaN(parsedDdmmyy.getTime()) &&
+            parsedDdmmyy.getUTCFullYear() === fullYear &&
+            parsedDdmmyy.getUTCMonth() === month - 1 &&
+            parsedDdmmyy.getUTCDate() === day
+        ) {
+            return `${fullYear.toString().padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
+    }
+
+    const parsed = new Date(asString);
+    if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString().slice(0, 10);
+    }
+    return null;
+}
+
+// Ensure import can accept duplicate phone numbers by removing UNIQUE constraint on customers.phone.
+// This migration is idempotent and only runs when the table definition still enforces UNIQUE(phone).
+const ensureCustomersPhoneNonUnique = async (db) => {
+    const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+    });
+    const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
+        db.run(sql, params, function (err) {
+            if (err) return reject(err);
+            resolve(this);
+        });
+    });
+
+    const tableInfo = await dbGet(
+        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'customers'`
+    );
+    const currentSql = String((tableInfo && tableInfo.sql) || '');
+    if (!/phone\s+TEXT\s+UNIQUE\s+NOT\s+NULL/i.test(currentSql)) return;
+
+    const migratedSql = currentSql.replace(
+        /phone\s+TEXT\s+UNIQUE\s+NOT\s+NULL/i,
+        'phone TEXT NOT NULL'
+    );
+    if (migratedSql === currentSql) return;
+
+    await dbRun('BEGIN IMMEDIATE');
+    try {
+        await dbRun('PRAGMA foreign_keys = OFF');
+        await dbRun(`ALTER TABLE customers RENAME TO customers_backup_phone_unique_mig`);
+        await dbRun(migratedSql);
+
+        const cols = await new Promise((resolve, reject) => {
+            db.all(`PRAGMA table_info(customers_backup_phone_unique_mig)`, [], (err, rows) => {
+                if (err) return reject(err);
+                resolve((rows || []).map((r) => r.name).filter(Boolean));
+            });
+        });
+        const colList = cols.map((c) => `"${c}"`).join(', ');
+        await dbRun(`INSERT INTO customers (${colList}) SELECT ${colList} FROM customers_backup_phone_unique_mig`);
+        await dbRun(`DROP TABLE customers_backup_phone_unique_mig`);
+        await dbRun('PRAGMA foreign_keys = ON');
+        await dbRun('COMMIT');
+        logger.warn('[IMPORT] Migrasi customers.phone UNIQUE -> non-UNIQUE selesai');
+    } catch (err) {
+        try { await dbRun('ROLLBACK'); } catch (_) {}
+        throw err;
+    }
 };
 
 // Helper: resolve period from month/year (fallback ke current month)
@@ -2492,10 +2654,10 @@ router.get('/import/customers/template', async (req, res) => {
             'address',
             'latitude',
             'longitude',
-            'package_id',
+            'package',
             'odp_id',
             'area',
-            'area_id',
+            'join_date',
             'pppoe_username',
             'pppoe_password',
             'pppoe_profile',
@@ -2529,16 +2691,16 @@ router.get('/import/customers/template', async (req, res) => {
             'Jl. Contoh No. 1',
             '-6.253011',
             '107.923009',
-            '1',
+            'Paket 10 Mbps',
             '',
             'Wilayah A',
-            '',
+            '08-05-26',
             'userpppoe',
             'rahasiaPPP',
             'default',
             '',
             'active',
-            '1',
+            'ya',
             '15',
             'renewal',
             '',
@@ -2566,16 +2728,16 @@ router.get('/import/customers/template', async (req, res) => {
             ['address', 'Alamat pemasangan. Boleh header "Alamat" / "alamat".'],
             ['latitude', 'Garis lintang (desimal). Opsional; kosong saat create = default peta server.'],
             ['longitude', 'Garis bujur (desimal).'],
-            ['package_id', 'ID paket (angka) dari tabel packages. Wajib untuk tagihan otomatis yang mengikat paket.'],
+            ['package *', 'Nama paket (teks) sesuai data di menu Paket. Wajib. Sistem akan otomatis mencari ID paketnya.'],
             ['odp_id', 'ID ODP (angka) jika sudah terdaftar — memicu pembuatan cable_routes saat pelanggan baru.'],
             ['area', 'Nama wilayah / cluster (teks).'],
-            ['area_id', 'ID wilayah jika dipakai di database.'],
+            ['join_date', 'Tanggal bergabung. Format: dd-mm-yy atau 01-October-2024. Opsional.'],
             ['pppoe_username', 'Login PPPoE di Mikrotik/RADIUS. Boleh header "PPPoE Username".'],
             ['pppoe_password', 'Password PPPoE. Jika diisi bersama username, sistem mencoba push ke router/RADIUS.'],
             ['pppoe_profile', 'Profil PPPoE Mikrotik, default "default".'],
             ['router_id', 'ID router (angka) dari halaman router, atau kosong / "RADIUS" untuk mode RADIUS.'],
             ['status', 'active, suspended, register, nonaktif, dll. Default active.'],
-            ['auto_suspension', '1 = ikut auto suspension, 0 = tidak. Default 1.'],
+            ['auto_suspension', 'ya = ikut auto suspension, tidak = nonaktifkan auto suspension. Default ya. (0/1 tetap didukung)'],
             ['billing_day', 'Tanggal tagih 1–28. Default 15.'],
             ['renewal_type', 'renewal atau fix_date (sesuai pengaturan paket pelanggan).'],
             ['fix_date', 'Jika renewal_type = fix_date, tanggal 1–28.'],
@@ -2605,9 +2767,402 @@ router.get('/import/customers/template', async (req, res) => {
     }
 });
 
+const IMPORT_STAGING_DIR = path.join(__dirname, '../tmp/customer-import-staging');
+const importCommitJobs = new Map();
+const IMPORT_COMMIT_JOB_DIR = path.join(IMPORT_STAGING_DIR, 'jobs');
+
+function ensureImportStagingDir() {
+    if (!fs.existsSync(IMPORT_STAGING_DIR)) {
+        fs.mkdirSync(IMPORT_STAGING_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(IMPORT_COMMIT_JOB_DIR)) {
+        fs.mkdirSync(IMPORT_COMMIT_JOB_DIR, { recursive: true });
+    }
+}
+
+function isValidStageId(stageId) {
+    return /^[a-zA-Z0-9_-]{16,80}$/.test(String(stageId || ''));
+}
+
+function getStageFilePaths(stageId) {
+    return {
+        metaPath: path.join(IMPORT_STAGING_DIR, `${stageId}.json`),
+        dataPath: path.join(IMPORT_STAGING_DIR, `${stageId}.bin`)
+    };
+}
+
+function cleanupExpiredImportStages(maxAgeMs = 24 * 60 * 60 * 1000) {
+    try {
+        ensureImportStagingDir();
+        const now = Date.now();
+        const files = fs.readdirSync(IMPORT_STAGING_DIR);
+        for (const file of files) {
+            const fullPath = path.join(IMPORT_STAGING_DIR, file);
+            try {
+                const st = fs.statSync(fullPath);
+                if ((now - st.mtimeMs) > maxAgeMs) {
+                    fs.unlinkSync(fullPath);
+                }
+            } catch (_) {
+                // ignore malformed file while cleaning
+            }
+        }
+    } catch (_) {
+        // ignore cleanup errors
+    }
+}
+
+function cleanupExpiredCommitJobs(maxAgeMs = 6 * 60 * 60 * 1000) {
+    const now = Date.now();
+    for (const [jobId, job] of importCommitJobs.entries()) {
+        const createdAtMs = new Date(job.created_at || now).getTime();
+        if (!Number.isFinite(createdAtMs) || (now - createdAtMs) > maxAgeMs) {
+            importCommitJobs.delete(jobId);
+        }
+    }
+    try {
+        ensureImportStagingDir();
+        const files = fs.readdirSync(IMPORT_COMMIT_JOB_DIR);
+        for (const file of files) {
+            const p = path.join(IMPORT_COMMIT_JOB_DIR, file);
+            try {
+                const st = fs.statSync(p);
+                if ((now - st.mtimeMs) > maxAgeMs) fs.unlinkSync(p);
+            } catch (_) {
+                // ignore cleanup issue
+            }
+        }
+    } catch (_) {
+        // ignore cleanup issue
+    }
+}
+
+function getCommitJobFilePath(jobId) {
+    return path.join(IMPORT_COMMIT_JOB_DIR, `${jobId}.json`);
+}
+
+function persistCommitJob(job) {
+    try {
+        ensureImportStagingDir();
+        fs.writeFileSync(getCommitJobFilePath(job.job_id), JSON.stringify(job));
+    } catch (e) {
+        logger.warn('Failed to persist commit job status:', e.message);
+    }
+}
+
+function loadCommitJob(jobId) {
+    try {
+        const p = getCommitJobFilePath(jobId);
+        if (!fs.existsSync(p)) return null;
+        const raw = fs.readFileSync(p, 'utf8');
+        const parsed = raw ? JSON.parse(raw) : null;
+        return parsed && parsed.job_id ? parsed : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function updateCommitJob(jobId, patch = {}) {
+    if (!jobId) return null;
+    const fromMap = importCommitJobs.get(jobId) || null;
+    const base = fromMap || loadCommitJob(jobId);
+    if (!base) return null;
+    const next = { ...base, ...patch };
+    importCommitJobs.set(jobId, next);
+    persistCommitJob(next);
+    return next;
+}
+
+async function parseImportFileSummary({ sourceType, buffer }) {
+    if (sourceType === 'xlsx') {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const worksheet = workbook.worksheets[0];
+        if (!worksheet) {
+            throw new Error('Worksheet tidak ditemukan dalam file XLSX');
+        }
+        let totalRows = 0;
+        for (let i = 2; i <= worksheet.rowCount; i++) {
+            const row = worksheet.getRow(i);
+            let hasValue = false;
+            row.eachCell({ includeEmpty: false }, (cell) => {
+                const val = cell.value;
+                if (val !== null && val !== undefined && String(val).trim() !== '') hasValue = true;
+            });
+            if (hasValue) totalRows++;
+        }
+        return { total_rows: totalRows };
+    }
+
+    const content = buffer.toString('utf8');
+    let payload;
+    try {
+        payload = JSON.parse(content);
+    } catch (_) {
+        throw new Error('Format JSON tidak valid');
+    }
+    const items = Array.isArray(payload) ? payload : (payload.customers || []);
+    if (!Array.isArray(items)) {
+        throw new Error('Format JSON tidak valid (harus array atau { customers: [] })');
+    }
+    return { total_rows: items.length };
+}
+
+router.post('/import/customers/stage', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file || !req.file.buffer) {
+            return res.status(400).json({ success: false, message: 'File import tidak ditemukan' });
+        }
+
+        cleanupExpiredImportStages();
+        ensureImportStagingDir();
+
+        const originalName = String(req.file.originalname || 'import-file').trim();
+        const lowerName = originalName.toLowerCase();
+        const sourceType = lowerName.endsWith('.xlsx') ? 'xlsx' : (lowerName.endsWith('.json') ? 'json' : null);
+        if (!sourceType) {
+            return res.status(400).json({ success: false, message: 'Format file harus .xlsx atau .json' });
+        }
+
+        const summary = await parseImportFileSummary({ sourceType, buffer: req.file.buffer });
+        const stageId = `stg_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+        const createdAtIso = new Date().toISOString();
+        const expiresAtIso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const { metaPath, dataPath } = getStageFilePaths(stageId);
+
+        const meta = {
+            stage_id: stageId,
+            source_type: sourceType,
+            original_name: originalName,
+            mime_type: req.file.mimetype || '',
+            byte_size: req.file.buffer.length,
+            total_rows: summary.total_rows || 0,
+            created_at: createdAtIso,
+            expires_at: expiresAtIso
+        };
+
+        fs.writeFileSync(dataPath, req.file.buffer);
+        fs.writeFileSync(metaPath, JSON.stringify(meta));
+
+        return res.json({
+            success: true,
+            stage_id: stageId,
+            source_type: sourceType,
+            original_name: originalName,
+            total_rows: meta.total_rows,
+            created_at: createdAtIso,
+            expires_at: expiresAtIso
+        });
+    } catch (error) {
+        logger.error('Error staging customer import file:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal upload file ke staging',
+            error: error.message
+        });
+    }
+});
+
+router.post('/import/customers/commit/:stageId', async (req, res) => {
+    try {
+        const stageId = String(req.params.stageId || '').trim();
+        if (!isValidStageId(stageId)) {
+            return res.status(400).json({ success: false, message: 'stage_id tidak valid' });
+        }
+
+        ensureImportStagingDir();
+        const { metaPath, dataPath } = getStageFilePaths(stageId);
+        if (!fs.existsSync(metaPath) || !fs.existsSync(dataPath)) {
+            return res.status(404).json({ success: false, message: 'Data staging tidak ditemukan atau sudah kedaluwarsa' });
+        }
+
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        const sourceType = meta && meta.source_type;
+        if (sourceType !== 'xlsx' && sourceType !== 'json') {
+            return res.status(400).json({ success: false, message: 'Jenis staging file tidak didukung' });
+        }
+
+        cleanupExpiredCommitJobs();
+        const existingJobEntry = Array.from(importCommitJobs.values()).find(
+            (j) => j && j.stage_id === stageId && (j.status === 'queued' || j.status === 'running')
+        );
+        if (existingJobEntry) {
+            return res.json({
+                success: true,
+                queued: true,
+                stage_id: stageId,
+                source_type: sourceType,
+                job_id: existingJobEntry.job_id
+            });
+        }
+
+        const jobId = `job_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+        const job = {
+            job_id: jobId,
+            stage_id: stageId,
+            source_type: sourceType,
+            status: 'queued',
+            created_at: new Date().toISOString(),
+            started_at: null,
+            finished_at: null,
+            result: null,
+            error: null,
+            progress: {
+                total_rows: Number(meta.total_rows || 0),
+                processed_rows: 0,
+                success_rows: 0,
+                failed_rows: 0,
+                percentage: 0
+            }
+        };
+        importCommitJobs.set(jobId, job);
+        persistCommitJob(job);
+
+        setImmediate(async () => {
+            job.status = 'running';
+            job.started_at = new Date().toISOString();
+            persistCommitJob(job);
+            try {
+                const dataBuffer = fs.readFileSync(dataPath);
+                const endpoint = `${req.protocol}://${req.get('host')}${req.baseUrl}/import/customers/${sourceType}`;
+                const fd = new FormData();
+                fd.append('file', new Blob([dataBuffer]), meta.original_name || `import.${sourceType}`);
+
+                const upstreamResp = await fetch(endpoint, {
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        cookie: req.headers.cookie || '',
+                        'x-import-fast-mode': '1',
+                        'x-import-job-id': jobId,
+                        'x-import-bypass-once': String(req.headers['x-import-bypass-once'] || '')
+                    }
+                });
+
+                const upstreamRaw = await upstreamResp.text();
+                let upstreamJson = null;
+                try {
+                    upstreamJson = upstreamRaw ? JSON.parse(upstreamRaw) : null;
+                } catch (_) {
+                    upstreamJson = null;
+                }
+
+                if (!upstreamResp.ok || !upstreamJson || !upstreamJson.success) {
+                    throw new Error(
+                        (upstreamJson && (upstreamJson.message || upstreamJson.error)) ||
+                        (upstreamRaw && upstreamRaw.slice(0, 1000)) ||
+                        `Gagal commit import (${upstreamResp.status})`
+                    );
+                }
+
+                job.status = 'finished';
+                job.result = {
+                    success: true,
+                    stage_id: stageId,
+                    source_type: sourceType,
+                    ...upstreamJson
+                };
+                persistCommitJob(job);
+                try {
+                    fs.unlinkSync(metaPath);
+                    fs.unlinkSync(dataPath);
+                } catch (_) {
+                    // non-fatal
+                }
+            } catch (err) {
+                job.status = 'failed';
+                job.error = String(err && err.message ? err.message : err);
+                persistCommitJob(job);
+                logger.error('Background import commit failed:', err);
+            } finally {
+                job.finished_at = new Date().toISOString();
+                persistCommitJob(job);
+            }
+        });
+
+        return res.json({
+            success: true,
+            queued: true,
+            stage_id: stageId,
+            source_type: sourceType,
+            job_id: jobId
+        });
+    } catch (error) {
+        logger.error('Error committing staged customer import:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal memproses import dari staging',
+            error: error.message
+        });
+    }
+});
+
+router.get('/import/customers/commit-status/:jobId', async (req, res) => {
+    try {
+        const jobId = String(req.params.jobId || '').trim();
+        if (!jobId) {
+            return res.status(400).json({ success: false, message: 'job_id wajib diisi' });
+        }
+        let job = importCommitJobs.get(jobId);
+        if (!job) {
+            const loaded = loadCommitJob(jobId);
+            if (loaded) {
+                job = loaded;
+                importCommitJobs.set(jobId, loaded);
+            }
+        }
+        if (!job) {
+            return res.status(404).json({ success: false, message: 'Job import tidak ditemukan atau sudah kedaluwarsa' });
+        }
+
+        if (job.status === 'finished') {
+            return res.json({
+                success: true,
+                status: 'finished',
+                ...job.result,
+                progress: job.progress || null,
+                job_id: jobId
+            });
+        }
+
+        if (job.status === 'failed') {
+            return res.json({
+                success: false,
+                status: 'failed',
+                message: job.error || 'Job import gagal',
+                progress: job.progress || null,
+                job_id: jobId
+            });
+        }
+
+        return res.json({
+            success: true,
+            status: job.status,
+            stage_id: job.stage_id,
+            source_type: job.source_type,
+            progress: job.progress || null,
+            job_id: jobId
+        });
+    } catch (error) {
+        logger.error('Error getting commit job status:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal mengambil status commit import',
+            error: error.message
+        });
+    }
+});
+
 // Import customers from XLSX file
 router.post('/import/customers/xlsx', upload.single('file'), async (req, res) => {
+    let db = null;
+    let dbRun = null;
+    let transactionStarted = false;
     try {
+        const importFastMode = String(req.headers['x-import-fast-mode'] || '').trim() === '1';
+        const bypassRequested = String(req.headers['x-import-bypass-once'] || '').trim() === '1';
+        const importBypassMode = bypassRequested ? consumeOneTimeImportBypass() : false;
+        const importJobId = String(req.headers['x-import-job-id'] || '').trim();
         if (!req.file) {
             return res.status(400).json({ success: false, message: 'File XLSX tidak ditemukan' });
         }
@@ -2635,6 +3190,10 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
             'pppoe password': 'pppoe_password',
             email: 'email',
             alamat: 'address',
+            package: 'package_name',
+            'package name': 'package_name',
+            package_name: 'package_name',
+            'nama paket': 'package_name',
             'package id': 'package_id',
             'pppoe profile': 'pppoe_profile',
             status: 'status',
@@ -2646,13 +3205,13 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
             'id paket': 'package_id',
             'id odp': 'odp_id',
             wilayah: 'area',
-            'id wilayah': 'area_id',
-            'area id': 'area_id',
             'odp id': 'odp_id',
             username: 'username',
             'login password': 'login_password',
             'password login': 'login_password',
             'kata sandi login': 'login_password',
+            'join date': 'join_date',
+            'tanggal gabung': 'join_date',
             'renewal type': 'renewal_type',
             'fix date': 'fix_date',
             'tipe kabel': 'cable_type',
@@ -2675,8 +3234,61 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
             return col ? (row.getCell(col).value ?? '') : '';
         };
 
+        db = require('../config/billing').db;
+        await ensureCustomersPhoneNonUnique(db);
+        dbRun = (sql, params = []) => new Promise((resolve, reject) => {
+            db.run(sql, params, function (err) {
+                if (err) return reject(err);
+                resolve(this);
+            });
+        });
+        const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
+            db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+        });
+
+        // Revert log table for import operations
+        await dbRun(`
+            CREATE TABLE IF NOT EXISTS import_customer_operations (
+                id TEXT PRIMARY KEY,
+                source_type TEXT NOT NULL,
+                created_count INTEGER NOT NULL DEFAULT 0,
+                updated_count INTEGER NOT NULL DEFAULT 0,
+                failed_count INTEGER NOT NULL DEFAULT 0,
+                created_ids_json TEXT NOT NULL DEFAULT '[]',
+                updated_before_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        `);
+        const useAtomicImport = !importFastMode;
+        if (useAtomicImport) {
+            await dbRun('BEGIN IMMEDIATE');
+            transactionStarted = true;
+        }
+
         let created = 0, updated = 0, failed = 0;
         const errors = [];
+        const radiusSync = { attempted: 0, success: 0, failed: 0, skipped: 0 };
+        const opCreatedIds = [];
+        const opUpdatedBefore = [];
+        const totalRowsForProgress = Math.max(worksheet.rowCount - 1, 0);
+        let processedRows = 0;
+        let successRows = 0;
+        const reportProgress = (force = false) => {
+            if (!importJobId) return;
+            if (!force && processedRows % 10 !== 0 && processedRows !== totalRowsForProgress) return;
+            const percentage = totalRowsForProgress > 0
+                ? Math.min(99, Math.floor((processedRows / totalRowsForProgress) * 100))
+                : 99;
+            updateCommitJob(importJobId, {
+                progress: {
+                    total_rows: totalRowsForProgress,
+                    processed_rows: processedRows,
+                    success_rows: successRows,
+                    failed_rows: failed,
+                    percentage
+                }
+            });
+        };
 
         worksheet.eachRow((row, rowNumber) => {
             if (rowNumber === 1) return; // skip header
@@ -2684,7 +3296,7 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                 const name = String(getVal(row, 'name') || '').trim();
                 const phone = String(getVal(row, 'phone') || '').trim();
                 if (!name || !phone) {
-                    failed++; errors.push({ row: rowNumber, error: 'Nama/Phone wajib' }); return;
+                    failed++; errors.push({ row: rowNumber, name, phone, error: 'Nama/Phone wajib' }); return;
                 }
 
                 const cellStr = (key) => String(getVal(row, key) ?? '').trim();
@@ -2706,16 +3318,20 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                     latitude: cellNum('latitude'),
                     longitude: cellNum('longitude'),
                     package_id: getVal(row, 'package_id') ? Number(getVal(row, 'package_id')) : null,
+                    package_name: cellStr('package_name'),
                     odp_id: cellNum('odp_id'),
                     area: cellStr('area'),
-                    area_id: cellNum('area_id'),
+                    join_date: parseCustomerImportJoinDate(getVal(row, 'join_date')),
                     pppoe_profile: String(getVal(row, 'pppoe_profile') || 'default').trim(),
                     status: String(getVal(row, 'status') || 'active').trim(),
                     router_id: getVal(row, 'router_id') ? (isNaN(getVal(row, 'router_id')) ? getVal(row, 'router_id') : Number(getVal(row, 'router_id'))) : null,
                     auto_suspension: (() => {
-                        const v = getVal(row, 'auto_suspension');
-                        const n = parseInt(String(v), 10);
-                        return Number.isFinite(n) ? n : 1;
+                        const v = String(getVal(row, 'auto_suspension') ?? '').trim().toLowerCase();
+                        if (v === '') return 1;
+                        if (['ya', 'yes', 'y', 'true', 'aktif', 'on', '1'].includes(v)) return 1;
+                        if (['tidak', 'no', 'n', 'false', 'nonaktif', 'off', '0'].includes(v)) return 0;
+                        const n = parseInt(v, 10);
+                        return Number.isFinite(n) ? (n ? 1 : 0) : 1;
                     })(),
                     billing_day: (() => {
                         const rawVal = getVal(row, 'billing_day');
@@ -2743,6 +3359,45 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
             }
         });
 
+        const normalizePackageName = (v) => String(v || '')
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ');
+        const normalizePackageCompact = (v) => normalizePackageName(v).replace(/\s+/g, '');
+
+        const activePackages = await billingManager.getPackages();
+        const allPackagesByIdMap = await billingManager.getAllPackagesByIdMap();
+        const allPackages = Array.from(allPackagesByIdMap.values());
+        const packageCandidates = allPackages.length ? allPackages : activePackages;
+        const packageByName = new Map();
+        const packageByCompactName = new Map();
+        const packageById = new Map();
+        packageCandidates
+            .filter(pkg => pkg && pkg.id != null)
+            .forEach((pkg) => {
+                packageById.set(Number(pkg.id), pkg);
+                const norm = normalizePackageName(pkg.name);
+                const compact = normalizePackageCompact(pkg.name);
+                if (norm) packageByName.set(norm, pkg);
+                if (compact) packageByCompactName.set(compact, pkg);
+            });
+
+        const resolveAreaIdByName = async (areaName) => {
+            const area = String(areaName || '').trim();
+            if (!area) return null;
+            return await new Promise((resolve) => {
+                db.get(
+                    `SELECT id FROM areas WHERE LOWER(TRIM(nama_area)) = LOWER(TRIM(?)) LIMIT 1`,
+                    [area],
+                    (err, row) => {
+                        if (err) return resolve(null);
+                        resolve(row && row.id ? row.id : null);
+                    }
+                );
+            });
+        };
+
         // Now sequentially process rows for DB ops
         for (let r = 2; r <= worksheet.rowCount; r++) {
             const row = worksheet.getRow(r);
@@ -2752,7 +3407,7 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                 // Validasi data wajib
                 if (!raw.name || !raw.phone) {
                     failed++;
-                    errors.push({ row: r, error: 'Nama dan nomor telepon wajib diisi' });
+                    errors.push({ row: r, name: raw.name || '', phone: raw.phone || '', error: 'Nama dan nomor telepon wajib diisi' });
                     continue;
                 }
 
@@ -2760,29 +3415,83 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                 const phoneRegex = /^[0-9+\-\s()]+$/;
                 if (!phoneRegex.test(raw.phone)) {
                     failed++;
-                    errors.push({ row: r, error: 'Format nomor telepon tidak valid' });
+                    errors.push({ row: r, name: raw.name || '', phone: raw.phone || '', error: 'Format nomor telepon tidak valid' });
                     continue;
                 }
 
-                const existing = await billingManager.getCustomerByPhone(raw.phone);
+                let resolvedPackageId = null;
+                if (raw.package_id != null && Number.isFinite(raw.package_id) && packageById.has(Number(raw.package_id))) {
+                    resolvedPackageId = raw.package_id;
+                } else if (raw.package_name) {
+                    const packageText = String(raw.package_name).trim();
+                    // fallback: user accidentally puts numeric id in package column
+                    const numericFromText = Number(packageText);
+                    if (Number.isFinite(numericFromText) && packageById.has(numericFromText)) {
+                        resolvedPackageId = numericFromText;
+                    } else {
+                        const pkg =
+                            packageByName.get(normalizePackageName(packageText)) ||
+                            packageByCompactName.get(normalizePackageCompact(packageText));
+                        if (pkg && pkg.id) {
+                            resolvedPackageId = pkg.id;
+                        }
+                    }
+                }
+                if (!resolvedPackageId) {
+                    failed++;
+                    errors.push({
+                        row: r,
+                        name: raw.name || '',
+                        phone: raw.phone || '',
+                        error: `Paket tidak ditemukan: "${raw.package_name || raw.package_id || ''}". Gunakan nama paket yang sesuai.`
+                    });
+                    processedRows++;
+                    reportProgress();
+                    continue;
+                }
+
+                const resolvedAreaId = await resolveAreaIdByName(raw.area);
+
+                const pppoeUsernameKey = String(raw.pppoe_username || '').trim();
+                if (!pppoeUsernameKey) {
+                    failed++;
+                    errors.push({
+                        row: r,
+                        name: raw.name || '',
+                        phone: raw.phone || '',
+                        error: 'PPPoE username wajib diisi'
+                    });
+                    processedRows++;
+                    reportProgress();
+                    continue;
+                }
+                const existing = await dbGet(
+                    `SELECT * FROM customers WHERE TRIM(COALESCE(pppoe_username, '')) = ? LIMIT 1`,
+                    [pppoeUsernameKey]
+                );
                 const customerData = {
                     name: raw.name.trim(),
                     phone: raw.phone.trim(),
                     pppoe_username: raw.pppoe_username ? raw.pppoe_username.trim() : '',
+                    pppoe_password: raw.pppoe_password ? raw.pppoe_password.trim() : '',
                     email: raw.email ? raw.email.trim() : '',
                     address: raw.address ? raw.address.trim() : '',
-                    package_id: raw.package_id || null,
+                    package_id: resolvedPackageId,
                     pppoe_profile: raw.pppoe_profile || 'default',
                     status: raw.status || 'active',
                     auto_suspension: typeof raw.auto_suspension !== 'undefined' ? parseInt(raw.auto_suspension, 10) : 1,
                     billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day, 10), 1), 28) : 15
                 };
+                if (importFastMode) {
+                    customerData.__skip_genieacs_sync = true;
+                    customerData.__skip_radius_sync = true;
+                }
                 if (raw.username) customerData.username = raw.username.trim();
                 if (raw.login_password) customerData.password = raw.login_password;
                 if (raw.latitude != null) customerData.latitude = raw.latitude;
                 if (raw.longitude != null) customerData.longitude = raw.longitude;
                 if (raw.area) customerData.area = raw.area;
-                if (raw.area_id != null) customerData.area_id = raw.area_id;
+                if (resolvedAreaId != null) customerData.area_id = resolvedAreaId;
                 if (raw.odp_id != null) customerData.odp_id = raw.odp_id;
                 if (raw.renewal_type) customerData.renewal_type = raw.renewal_type;
                 if (raw.fix_date != null) customerData.fix_date = raw.fix_date;
@@ -2794,17 +3503,40 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
 
                 let result;
                 if (existing) {
+                    const beforeSnapshot = importFastMode ? null : await dbGet(`SELECT * FROM customers WHERE id = ?`, [existing.id]);
                     result = await billingManager.updateCustomer(raw.phone, customerData);
+                    if (raw.join_date) {
+                        await new Promise((resolve, reject) => {
+                            db.run(
+                                `UPDATE customers SET join_date = ? WHERE phone = ?`,
+                                [raw.join_date, raw.phone.trim()],
+                                (err) => (err ? reject(err) : resolve())
+                            );
+                        });
+                    }
+                    if (beforeSnapshot) opUpdatedBefore.push(beforeSnapshot);
                     updated++;
+                    successRows++;
                     logger.info(`Updated customer: ${raw.name} (${raw.phone})`);
                 } else {
                     result = await billingManager.createCustomer(customerData);
+                    if (raw.join_date) {
+                        await new Promise((resolve, reject) => {
+                            db.run(
+                                `UPDATE customers SET join_date = ? WHERE id = ?`,
+                                [raw.join_date, result.id],
+                                (err) => (err ? reject(err) : resolve())
+                            );
+                        });
+                    }
+                    if (result && result.id) opCreatedIds.push(result.id);
                     created++;
+                    successRows++;
                     logger.info(`Created customer: ${raw.name} (${raw.phone}) with ID: ${result.id}`);
                 }
 
                 // Handle PPPoE user creation/update if pppoe_username and password provided
-                if (raw.pppoe_username && raw.pppoe_password) {
+                if (!importFastMode && raw.pppoe_username && raw.pppoe_password) {
                     try {
                         const pppoe_username = String(raw.pppoe_username).trim();
                         const pppoe_password = String(raw.pppoe_password).trim();
@@ -2874,20 +3606,280 @@ router.post('/import/customers/xlsx', upload.single('file'), async (req, res) =>
                         // Don't fail the import if PPPoE creation fails, but log the error
                         errors.push({ row: r, error: `PPPoE creation failed: ${pppoeError.message}` });
                     }
-                } else {
+                } else if (!importFastMode) {
                     logger.debug(`[IMPORT] Skipping PPPoE user creation for ${raw.phone}: pppoe_username or pppoe_password not provided`);
+                } else {
+                    logger.debug(`[IMPORT] Fast mode enabled: skip PPPoE provisioning for ${raw.phone}`);
                 }
+
+                if (importFastMode) {
+                    const radiusUsername = (customerData.pppoe_username || (existing && existing.pppoe_username) || '').trim();
+                    if (!radiusUsername) {
+                        radiusSync.skipped++;
+                    } else {
+                        radiusSync.attempted++;
+                        try {
+                            const radiusRes = await syncCustomerToRadius(
+                                {
+                                    ...customerData,
+                                    pppoe_username: radiusUsername,
+                                    username: customerData.username || (existing && existing.username) || ''
+                                },
+                                {
+                                    ...customerData,
+                                    pppoe_password: raw.pppoe_password || '',
+                                    pppoe_profile: customerData.pppoe_profile,
+                                    status: customerData.status
+                                }
+                            );
+                            if (radiusRes && radiusRes.success) radiusSync.success++;
+                            else if (radiusRes && radiusRes.skipped) radiusSync.skipped++;
+                            else radiusSync.failed++;
+                        } catch (radiusErr) {
+                            radiusSync.failed++;
+                            logger.warn(`[IMPORT-RADIUS] Sync failed for ${radiusUsername}: ${radiusErr.message}`);
+                        }
+                    }
+                }
+                processedRows++;
+                reportProgress();
             } catch (e) {
                 failed++;
-                errors.push({ row: r, error: e.message });
+                errors.push({ row: r, name: raw && raw.name ? raw.name : '', phone: raw && raw.phone ? raw.phone : '', error: e.message });
                 logger.error(`Error processing row ${r}:`, e);
+                processedRows++;
+                reportProgress();
             }
         }
 
-        res.json({ success: true, summary: { created, updated, failed }, errors });
+        const operationId = `import_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        if (useAtomicImport) {
+            await dbRun(
+                `INSERT INTO import_customer_operations
+                (id, source_type, created_count, updated_count, failed_count, created_ids_json, updated_before_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    operationId,
+                    'xlsx',
+                    created,
+                    updated,
+                    failed,
+                    JSON.stringify(opCreatedIds),
+                    JSON.stringify(opUpdatedBefore)
+                ]
+            );
+            await dbRun('COMMIT');
+            transactionStarted = false;
+        }
+        if (importJobId) {
+            updateCommitJob(importJobId, {
+                progress: {
+                    total_rows: totalRowsForProgress,
+                    processed_rows: totalRowsForProgress,
+                    success_rows: created + updated,
+                    failed_rows: failed,
+                    percentage: 100
+                }
+            });
+        }
+
+        const responsePayload = {
+            success: true,
+            operation_id: useAtomicImport ? operationId : null,
+            summary: {
+                created,
+                updated,
+                failed,
+                total: Math.max(worksheet.rowCount - 1, 0),
+                success_count: created + updated,
+                bypass_mode: true,
+                match_key: 'pppoe_username',
+                radius_sync: radiusSync
+            },
+            errors
+        };
+        if (importJobId) {
+            updateCommitJob(importJobId, {
+                status: 'finished',
+                result: responsePayload,
+                finished_at: new Date().toISOString(),
+                progress: {
+                    total_rows: totalRowsForProgress,
+                    processed_rows: totalRowsForProgress,
+                    success_rows: created + updated,
+                    failed_rows: failed,
+                    percentage: 100
+                }
+            });
+        }
+        res.json(responsePayload);
     } catch (error) {
+        if (transactionStarted && dbRun) {
+            try {
+                await dbRun('ROLLBACK');
+            } catch (rollbackError) {
+                logger.error('Error rolling back XLSX import transaction:', rollbackError);
+            }
+        }
+        const importJobId = String(req.headers['x-import-job-id'] || '').trim();
+        if (importJobId) {
+            updateCommitJob(importJobId, {
+                status: 'failed',
+                error: error.message,
+                finished_at: new Date().toISOString()
+            });
+        }
         logger.error('Error importing customers (XLSX):', error);
         res.status(500).json({ success: false, message: 'Error importing customers (XLSX)', error: error.message });
+    }
+});
+
+// Get latest customer import operation result (for frontend recovery when network drops)
+router.get('/import/customers/last-operation', async (req, res) => {
+    try {
+        const db = require('../config/billing').db;
+        const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
+            db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+        });
+
+        const sourceType = String(req.query.source_type || '').trim().toLowerCase();
+        const sinceMsRaw = Number(req.query.since_ms || 0);
+        const sinceMs = Number.isFinite(sinceMsRaw) ? sinceMsRaw : 0;
+        const maxAgeSecRaw = Number(req.query.max_age_sec || 900);
+        const maxAgeSec = Number.isFinite(maxAgeSecRaw) ? Math.min(Math.max(maxAgeSecRaw, 30), 7200) : 900;
+
+        let sql = `
+            SELECT id, source_type, created_count, updated_count, failed_count, created_at
+            FROM import_customer_operations
+        `;
+        const params = [];
+        if (sourceType === 'xlsx' || sourceType === 'json') {
+            sql += ' WHERE source_type = ?';
+            params.push(sourceType);
+        }
+        sql += ' ORDER BY datetime(created_at) DESC LIMIT 1';
+
+        const op = await dbGet(sql, params);
+        if (!op) {
+            return res.json({ success: true, found: false });
+        }
+
+        const createdAtMs = new Date(`${op.created_at}Z`).getTime();
+        const nowMs = Date.now();
+        const ageMs = Number.isFinite(createdAtMs) ? (nowMs - createdAtMs) : Number.POSITIVE_INFINITY;
+        const tooOld = ageMs > (maxAgeSec * 1000);
+        const olderThanRequest = sinceMs > 0 && Number.isFinite(createdAtMs) && createdAtMs < (sinceMs - 15000);
+        if (tooOld || olderThanRequest) {
+            return res.json({ success: true, found: false });
+        }
+
+        return res.json({
+            success: true,
+            found: true,
+            operation: {
+                id: op.id,
+                source_type: op.source_type,
+                created_at: op.created_at,
+                summary: {
+                    created: Number(op.created_count || 0),
+                    updated: Number(op.updated_count || 0),
+                    failed: Number(op.failed_count || 0),
+                    success_count: Number(op.created_count || 0) + Number(op.updated_count || 0),
+                    total: Number(op.created_count || 0) + Number(op.updated_count || 0) + Number(op.failed_count || 0)
+                }
+            }
+        });
+    } catch (error) {
+        logger.error('Error getting latest import operation:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal mengambil data operasi import terakhir',
+            error: error.message
+        });
+    }
+});
+
+// Revert customer import operation (created rows deleted, updated rows restored)
+router.post('/import/customers/revert/:operationId', async (req, res) => {
+    try {
+        const operationId = String(req.params.operationId || '').trim();
+        if (!operationId) {
+            return res.status(400).json({ success: false, message: 'operation_id wajib diisi' });
+        }
+
+        const db = require('../config/billing').db;
+        const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
+            db.run(sql, params, function (err) {
+                if (err) return reject(err);
+                resolve(this);
+            });
+        });
+        const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
+            db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+        });
+        const dbAll = (sql, params = []) => new Promise((resolve, reject) => {
+            db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
+        });
+
+        const op = await dbGet(`SELECT * FROM import_customer_operations WHERE id = ?`, [operationId]);
+        if (!op) {
+            return res.status(404).json({ success: false, message: 'Data operasi import tidak ditemukan' });
+        }
+
+        const createdIds = JSON.parse(op.created_ids_json || '[]').filter(Number.isFinite);
+        const updatedBefore = JSON.parse(op.updated_before_json || '[]').filter(x => x && Number.isFinite(x.id));
+
+        const customerColumns = (await dbAll(`PRAGMA table_info(customers)`)).map(c => c.name);
+        const restorableColumns = customerColumns.filter(c => c !== 'id');
+
+        let revertedCreated = 0;
+        let revertedUpdated = 0;
+
+        await dbRun('BEGIN IMMEDIATE');
+        try {
+            // restore updated rows to "before" snapshot
+            for (const prev of updatedBefore) {
+                const setCols = restorableColumns.filter(col => Object.prototype.hasOwnProperty.call(prev, col));
+                if (!setCols.length) continue;
+                const sql = `UPDATE customers SET ${setCols.map(c => `"${c}" = ?`).join(', ')} WHERE id = ?`;
+                const params = setCols.map(c => prev[c]);
+                params.push(prev.id);
+                const r = await dbRun(sql, params);
+                revertedUpdated += (r && r.changes) ? r.changes : 0;
+            }
+
+            // delete created rows
+            const chunkSize = 300;
+            for (let i = 0; i < createdIds.length; i += chunkSize) {
+                const chunk = createdIds.slice(i, i + chunkSize);
+                if (!chunk.length) continue;
+                const placeholders = chunk.map(() => '?').join(', ');
+                const r = await dbRun(`DELETE FROM customers WHERE id IN (${placeholders})`, chunk);
+                revertedCreated += (r && r.changes) ? r.changes : 0;
+            }
+
+            await dbRun(`DELETE FROM import_customer_operations WHERE id = ?`, [operationId]);
+            await dbRun('COMMIT');
+        } catch (e) {
+            await dbRun('ROLLBACK');
+            throw e;
+        }
+
+        return res.json({
+            success: true,
+            message: 'Perubahan import berhasil di-revert',
+            summary: {
+                reverted_created: revertedCreated,
+                reverted_updated: revertedUpdated
+            }
+        });
+    } catch (error) {
+        logger.error('Error reverting customer import:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Gagal melakukan revert import',
+            error: error.message
+        });
     }
 });
 
@@ -2976,7 +3968,14 @@ router.get('/export/customers.json', async (req, res) => {
 
 // Import customers from JSON file
 router.post('/import/customers/json', upload.single('file'), async (req, res) => {
+    let db = null;
+    let dbRun = null;
+    let transactionStarted = false;
     try {
+        const importFastMode = String(req.headers['x-import-fast-mode'] || '').trim() === '1';
+        const bypassRequested = String(req.headers['x-import-bypass-once'] || '').trim() === '1';
+        const importBypassMode = bypassRequested ? consumeOneTimeImportBypass() : false;
+        const importJobId = String(req.headers['x-import-job-id'] || '').trim();
         if (!req.file) {
             return res.status(400).json({ success: false, message: 'File JSON tidak ditemukan' });
         }
@@ -2994,18 +3993,76 @@ router.post('/import/customers/json', upload.single('file'), async (req, res) =>
             return res.status(400).json({ success: false, message: 'Tidak ada data pelanggan pada file' });
         }
 
+        db = require('../config/billing').db;
+        await ensureCustomersPhoneNonUnique(db);
+        dbRun = (sql, params = []) => new Promise((resolve, reject) => {
+            db.run(sql, params, function (err) {
+                if (err) return reject(err);
+                resolve(this);
+            });
+        });
+        const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
+            db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+        });
+
+        await dbRun(`
+            CREATE TABLE IF NOT EXISTS import_customer_operations (
+                id TEXT PRIMARY KEY,
+                source_type TEXT NOT NULL,
+                created_count INTEGER NOT NULL DEFAULT 0,
+                updated_count INTEGER NOT NULL DEFAULT 0,
+                failed_count INTEGER NOT NULL DEFAULT 0,
+                created_ids_json TEXT NOT NULL DEFAULT '[]',
+                updated_before_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        `);
+        const useAtomicImport = !importFastMode;
+        if (useAtomicImport) {
+            await dbRun('BEGIN IMMEDIATE');
+            transactionStarted = true;
+        }
+
         let created = 0, updated = 0, failed = 0;
         const errors = [];
+        const totalRowsForProgress = items.length;
+        let processedRows = 0;
+        let successRows = 0;
+        const reportProgress = (force = false) => {
+            if (!importJobId) return;
+            if (!force && processedRows % 10 !== 0 && processedRows !== totalRowsForProgress) return;
+            const percentage = totalRowsForProgress > 0
+                ? Math.min(99, Math.floor((processedRows / totalRowsForProgress) * 100))
+                : 99;
+            updateCommitJob(importJobId, {
+                progress: {
+                    total_rows: totalRowsForProgress,
+                    processed_rows: processedRows,
+                    success_rows: successRows,
+                    failed_rows: failed,
+                    percentage
+                }
+            });
+        };
 
         for (const raw of items) {
             try {
                 const name = (raw.name || '').toString().trim();
                 const phone = (raw.phone || '').toString().trim();
                 if (!name || !phone) {
-                    failed++; errors.push({ phone, error: 'Nama/Phone wajib' }); continue;
+                    failed++; errors.push({ name, phone, error: 'Nama/Phone wajib' }); continue;
                 }
 
-                const existing = await billingManager.getCustomerByPhone(phone);
+                const pppoeUsernameKey = String(raw.pppoe_username || '').trim();
+                if (!pppoeUsernameKey) {
+                    failed++;
+                    errors.push({ name, phone, error: 'PPPoE username wajib diisi' });
+                    continue;
+                }
+                const existing = await dbGet(
+                    `SELECT * FROM customers WHERE TRIM(COALESCE(pppoe_username, '')) = ? LIMIT 1`,
+                    [pppoeUsernameKey]
+                );
                 const optNum = (v) => {
                     if (v === undefined || v === null || v === '') return undefined;
                     const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
@@ -3015,6 +4072,7 @@ router.post('/import/customers/json', upload.single('file'), async (req, res) =>
                     name,
                     phone,
                     pppoe_username: raw.pppoe_username || '',
+                    pppoe_password: raw.pppoe_password ? String(raw.pppoe_password).trim() : '',
                     email: raw.email || '',
                     address: raw.address || '',
                     package_id: raw.package_id || null,
@@ -3023,6 +4081,10 @@ router.post('/import/customers/json', upload.single('file'), async (req, res) =>
                     auto_suspension: raw.auto_suspension !== undefined ? parseInt(raw.auto_suspension, 10) : 1,
                     billing_day: raw.billing_day ? Math.min(Math.max(parseInt(raw.billing_day, 10), 1), 28) : 15
                 };
+                if (importFastMode) {
+                    customerData.__skip_genieacs_sync = true;
+                    customerData.__skip_radius_sync = true;
+                }
                 if (raw.username) customerData.username = String(raw.username).trim();
                 if (raw.login_password || raw.password) customerData.password = String(raw.login_password || raw.password).trim();
                 const latJ = optNum(raw.latitude);
@@ -3045,17 +4107,27 @@ router.post('/import/customers/json', upload.single('file'), async (req, res) =>
                 if (raw.cable_status) customerData.cable_status = String(raw.cable_status).trim();
                 if (raw.cable_notes) customerData.cable_notes = String(raw.cable_notes).trim();
 
+                const joinParsed = parseCustomerImportJoinDate(raw.join_date);
+
                 let result;
+                let customerIdForJoin = null;
                 if (existing) {
                     result = await billingManager.updateCustomer(phone, customerData);
+                    customerIdForJoin = existing.id;
                     updated++;
+                    successRows++;
                 } else {
                     result = await billingManager.createCustomer(customerData);
+                    customerIdForJoin = result && result.id ? result.id : null;
                     created++;
+                    successRows++;
+                }
+                if (joinParsed && customerIdForJoin) {
+                    await dbRun(`UPDATE customers SET join_date = ? WHERE id = ?`, [joinParsed, customerIdForJoin]);
                 }
 
                 // Handle PPPoE user creation/update if pppoe_username and password provided
-                if (raw.pppoe_username && raw.pppoe_password) {
+                if (!importFastMode && raw.pppoe_username && raw.pppoe_password) {
                     try {
                         const pppoe_username = String(raw.pppoe_username).trim();
                         const pppoe_password = String(raw.pppoe_password).trim();
@@ -3123,19 +4195,130 @@ router.post('/import/customers/json', upload.single('file'), async (req, res) =>
                         logger.error(`[IMPORT] Error creating/updating PPPoE user for ${phone}:`, pppoeError);
                         logger.error(`[IMPORT] Error stack:`, pppoeError.stack);
                         // Don't fail the import if PPPoE creation fails, but log the error
-                        errors.push({ phone, error: `PPPoE creation failed: ${pppoeError.message}` });
+                        errors.push({ name, phone, error: `PPPoE creation failed: ${pppoeError.message}` });
                     }
-                } else {
+                } else if (!importFastMode) {
                     logger.debug(`[IMPORT] Skipping PPPoE user creation for ${phone}: pppoe_username or pppoe_password not provided`);
+                } else {
+                    logger.debug(`[IMPORT] Fast mode enabled: skip PPPoE provisioning for ${phone}`);
                 }
+
+                if (importFastMode) {
+                    const radiusUsername = String(customerData.pppoe_username || (existing && existing.pppoe_username) || '').trim();
+                    if (!radiusUsername) {
+                        radiusSync.skipped++;
+                    } else {
+                        radiusSync.attempted++;
+                        try {
+                            const radiusRes = await syncCustomerToRadius(
+                                {
+                                    ...customerData,
+                                    pppoe_username: radiusUsername,
+                                    username: customerData.username || (existing && existing.username) || ''
+                                },
+                                {
+                                    ...customerData,
+                                    pppoe_password: raw.pppoe_password || '',
+                                    pppoe_profile: customerData.pppoe_profile,
+                                    status: customerData.status
+                                }
+                            );
+                            if (radiusRes && radiusRes.success) radiusSync.success++;
+                            else if (radiusRes && radiusRes.skipped) radiusSync.skipped++;
+                            else radiusSync.failed++;
+                        } catch (radiusErr) {
+                            radiusSync.failed++;
+                            logger.warn(`[IMPORT-RADIUS] Sync failed for ${radiusUsername}: ${radiusErr.message}`);
+                        }
+                    }
+                }
+                processedRows++;
+                reportProgress();
             } catch (e) {
                 failed++;
-                errors.push({ phone: raw && raw.phone, error: e.message });
+                errors.push({ name: raw && raw.name ? raw.name : '', phone: raw && raw.phone, error: e.message });
+                processedRows++;
+                reportProgress();
             }
         }
 
-        res.json({ success: true, summary: { created, updated, failed }, errors });
+        const operationId = `import_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        if (useAtomicImport) {
+            await dbRun(
+                `INSERT INTO import_customer_operations
+                (id, source_type, created_count, updated_count, failed_count, created_ids_json, updated_before_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    operationId,
+                    'json',
+                    created,
+                    updated,
+                    failed,
+                    '[]',
+                    '[]'
+                ]
+            );
+            await dbRun('COMMIT');
+            transactionStarted = false;
+        }
+        if (importJobId) {
+            updateCommitJob(importJobId, {
+                progress: {
+                    total_rows: totalRowsForProgress,
+                    processed_rows: totalRowsForProgress,
+                    success_rows: created + updated,
+                    failed_rows: failed,
+                    percentage: 100
+                }
+            });
+        }
+
+        const responsePayload = {
+            success: true,
+            operation_id: useAtomicImport ? operationId : null,
+            summary: {
+                created,
+                updated,
+                failed,
+                total: created + updated + failed,
+                success_count: created + updated,
+                bypass_mode: true,
+                match_key: 'pppoe_username',
+                radius_sync: radiusSync
+            },
+            errors
+        };
+        if (importJobId) {
+            updateCommitJob(importJobId, {
+                status: 'finished',
+                result: responsePayload,
+                finished_at: new Date().toISOString(),
+                progress: {
+                    total_rows: totalRowsForProgress,
+                    processed_rows: totalRowsForProgress,
+                    success_rows: created + updated,
+                    failed_rows: failed,
+                    percentage: 100
+                }
+            });
+        }
+        res.json(responsePayload);
     } catch (error) {
+        if (transactionStarted && dbRun) {
+            try {
+                await dbRun('ROLLBACK');
+            } catch (rollbackError) {
+                logger.error('Error rolling back JSON import transaction:', rollbackError);
+            }
+        }
+        const importJobId = String(req.headers['x-import-job-id'] || '').trim();
+        if (importJobId) {
+            updateCommitJob(importJobId, {
+                status: 'failed',
+                error: error.message,
+                finished_at: new Date().toISOString()
+            });
+        }
         logger.error('Error importing customers (JSON):', error);
         res.status(500).json({
             success: false,
@@ -4310,16 +5493,19 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
             upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
             burst_threshold, burst_time 
         } = req.body;
-        
+
+        const billingOnly = ['1', 'true', 'on', 'yes'].includes(String(req.body.billing_only || '').toLowerCase());
+
         const packageData = {
             name: name.trim(),
             speed: speed.trim(),
             price: parseFloat(price),
             tax_rate: parseFloat(tax_rate) >= 0 ? parseFloat(tax_rate) : 0,
             description: description.trim(),
-            pppoe_profile: pppoe_profile ? pppoe_profile.trim() : 'default',
-            router_id: router_id ? parseInt(router_id) : null,
-            nas_ip: nas_ip ? nas_ip.trim() : null,
+            billing_only: billingOnly,
+            pppoe_profile: billingOnly ? null : (pppoe_profile ? pppoe_profile.trim() : 'default'),
+            router_id: billingOnly ? null : (router_id ? parseInt(router_id, 10) : null),
+            nas_ip: billingOnly ? null : (nas_ip ? nas_ip.trim() : null),
             upload_limit: upload_limit ? upload_limit.trim() : null,
             download_limit: download_limit ? download_limit.trim() : null,
             burst_limit_upload: burst_limit_upload ? burst_limit_upload.trim() : null,
@@ -4348,7 +5534,7 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
         const authMode = await getUserAuthModeAsync();
         
         let syncResult = null;
-        if (authMode === 'radius') {
+        if (!billingOnly && authMode === 'radius') {
             // Sync ke RADIUS (radgroupreply)
             try {
                 // Convert profile name ke format groupname (lowercase dengan underscore)
@@ -4368,7 +5554,7 @@ router.post('/packages', imageUpload.single('image'), async (req, res) => {
             } catch (syncError) {
                 logger.warn(`Failed to sync limits to RADIUS: ${syncError.message}`);
             }
-        } else {
+        } else if (!billingOnly) {
             // Sync ke Mikrotik (PPPoE profile rate-limit) - hanya jika router_id ada
             if (newPackage.router_id && newPackage.pppoe_profile) {
                 try {
@@ -4458,16 +5644,19 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
             upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
             burst_threshold, burst_time 
         } = req.body;
-        
+
+        const billingOnly = ['1', 'true', 'on', 'yes'].includes(String(req.body.billing_only || '').toLowerCase());
+
         const packageData = {
             name: name.trim(),
             speed: speed.trim(),
             price: parseFloat(price),
             tax_rate: parseFloat(tax_rate) >= 0 ? parseFloat(tax_rate) : 0,
             description: description.trim(),
-            pppoe_profile: pppoe_profile ? pppoe_profile.trim() : 'default',
-            router_id: router_id ? parseInt(router_id) : null,
-            nas_ip: nas_ip ? nas_ip.trim() : null,
+            billing_only: billingOnly,
+            pppoe_profile: billingOnly ? null : (pppoe_profile ? pppoe_profile.trim() : 'default'),
+            router_id: billingOnly ? null : (router_id ? parseInt(router_id, 10) : null),
+            nas_ip: billingOnly ? null : (nas_ip ? nas_ip.trim() : null),
             upload_limit: upload_limit ? upload_limit.trim() : null,
             download_limit: download_limit ? download_limit.trim() : null,
             burst_limit_upload: burst_limit_upload ? burst_limit_upload.trim() : null,
@@ -4496,7 +5685,7 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
         const authMode = await getUserAuthModeAsync();
         
         let syncResult = null;
-        if (authMode === 'radius') {
+        if (!billingOnly && authMode === 'radius') {
             // Sync ke RADIUS (radgroupreply)
             try {
                 // Convert profile name ke format groupname (lowercase dengan underscore)
@@ -4516,7 +5705,7 @@ router.put('/packages/:id', imageUpload.single('image'), async (req, res) => {
             } catch (syncError) {
                 logger.warn(`Failed to sync limits to RADIUS: ${syncError.message}`);
             }
-        } else {
+        } else if (!billingOnly) {
             // Sync ke Mikrotik (PPPoE profile rate-limit) - hanya jika router_id ada
             if (updatedPackage.router_id && updatedPackage.pppoe_profile) {
                 try {
@@ -5213,12 +6402,8 @@ router.post('/customers', customerPhotoUpload.fields([
             });
         }
 
-        // Get package to get default profile if not specified
-        let profileToUse = pppoe_profile;
-        if (!profileToUse) {
-            const packageData = await billingManager.getPackageById(package_id);
-            profileToUse = packageData?.pppoe_profile || 'default';
-        }
+        const packageData = await billingManager.getPackageById(package_id);
+        const profileToUse = resolveCustomerPppoeProfile(pppoe_profile, packageData, null);
 
         // Password portal: default 123456 jika kosong (sesuai kebijakan form tambah pelanggan)
         const bcrypt = require('bcrypt');
@@ -5247,7 +6432,7 @@ router.post('/customers', customerPhotoUpload.fields([
             area_id: area_id ? parseInt(area_id) : null,
             package_id,
             odp_id: odp_id || null,
-            pppoe_profile: profileToUse,
+            pppoe_profile: profileToUse ?? null,
             status: initialStatus,
             auto_suspension: auto_suspension !== undefined ? parseInt(auto_suspension) : 1,
             billing_day: (() => {
@@ -5273,6 +6458,10 @@ router.post('/customers', customerPhotoUpload.fields([
             cable_status: cable_status || 'connected',
             cable_notes: cable_notes || null
         };
+
+        if (!packageUsesPPPoEProfile(packageData)) {
+            customerData.__billing_only_package = true;
+        }
         
         // Handle photo uploads
         if (req.files) {
@@ -5321,8 +6510,9 @@ router.post('/customers', customerPhotoUpload.fields([
         let pppoeCreate = { attempted: false, created: false, message: '' };
         try {
             const shouldCreate = create_pppoe_user === 1 || create_pppoe_user === '1' || create_pppoe_user === true || create_pppoe_user === 'true';
-            // Jika checkbox dicentang atau pppoe_username diisi, buat PPPoE user
-            if ((shouldCreate || pppoe_username) && pppoe_username) {
+            const pkgUsesPppoe = packageUsesPPPoEProfile(packageData);
+            // Paket non-PPPoE: jangan buat user RADIUS/Mikrotik walau checkbox/username terisi
+            if (pkgUsesPppoe && (shouldCreate || pppoe_username) && pppoe_username) {
                 pppoeCreate.attempted = true;
                 
                 // Generate password jika tidak diberikan
@@ -5350,7 +6540,7 @@ router.post('/customers', customerPhotoUpload.fields([
                 
                 // Cek mode autentikasi untuk logging
                 const authMode = await getUserAuthModeAsync();
-                logger.info(`Creating PPPoE user ${pppoe_username} with profile ${profileToUse} (Mode: ${authMode})`);
+                logger.info(`Creating PPPoE user ${pppoe_username} with profile ${profileToUse || '(none)'} (Mode: ${authMode})`);
                 
                 // Pass customer object dengan id untuk per-router connection di mode API
                 // Di mode RADIUS, routerObj tidak diperlukan karena semua router pakai database yang sama
@@ -5803,14 +6993,8 @@ router.put('/customers/:phone', customerPhotoUpload.fields([
             });
         }
 
-        // Get package to get default profile if not specified
-        let profileToUse = pppoe_profile;
-        if (!profileToUse && package_id) {
-            const packageData = await billingManager.getPackageById(package_id);
-            profileToUse = packageData?.pppoe_profile || 'default';
-        } else if (!profileToUse) {
-            profileToUse = currentCustomer.pppoe_profile || 'default';
-        }
+        const packageRowForProfile = package_id ? await billingManager.getPackageById(package_id) : null;
+        const profileToUse = resolveCustomerPppoeProfile(pppoe_profile, packageRowForProfile, currentCustomer.pppoe_profile);
 
         // Extract new phone from request body, fallback to current if not provided
         const newPhone = req.body.phone || currentCustomer.phone;
@@ -5838,7 +7022,7 @@ router.put('/customers/:phone', customerPhotoUpload.fields([
             area: area !== undefined ? area : currentCustomer.area,
             package_id: package_id,
             odp_id: odp_id !== undefined ? odp_id : currentCustomer.odp_id,
-            pppoe_profile: profileToUse,
+            pppoe_profile: profileToUse ?? null,
             status: status || currentCustomer.status,
             auto_suspension: auto_suspension !== undefined ? parseInt(auto_suspension) : currentCustomer.auto_suspension,
             billing_day: (function(){

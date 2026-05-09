@@ -406,6 +406,10 @@
         }
 
         function toggleStatus(id, currentStatus) {
+            // currentStatus dari HTML sering berupa string "1"/"0".
+            // Jika langsung di-negasi, !"0" = false (karena string non-kosong), sehingga gagal aktifkan.
+            const current = Number(currentStatus) === 1;
+            const nextStatus = !current;
             showConfirmAlert(
                 'Konfirmasi',
                 'Yakin ingin mengubah status teknisi ini?',
@@ -415,7 +419,7 @@
                     fetch(`/admin/technicians/${id}/toggle-status`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ is_active: !currentStatus })
+                        body: JSON.stringify({ is_active: nextStatus })
                     })
                 .then(response => response.json())
                 .then(result => {

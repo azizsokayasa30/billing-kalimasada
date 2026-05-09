@@ -1,12 +1,12 @@
 {
   "invoice_created": {
     "title": "Tagihan Baru",
-    "template": "\n📋 *TAGIHAN BARU*\n\nHalo {customer_name},\n\nTagihan bulanan Anda telah dibuat:\n\n📄 *No. Invoice:* {invoice_number}\n💰 *Jumlah:* Rp {amount}\n📅 *Jatuh Tempo:* {due_date}\n📦 *Paket:* {package_name} ({package_speed})\n📝 *Catatan:* {notes}\n\n*Cek Status Dan Lakukan Pembayaran Anda Di*\nwww.billlingskynet.kalimasada.id\n*_Login Dengan No Hp Terdaftar_*\n\nSilakan lakukan pembayaran sebelum tanggal jatuh tempo untuk menghindari denda keterlambatan.\nTerima kasih atas kepercayaan Anda.\n\nKALIMASADA INTI SARANA",
+    "template": "\n📋 *TAGIHAN BARU*\n\nHalo {customer_name},\n\nTagihan bulanan Anda telah dibuat:\n\n📄 *No. Invoice:* {invoice_number}\n💰 *Jumlah:* Rp {amount}\n📅 *Jatuh Tempo:* {due_date}\n📦 *Paket:* {package_name} ({package_speed})\n📝 *Catatan:* {notes}\n\n*Cek Status Dan Lakukan Pembayaran Anda Di*\nwww.billlingskynet.kalimasada.id\n*_Login Dengan No Hp Terdaftar_*\n\nUntuk konfirmasi pembayaran hubungi nomer 0816411615\nSilakan lakukan pembayaran sebelum tanggal jatuh tempo untuk menghindari denda keterlambatan.\nTerima kasih atas kepercayaan Anda.\n\n\nKALIMASADA INTI SARANA",
     "enabled": true
   },
   "due_date_reminder": {
     "title": "Peringatan Jatuh Tempo",
-    "template": "\n⚠️ PEMBERITAHUAN TAGIHAN TERLAMBAT\n\nTagihan Anda telah melewati jatuh tempo:\n📄 *No. Invoice:* {invoice_number}\n💰 *Jumlah:* Rp {amount}\n📅 *Jatuh Tempo:* {due_date}\n      * Status: TERLAMBAT ⚠️\n\nCek Status Dan Lakukan Pembayaran Anda Di\nwww.cvlmedia.my.id\nLogin Dengan No Hp Terdaftar\nSilakan lakukan pembayaran segera untuk menghindari denda keterlambatan.\nKALIMASADA INTI SARANA\n\nHubungi kami jika ada kendala dalam pembayaran.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nInfo Hubungi : 0816411615",
+    "template": "\n⚠️ PEMBERITAHUAN TAGIHAN TERLAMBAT\n\nTagihan Anda telah melewati jatuh tempo:\n📄 *No. Invoice:* {invoice_number}\n💰 *Jumlah:* Rp {amount}\n📅 *Jatuh Tempo:* {due_date}\n      * Status: TERLAMBAT ⚠️\n\nCek Status Dan Lakukan Pembayaran Anda Di\nwww.billlingskynet.kalimasada.id\nLogin Dengan No Hp Terdaftar\nSilakan lakukan pembayaran segera untuk menghindari denda keterlambatan.\nKALIMASADA INTI SARANA\n\nHubungi kami jika ada kendala dalam pembayaran.\nInfo tagihan atau konfirmasi hubungi : 0816411615",
     "enabled": true
   },
   "payment_received": {
@@ -52,6 +52,21 @@
   "installation_completed": {
     "title": "Instalasi Selesai",
     "template": "✅ *INSTALASI SELESAI*\n\nHalo {technician_name},\n\nSelamat! Instalasi telah berhasil diselesaikan:\n\n📋 *Detail Job:*\n• No. Job: {job_number}\n• Pelanggan: {customer_name}\n• Status: SELESAI ✅\n• Waktu Selesai: {completion_time}\n\n📝 *Catatan Penyelesaian:* {completion_notes}\n",
+    "enabled": true
+  },
+  "sales_order_new_customer": {
+    "title": "Sales Order — Pelanggan Baru (ke teknisi)",
+    "template": "📋 *SALES ORDER - PELANGGAN BARU*\n\n*No ID Pelanggan:* {customer_id}\n*Nama Pelanggan:* {customer_name}\n*No HP/WA:* {customer_phone}\n*Email:* {customer_email}\n*Alamat:* {customer_address}\n*Paket:* {package_name} ({package_speed})\n*PPPoE Username:* {pppoe_username}\n*PPPoE Password:* {pppoe_password}\n*PPPoE Profile:* {pppoe_profile}\n\n✅ *Status:* Pelanggan telah di-accept dan siap untuk setting.\n\nSilakan lakukan instalasi sesuai dengan data di atas.",
+    "enabled": true
+  },
+  "trouble_report_new_technician": {
+    "title": "Laporan gangguan — notifikasi ke teknisi/admin",
+    "template": "🚨 *LAPORAN GANGGUAN BARU*\n\n*{company_header}*\n\n📝 *ID Tiket*: {report_id}\n👤 *Pelanggan*: {customer_name}\n📱 *No. HP*: {phone}\n📍 *Lokasi*: {location}\n🔧 *Kategori*: {category}\n🕒 *Waktu Laporan*: {created_at}\n\n💬 *Deskripsi Masalah*:\n{description}\n\n📌 *Status*: {status}\n\n⚠️ *PRIORITAS TINGGI* - Silakan segera ditindaklanjuti!",
+    "enabled": true
+  },
+  "trouble_report_customer_update": {
+    "title": "Laporan gangguan — update ke pelanggan",
+    "template": "📣 *UPDATE LAPORAN GANGGUAN*\n\n*{company_header}*\n\n📝 *ID Tiket*: {report_id}\n🕒 *Update Pada*: {updated_at}\n📌 *Status Baru*: {status_label}\n\n{technician_note_section}{status_message}\n\nJika ada pertanyaan, silakan hubungi kami.",
     "enabled": true
   }
 }

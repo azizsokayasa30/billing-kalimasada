@@ -210,6 +210,11 @@ router.get('/dashboard', adminAuth, async (req, res) => {
   let recentPaidInvoices = [];
   let recentTickets = [];
   let newCustomersThisMonth = 0;
+  let operationalStats = {
+    pendingInstallations: 0,
+    pendingTroubleTickets: 0,
+    employeesAttendedToday: 0
+  };
 
   try {
     const dbPath = resolveBestBillingDbPath();
@@ -282,6 +287,43 @@ router.get('/dashboard', adminAuth, async (req, res) => {
           resolve();
         });
       }),
+      // Pending job instalasi (belum selesai / belum dibatalkan)
+      new Promise((resolve) => {
+        db.get(
+          `SELECT COUNT(*) AS cnt
+           FROM installation_jobs
+           WHERE LOWER(COALESCE(status, '')) IN ('scheduled', 'assigned', 'in_progress')`,
+          [],
+          (err, row) => {
+            if (err) {
+              console.warn('⚠️ [DASHBOARD] pendingInstallations query failed:', err.message);
+              operationalStats.pendingInstallations = 0;
+            } else {
+              operationalStats.pendingInstallations = (row && row.cnt) || 0;
+            }
+            resolve();
+          }
+        );
+      }),
+      // Karyawan yang sudah absen hari ini (unik per employee_id)
+      new Promise((resolve) => {
+        db.get(
+          `SELECT COUNT(DISTINCT employee_id) AS cnt
+           FROM employee_attendance
+           WHERE date = date('now', 'localtime')
+             AND TRIM(COALESCE(status, '')) != ''`,
+          [],
+          (err, row) => {
+            if (err) {
+              console.warn('⚠️ [DASHBOARD] employeesAttendedToday query failed:', err.message);
+              operationalStats.employeesAttendedToday = 0;
+            } else {
+              operationalStats.employeesAttendedToday = (row && row.cnt) || 0;
+            }
+            resolve();
+          }
+        );
+      }),
     ]);
     db.close();
 
@@ -289,6 +331,11 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     try {
       const { getAllTroubleReports } = require('../config/troubleReport');
       const allTickets = await getAllTroubleReports();
+      const pendingStatuses = new Set(['open', 'pending', 'in_progress', 'baru']);
+      operationalStats.pendingTroubleTickets = (allTickets || []).filter((t) => {
+        const st = String(t && t.status ? t.status : '').toLowerCase().trim();
+        return pendingStatuses.has(st);
+      }).length;
       recentTickets = (allTickets || [])
         .sort((a, b) => {
           const ad = new Date(a.createdAt || a.created_at || 0).getTime();
@@ -297,6 +344,7 @@ router.get('/dashboard', adminAuth, async (req, res) => {
         })
         .slice(0, 5);
     } catch(e) {
+      operationalStats.pendingTroubleTickets = 0;
       recentTickets = [];
     }
   } catch(dbErr) {
@@ -325,7 +373,8 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     recentCustomers,
     recentPaidInvoices,
     recentTickets,
-    newCustomersThisMonth
+    newCustomersThisMonth,
+    operationalStats
   });
 });
 

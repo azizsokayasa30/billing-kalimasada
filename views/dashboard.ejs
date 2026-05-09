@@ -1087,15 +1087,6 @@
       <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
 
       <script>
-      // Hard Reload for CSS detection
-      (function() {
-    var pKey = 'simple_reload_' + location.pathname;
-    if (!sessionStorage.getItem(pKey)) {
-        sessionStorage.setItem(pKey, 'true');
-        window.location.reload();
-    }
-})();
-
       $(document).ready(function() {
         // Initialize DataTable for connected devices if table exists
         if ($('#connectedDevicesTable').length) {

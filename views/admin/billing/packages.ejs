@@ -84,7 +84,7 @@
                                         <th>Harga (Sebelum PPN)</th>
                                         <th>PPN</th>
                                         <th>Harga (Setelah PPN)</th>
-                                        <th>PPPoE Profile</th>
+                                        <th>Akses jaringan</th>
                                         <th>NAS (Router)</th>
                                         <th>Deskripsi</th>
                                         <th>Status</th>
@@ -119,7 +119,15 @@
                                                         Rp <%= ((parseFloat(package.price) * 1.11).toFixed(0)).toLocaleString('id-ID') %>
                                                     <% } %>
                                                 </td>
-                                                <td><span class="badge bg-info"><%= package.pppoe_profile || 'default' %></span></td>
+                                                <td>
+                                                    <% if (package.pppoe_profile != null && String(package.pppoe_profile).trim() !== '') { %>
+                                                        <span class="badge bg-info"><%= package.pppoe_profile %></span>
+                                                        <span class="text-muted small d-block">PPPoE</span>
+                                                    <% } else { %>
+                                                        <span class="badge bg-secondary">Non-PPPoE</span>
+                                                        <span class="text-muted small d-block">Billing / tagihan</span>
+                                                    <% } %>
+                                                </td>
                                                 <td>
                                                     <% 
                                                     if (package.nas_ip) {
@@ -222,6 +230,12 @@
                             <label for="description" class="form-label">Deskripsi</label>
                             <textarea class="form-control" id="description" name="description" rows="3"></textarea>
                         </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="billing_only_add" value="1">
+                            <label class="form-check-label" for="billing_only_add">Paket tanpa PPPoE (hanya tagihan / berlangganan)</label>
+                            <small class="form-text text-muted d-block">Aktifkan untuk pelanggan yang tidak memakai user PPPoE. NAS dan profil PPPoE tidak wajib; tidak ada sync limit ke RADIUS/Mikrotik.</small>
+                        </div>
+                        <div id="addPackagePppoeBindSection">
                         <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
                             <!-- Mode RADIUS: Input NAS IP -->
                             <div class="mb-3">
@@ -273,6 +287,7 @@
                                 <% } %>
                             </small>
                         </div>
+                        </div><!-- /addPackagePppoeBindSection -->
                         
                         <div class="mb-3">
                             <label for="image" class="form-label">Gambar Paket (JPG)</label>
@@ -340,6 +355,12 @@
                             <label for="edit_description" class="form-label">Deskripsi</label>
                             <textarea class="form-control" id="edit_description" name="description" rows="3"></textarea>
                         </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="billing_only_edit" value="1">
+                            <label class="form-check-label" for="billing_only_edit">Paket tanpa PPPoE (hanya tagihan / berlangganan)</label>
+                            <small class="form-text text-muted d-block">Nonaktifkan akses PPPoE untuk paket ini.</small>
+                        </div>
+                        <div id="editPackagePppoeBindSection">
                         <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
                             <!-- Mode RADIUS: Input NAS IP -->
                             <div class="mb-3">
@@ -391,6 +412,7 @@
                                 <% } %>
                             </small>
                         </div>
+                        </div><!-- /editPackagePppoeBindSection -->
                         
                         <div class="mb-3">
                             <label for="edit_image" class="form-label">Gambar Paket (JPG)</label>
@@ -438,6 +460,28 @@
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
     <script>
         $(document).ready(function() {
+            const PACKAGE_AUTH_RADIUS = <%= (typeof authMode !== 'undefined' && authMode === 'radius') ? 'true' : 'false' %>;
+
+            function applyBillingOnlyPackageUI(mode) {
+                const checked = mode === 'edit'
+                    ? $('#billing_only_edit').is(':checked')
+                    : $('#billing_only_add').is(':checked');
+                const section = mode === 'edit' ? $('#editPackagePppoeBindSection') : $('#addPackagePppoeBindSection');
+                section.toggle(!checked);
+                if (mode === 'add') {
+                    $('#nas_ip').prop('required', !checked && PACKAGE_AUTH_RADIUS);
+                    $('#router_id').prop('required', !checked && !PACKAGE_AUTH_RADIUS);
+                    $('#pppoe_profile').prop('required', !checked);
+                } else {
+                    $('#edit_nas_ip').prop('required', !checked && PACKAGE_AUTH_RADIUS);
+                    $('#edit_router_id').prop('required', !checked && !PACKAGE_AUTH_RADIUS);
+                    $('#edit_pppoe_profile').prop('required', !checked);
+                }
+            }
+
+            $('#billing_only_add').on('change', function () { applyBillingOnlyPackageUI('add'); });
+            $('#billing_only_edit').on('change', function () { applyBillingOnlyPackageUI('edit'); });
+
             $('#packagesTable').DataTable({
                 language: {
                     url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/id.json',
@@ -473,6 +517,8 @@
                 $('#tax_rate_group').hide();
                 $('#tax_rate_group input').prop('disabled', true);
                 $('#tax_rate').val(0);
+                $('#billing_only_add').prop('checked', false);
+                applyBillingOnlyPackageUI('add');
                 // Reset NAS and profile dropdowns
                                 <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
                 $('#nas_ip').val('');
@@ -927,14 +973,15 @@
             formData.append('price', parseFloat($('#price').val()));
             formData.append('tax_rate', $('#enable_tax').is(':checked') ? parseFloat($('#tax_rate').val()) : 0);
             formData.append('description', $('#description').val().trim());
+            formData.append('billing_only', $('#billing_only_add').is(':checked') ? '1' : '0');
             <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
-                formData.append('nas_ip', $('#nas_ip').val().trim() || '');
+                formData.append('nas_ip', $('#billing_only_add').is(':checked') ? '' : ($('#nas_ip').val().trim() || ''));
                 formData.append('router_id', '');
             <% } else { %>
-                formData.append('router_id', $('#router_id').val() || '');
+                formData.append('router_id', $('#billing_only_add').is(':checked') ? '' : ($('#router_id').val() || ''));
                 formData.append('nas_ip', '');
             <% } %>
-            formData.append('pppoe_profile', $('#pppoe_profile').val().trim() || 'default');
+            formData.append('pppoe_profile', $('#billing_only_add').is(':checked') ? '' : ($('#pppoe_profile').val().trim() || 'default'));
             
             // Add image file if selected
             const imageFile = $('#image')[0].files[0];
@@ -1006,6 +1053,10 @@
                         }
                         
                         $('#edit_description').val(package.description || '');
+
+                        const billingOnlyPkg = package.pppoe_profile == null || String(package.pppoe_profile || '').trim() === '';
+                        $('#billing_only_edit').prop('checked', billingOnlyPkg);
+                        applyBillingOnlyPackageUI('edit');
                         
                         <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
                             // Set nas_ip for RADIUS mode
@@ -1082,14 +1133,15 @@
             formData.append('price', parseFloat($('#edit_price').val()));
             formData.append('tax_rate', $('#edit_enable_tax').is(':checked') ? parseFloat($('#edit_tax_rate').val()) : 0);
             formData.append('description', $('#edit_description').val().trim());
+            formData.append('billing_only', $('#billing_only_edit').is(':checked') ? '1' : '0');
             <% if (typeof authMode !== 'undefined' && authMode === 'radius') { %>
-                formData.append('nas_ip', $('#edit_nas_ip').val().trim() || '');
+                formData.append('nas_ip', $('#billing_only_edit').is(':checked') ? '' : ($('#edit_nas_ip').val().trim() || ''));
                 formData.append('router_id', '');
             <% } else { %>
-                formData.append('router_id', $('#edit_router_id').val() || '');
+                formData.append('router_id', $('#billing_only_edit').is(':checked') ? '' : ($('#edit_router_id').val() || ''));
                 formData.append('nas_ip', '');
             <% } %>
-            formData.append('pppoe_profile', $('#edit_pppoe_profile').val().trim() || 'default');
+            formData.append('pppoe_profile', $('#billing_only_edit').is(':checked') ? '' : ($('#edit_pppoe_profile').val().trim() || 'default'));
             
             // Add image file if selected
             const imageFile = $('#edit_image')[0].files[0];
@@ -1157,7 +1209,7 @@
                                             'Rp ' + ((parseFloat(package.price) * (1 + taxRate / 100)).toFixed(0)).toLocaleString('id-ID')
                                         }
                                     </p>
-                                    <p><strong>PPPoE Profile:</strong> ${package.pppoe_profile || 'default'}</p>
+                                    <p><strong>Akses jaringan:</strong> ${(package.pppoe_profile != null && String(package.pppoe_profile).trim() !== '') ? (package.pppoe_profile + ' (PPPoE)') : 'Non-PPPoE (billing saja)'}</p>
                                 </div>
                                 <div class="col-md-6">
                                     <p><strong>Deskripsi:</strong></p>

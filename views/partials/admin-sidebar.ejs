@@ -5,7 +5,7 @@
             <img src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?ts=<%= Date.now() %>" alt="Logo" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
         </div>
         <div class="sb-brand">
-            <span class="sb-brand-name"><%= typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'Net digital Group') %></span>
+            <span class="sb-brand-name"><%= typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'KALIMASADA') %></span>
             <span class="sb-brand-tag">Admin Panel</span>
         </div>
     </div>
@@ -185,96 +185,7 @@
     </div>
 </nav>
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    // Hard Reload for CSS detection
-    (function() {
-    var pKey = 'simple_reload_' + location.pathname;
-    if (!sessionStorage.getItem(pKey)) {
-        sessionStorage.setItem(pKey, 'true');
-        window.location.reload();
-    }
-})();
 
-    // App Switcher dropdown
-    const appSwitcherBtn = document.getElementById('appSwitcherBtn');
-    const appSwitcherDropdown = document.getElementById('appSwitcherDropdown');
-    if (appSwitcherBtn && appSwitcherDropdown) {
-        appSwitcherBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            appSwitcherDropdown.classList.toggle('show');
-        });
-        document.addEventListener('click', function() {
-            appSwitcherDropdown.classList.remove('show');
-        });
-    }
-
-    // Collapse toggle setup
-    function setupCollapseToggle(collapseId) {
-        var toggler = document.querySelector('[data-target-id="' + collapseId + '"]');
-        var collapseEl = document.getElementById(collapseId);
-        if (toggler && collapseEl && typeof bootstrap !== 'undefined') {
-            var icon = toggler.querySelector('.toggle-arrow');
-            if (collapseEl.classList.contains('show')) {
-                if (icon) icon.classList.replace('bi-chevron-down', 'bi-chevron-up');
-                toggler.setAttribute('aria-expanded', 'true');
-            }
-            toggler.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
-                bsCollapse.toggle();
-            });
-            collapseEl.addEventListener('show.bs.collapse', function () {
-                if (icon) icon.classList.replace('bi-chevron-down', 'bi-chevron-up');
-                toggler.setAttribute('aria-expanded', 'true');
-            });
-            collapseEl.addEventListener('hide.bs.collapse', function () {
-                if (icon) icon.classList.replace('bi-chevron-up', 'bi-chevron-down');
-                toggler.setAttribute('aria-expanded', 'false');
-            });
-            bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
-        }
-    }
-
-    function updateSidebarActive(url) {
-        const sidebar = document.getElementById('adminSidebar');
-        if (!sidebar) return;
-        const path = new URL(url, window.location.origin).pathname;
-        sidebar.querySelectorAll('.sb-item').forEach(link => {
-            const href = link.getAttribute('href');
-            if (!href || href === '#' || href.startsWith('javascript:')) return;
-            try {
-                const linkPath = new URL(href, window.location.origin).pathname;
-                const isActive = (path === linkPath);
-                link.classList.toggle('active', isActive);
-                
-                if (isActive) {
-                    let parent = link.closest('.collapse');
-                    while (parent) {
-                        if (typeof bootstrap !== 'undefined') {
-                            const bsCollapse = bootstrap.Collapse.getOrCreateInstance(parent, { toggle: false });
-                            if (!parent.classList.contains('show')) bsCollapse.show();
-                        }
-                        const toggler = document.querySelector('[data-target-id="' + parent.id + '"]');
-                        if (toggler) {
-                            const arrow = toggler.querySelector('.toggle-arrow');
-                            if (arrow) arrow.classList.replace('bi-chevron-down', 'bi-chevron-up');
-                            toggler.setAttribute('aria-expanded', 'true');
-                        }
-                        parent = parent.parentElement.closest('.collapse');
-                    }
-                }
-            } catch (e) { /* ignore invalid urls */ }
-        });
-    }
-
-    ['adminHotspotCollapse','adminInfraCollapse','adminSettingCollapse'].forEach(setupCollapseToggle);
-
-    // Initial highlight and expansion
-    updateSidebarActive(window.location.href);
-});
-</script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');

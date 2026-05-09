@@ -61,43 +61,47 @@ class _TagLocationScreenState extends State<TagLocationScreen>
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Layanan lokasi nonaktif. Aktifkan GPS terlebih dahulu.'),
+            content: Text('GPS belum aktif. Aktifkan lokasi perangkat terlebih dahulu.'),
             backgroundColor: Colors.red,
           ),
         );
         return;
       }
 
-      var permission = await Geolocator.checkPermission();
+      LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Izin lokasi diperlukan untuk fitur My Location.'),
+            content: Text('Izin lokasi ditolak. Izinkan akses lokasi untuk memakai My Location.'),
             backgroundColor: Colors.red,
           ),
         );
         return;
       }
 
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
-      final gps = LatLng(pos.latitude, pos.longitude);
+
+      final point = LatLng(position.latitude, position.longitude);
       if (!mounted) return;
       setState(() {
-        _currentGpsLocation = gps;
+        _currentGpsLocation = point;
+        _selectedLocation = point;
       });
-      _mapController.move(gps, 18.0);
+      _mapController.move(point, 18.0);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal mengambil lokasi GPS: $e'),
+          content: Text('Gagal mengambil lokasi saat ini: $e'),
           backgroundColor: Colors.red,
         ),
       );

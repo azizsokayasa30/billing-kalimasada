@@ -42,16 +42,18 @@ class CustomerProvider extends ChangeNotifier {
       final response = await ApiClient.get(url);
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          final List<dynamic> newCustomers = data['data'];
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (ApiClient.jsonSuccess(data['success'])) {
+          final raw = data['data'];
+          final newCustomers =
+              raw is List ? List<dynamic>.from(raw) : <dynamic>[];
           if (newCustomers.length < 20) {
             _hasMore = false;
           }
           _customers.addAll(newCustomers);
           _page++;
         } else {
-          _error = data['message'];
+          _error = data['message']?.toString();
         }
       } else {
         _error = 'Gagal memuat data pelanggan';
@@ -69,14 +71,25 @@ class CustomerProvider extends ChangeNotifier {
     try {
       final response = await ApiClient.get('/api/mobile-adapter/dashboard');
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          final statsData = data['data']['stats'];
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (!ApiClient.jsonSuccess(data['success'])) return;
+
+        final inner = data['data'];
+        final statsWrap = inner is Map ? inner['stats'] : null;
+        final statsData = statsWrap is Map<String, dynamic>
+            ? statsWrap
+            : (statsWrap is Map ? Map<String, dynamic>.from(statsWrap as Map) : null);
+        if (statsData != null) {
+          num nz(dynamic v) {
+            if (v is num) return v;
+            return num.tryParse(v?.toString() ?? '') ?? 0;
+          }
+
           _stats = {
-            'total': statsData['total_customers'] ?? 0,
-            'active': statsData['active_customers'] ?? 0,
-            'suspended': statsData['suspended_customers'] ?? 0,
-            'isolated': statsData['isolated_customers'] ?? 0,
+            'total': nz(statsData['total_customers']).toInt(),
+            'active': nz(statsData['active_customers']).toInt(),
+            'suspended': nz(statsData['suspended_customers']).toInt(),
+            'isolated': nz(statsData['isolated_customers']).toInt(),
           };
         }
       }

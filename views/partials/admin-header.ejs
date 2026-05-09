@@ -10,15 +10,7 @@
       })();
     </script>
     <!-- Hard Reload for CSS detection -->
-    <script>
-    (function() {
-    var pKey = 'simple_reload_' + location.pathname;
-    if (!sessionStorage.getItem(pKey)) {
-        sessionStorage.setItem(pKey, 'true');
-        window.location.reload();
-    }
-})();
-    </script>
+    
     <meta charset="UTF-8">
     <title><%= typeof title !== 'undefined' ? title : 'Admin Panel' %></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">

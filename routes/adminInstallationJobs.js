@@ -563,6 +563,15 @@ router.put('/update/:id', adminAuth, async (req, res) => {
         const syncName = linkedCustomer.name || customer_name;
         const syncPhone = linkedCustomer.phone || customer_phone;
         const syncAddr = linkedCustomer.address || customer_address;
+        const todayLocalDate = String(getLocalTimestamp() || '').split(' ')[0] || new Date().toISOString().split('T')[0];
+        const safeInstallationDate =
+            (installation_date !== undefined && installation_date !== null && String(installation_date).trim() !== '')
+                ? String(installation_date).trim()
+                : (currentJob.installation_date || todayLocalDate);
+        const safeInstallationTime =
+            (installation_time !== undefined && installation_time !== null && String(installation_time).trim() !== '')
+                ? String(installation_time).trim()
+                : (currentJob.installation_time || null);
 
         const newAssignId = assigned_technician_id ? parseInt(assigned_technician_id, 10) : null;
         const oldAssignId = currentJob.assigned_technician_id
@@ -606,8 +615,8 @@ router.put('/update/:id', adminAuth, async (req, res) => {
                     syncPhone,
                     syncAddr,
                     package_id,
-                    installation_date,
-                    installation_time,
+                    safeInstallationDate,
+                    safeInstallationTime,
                     assigned_technician_id || null,
                     priority || 'normal',
                     notes || null,

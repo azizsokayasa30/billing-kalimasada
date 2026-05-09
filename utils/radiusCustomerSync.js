@@ -22,7 +22,9 @@ function sanitizeIp(value) {
  */
 async function syncCustomerToRadius(customer, options = {}) {
     const pppoeUsername = String(customer?.pppoe_username || customer?.username || '').trim();
-    const pppoePassword = String(options.pppoe_password || options.password || '').trim();
+    // IMPORTANT: RADIUS PPPoE password must come from PPPoE password field,
+    // never from portal login password.
+    const pppoePassword = String(options.pppoe_password || customer?.pppoe_password || '').trim();
     const groupname = normalizeGroupName(options.pppoe_profile || customer?.pppoe_profile || null);
     const framedIp = sanitizeIp(options.static_ip || options.assigned_ip || customer?.static_ip || customer?.assigned_ip || null);
     /** Jangan timpa radusergroup ke profil paket saat pelanggan isolir — grup 'isolir' diatur suspendUserRadius / serviceSuspension */
