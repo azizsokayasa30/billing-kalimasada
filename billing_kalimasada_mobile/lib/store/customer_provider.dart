@@ -9,6 +9,8 @@ class CustomerProvider extends ChangeNotifier {
   Map<String, dynamic> _stats = {};
   bool _hasMore = true;
   int _page = 1;
+  /// Naik tiap refresh; respons request lama diabaikan agar tidak menimpa daftar kosong / halaman salah.
+  int _customersFetchGen = 0;
 
   bool get loading => _loading;
   String? get error => _error;
@@ -21,13 +23,18 @@ class CustomerProvider extends ChangeNotifier {
     String search = '',
     String? status,
   }) async {
+    if (!refresh) {
+      if (!_hasMore || _loading) return;
+    }
+
     if (refresh) {
+      _customersFetchGen++;
       _page = 1;
       _customers = [];
       _hasMore = true;
     }
 
-    if (!_hasMore || _loading) return;
+    final int gen = _customersFetchGen;
 
     _loading = true;
     _error = null;
@@ -39,11 +46,17 @@ class CustomerProvider extends ChangeNotifier {
       if (status != null && status.isNotEmpty) {
         url += '&status=$status';
       }
+      if (refresh) {
+        url += '&_=${DateTime.now().millisecondsSinceEpoch}';
+      }
       final response = await ApiClient.get(url);
+
+      if (gen != _customersFetchGen) return;
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         if (ApiClient.jsonSuccess(data['success'])) {
+          if (gen != _customersFetchGen) return;
           final raw = data['data'];
           final newCustomers =
               raw is List ? List<dynamic>.from(raw) : <dynamic>[];
@@ -59,10 +72,14 @@ class CustomerProvider extends ChangeNotifier {
         _error = 'Gagal memuat data pelanggan';
       }
     } catch (e) {
-      _error = 'Koneksi bermasalah: ${e.toString()}';
+      if (gen == _customersFetchGen) {
+        _error = 'Koneksi bermasalah: ${e.toString()}';
+      }
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (gen == _customersFetchGen) {
+        _loading = false;
+        notifyListeners();
+      }
     }
   }
 
