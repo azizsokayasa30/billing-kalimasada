@@ -293,6 +293,40 @@ const FORCED_APP_VERSION = 'v5.4';
             </div>
         </div>
         
+        <!-- MANAJEMEN GUDANG -->
+        <% const warehousePages = ['warehouse-inbound', 'warehouse-outbound', 'warehouse-items', 'warehouse-report']; %>
+        <% const warehouseExpanded = typeof page !== 'undefined' && warehousePages.includes(page); %>
+        <div class="sb-section">
+            <div class="sb-section-title sb-collapsible"
+                 data-manual-toggle="collapse"
+                 data-target-id="warehouseCollapse"
+                 aria-expanded="<%= warehouseExpanded ? 'true' : 'false' %>"
+                 aria-controls="warehouseCollapse"
+                 role="button"
+                 tabindex="0">
+                <span>Manajemen Gudang</span>
+                <i class="bi <%= warehouseExpanded ? 'bi-chevron-up' : 'bi-chevron-down' %> toggle-arrow sb-chevron"></i>
+            </div>
+            <div class="collapse <%= warehouseExpanded ? 'show' : '' %>" id="warehouseCollapse">
+                <a href="/admin/warehouse/barang-masuk" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'warehouse-inbound' ? 'active' : '' %>">
+                    <i class="bi bi-box-arrow-in-down"></i>
+                    <span class="sb-item-text">Barang Masuk</span>
+                </a>
+                <a href="/admin/warehouse/barang-keluar" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'warehouse-outbound' ? 'active' : '' %>">
+                    <i class="bi bi-box-arrow-up"></i>
+                    <span class="sb-item-text">Barang Keluar</span>
+                </a>
+                <a href="/admin/warehouse/nama-barang" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'warehouse-items' ? 'active' : '' %>">
+                    <i class="bi bi-tags"></i>
+                    <span class="sb-item-text">Nama Barang</span>
+                </a>
+                <a href="/admin/warehouse/laporan" class="sb-item sb-sub <%= typeof page !== 'undefined' && page === 'warehouse-report' ? 'active' : '' %>">
+                    <i class="bi bi-clipboard-data"></i>
+                    <span class="sb-item-text">Laporan Barang</span>
+                </a>
+            </div>
+        </div>
+        
         <!-- AGENT -->
         <% const agentPages = ['agents', 'agent-registrations']; %>
         <% const agentExpanded = typeof page !== 'undefined' && agentPages.includes(page); %>
@@ -581,7 +615,7 @@ document.addEventListener('DOMContentLoaded', function () {
             bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
         }
     }
-    ['pppConnectionCollapse','responsiveHotspotCollapse','agentCollapse','teknisiCollapse','toolsCollapse','settingCollapse','billingCustomerCollapse','billingInvoiceCollapse','billingFinanceCollapse','karyawanCollapse'].forEach(setupCollapseToggle);
+    ['pppConnectionCollapse','responsiveHotspotCollapse','agentCollapse','teknisiCollapse','toolsCollapse','settingCollapse','billingCustomerCollapse','billingInvoiceCollapse','billingFinanceCollapse','warehouseCollapse','karyawanCollapse'].forEach(setupCollapseToggle);
 
     window.addEventListener('resize', function() { if (window.innerWidth >= 768) closeSidebar(); });
 

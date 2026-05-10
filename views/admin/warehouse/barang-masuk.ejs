@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <style>
+        .wh-btn-print {
+            background-color: #198754;
+            color: #fff !important;
+            border: none;
+            font-weight: 600;
+            min-width: 9.5rem;
+            padding: 0.45rem 1rem;
+        }
+        .wh-btn-print:hover {
+            background-color: #157347;
+            color: #fff !important;
+        }
+        .wh-btn-print-lg {
+            min-width: 11rem;
+            padding: 0.5rem 1.15rem;
+        }
+        .wh-btn-edit-solid {
+            background-color: #0d6efd;
+            color: #fff;
+            border: none;
+            width: 2.35rem;
+            height: 2.35rem;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .wh-btn-edit-solid:hover {
+            background-color: #0b5ed7;
+            color: #fff;
+        }
+        .wh-btn-del-solid {
+            background-color: #dc3545;
+            color: #fff;
+            border: none;
+            width: 2.35rem;
+            height: 2.35rem;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .wh-btn-del-solid:hover:not(:disabled) {
+            background-color: #bb2d3b;
+            color: #fff;
+        }
+        .wh-btn-del-solid:disabled {
+            background-color: #adb5bd;
+            color: #fff;
+            opacity: 1;
+            cursor: not-allowed;
+        }
+    </style>
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <%- include('../../partials/billing-sidebar', { page: typeof page !== 'undefined' ? page : '' }) %>
+        <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content" style="min-height:100vh;">
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2"><i class="bi bi-box-arrow-in-down"></i> Barang Masuk</h1>
+                <a class="btn wh-btn-print rounded-2 shadow-sm" href="/admin/warehouse/nama-barang"><i class="bi bi-tags me-1"></i>Kelola nama barang</a>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header fw-semibold">Input barang masuk</div>
+                <div class="card-body">
+                    <div id="alIn"></div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Barang</label>
+                            <select class="form-select" id="inItem"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Jumlah unit</label>
+                            <input type="number" min="1" max="5000" class="form-control" id="inQty" value="1">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">No. referensi / PO (opsional)</label>
+                            <input type="text" class="form-control" id="inRef" maxlength="200">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Catatan</label>
+                            <textarea class="form-control" id="inNotes" rows="2" maxlength="500"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-primary" id="btnInbound"><i class="bi bi-check2-circle"></i> Simpan barang masuk</button>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">Setiap unit mendapat kode unik di QR. Setelah simpan, gunakan tautan <strong>Cetak QR</strong> di riwayat di bawah atau tombol hijau di sini.</p>
+                    <div id="lastPrint" class="mt-2"></div>
+                </div>
+            </div>
+
+            <div class="alert alert-info py-2 small mb-3">
+                <strong>QR per unit.</strong> Kode di QR dipakai saat <a href="/admin/warehouse/barang-keluar">barang keluar</a>.
+                Scanner USB HID: fokus ke kolom scan di halaman keluar lalu scan.
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span class="fw-semibold">Riwayat barang masuk</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnRefreshHist"><i class="bi bi-arrow-clockwise"></i> Muat ulang</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                            <tr>
+                                <th>Waktu</th>
+                                <th>Barang</th>
+                                <th>Qty</th>
+                                <th>Referensi</th>
+                                <th>Catatan</th>
+                                <th>Status unit</th>
+                                <th class="text-end">Aksi</th>
+                            </tr>
+                            </thead>
+                            <tbody id="tbHist"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<div class="modal fade" id="modalEditBatch" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit batch masuk</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="alEdit" class="mb-2"></div>
+                <p class="small text-muted" id="editBatchHint"></p>
+                <input type="hidden" id="editBatchId">
+                <div class="row g-3">
+                    <div class="col-md-6" id="wrapEditItem">
+                        <label class="form-label">Barang</label>
+                        <select class="form-select" id="editItem"></select>
+                    </div>
+                    <div class="col-md-3" id="wrapEditQty">
+                        <label class="form-label">Jumlah unit</label>
+                        <input type="number" min="1" max="5000" class="form-control" id="editQty">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Referensi / PO</label>
+                        <input type="text" class="form-control" id="editRef" maxlength="200">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Catatan</label>
+                        <textarea class="form-control" id="editNotes" rows="2" maxlength="500"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-primary" id="btnSaveBatch">Simpan perubahan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    const alIn = document.getElementById('alIn');
+    const inItem = document.getElementById('inItem');
+    const tbHist = document.getElementById('tbHist');
+    const lastPrint = document.getElementById('lastPrint');
+    const modalEl = document.getElementById('modalEditBatch');
+    const modal = new bootstrap.Modal(modalEl);
+    const editItem = document.getElementById('editItem');
+
+    function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function notesShort(s, n) {
+        const t = (s || '').trim();
+        if (t.length <= n) return esc(t) || '—';
+        return esc(t.slice(0, n)) + '…';
+    }
+
+    function fillItemSelect(sel, items) {
+        sel.innerHTML = '';
+        (items || []).forEach(it => {
+            const o = document.createElement('option');
+            o.value = it.id;
+            o.textContent = it.name + (it.unit ? ' (' + it.unit + ')' : '');
+            sel.appendChild(o);
+        });
+    }
+
+    async function loadItems() {
+        const r = await fetch('/admin/warehouse/api/items');
+        const j = await r.json();
+        if (!j.success || !(j.items || []).length) {
+            inItem.innerHTML = '<option value="">— Buat dulu di Nama Barang —</option>';
+            editItem.innerHTML = '<option value="">—</option>';
+            return;
+        }
+        fillItemSelect(inItem, j.items);
+        fillItemSelect(editItem, j.items);
+    }
+
+    async function loadHist() {
+        const r = await fetch('/admin/warehouse/api/inbound-history?limit=200');
+        const j = await r.json();
+        tbHist.innerHTML = '';
+        if (!j.success) {
+            tbHist.innerHTML = '<tr><td colspan="7" class="text-danger p-3">Gagal memuat riwayat</td></tr>';
+            return;
+        }
+        (j.rows || []).forEach(row => {
+            const outN = Number(row.units_out) || 0;
+            const inN = Number(row.units_in_stock) || 0;
+            const locked = outN > 0;
+            const statusHtml = locked
+                ? '<span class="badge bg-warning text-dark">' + inN + ' di gudang</span> <span class="badge bg-secondary">' + outN + ' keluar</span>'
+                : '<span class="badge bg-success">' + inN + ' di gudang</span>';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td class="text-nowrap small">' + esc(row.created_at) + '</td>' +
+                '<td>' + esc(row.item_name) + '</td>' +
+                '<td>' + row.quantity + '</td>' +
+                '<td class="small">' + esc(row.reference || '—') + '</td>' +
+                '<td class="small">' + notesShort(row.notes, 48) + '</td>' +
+                '<td>' + statusHtml + '</td>' +
+                '<td class="text-end">' +
+                '<div class="d-inline-flex flex-wrap gap-1 justify-content-end align-items-center">' +
+                '<a class="btn btn-sm wh-btn-print rounded-2 shadow-sm" target="_blank" title="Cetak label QR batch" href="/admin/warehouse/cetak-qr/' + row.id + '">' +
+                '<i class="bi bi-qr-code me-1"></i>Cetak QR</a>' +
+                '<button type="button" class="btn btn-sm wh-btn-edit-solid rounded-2 shadow-sm btn-edit-batch" title="Edit"><i class="bi bi-pencil"></i></button>' +
+                '<button type="button" class="btn btn-sm wh-btn-del-solid rounded-2 shadow-sm btn-del-batch" data-id="' + row.id + '" ' + (locked ? 'disabled title="Tidak bisa hapus jika sudah ada unit keluar"' : 'title="Hapus batch"') + '><i class="bi bi-trash"></i></button>' +
+                '</div></td>';
+            tr.querySelector('.btn-edit-batch').onclick = () => openEditModal(row);
+            const delBtn = tr.querySelector('.btn-del-batch');
+            if (!locked) delBtn.onclick = () => delBatch(row.id, false);
+            tbHist.appendChild(tr);
+        });
+    }
+
+    function openEditModal(row) {
+        const outN = Number(row.units_out) || 0;
+        const locked = outN > 0;
+        document.getElementById('alEdit').innerHTML = '';
+        document.getElementById('editBatchId').value = row.id;
+        document.getElementById('editRef').value = row.reference || '';
+        document.getElementById('editNotes').value = row.notes || '';
+        document.getElementById('editQty').value = row.quantity;
+        document.getElementById('editItem').value = String(row.item_id);
+
+        document.getElementById('wrapEditItem').style.display = locked ? 'none' : '';
+        document.getElementById('wrapEditQty').style.display = locked ? 'none' : '';
+        document.getElementById('editBatchHint').textContent = locked
+            ? 'Batch ini sudah ada unit yang keluar. Hanya referensi dan catatan yang bisa diubah.'
+            : 'Semua unit masih di gudang: Anda bisa mengubah barang, jumlah, referensi, dan catatan. Mengurangi jumlah akan menghapus label/unit paling baru (belum keluar).';
+
+        modal.show();
+    }
+
+    document.getElementById('btnSaveBatch').onclick = async () => {
+        const id = document.getElementById('editBatchId').value;
+        const alEdit = document.getElementById('alEdit');
+        alEdit.innerHTML = '';
+        const body = {
+            reference: document.getElementById('editRef').value.trim(),
+            notes: document.getElementById('editNotes').value.trim()
+        };
+        const showItemQty = document.getElementById('wrapEditItem').style.display !== 'none';
+        if (showItemQty) {
+            body.item_id = parseInt(document.getElementById('editItem').value, 10);
+            body.quantity = parseInt(document.getElementById('editQty').value, 10);
+        }
+        const r = await fetch('/admin/warehouse/api/inbound-batches/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const j = await r.json();
+        if (!j.success) {
+            alEdit.innerHTML = '<div class="alert alert-danger">' + esc(j.message || 'Gagal') + '</div>';
+            return;
+        }
+        modal.hide();
+        alIn.innerHTML = '<div class="alert alert-' + (j.partial ? 'info' : 'success') + '">' +
+            esc(j.message || (j.partial ? 'Referensi/catatan diperbarui.' : 'Perubahan disimpan.')) + '</div>';
+        loadHist();
+    };
+
+    async function delBatch(id, locked) {
+        if (locked) return;
+        if (!confirm('Hapus batch ini beserta semua unit & QR-nya di gudang? Tindakan tidak bisa dibatalkan.')) return;
+        const r = await fetch('/admin/warehouse/api/inbound-batches/' + id, { method: 'DELETE' });
+        const j = await r.json();
+        if (!j.success) {
+            alert(j.message || 'Gagal menghapus');
+            return;
+        }
+        alIn.innerHTML = '<div class="alert alert-success">Batch dihapus.</div>';
+        loadHist();
+    }
+
+    document.getElementById('btnInbound').onclick = async () => {
+        alIn.innerHTML = '';
+        const item_id = parseInt(inItem.value, 10);
+        const quantity = parseInt(document.getElementById('inQty').value, 10);
+        if (!item_id || quantity < 1) {
+            alIn.innerHTML = '<div class="alert alert-warning">Pilih barang dan isi jumlah valid.</div>';
+            return;
+        }
+        const body = {
+            item_id,
+            quantity,
+            reference: document.getElementById('inRef').value.trim(),
+            notes: document.getElementById('inNotes').value.trim()
+        };
+        const r = await fetch('/admin/warehouse/api/inbound', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const j = await r.json();
+        if (!j.success) {
+            alIn.innerHTML = '<div class="alert alert-danger">' + esc(j.message || 'Gagal') + '</div>';
+            return;
+        }
+        alIn.innerHTML = '<div class="alert alert-success">Berhasil. Batch #' + j.batch_id + ' — ' + j.units.length + ' unit dengan QR.</div>';
+        lastPrint.innerHTML = '<a class="btn btn-sm wh-btn-print wh-btn-print-lg rounded-2 shadow-sm" target="_blank" href="' + j.print_url + '"><i class="bi bi-qr-code me-2"></i>Cetak QR</a>';
+        document.getElementById('inRef').value = '';
+        document.getElementById('inNotes').value = '';
+        document.getElementById('inQty').value = '1';
+        loadHist();
+    };
+
+    document.getElementById('btnRefreshHist').onclick = loadHist;
+
+    loadItems();
+    loadHist();
+})();
+</script>
+</body>
+</html>

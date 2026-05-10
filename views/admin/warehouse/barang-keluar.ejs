@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <%- include('../../partials/billing-sidebar', { page: typeof page !== 'undefined' ? page : '' }) %>
+        <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4 main-content" style="min-height:100vh;">
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2"><i class="bi bi-box-arrow-up"></i> Barang Keluar</h1>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>Wajib scan QR unit.</strong> Pengeluaran hanya dengan kode unik per unit (sama dengan isi QR saat barang masuk). Scanner USB HID: fokus ke kolom scan, scan — biasanya kode + Enter terkirim otomatis. <strong>Nama penerima wajib diisi</strong> sebelum memproses keluar.
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <div id="alOut"></div>
+                    <label class="form-label fw-semibold">Penerima <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control mb-3" id="outRecipient" maxlength="200" required autocomplete="name" placeholder="Nama orang / tim yang menerima barang">
+                    <label class="form-label fw-semibold">Scan / tempel kode QR</label>
+                    <input type="text" class="form-control form-control-lg mb-2" id="scanInput" autocomplete="off" placeholder="WH..." autofocus>
+                    <label class="form-label">Catatan keluar (opsional)</label>
+                    <input type="text" class="form-control mb-3" id="outNotes" maxlength="500" placeholder="Tujuan, proyek, dll.">
+                    <button type="button" class="btn btn-primary" id="btnOut"><i class="bi bi-upc-scan"></i> Proses keluar</button>
+                </div>
+            </div>
+
+            <h5 class="mb-2">Riwayat keluar</h5>
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                            <tr>
+                                <th>Waktu</th>
+                                <th>Barang</th>
+                                <th>Kode unit</th>
+                                <th>Penerima</th>
+                                <th>Catatan</th>
+                            </tr>
+                            </thead>
+                            <tbody id="tbOut"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    const scanInput = document.getElementById('scanInput');
+    const outRecipient = document.getElementById('outRecipient');
+    const alOut = document.getElementById('alOut');
+    const tbOut = document.getElementById('tbOut');
+
+    function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    async function loadHist() {
+        const r = await fetch('/admin/warehouse/api/outbound-history?limit=200');
+        const j = await r.json();
+        tbOut.innerHTML = '';
+        if (!j.success) return;
+        (j.rows || []).forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td>' + esc(row.outbound_at) + '</td><td>' + esc(row.item_name) + '</td><td><code>' + esc(row.public_code) + '</code></td><td>' + esc(row.outbound_recipient || '—') + '</td><td>' + esc(row.outbound_notes || '—') + '</td>';
+            tbOut.appendChild(tr);
+        });
+    }
+
+    async function submitScan() {
+        alOut.innerHTML = '';
+        const recipient = outRecipient.value.trim();
+        if (!recipient) {
+            alOut.innerHTML = '<div class="alert alert-warning">Nama penerima wajib diisi.</div>';
+            outRecipient.focus();
+            return;
+        }
+        const code = scanInput.value.trim();
+        if (!code) {
+            alOut.innerHTML = '<div class="alert alert-warning">Isi kode hasil scan.</div>';
+            scanInput.focus();
+            return;
+        }
+        const r = await fetch('/admin/warehouse/api/outbound-scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                code,
+                recipient,
+                notes: document.getElementById('outNotes').value.trim()
+            })
+        });
+        const j = await r.json();
+        if (!j.success) {
+            alOut.innerHTML = '<div class="alert alert-danger">' + esc(j.message || 'Gagal') + '</div>';
+            scanInput.select();
+            return;
+        }
+        alOut.innerHTML = '<div class="alert alert-success">Berhasil keluar ke <strong>' + esc(j.unit.recipient || recipient) + '</strong>: <strong>' + esc(j.unit.item_name) + '</strong> — <code>' + esc(j.unit.public_code) + '</code></div>';
+        scanInput.value = '';
+        scanInput.focus();
+        loadHist();
+    }
+
+    document.getElementById('btnOut').onclick = submitScan;
+    scanInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            submitScan();
+        }
+    });
+
+    loadHist();
+    setTimeout(() => {
+        if (!outRecipient.value.trim()) outRecipient.focus();
+        else scanInput.focus();
+    }, 300);
+})();
+</script>
+</body>
+</html>

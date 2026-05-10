@@ -468,6 +468,71 @@ const employeeSync = {
 // Start employee sync service
 employeeSync.start();
 
+// Warehouse (manajemen gudang) — tabel di billing.db
+const warehouseSync = {
+    start() {
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database('./data/billing.db');
+        const sync = () => {
+            const tables = [
+                `CREATE TABLE IF NOT EXISTS warehouse_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    unit TEXT DEFAULT '',
+                    low_stock_threshold INTEGER NOT NULL DEFAULT 5,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+                `CREATE TABLE IF NOT EXISTS warehouse_inbound_batches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_id INTEGER NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    reference TEXT,
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`,
+                `CREATE TABLE IF NOT EXISTS warehouse_units (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_id INTEGER NOT NULL,
+                    inbound_batch_id INTEGER NOT NULL,
+                    public_code TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL DEFAULT 'in_stock' CHECK(status IN ('in_stock','out')),
+                    outbound_at DATETIME,
+                    outbound_recipient TEXT,
+                    outbound_notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`
+            ];
+            tables.forEach((sql) => {
+                db.run(sql, (err) => {
+                    if (err) console.error('Failed to ensure warehouse table:', err.message);
+                });
+            });
+            db.run('ALTER TABLE warehouse_units ADD COLUMN outbound_recipient TEXT', (err) => {
+                if (err && !String(err.message).includes('duplicate column')) {
+                    console.error('Warehouse migrate outbound_recipient:', err.message);
+                }
+            });
+            const indexes = [
+                'CREATE INDEX IF NOT EXISTS idx_wh_units_code ON warehouse_units(public_code)',
+                'CREATE INDEX IF NOT EXISTS idx_wh_units_item_status ON warehouse_units(item_id, status)',
+                'CREATE INDEX IF NOT EXISTS idx_wh_units_batch ON warehouse_units(inbound_batch_id)',
+                'CREATE INDEX IF NOT EXISTS idx_wh_batches_item ON warehouse_inbound_batches(item_id)',
+                'CREATE INDEX IF NOT EXISTS idx_wh_batches_created ON warehouse_inbound_batches(created_at)'
+            ];
+            indexes.forEach((sql) => {
+                db.run(sql, (err) => {
+                    if (err) console.error('Failed to ensure warehouse index:', err.message);
+                });
+            });
+        };
+        sync();
+        console.log('📦 Warehouse module sync enabled');
+    }
+};
+warehouseSync.start();
+
 // Inisialisasi aplikasi Express
 const app = express();
 
@@ -702,6 +767,9 @@ app.use('/admin/trouble', blockTechnicianAccess, adminAuth, adminTroubleReportRo
 // Import dan gunakan route adminBilling (dipindah ke bawah agar tidak mengganggu route login)
 const adminBillingRouter = require('./routes/adminBilling');
 app.use('/admin/billing', blockTechnicianAccess, adminAuth, adminBillingRouter);
+
+const adminWarehouseRouter = require('./routes/adminWarehouse');
+app.use('/admin/warehouse', blockTechnicianAccess, adminAuth, adminWarehouseRouter);
 
 // Import dan gunakan route adminGoodsInvoice
 const adminGoodsInvoiceRouter = require('./routes/adminGoodsInvoice');

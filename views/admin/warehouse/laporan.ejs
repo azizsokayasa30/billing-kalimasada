@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <%- include('../../partials/billing-sidebar', { page: typeof page !== 'undefined' ? page : '' }) %>
+        <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4" style="min-height:100vh;">
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2"><i class="bi bi-clipboard-data"></i> Laporan Barang</h1>
+                <a class="btn btn-success" href="/admin/warehouse/export/laporan.xlsx"><i class="bi bi-file-earmark-excel"></i> Export Excel</a>
+            </div>
+
+            <div class="row g-3 mb-3" id="cards"></div>
+            <div id="lowBanner"></div>
+
+            <div class="card shadow-sm">
+                <div class="card-header">Ringkasan per barang (stok = unit yang belum keluar)</div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                            <tr>
+                                <th>Barang</th>
+                                <th>Satuan</th>
+                                <th>Sisa stok</th>
+                                <th>Sudah keluar</th>
+                                <th>Batas tipis</th>
+                            </tr>
+                            </thead>
+                            <tbody id="tb"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <p class="text-muted small mt-2" id="totalsLine"></p>
+        </main>
+    </div>
+</div>
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    const cards = document.getElementById('cards');
+    const lowBanner = document.getElementById('lowBanner');
+    const tb = document.getElementById('tb');
+    const totalsLine = document.getElementById('totalsLine');
+
+    function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    async function load() {
+        const r = await fetch('/admin/warehouse/api/report-summary');
+        const j = await r.json();
+        if (!j.success) return;
+        const items = j.items || [];
+        let sumIn = 0;
+        items.forEach(x => { sumIn += Number(x.stock_in) || 0; });
+        const low = j.lowStock || [];
+
+        cards.innerHTML =
+            '<div class="col-md-4"><div class="card border-primary h-100"><div class="card-body"><h6 class="text-muted">Total sisa stok (unit)</h6><h2 class="mb-0">' + sumIn + '</h2></div></div></div>' +
+            '<div class="col-md-4"><div class="card h-100"><div class="card-body"><h6 class="text-muted">Batch barang masuk</h6><h2 class="mb-0">' + (j.totals.inbound_batches || 0) + '</h2></div></div></div>' +
+            '<div class="col-md-4"><div class="card h-100"><div class="card-body"><h6 class="text-muted">Total unit terdaftar</h6><h2 class="mb-0">' + (j.totals.units || 0) + '</h2></div></div></div>';
+
+        if (low.length) {
+            lowBanner.innerHTML = '<div class="alert alert-danger mb-3"><strong>Stok menipis</strong> untuk: ' +
+                low.map(x => esc(x.name) + ' (sisa ' + (Number(x.stock_in) || 0) + ', batas ' + x.low_stock_threshold + ')').join(' · ') +
+                '</div>';
+        } else {
+            lowBanner.innerHTML = '<div class="alert alert-success mb-3">Tidak ada barang di bawah batas stok tipis.</div>';
+        }
+
+        tb.innerHTML = '';
+        items.forEach(row => {
+            const ins = Number(row.stock_in) || 0;
+            const lowT = Number(row.low_stock_threshold) || 0;
+            const danger = ins <= lowT;
+            const tr = document.createElement('tr');
+            if (danger) tr.classList.add('table-warning');
+            tr.innerHTML = '<td>' + esc(row.name) + (danger ? ' <span class="badge bg-warning text-dark">tipis</span>' : '') + '</td>' +
+                '<td>' + esc(row.unit || '—') + '</td><td><strong>' + ins + '</strong></td><td>' + (Number(row.stock_out) || 0) + '</td><td>' + lowT + '</td>';
+            tb.appendChild(tr);
+        });
+        totalsLine.textContent = 'Export Excel memuat ringkasan stok per barang aktif.';
+    }
+    load();
+})();
+</script>
+</body>
+</html>

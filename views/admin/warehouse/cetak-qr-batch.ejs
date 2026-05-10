@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cetak QR — Batch #<%= batch.id %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            .qr-cell { break-inside: avoid; page-break-inside: avoid; }
+        }
+        .qr-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+        .qr-cell {
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            width: 160px;
+        }
+        .qr-cell img { width: 128px; height: 128px; }
+        .qr-code-txt { font-size: 10px; word-break: break-all; font-family: monospace; }
+    </style>
+</head>
+<body class="p-3">
+<div class="no-print mb-3 d-flex gap-2 align-items-center">
+    <button type="button" class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Cetak</button>
+    <a class="btn btn-outline-secondary" href="/admin/warehouse/barang-masuk">Kembali</a>
+    <span class="text-muted small">Batch #<%= batch.id %> — <%= batch.item_name %> — <%= batch.quantity %> unit — <%= batch.reference || 'tanpa ref' %></span>
+</div>
+<h5 class="mb-3"><%= batch.item_name %> <small class="text-muted">(<%= batch.quantity %> label)</small></h5>
+<div class="qr-grid">
+    <% (units || []).forEach(function (u) { %>
+        <div class="qr-cell">
+            <img src="<%= qrBaseUrl %><%= encodeURIComponent(u.public_code) %>" alt="QR" width="128" height="128">
+            <div class="qr-code-txt mt-1"><%= u.public_code %></div>
+        </div>
+    <% }); %>
+</div>
+</body>
+</html>

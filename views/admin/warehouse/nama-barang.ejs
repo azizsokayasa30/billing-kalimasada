@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('../../partials/hard-reload') %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/admin-mobile.css" rel="stylesheet">
+    <%- include('../../partials/theme-head') %>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <%- include('../../partials/billing-sidebar', { page: typeof page !== 'undefined' ? page : '' }) %>
+        <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4" style="min-height:100vh;">
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2"><i class="bi bi-tags"></i> Nama Barang</h1>
+                <button type="button" class="btn btn-primary" id="btnOpenNew">
+                    <i class="bi bi-plus-lg"></i> Tambah Barang
+                </button>
+            </div>
+            <p class="text-muted">Master nama item dipakai saat barang masuk dan untuk laporan stok.</p>
+            <div id="alertRoot"></div>
+            <div class="table-responsive card shadow-sm">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                    <tr>
+                        <th>Nama</th>
+                        <th>Satuan</th>
+                        <th>Batas stok tipis</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="tbodyItems"></tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</div>
+
+<div class="modal fade" id="modalItem" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalItemTitle">Tambah Barang</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editId" value="">
+                <div class="mb-3">
+                    <label class="form-label">Nama barang</label>
+                    <input type="text" class="form-control" id="fName" maxlength="200" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Satuan (opsional)</label>
+                    <input type="text" class="form-control" id="fUnit" maxlength="40" placeholder="pcs, roll, dus, …">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Batas notifikasi stok tipis</label>
+                    <input type="number" min="0" class="form-control" id="fLow" value="5">
+                    <small class="text-muted">Jika sisa unit di gudang ≤ nilai ini, muncul peringatan di laporan.</small>
+                </div>
+                <div class="form-check" id="wrapActive" style="display:none;">
+                    <input class="form-check-input" type="checkbox" id="fActive" checked>
+                    <label class="form-check-label" for="fActive">Aktif (bisa dipilih saat barang masuk)</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-primary" id="btnSaveItem">Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    const tbody = document.getElementById('tbodyItems');
+    const alertRoot = document.getElementById('alertRoot');
+    const modalEl = document.getElementById('modalItem');
+    const modal = new bootstrap.Modal(modalEl);
+
+    function showAlert(type, msg) {
+        alertRoot.innerHTML = '<div class="alert alert-' + type + ' alert-dismissible fade show" role="alert">' + msg +
+            '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    }
+
+    async function load() {
+        const r = await fetch('/admin/warehouse/api/items?all=1');
+        const j = await r.json();
+        if (!j.success) { showAlert('danger', j.message || 'Gagal memuat'); return; }
+        tbody.innerHTML = '';
+        (j.items || []).forEach(it => {
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td>' + escapeHtml(it.name) + '</td>' +
+                '<td>' + escapeHtml(it.unit || '—') + '</td>' +
+                '<td>' + it.low_stock_threshold + '</td>' +
+                '<td>' + (it.is_active ? '<span class="badge bg-success">Aktif</span>' : '<span class="badge bg-secondary">Nonaktif</span>') + '</td>' +
+                '<td class="text-end">' +
+                '<button class="btn btn-sm btn-outline-primary me-1 btn-edit" data-id="' + it.id + '">Edit</button>' +
+                '<button class="btn btn-sm btn-outline-danger btn-del" data-id="' + it.id + '">Hapus</button>' +
+                '</td>';
+            tr.querySelector('.btn-edit').onclick = () => openEdit(it);
+            tr.querySelector('.btn-del').onclick = () => delItem(it.id);
+            tbody.appendChild(tr);
+        });
+    }
+
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    function openNew() {
+        document.getElementById('modalItemTitle').textContent = 'Tambah Barang';
+        document.getElementById('editId').value = '';
+        document.getElementById('fName').value = '';
+        document.getElementById('fUnit').value = '';
+        document.getElementById('fLow').value = '5';
+        document.getElementById('wrapActive').style.display = 'none';
+        modal.show();
+    }
+
+    function openEdit(it) {
+        document.getElementById('modalItemTitle').textContent = 'Edit Barang';
+        document.getElementById('editId').value = it.id;
+        document.getElementById('fName').value = it.name;
+        document.getElementById('fUnit').value = it.unit || '';
+        document.getElementById('fLow').value = it.low_stock_threshold;
+        document.getElementById('fActive').checked = !!it.is_active;
+        document.getElementById('wrapActive').style.display = 'block';
+        modal.show();
+    }
+
+    document.getElementById('btnOpenNew').onclick = openNew;
+
+    document.getElementById('btnSaveItem').onclick = async () => {
+        const id = document.getElementById('editId').value;
+        const body = {
+            name: document.getElementById('fName').value.trim(),
+            unit: document.getElementById('fUnit').value.trim(),
+            low_stock_threshold: parseInt(document.getElementById('fLow').value, 10) || 0
+        };
+        if (!body.name) { showAlert('warning', 'Nama wajib diisi'); return; }
+        let url = '/admin/warehouse/api/items';
+        let method = 'POST';
+        if (id) {
+            url += '/' + id;
+            method = 'PUT';
+            body.is_active = document.getElementById('fActive').checked;
+        }
+        const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json();
+        if (!j.success) { showAlert('danger', j.message || 'Gagal simpan'); return; }
+        modal.hide();
+        showAlert('success', 'Tersimpan.');
+        load();
+    };
+
+    async function delItem(id) {
+        if (!confirm('Hapus master barang ini? Hanya boleh jika belum ada unit/stok.')) return;
+        const r = await fetch('/admin/warehouse/api/items/' + id, { method: 'DELETE' });
+        const j = await r.json();
+        if (!j.success) { showAlert('danger', j.message || 'Gagal hapus'); return; }
+        showAlert('success', 'Terhapus.');
+        load();
+    }
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+        document.getElementById('editId').value = '';
+    });
+
+    load();
+})();
+</script>
+</body>
+</html>
