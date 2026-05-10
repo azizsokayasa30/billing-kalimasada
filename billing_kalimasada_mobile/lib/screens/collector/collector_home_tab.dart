@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../store/collector_provider.dart';
 import '../../theme/collector_colors.dart';
+import '../tag_customer_location_screen.dart';
 
 String _rupiah(num? v) {
   final n = (v ?? 0).round();
@@ -412,6 +413,46 @@ class _CollectorHomeTabState extends State<CollectorHomeTab> {
           ),
           const SizedBox(height: 16),
           _summaryGrid(context, totalPlg, blm, lunas, isolir),
+          const SizedBox(height: 20),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Aksi cepat',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: FieldCollectorColors.onSurfaceVariant,
+                    letterSpacing: 0.4,
+                  ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (context) => const TagCustomerLocationScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.person_pin_circle_outlined, size: 22),
+              label: const Text(
+                'Tag Pelanggan',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: FieldCollectorColors.onSurface,
+                side: const BorderSide(color: FieldCollectorColors.outlineVariant),
+                backgroundColor: FieldCollectorColors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

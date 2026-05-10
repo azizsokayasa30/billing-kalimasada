@@ -761,9 +761,11 @@ router.get('/customers/search', verifyToken, allowFieldOps, (req, res) => {
     );
 });
 
-router.put('/customers/:customerId/location', verifyToken, requireTechnician, (req, res) => {
+router.put('/customers/:customerId/location', verifyToken, allowFieldOps, (req, res) => {
     const id = parseInt(req.params.customerId, 10);
-    const { latitude, longitude } = req.body || {};
+    const body = req.body || {};
+    const { latitude, longitude } = body;
+    const odpRaw = body.odp_id != null ? body.odp_id : body.odpId;
     if (!Number.isFinite(id) || latitude === undefined || longitude === undefined) {
         return res.status(400).json({ success: false, message: 'Data tidak valid' });
     }
@@ -772,17 +774,55 @@ router.put('/customers/:customerId/location', verifyToken, requireTechnician, (r
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         return res.status(400).json({ success: false, message: 'Koordinat tidak valid' });
     }
-    db.run(
-        'UPDATE customers SET latitude = ?, longitude = ? WHERE id = ?',
-        [lat, lng, id],
-        function (err) {
-            if (err) {
-                return res.status(500).json({ success: false, message: err.message });
+
+    const runLocationUpdate = (odpIntId) => {
+        if (odpIntId != null && Number.isFinite(odpIntId) && odpIntId > 0) {
+            db.run(
+                'UPDATE customers SET latitude = ?, longitude = ?, odp_id = ? WHERE id = ?',
+                [lat, lng, odpIntId, id],
+                function (err) {
+                    if (err) {
+                        return res.status(500).json({ success: false, message: err.message });
+                    }
+                    if (this.changes === 0) {
+                        return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+                    }
+                    return res.json({ success: true, message: 'Lokasi dan ODP pelanggan diperbarui' });
+                }
+            );
+            return;
+        }
+        db.run(
+            'UPDATE customers SET latitude = ?, longitude = ? WHERE id = ?',
+            [lat, lng, id],
+            function (err) {
+                if (err) {
+                    return res.status(500).json({ success: false, message: err.message });
+                }
+                if (this.changes === 0) {
+                    return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+                }
+                res.json({ success: true, message: 'Lokasi diperbarui' });
             }
-            if (this.changes === 0) {
-                return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+        );
+    };
+
+    if (odpRaw === undefined || odpRaw === null || String(odpRaw).trim() === '') {
+        return runLocationUpdate(null);
+    }
+
+    const odpKey = String(odpRaw).trim();
+    db.get(
+        'SELECT id FROM odps WHERE id = ? OR code = ? OR name = ? LIMIT 1',
+        [odpKey, odpKey, odpKey],
+        (eOdp, odpRow) => {
+            if (eOdp) {
+                return res.status(500).json({ success: false, message: eOdp.message });
             }
-            res.json({ success: true, message: 'Lokasi diperbarui' });
+            if (!odpRow) {
+                return res.status(400).json({ success: false, message: 'ODP tidak ditemukan' });
+            }
+            runLocationUpdate(odpRow.id);
         }
     );
 });
@@ -2455,12 +2495,18 @@ router.post('/notifications/read-all', verifyToken, requireTechnician, (req, res
 });
 
 // --- ODP / jaringan ---
-router.get('/odps', verifyToken, requireTechnician, (req, res) => {
+router.get('/odps', verifyToken, allowFieldOps, (req, res) => {
+    const includeAll = String(req.query.all || '').trim() === '1';
+    const sql = includeAll
+        ? `SELECT id, name, code, latitude, longitude, status, capacity, used_ports, address, parent_odp_id
+           FROM odps
+           ORDER BY name`
+        : `SELECT id, name, code, latitude, longitude, status, capacity, used_ports, address, parent_odp_id
+           FROM odps
+           WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+           ORDER BY name`;
     db.all(
-        `SELECT id, name, code, latitude, longitude, status, capacity, used_ports, address, parent_odp_id
-         FROM odps
-         WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-         ORDER BY name`,
+        sql,
         [],
         (err, rows) => {
             if (err) {
@@ -2468,8 +2514,8 @@ router.get('/odps', verifyToken, requireTechnician, (req, res) => {
             }
             const data = (rows || []).map((r) => ({
                 ...r,
-                latitude: parseFloat(r.latitude),
-                longitude: parseFloat(r.longitude)
+                latitude: r.latitude != null && r.latitude !== '' ? parseFloat(r.latitude) : null,
+                longitude: r.longitude != null && r.longitude !== '' ? parseFloat(r.longitude) : null
             }));
             res.json({ success: true, data });
         }

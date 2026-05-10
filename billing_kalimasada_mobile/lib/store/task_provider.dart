@@ -54,7 +54,10 @@ class TaskProvider extends ChangeNotifier {
     if (refresh) notifyListeners();
 
     try {
-      final response = await ApiClient.get('/api/mobile-adapter/tasks');
+      final path = refresh
+          ? '/api/mobile-adapter/tasks?_=${DateTime.now().millisecondsSinceEpoch}'
+          : '/api/mobile-adapter/tasks';
+      final response = await ApiClient.get(path);
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -83,7 +86,10 @@ class TaskProvider extends ChangeNotifier {
     if (refresh) notifyListeners();
 
     try {
-      final response = await ApiClient.get('/api/mobile-adapter/performance/week');
+      final path = refresh
+          ? '/api/mobile-adapter/performance/week?_=${DateTime.now().millisecondsSinceEpoch}'
+          : '/api/mobile-adapter/performance/week';
+      final response = await ApiClient.get(path);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         if (ApiClient.jsonSuccess(data['success']) && data['data'] is Map) {

@@ -14,6 +14,7 @@ import 'network_status_screen.dart';
 import 'customer_list_screen.dart';
 import 'task_list_screen.dart';
 import 'tag_location_screen.dart';
+import 'tag_customer_location_screen.dart';
 
 class TechnicianDashboard extends StatefulWidget {
   final void Function(int index, {String? taskListFilter})? onNavigateToTab;
@@ -60,11 +61,12 @@ class _TechnicianDashboardState extends State<TechnicianDashboard>
   Future<void> _onPullRefreshDashboard() async {
     if (!mounted) return;
     await Future.wait<void>([
-      context.read<CustomerProvider>().fetchDashboardStats(),
+      context.read<CustomerProvider>().fetchDashboardStats(bustCache: true),
       context.read<TaskProvider>().fetchTasks(refresh: true),
       context.read<TaskProvider>().fetchWeekPerformance(refresh: true),
       context.read<NotificationProvider>().fetchNotifications(silent: true),
     ]);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -111,17 +113,23 @@ class _TechnicianDashboardState extends State<TechnicianDashboard>
     const inversePrimary = Color(0xFFC5C0FF);
     const errorColor = Color(0xFFBA1A1A);
 
+    final topInset = MediaQuery.paddingOf(context).top;
+
     return Scaffold(
       backgroundColor: bgBackground,
       body: RefreshIndicator(
         color: surfaceTint,
-        displacement: 40,
-        triggerMode: RefreshIndicatorTriggerMode.anywhere,
+        edgeOffset: topInset + 8,
+        displacement: topInset + 32,
+        triggerMode: RefreshIndicatorTriggerMode.onEdge,
+        notificationPredicate: (ScrollNotification notification) {
+          if (notification.metrics.axis != Axis.vertical) return false;
+          if (notification.depth == 0) return true;
+          return notification is OverscrollNotification && notification.depth == 1;
+        },
         onRefresh: _onPullRefreshDashboard,
         child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics(),
-          ),
+          physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(
               child: Container(
@@ -542,45 +550,100 @@ class _TechnicianDashboardState extends State<TechnicianDashboard>
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: bgSurfaceContainerLowest,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0xFFC8C4D3).withValues(alpha: 0.6),
-                        ),
-                      ),
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const TagLocationScreen(),
-                            ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.qr_code_scanner,
-                              color: surfaceTint,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Tag ODP',
-                              style: TextStyle(
-                                color: textOnBackground,
-                                fontWeight: FontWeight.w600,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: bgSurfaceContainerLowest,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFC8C4D3)
+                                    .withValues(alpha: 0.6),
                               ),
                             ),
-                          ],
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const TagLocationScreen(),
+                                  ),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.qr_code_scanner,
+                                    color: surfaceTint,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Tag ODP',
+                                    style: TextStyle(
+                                      color: textOnBackground,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: bgSurfaceContainerLowest,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFC8C4D3)
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const TagCustomerLocationScreen(),
+                                  ),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.person_pin_circle_outlined,
+                                    color: surfaceTint,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      'Tag Pelanggan',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: textOnBackground,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 32),

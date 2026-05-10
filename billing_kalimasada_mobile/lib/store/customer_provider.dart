@@ -67,9 +67,14 @@ class CustomerProvider extends ChangeNotifier {
   }
 
   /// Jangan set `_loading` di sini — dipakai untuk pagination `fetchCustomers`; memakai flag yang sama bikin refresh/macet.
-  Future<void> fetchDashboardStats() async {
+  ///
+  /// [bustCache] — tambahkan query unik agar pull-to-refresh tidak memakai respons cache (proxy/CDN) dan angka selalu diambil ulang.
+  Future<void> fetchDashboardStats({bool bustCache = false}) async {
     try {
-      final response = await ApiClient.get('/api/mobile-adapter/dashboard');
+      final path = bustCache
+          ? '/api/mobile-adapter/dashboard?_=${DateTime.now().millisecondsSinceEpoch}'
+          : '/api/mobile-adapter/dashboard';
+      final response = await ApiClient.get(path);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         if (!ApiClient.jsonSuccess(data['success'])) return;
@@ -119,12 +124,20 @@ class CustomerProvider extends ChangeNotifier {
   Future<bool> updateLocation(
     String customerId,
     double latitude,
-    double longitude,
-  ) async {
+    double longitude, {
+    int? odpId,
+  }) async {
     try {
+      final body = <String, dynamic>{
+        'latitude': latitude,
+        'longitude': longitude,
+      };
+      if (odpId != null && odpId > 0) {
+        body['odp_id'] = odpId;
+      }
       final response = await ApiClient.put(
         '/api/mobile-adapter/customers/$customerId/location',
-        {'latitude': latitude, 'longitude': longitude},
+        body,
       );
       print('UPDATE LOCATION RES: ${response.statusCode} - ${response.body}');
       if (response.statusCode == 200) {
