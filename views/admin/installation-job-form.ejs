@@ -460,18 +460,24 @@
         `;
     }
     
-    /** Password Cleartext-Password dari radcheck untuk username PPPoE; fallback billing jika tidak ada. */
-    function loadPppoePasswordFromRadius(effectiveUsername, billingPass) {
+    /**
+     * Sandi PPPoE: prioritas RADIUS (radcheck). Opsional `trustedOperationalPass` hanya jika sudah
+     * diketahui sebagai sandi PPPoE (mis. dari pencarian / tugas), bukan `customers.password` portal.
+     */
+    function loadPppoePasswordFromRadius(effectiveUsername, trustedOperationalPass) {
         const slot = document.getElementById('installPppoePwdSlot');
         const hiddenPwd = document.getElementById('installCustomerPppoePasswordHidden');
         if (!slot || !hiddenPwd) return;
-        const fb = billingPass != null ? String(billingPass) : '';
+        const trusted =
+            trustedOperationalPass != null && String(trustedOperationalPass).trim() !== ''
+                ? String(trustedOperationalPass).trim()
+                : '';
         const u = (effectiveUsername && String(effectiveUsername).trim()) || '';
         if (!u) {
-            slot.innerHTML = fb
-                ? `<code class="small user-select-all">${escHtml(fb)}</code> <span class="text-muted">(dari billing, tanpa username PPPoE untuk lookup RADIUS)</span>`
+            slot.innerHTML = trusted
+                ? `<code class="small user-select-all">${escHtml(trusted)}</code> <span class="text-muted small">(tanpa username PPPoE untuk lookup RADIUS)</span>`
                 : '<span class="text-muted">—</span>';
-            hiddenPwd.value = fb;
+            hiddenPwd.value = trusted;
             return;
         }
         slot.innerHTML = '<span class="text-muted">Memuat dari RADIUS…</span>';
@@ -482,20 +488,18 @@
                 if (pwd) {
                     slot.innerHTML = `<code class="small user-select-all">${escHtml(pwd)}</code>`;
                     hiddenPwd.value = pwd;
-                } else if (fb) {
-                    slot.innerHTML =
-                        `<span class="text-muted">Tidak di radcheck untuk <code>${escHtml(u)}</code> — billing:</span> <code class="small user-select-all">${escHtml(fb)}</code>`;
-                    hiddenPwd.value = fb;
+                } else if (trusted) {
+                    slot.innerHTML = `<code class="small user-select-all">${escHtml(trusted)}</code> <span class="text-muted small">(belum di radcheck untuk <code>${escHtml(u)}</code>)</span>`;
+                    hiddenPwd.value = trusted;
                 } else {
-                    slot.innerHTML = `<span class="text-muted">Tidak ada di RADIUS (user <code>${escHtml(u)}</code>) — isi password di menu Pelanggan / sync RADIUS</span>`;
+                    slot.innerHTML = `<span class="text-muted">Tidak ada di RADIUS (user <code>${escHtml(u)}</code>) — atur Cleartext-Password di radcheck / sync RADIUS</span>`;
                     hiddenPwd.value = '';
                 }
             })
             .catch(() => {
-                if (fb) {
-                    slot.innerHTML =
-                        `<span class="text-muted">RADIUS gagal — billing:</span> <code class="small user-select-all">${escHtml(fb)}</code>`;
-                    hiddenPwd.value = fb;
+                if (trusted) {
+                    slot.innerHTML = `<span class="text-muted">RADIUS gagal —</span> <code class="small user-select-all">${escHtml(trusted)}</code>`;
+                    hiddenPwd.value = trusted;
                 } else {
                     slot.textContent = 'Gagal memuat dari RADIUS.';
                     hiddenPwd.value = '';
@@ -535,7 +539,10 @@
         const address = cust.address || '';
         const loginUser = cust.username || '';
         const pppoe = cust.pppoe_username || '';
-        const pass = cust.password != null ? String(cust.password) : '';
+        const pass =
+            cust.pppoe_password != null && String(cust.pppoe_password).trim() !== ''
+                ? String(cust.pppoe_password).trim()
+                : '';
         const pkgName = cust.package_name || '';
         const effectivePppoeUser = (pppoe && String(pppoe).trim()) || (loginUser && String(loginUser).trim()) || '';
 
@@ -881,7 +888,7 @@
                     email: prefillCustomer.email || '',
                     address: prefillCustomer.customer_address || '',
                     pppoe_username: prefillCustomer.pppoe_username || '',
-                    password: prefillCustomer.pppoe_password || prefillCustomer.password || '',
+                    password: prefillCustomer.pppoe_password || '',
                     package_id: prefillCustomer.package_id,
                     package_name: prefillCustomer.package_name || ''
                 },
@@ -910,7 +917,7 @@
                     email: '',
                     address: editJob.customer_address || '',
                     pppoe_username: editJob.customer_pppoe_username_loaded || editJob.customer_pppoe_username || '',
-                    password: editJob.customer_password_loaded || '',
+                    password: '',
                     package_id: editJob.package_id,
                     package_name: editJob.package_name || ''
                 },

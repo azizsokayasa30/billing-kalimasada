@@ -61,13 +61,13 @@ class _OdpMapMarkerState extends State<OdpMapMarker>
     final Color fill = inactive
         ? const Color(0xFFC4C4C4)
         : maintenance
-            ? const Color(0xFFFFCA28)
-            : const Color(0xFFFFC107);
+        ? const Color(0xFFFFCA28)
+        : const Color(0xFFFFC107);
     final Color stroke = inactive
         ? const Color(0xFF9E9E9E)
         : maintenance
-            ? const Color(0xFFFF9800)
-            : const Color(0xFFF9A825);
+        ? const Color(0xFFFF9800)
+        : const Color(0xFFF9A825);
     final d = widget.size;
     final icon = maintenance
         ? Icons.settings_input_component_rounded
@@ -76,7 +76,9 @@ class _OdpMapMarkerState extends State<OdpMapMarker>
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) {
-        final scale = widget.enablePulse ? (1.0 + (_pulseController.value * 0.08)) : 1.0;
+        final scale = widget.enablePulse
+            ? (1.0 + (_pulseController.value * 0.08))
+            : 1.0;
         return Transform.scale(scale: scale, child: child);
       },
       child: SizedBox(
@@ -105,11 +107,7 @@ class _OdpMapMarkerState extends State<OdpMapMarker>
                   ),
                 ],
               ),
-              child: Icon(
-                icon,
-                size: d * 0.48,
-                color: Colors.white,
-              ),
+              child: Icon(icon, size: d * 0.48, color: Colors.white),
             ),
             Positioned(
               top: d - 2,
@@ -118,8 +116,14 @@ class _OdpMapMarkerState extends State<OdpMapMarker>
                 height: 0,
                 decoration: BoxDecoration(
                   border: Border(
-                    left: BorderSide(color: Colors.transparent, width: d * 0.18),
-                    right: BorderSide(color: Colors.transparent, width: d * 0.18),
+                    left: BorderSide(
+                      color: Colors.transparent,
+                      width: d * 0.18,
+                    ),
+                    right: BorderSide(
+                      color: Colors.transparent,
+                      width: d * 0.18,
+                    ),
                     top: BorderSide(color: fill, width: d * 0.28),
                   ),
                 ),

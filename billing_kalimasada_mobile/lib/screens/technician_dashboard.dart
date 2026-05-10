@@ -804,6 +804,28 @@ class _TechnicianDashboardState extends State<TechnicianDashboard>
                                     ),
                                   ],
                                 ),
+                                if (activeTasks > 0) ...[
+                                  const SizedBox(height: 6),
+                                  FadeTransition(
+                                    opacity: pulseOpacity,
+                                    child: Text(
+                                      'menunggu dikerjakan',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.15,
+                                        color: const Color(0xFF66DF75),
+                                        shadows: [
+                                          Shadow(
+                                            color: const Color(0xFF66DF75)
+                                                .withValues(alpha: 0.55),
+                                            blurRadius: 8,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

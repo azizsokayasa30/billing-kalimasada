@@ -6,6 +6,7 @@ const { getRadiusConnection: getRadiusConnectionSQLite } = require('./radiusSQLi
 const fs = require('fs');
 const path = require('path');
 const cacheManager = require('./cacheManager');
+const { looksLikePasswordHashNotCleartext } = require('../utils/passwordHashHeuristic');
 
 let sock = null;
 let mikrotikConnection = null;
@@ -382,21 +383,50 @@ async function resolvePppoeProfileHintToRadiusGroup(conn, profileHint) {
     return null;
 }
 
-/** Cleartext-Password di radcheck untuk satu username PPPoE (RADIUS SQLite). */
+/** Sandi cleartext di radcheck untuk satu login PPPoE (RADIUS SQLite). */
 async function getRadcheckCleartextPassword(username) {
     const u = (username && String(username).trim()) || '';
     if (!u) return null;
     let conn;
+    const normalizeVal = (v) => {
+        if (v == null) return '';
+        if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) return v.toString('utf8').trim();
+        return String(v).trim();
+    };
     try {
         conn = await getRadiusConnection();
-        const [rows] = await conn.execute(
-            "SELECT value FROM radcheck WHERE username = ? AND attribute = 'Cleartext-Password' LIMIT 1",
+        /** Abaikan value yang tampak hash (bcrypt/argon2) — sering salah isi di radcheck. */
+        const pickFirstCleartext = (rows) => {
+            if (!rows || !rows.length) return null;
+            for (const row of rows) {
+                const val = normalizeVal(row.value);
+                if (val && !looksLikePasswordHashNotCleartext(val)) return val;
+            }
+            return null;
+        };
+
+        const tryAll = async (sql, params) => {
+            const [rows] = await conn.execute(sql, params);
+            return pickFirstCleartext(rows);
+        };
+
+        // Atribut di dump FreeRADIUS / tool impor bervariasi huruf besar-kecil.
+        let v = await tryAll(
+            `SELECT value FROM radcheck
+             WHERE username = ? AND LOWER(TRIM(attribute)) IN ('cleartext-password', 'user-password')
+             ORDER BY CASE LOWER(TRIM(attribute)) WHEN 'cleartext-password' THEN 0 ELSE 1 END, rowid ASC`,
             [u]
         );
-        if (rows && rows[0] && rows[0].value != null && String(rows[0].value) !== '') {
-            return String(rows[0].value);
+        if (!v) {
+            v = await tryAll(
+                `SELECT value FROM radcheck
+                 WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
+                   AND LOWER(TRIM(attribute)) IN ('cleartext-password', 'user-password')
+                 ORDER BY CASE LOWER(TRIM(attribute)) WHEN 'cleartext-password' THEN 0 ELSE 1 END, rowid ASC`,
+                [u]
+            );
         }
-        return null;
+        return v || null;
     } catch (e) {
         try {
             logger.warn('[RADIUS] getRadcheckCleartextPassword:', e.message);
@@ -406,6 +436,92 @@ async function getRadcheckCleartextPassword(username) {
         try {
             if (conn && typeof conn.end === 'function') await conn.end();
         } catch (_) {}
+    }
+}
+
+/** Cache `/ppp/secret/print` penuh per NAS — hindari spam saat banyak tugas; TTL pendek. */
+const _pppSecretFullPrintCache = new Map();
+const PPP_SECRET_FULL_CACHE_MS = 40000;
+
+async function getCachedFullPppSecrets(conn, cacheKey) {
+    const key = cacheKey != null ? String(cacheKey) : '_';
+    const now = Date.now();
+    const hit = _pppSecretFullPrintCache.get(key);
+    if (hit && now - hit.ts < PPP_SECRET_FULL_CACHE_MS) {
+        return hit.rows;
+    }
+    const all = await conn.write('/ppp/secret/print');
+    const rows = Array.isArray(all) ? all : [];
+    _pppSecretFullPrintCache.set(key, { ts: now, rows });
+    return rows;
+}
+
+/**
+ * Sandi cleartext dari /ppp/secret RouterOS — sumber yang sama dengan halaman admin
+ * `/admin/mikrotik` saat mode autentikasi PPPoE **Mikrotik** (bukan RADIUS).
+ * Memindai semua baris di `routers` (multi-NAS), lalu fallback satu koneksi default.
+ *
+ * Catatan: filter `?name=` kadang mengembalikan `!empty` / error di node-routeros atau
+ * tidak cocok versi API — maka fallback ke print penuh (sama pola komentar di disconnectPPPoEUser).
+ */
+async function getPppSecretCleartextPasswordFromMikrotikRouters(username) {
+    const u = (username && String(username).trim()) || '';
+    if (!u) return null;
+    const ul = u.toLowerCase();
+
+    const pickFromSecrets = (secrets) => {
+        if (!Array.isArray(secrets) || secrets.length === 0) return null;
+        for (const sec of secrets) {
+            if (!sec || sec.name == null) continue;
+            const n = String(sec.name).trim();
+            if (n !== u && n.toLowerCase() !== ul) continue;
+            const val = sec.password != null ? String(sec.password).trim() : '';
+            if (val && !looksLikePasswordHashNotCleartext(val)) return val;
+        }
+        return null;
+    };
+
+    const lookupOnConn = async (conn, cacheKey) => {
+        if (!conn) return null;
+        let filtered = [];
+        try {
+            filtered = await conn.write('/ppp/secret/print', ['?name=' + u]);
+        } catch (e) {
+            logger.debug(`[MIKROTIK] secret print ?name= skip (${u}): ${e.message}`);
+            filtered = [];
+        }
+        if (!Array.isArray(filtered)) filtered = [];
+        let found = pickFromSecrets(filtered);
+        if (found) return found;
+        try {
+            const allRows = await getCachedFullPppSecrets(conn, cacheKey);
+            return pickFromSecrets(allRows);
+        } catch (e2) {
+            logger.warn(`[MIKROTIK] secret print full (${cacheKey}): ${e2.message}`);
+            return null;
+        }
+    };
+
+    try {
+        const routers = await getAllRoutersFromBillingDb();
+        if (routers && routers.length > 0) {
+            for (const r of routers) {
+                try {
+                    const conn = await getMikrotikConnectionForRouter(r);
+                    const ck = `r${r.id}`;
+                    const found = await lookupOnConn(conn, ck);
+                    if (found) return found;
+                } catch (e) {
+                    logger.warn(`[MIKROTIK] PPP secret "${u}" (${r.name || r.id}): ${e.message}`);
+                }
+            }
+            return null;
+        }
+        const conn = await getMikrotikConnection();
+        return await lookupOnConn(conn, '_default');
+    } catch (e) {
+        logger.warn(`[MIKROTIK] getPppSecretCleartextPasswordFromMikrotikRouters: ${e.message}`);
+        return null;
     }
 }
 
@@ -9759,6 +9875,7 @@ module.exports = {
     // RADIUS functions
     getRadiusConnection,
     getRadcheckCleartextPassword,
+    getPppSecretCleartextPasswordFromMikrotikRouters,
     resolveRadiusProfileGroupname,
     resolvePppoeProfileHintToRadiusGroup,
     getUserAuthModeAsync,

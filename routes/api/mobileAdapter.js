@@ -653,13 +653,14 @@ router.get('/customers', verifyToken, allowFieldOps, (req, res) => {
         }
     }
     if (search) {
-        where += ' AND (c.name LIKE ? OR c.phone LIKE ? OR CAST(c.customer_id AS TEXT) LIKE ? OR c.username LIKE ?)';
+        where +=
+            ' AND (c.name LIKE ? OR c.phone LIKE ? OR CAST(c.customer_id AS TEXT) LIKE ? OR c.username LIKE ? OR IFNULL(c.email, \'\') LIKE ?)';
         const like = `%${search.replace(/%/g, '')}%`;
-        params.push(like, like, like, like);
+        params.push(like, like, like, like, like);
     }
 
     const sql = `
-        SELECT c.id, c.customer_id, c.name, c.phone, c.status, c.address,
+        SELECT c.id, c.customer_id, c.name, c.phone, c.email, c.status, c.address,
                c.latitude, c.longitude, c.pppoe_username,
                p.name AS profile
         FROM customers c
@@ -823,12 +824,12 @@ router.get('/customers/search', verifyToken, allowFieldOps, (req, res) => {
     }
     const like = `%${q.replace(/%/g, '')}%`;
     db.all(
-        `SELECT c.id, c.customer_id, c.name, c.phone, c.status, c.address
+        `SELECT c.id, c.customer_id, c.name, c.phone, c.email, c.status, c.address
          FROM customers c
-         WHERE c.name LIKE ? OR c.phone LIKE ? OR CAST(c.customer_id AS TEXT) LIKE ?
+         WHERE c.name LIKE ? OR c.phone LIKE ? OR CAST(c.customer_id AS TEXT) LIKE ? OR IFNULL(c.email, '') LIKE ?
          ORDER BY c.name
          LIMIT 30`,
-        [like, like, like],
+        [like, like, like, like],
         (err, rows) => {
             if (err) {
                 return res.status(500).json({ success: false, message: err.message });
@@ -1633,15 +1634,7 @@ router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
                        REPLACE(REPLACE(REPLACE(LOWER(TRIM(ij.customer_phone)), ' ', ''), '-', ''), '+', '')
                  ORDER BY cu.id DESC LIMIT 1)
             ) AS cust_pppoe_username,
-            COALESCE(
-                (SELECT NULLIF(TRIM(password), '') FROM customers WHERE id = ij.customer_id AND NULLIF(ij.customer_id, 0) IS NOT NULL),
-                (SELECT NULLIF(TRIM(password), '') FROM customers cu
-                 WHERE (ij.customer_id IS NULL OR ij.customer_id = 0)
-                   AND NULLIF(TRIM(IFNULL(ij.customer_phone, '')), '') IS NOT NULL
-                   AND REPLACE(REPLACE(REPLACE(LOWER(TRIM(cu.phone)), ' ', ''), '-', ''), '+', '') =
-                       REPLACE(REPLACE(REPLACE(LOWER(TRIM(ij.customer_phone)), ' ', ''), '-', ''), '+', '')
-                 ORDER BY cu.id DESC LIMIT 1)
-            ) AS cust_pppoe_password
+            NULL AS cust_pppoe_password
         FROM installation_jobs ij
         LEFT JOIN packages p ON ij.package_id = p.id
         WHERE ${installWhere}
@@ -1681,12 +1674,7 @@ router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
                     return res.status(500).json({ success: false, message: 'Gagal memuat tiket' });
                 }
 
-                let getRadcheckCleartextPassword;
-                try {
-                    ({ getRadcheckCleartextPassword } = require('../../config/mikrotik'));
-                } catch (e) {
-                    getRadcheckCleartextPassword = null;
-                }
+                const { resolvePppoeCleartextFromRadiusOnly } = require('../../utils/pppoePasswordPolicy');
 
                 const tasks = [];
                 for (const row of installRows || []) {
@@ -1697,16 +1685,10 @@ router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
                         (stLow === 'in_progress' ? row.updated_at || null : null);
                     const pppUser =
                         (row.cust_pppoe_username && String(row.cust_pppoe_username).trim()) || '';
-                    let pppPass =
-                        row.cust_pppoe_password != null && String(row.cust_pppoe_password).trim() !== ''
-                            ? String(row.cust_pppoe_password).trim()
-                            : null;
-                    if ((!pppPass || String(pppPass).trim() === '') && pppUser && typeof getRadcheckCleartextPassword === 'function') {
+                    let pppPass = null;
+                    if (pppUser) {
                         try {
-                            const fromRadius = await getRadcheckCleartextPassword(pppUser);
-                            if (fromRadius != null && String(fromRadius).trim() !== '') {
-                                pppPass = String(fromRadius).trim();
-                            }
+                            pppPass = await resolvePppoeCleartextFromRadiusOnly(pppUser);
                         } catch (radErr) {
                             logger.warn('[mobile-adapter] tasks install RADIUS password:', radErr.message || radErr);
                         }

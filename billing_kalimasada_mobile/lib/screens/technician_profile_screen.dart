@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import '../store/auth_provider.dart';
 import '../services/api_client.dart';
+import 'app_update_screen.dart';
 import 'settings_screen.dart';
 
 class TechnicianProfileScreen extends StatefulWidget {
@@ -345,6 +346,49 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                           primaryColor,
                           bgSurfaceContainer,
                           onTap: null,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: bgSurfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: bgSurfaceContainer,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.system_update, color: primaryColor, size: 22),
+                          ),
+                          title: const Text(
+                            'Update aplikasi',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                              color: textOnBackground,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Periksa versi terbaru dan instal APK',
+                            style: TextStyle(fontSize: 13, color: textOnSurfaceVariant),
+                          ),
+                          trailing: const Icon(Icons.chevron_right, color: outlineVariant),
+                          onTap: () {
+                            Navigator.of(context).push<void>(
+                              MaterialPageRoute<void>(builder: (_) => const AppUpdateScreen()),
+                            );
+                          },
                         ),
                       ],
                     ),

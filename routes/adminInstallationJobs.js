@@ -448,7 +448,6 @@ router.get('/edit/:id', adminAuth, async (req, res) => {
                 `
                 SELECT ij.*, p.name as package_name, t.name as technician_name,
                        c.pppoe_username AS customer_pppoe_username_loaded,
-                       c.password AS customer_password_loaded,
                        c.customer_id AS customer_public_id_loaded,
                        c.username AS customer_login_username_loaded
                 FROM installation_jobs ij
@@ -1151,8 +1150,8 @@ router.get('/api/pppoe-password', adminAuth, async (req, res) => {
         if (!username) {
             return res.json({ success: true, password: null, username: '' });
         }
-        const { getRadcheckCleartextPassword } = require('../config/mikrotik');
-        const password = await getRadcheckCleartextPassword(username);
+        const { resolvePppoeCleartextFromRadiusOnly } = require('../utils/pppoePasswordPolicy');
+        const password = await resolvePppoeCleartextFromRadiusOnly(username);
         res.json({ success: true, password, username });
     } catch (error) {
         logger.error('[admin-install] pppoe-password:', error);

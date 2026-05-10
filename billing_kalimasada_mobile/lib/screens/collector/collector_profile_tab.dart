@@ -5,6 +5,7 @@ import '../../store/auth_provider.dart';
 import '../../store/collector_provider.dart';
 import '../../theme/collector_colors.dart';
 import 'collector_profile_edit_screen.dart';
+import '../app_update_screen.dart';
 import '../settings_screen.dart';
 
 String _rupiah(num? v) {
@@ -159,6 +160,18 @@ class _CollectorProfileTabState extends State<CollectorProfileTab> with Automati
                     }
                     Navigator.of(context).push<void>(
                       MaterialPageRoute<void>(builder: (_) => const CollectorProfileEditScreen()),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.system_update_rounded),
+                  title: const Text('Update aplikasi'),
+                  subtitle: const Text('Cek versi & unduh APK'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(builder: (_) => const AppUpdateScreen()),
                     );
                   },
                 ),

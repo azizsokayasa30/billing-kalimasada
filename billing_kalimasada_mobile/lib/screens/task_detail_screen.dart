@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../store/task_provider.dart';
+import '../utils/pppoe_password_display.dart';
 import 'job_execution_screen.dart';
 
 class TaskDetailScreen extends StatefulWidget {
@@ -89,7 +90,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
   String? _pppoePassRaw() {
     final p = _task['pppoe_password'];
     if (p == null) return null;
-    final s = p.toString().trim();
+    final s = pppoeCleartextForTechnicianUi(p.toString());
     return s.isEmpty ? null : s;
   }
 
@@ -701,14 +702,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                               const SizedBox(height: 4),
                               SelectableText(
                                 _pppoePassRaw() == null
-                                    ? '— (password belum diisi di data pelanggan)'
+                                    ? kTechnicianPppoePasswordEmptyHint
                                     : (_pppoeObscure ? _maskedPass(_pppoePassRaw()!) : _pppoePassRaw()!),
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF19163F),
-                                  letterSpacing: _pppoeObscure ? 1.2 : 0,
-                                ),
+                                style: _pppoePassRaw() == null
+                                    ? TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w400,
+                                        height: 1.35,
+                                        color: Colors.grey.shade700,
+                                      )
+                                    : TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF19163F),
+                                        letterSpacing: _pppoeObscure ? 1.2 : 0,
+                                      ),
                               ),
                             ],
                           ),

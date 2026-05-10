@@ -67,6 +67,37 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     return double.tryParse(v?.toString() ?? '');
   }
 
+  /// Nomor internasional tanpa `+` untuk `https://wa.me/...` (utama: Indonesia 0… → 62…).
+  String? _whatsappDigitsFromDisplay(String? raw) {
+    if (raw == null) return null;
+    final d = raw.replaceAll(RegExp(r'\D'), '');
+    if (d.isEmpty) return null;
+    if (d.startsWith('0') && d.length >= 9) {
+      return '62${d.substring(1)}';
+    }
+    if (d.startsWith('62')) return d;
+    return d;
+  }
+
+  Future<void> _openWhatsAppForPhone(String phoneDisplay) async {
+    final wa = _whatsappDigitsFromDisplay(phoneDisplay);
+    if (wa == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nomor HP tidak valid untuk WhatsApp.')),
+        );
+      }
+      return;
+    }
+    final uri = Uri.parse('https://wa.me/$wa');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak dapat membuka WhatsApp.')),
+      );
+    }
+  }
+
   Future<void> _openGoogleMapsDirections(double lat, double lng) async {
     final navUri = Uri.parse('google.navigation:q=$lat,$lng');
     final webUri = Uri.parse(
@@ -480,12 +511,21 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                     textOnBackground,
                     textOnSurfaceVariant,
                     outline,
+                    onValueTap: () {
+                      final p = _pickString(customer, ['phone', 'mobile', 'tel', 'phone_number']);
+                      final display = p.isNotEmpty ? p : (customer['phone']?.toString().trim() ?? '');
+                      if (display.isEmpty || display == '-') return;
+                      _openWhatsAppForPhone(display);
+                    },
                   ),
                   const SizedBox(height: 16),
                   _buildInfoRow(
                     Icons.mail,
                     'EMAIL ADDRESS',
-                    '${customer['customer_id']?.toString().toLowerCase() ?? 'user'}@example.com',
+                    () {
+                      final e = _pickString(customer, ['email', 'contact_email', 'mail']);
+                      return e.isEmpty ? '-' : e;
+                    }(),
                     textOnBackground,
                     textOnSurfaceVariant,
                     outline,
@@ -806,8 +846,20 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     String value,
     Color textColor,
     Color labelColor,
-    Color iconColor,
-  ) {
+    Color iconColor, {
+    VoidCallback? onValueTap,
+  }) {
+    final trimmed = value.trim();
+    final canTap = onValueTap != null && trimmed.isNotEmpty && trimmed != '-';
+    final valueStyle = TextStyle(
+      fontSize: 16,
+      color: canTap ? const Color(0xFF128C7E) : textColor,
+      fontWeight: canTap ? FontWeight.w600 : FontWeight.w400,
+      decoration: canTap ? TextDecoration.underline : TextDecoration.none,
+      decorationColor: const Color(0xFF128C7E),
+    );
+    final valueWidget = Text(value, style: valueStyle);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -830,7 +882,24 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(value, style: TextStyle(fontSize: 16, color: textColor)),
+              if (canTap)
+                InkWell(
+                  onTap: onValueTap,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(child: valueWidget),
+                        const SizedBox(width: 6),
+                        Icon(Icons.chat, size: 18, color: valueStyle.color),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                valueWidget,
             ],
           ),
         ),

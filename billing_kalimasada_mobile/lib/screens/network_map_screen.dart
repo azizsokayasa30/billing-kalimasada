@@ -251,6 +251,128 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
     );
   }
 
+  /// Teks legenda di atas peta: gelap + halo putih agar tetap terbaca tanpa panel opak.
+  static const List<Shadow> _legendShadows = [
+    Shadow(color: Color(0xE6FFFFFF), blurRadius: 2, offset: Offset(0, 0)),
+    Shadow(color: Color(0xCCFFFFFF), blurRadius: 5, offset: Offset(0, 0)),
+    Shadow(color: Color(0x55000000), blurRadius: 1, offset: Offset(0, 1)),
+  ];
+
+  TextStyle _legendBodyStyle() => const TextStyle(
+        fontSize: 10,
+        height: 1.05,
+        letterSpacing: -0.1,
+        color: Color(0xFF0D0B1A),
+        fontWeight: FontWeight.w600,
+        shadows: _legendShadows,
+      );
+
+  TextStyle _legendTitleStyle() => const TextStyle(
+        fontSize: 10.5,
+        height: 1.05,
+        fontWeight: FontWeight.w800,
+        color: Color(0xFF070038),
+        letterSpacing: 0.15,
+        shadows: _legendShadows,
+      );
+
+  Widget _legendRowIcon(Widget icon, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(width: 18, height: 18, child: Center(child: icon)),
+          const SizedBox(width: 5),
+          Expanded(child: Text(label, style: _legendBodyStyle())),
+        ],
+      ),
+    );
+  }
+
+  /// Legenda kiri bawah, tepat di bawah kolom pencarian (latar transparan, teks dengan halo).
+  Widget _buildMapLegend() {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 248),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(2, 2, 8, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Pelanggan & ODP', style: _legendTitleStyle()),
+            const SizedBox(height: 3),
+            _legendRowIcon(
+              Container(
+                width: 14,
+                height: 14,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF2196F3),
+                  shape: BoxShape.circle,
+                  border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 1)),
+                ),
+                child: const Icon(Icons.home, size: 8, color: Colors.white),
+              ),
+              'Pelanggan aktif',
+            ),
+            _legendRowIcon(
+              Container(
+                width: 14,
+                height: 14,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF9E9E9E),
+                  shape: BoxShape.circle,
+                  border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 1)),
+                ),
+                child: const Icon(Icons.home, size: 8, color: Colors.white),
+              ),
+              'Pelanggan tidak aktif',
+            ),
+            _legendRowIcon(
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFC107),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFF9A825)),
+                ),
+                child: const Icon(Icons.settings_input_antenna_rounded, size: 7, color: Color(0xFF5D4037)),
+              ),
+              'ODP aktif',
+            ),
+            _legendRowIcon(
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFC4C4C4),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Color(0xFF9E9E9E)),
+                ),
+                child: const Icon(Icons.settings_input_antenna_rounded, size: 7, color: Color(0xFF424242)),
+              ),
+              'ODP nonaktif',
+            ),
+            _legendRowIcon(
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFCA28),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Color(0xFFFF9800)),
+                ),
+                child: const Icon(Icons.settings_input_component_rounded, size: 7, color: Color(0xFF5D4037)),
+              ),
+              'ODP pemeliharaan',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _animateTo(
     LatLng targetCenter,
     double targetZoom, {
@@ -449,29 +571,37 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Top: Search Bar
-                  Container(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFCF8FF), // surface
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFC8C4D3)),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
+                  // Atas kiri: pencarian + legenda di bawahnya
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
-                          child: Icon(Icons.search, color: Color(0xFF474551)), // on-surface-variant
-                        ),
-                        Expanded(
-                          child: Autocomplete<Map<String, dynamic>>(
+                        SizedBox(
+                          width: double.infinity,
+                          child: Container(
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFCF8FF), // surface
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFC8C4D3)),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black12,
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: Icon(Icons.search, color: Color(0xFF474551)), // on-surface-variant
+                              ),
+                              Expanded(
+                                child: Autocomplete<Map<String, dynamic>>(
                             optionsBuilder: (TextEditingValue textEditingValue) {
                               if (textEditingValue.text.isEmpty) {
                                 return const Iterable<Map<String, dynamic>>.empty();
@@ -560,10 +690,16 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
                             },
                           ),
                         ),
+                            ],
+                          ),
+                        ),
+                        ),
+                        const SizedBox(height: 6),
+                        _buildMapLegend(),
                       ],
                     ),
                   ),
-                  
+
                   // Bottom: Controls, Info Panel, FAB
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,

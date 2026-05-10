@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../store/auth_provider.dart';
 import '../store/task_provider.dart';
+import '../utils/pppoe_password_display.dart';
 
 class JobExecutionScreen extends StatefulWidget {
   final Map<String, dynamic> task;
@@ -780,8 +781,8 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
   /// Password PPPoE bisa disalin (SelectableText + tombol salin).
   Widget _buildPppoePasswordSummaryRow(BuildContext context) {
     final raw = _task['pppoe_password'];
-    final pass = raw == null ? '' : raw.toString().trim();
-    final display = pass.isEmpty ? '— (pull-to-refresh daftar tugas / cek billing & RADIUS)' : pass;
+    final pass = pppoeCleartextForTechnicianUi(raw?.toString());
+    final display = pass.isEmpty ? kTechnicianPppoePasswordEmptyHint : pass;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -808,9 +809,10 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                     child: SelectableText(
                       display,
                       style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: pass.isEmpty ? FontWeight.w500 : FontWeight.w600,
-                        color: const Color(0xFF19163F),
+                        fontSize: pass.isEmpty ? 13 : 16,
+                        fontWeight: pass.isEmpty ? FontWeight.w400 : FontWeight.w600,
+                        height: pass.isEmpty ? 1.35 : null,
+                        color: pass.isEmpty ? const Color(0xFF5C5A68) : const Color(0xFF19163F),
                       ),
                     ),
                   ),
