@@ -6,6 +6,7 @@ import '../../store/collector_notification_provider.dart';
 import '../../theme/collector_colors.dart';
 import 'collector_notifications_screen.dart';
 import 'collector_customer_detail_sheet.dart';
+import 'collector_payment_status_badge.dart';
 
 String _rupiah(num? v) {
   final n = (v ?? 0).round();
@@ -23,11 +24,9 @@ num? _coerceNum(dynamic v) {
 class CollectorCustomersScreen extends StatefulWidget {
   const CollectorCustomersScreen({
     super.key,
-    required this.onOpenMenu,
     required this.onSync,
   });
 
-  final VoidCallback onOpenMenu;
   final Future<void> Function() onSync;
 
   @override
@@ -37,14 +36,19 @@ class CollectorCustomersScreen extends StatefulWidget {
 class _CollectorCustomersScreenState extends State<CollectorCustomersScreen> {
   final _search = TextEditingController();
   String _status = '';
+  /// Kosong = semua wilayah; nilai = string persis seperti `collector_areas.area` di server.
+  String _areaFilter = '';
   bool _syncing = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      context.read<CollectorProvider>().fetchCustomers(status: _status, q: _search.text);
+      final col = context.read<CollectorProvider>();
+      await col.fetchCollectorAreas();
+      if (!mounted) return;
+      await col.fetchCustomers(status: _status, q: _search.text, area: _areaFilter);
     });
   }
 
@@ -55,12 +59,79 @@ class _CollectorCustomersScreenState extends State<CollectorCustomersScreen> {
   }
 
   Future<void> _reload() async {
-    await context.read<CollectorProvider>().fetchCustomers(status: _status, q: _search.text);
+    await context.read<CollectorProvider>().fetchCustomers(status: _status, q: _search.text, area: _areaFilter);
   }
 
   void _setFilter(String s) {
     setState(() => _status = s);
-    context.read<CollectorProvider>().fetchCustomers(status: s, q: _search.text);
+    context.read<CollectorProvider>().fetchCustomers(status: s, q: _search.text, area: _areaFilter);
+  }
+
+  void _applyAreaFilter(String area) {
+    setState(() => _areaFilter = area);
+    context.read<CollectorProvider>().fetchCustomers(status: _status, q: _search.text, area: area);
+  }
+
+  void _openAreaFilterSheet() {
+    final col = context.read<CollectorProvider>();
+    final areas = col.collectorAreas;
+    const primary = Color(0xFF001F3F);
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+                  child: Text(
+                    'Filter wilayah',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: primary),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.public_rounded),
+                  title: const Text('Semua wilayah'),
+                  trailing: _areaFilter.isEmpty ? const Icon(Icons.check, color: primary) : null,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _applyAreaFilter('');
+                  },
+                ),
+                ...areas.map((r) {
+                  final a = r['area']?.toString() ?? '';
+                  if (a.isEmpty) return const SizedBox.shrink();
+                  final sel = _areaFilter == a;
+                  return ListTile(
+                    leading: const Icon(Icons.place_outlined),
+                    title: Text(a),
+                    trailing: sel ? const Icon(Icons.check, color: primary) : null,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _applyAreaFilter(a);
+                    },
+                  );
+                }),
+                if (areas.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: Text(
+                      'Wilayah penugasan belum diatur di admin. Semua pelanggan dalam pool kolektor tetap ditampilkan.',
+                      style: TextStyle(fontSize: 13, height: 1.4, color: Colors.grey.shade700),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _doSync() async {
@@ -78,23 +149,74 @@ class _CollectorCustomersScreenState extends State<CollectorCustomersScreen> {
   Widget build(BuildContext context) {
     final c = context.watch<CollectorProvider>();
     final unread = context.watch<CollectorNotificationProvider>().unreadCount;
-    const bg = Color(0xFFF8F9FA);
+    const primary = Color(0xFF001F3F);
+    const bg = FieldCollectorColors.dashboardCanvas;
 
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF001F3F),
+        foregroundColor: primary,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: true,
-        title: const Text(
-          'Field Collector',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+        leadingWidth: 152,
+        leading: Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Material(
+              color: FieldCollectorColors.statTotalBg,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+                side: BorderSide(color: FieldCollectorColors.statTotalIcon.withValues(alpha: 0.28)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: _openAreaFilterSheet,
+                borderRadius: BorderRadius.circular(999),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.filter_alt_rounded, size: 18, color: FieldCollectorColors.statTotalIcon),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Filter area',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          height: 1.1,
+                          color: primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: widget.onOpenMenu,
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Pelanggan',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: primary),
+            ),
+            if (_areaFilter.isNotEmpty)
+              Text(
+                _areaFilter,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: primary.withValues(alpha: 0.72),
+                ),
+              ),
+          ],
         ),
         actions: [
           IconButton(
@@ -327,45 +449,34 @@ class _CustomerCard extends StatelessWidget {
         : (username.isNotEmpty ? 'ID: $username' : 'ID: ${row['id']}');
 
     final isIsolir = st == 'suspended';
-    final isPaid = ps == 'paid';
+    final areaStr = (row['area']?.toString() ?? '').trim();
+    final areaDisplay = areaStr.isEmpty ? '—' : areaStr;
 
-    late String badgeLabel;
-    late Color badgeBg;
-    late Color badgeFg;
-    late IconData badgeIcon;
-
-    if (isIsolir) {
-      badgeLabel = 'ISOLIR';
-      badgeBg = const Color(0xFFE7E8E9);
-      badgeFg = FieldCollectorColors.onSurfaceVariant;
-      badgeIcon = Icons.block;
-    } else if (isPaid) {
-      badgeLabel = 'LUNAS';
-      badgeBg = const Color(0xFFD3F5D6);
-      badgeFg = const Color(0xFF0D5A16);
-      badgeIcon = Icons.check_circle_outline;
-    } else {
-      badgeLabel = 'BELUM BAYAR';
-      badgeBg = const Color(0xFFFFDAD6);
-      badgeFg = const Color(0xFF93000A);
-      badgeIcon = Icons.schedule;
-    }
+    final badgeStyle = collectorPaymentBadgeFor(isIsolirAccount: isIsolir, paymentStatus: ps);
+    final amountColor = collectorPaymentAmountHeadlineColor(isIsolirAccount: isIsolir, paymentStatus: ps);
 
     return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      elevation: 0,
+      color: Colors.transparent,
       child: InkWell(
         onTap: onOpenDetail,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
+          width: double.infinity,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: FieldCollectorColors.outlineVariant),
-            boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 6, offset: Offset(0, 2))],
+            color: FieldCollectorColors.dashPriorityBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFFFE0B2), width: 1.2),
+            boxShadow: const [
+              BoxShadow(color: Color(0x10000000), blurRadius: 10, offset: Offset(0, 4)),
+            ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+          child: Container(
+            decoration: const BoxDecoration(
+              border: Border(
+                left: BorderSide(width: 5, color: FieldCollectorColors.dashPriorityRail),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(12, 14, 14, 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -378,83 +489,96 @@ class _CustomerCard extends StatelessWidget {
                         children: [
                           Text(
                             name,
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17, color: FieldCollectorColors.onSurface),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: FieldCollectorColors.onSurface,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             idLine,
-                            style: const TextStyle(fontSize: 12, color: FieldCollectorColors.onSurfaceVariant),
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.3,
+                              color: FieldCollectorColors.onSurfaceVariant.withValues(alpha: 0.95),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: badgeBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(badgeIcon, size: 14, color: badgeFg),
-                          const SizedBox(width: 4),
-                          Text(
-                            badgeLabel,
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: badgeFg, letterSpacing: 0.3),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        badgeStyle.buildPill(),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Area',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.4,
+                            color: FieldCollectorColors.onSurfaceVariant.withValues(alpha: 0.9),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 2),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 150),
+                          child: Text(
+                            areaDisplay,
+                            textAlign: TextAlign.end,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: FieldCollectorColors.onSurface,
+                              height: 1.25,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.location_on_outlined, size: 18, color: FieldCollectorColors.onSurfaceVariant),
+                    Icon(
+                      Icons.home_work_rounded,
+                      size: 17,
+                      color: FieldCollectorColors.onSurfaceVariant.withValues(alpha: 0.9),
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         addr.isEmpty ? '—' : addr,
-                        style: const TextStyle(fontSize: 13, color: FieldCollectorColors.onSurfaceVariant, height: 1.35),
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.35,
+                          color: FieldCollectorColors.onSurfaceVariant.withValues(alpha: 0.95),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Divider(height: 1),
-                ),
+                const SizedBox(height: 12),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            ps == 'overdue' ? 'TOTAL TAGIHAN (TUNGGAKAN)' : 'TOTAL TAGIHAN',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.4,
-                              color: ps == 'overdue' ? const Color(0xFFBA1A1A) : FieldCollectorColors.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _rupiah(price),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 18,
-                              color: isPaid ? FieldCollectorColors.onSurfaceVariant : FieldCollectorColors.onSurface,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        _rupiah(price),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 17,
+                          color: amountColor,
+                        ),
                       ),
                     ),
-                    const Icon(Icons.chevron_right, color: FieldCollectorColors.onSurfaceVariant),
+                    Icon(Icons.chevron_right_rounded, size: 22, color: FieldCollectorColors.statTotalIcon),
                   ],
                 ),
               ],

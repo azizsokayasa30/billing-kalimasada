@@ -123,11 +123,19 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateTaskStatus(String id, String type, String status) async {
+  Future<bool> updateTaskStatus(
+    String id,
+    String type,
+    String status, {
+    String? pendingReason,
+  }) async {
     try {
-      final response = await ApiClient.post('/api/mobile-adapter/tasks/$type/$id/status', {
-        'status': status,
-      });
+      final body = <String, dynamic>{'status': status};
+      final pr = pendingReason?.trim() ?? '';
+      if (pr.isNotEmpty) {
+        body['pending_reason'] = pr;
+      }
+      final response = await ApiClient.post('/api/mobile-adapter/tasks/$type/$id/status', body);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

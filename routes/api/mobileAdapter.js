@@ -94,10 +94,11 @@ function joinDateThisCalendarMonth(c) {
  * Semua = seluruh pelanggan di pool (seperti admin /customers, dibatasi area tim).
  * unpaid = Belum Lunas admin; paid = Lunas admin; baru = join_date bulan ini.
  */
-function filterCollectorCustomersForMobile(allMappedCustomers, statusFilter, q) {
+function filterCollectorCustomersForMobile(allMappedCustomers, statusFilter, q, areaFilter) {
     const validFilters = new Set(['paid', 'unpaid', 'overdue', 'no_invoice', 'isolir', 'baru']);
     const sf = (statusFilter || '').toString().toLowerCase();
     const qLower = (q || '').toString().trim().toLowerCase();
+    const areaLow = (areaFilter || '').toString().trim().toLowerCase();
     let customers = allMappedCustomers || [];
 
     if (sf === 'isolir') {
@@ -127,6 +128,17 @@ function filterCollectorCustomersForMobile(allMappedCustomers, statusFilter, q) 
                 ppp.includes(qLower) ||
                 user.includes(qLower)
             );
+        });
+    }
+
+    if (areaLow) {
+        customers = customers.filter((c) => {
+            const t = (c.area || '').toString().trim().toLowerCase();
+            if (t && t === areaLow) return true;
+            const aid = c.area_id != null ? Number(c.area_id) : NaN;
+            const wantId = Number(areaFilter);
+            if (Number.isFinite(wantId) && Number.isFinite(aid) && aid === wantId) return true;
+            return false;
         });
     }
     return customers;
@@ -2039,6 +2051,66 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
         if (!Number.isFinite(jobId)) {
             return res.status(400).json({ success: false, message: 'ID tugas tidak valid' });
         }
+
+        /** Pending dari app teknisi: simpan alasan di notes, kembalikan status ke assigned agar admin melihat di web. */
+        if (rawStatus === 'pending' || rawStatus === 'ditunda') {
+            const pendingReason = String(body.pending_reason || body.reason || '').trim();
+            if (pendingReason.length < 8) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Alasan pending wajib diisi (minimal 8 karakter)'
+                });
+            }
+            const pickSql = isAdminTask
+                ? `SELECT * FROM installation_jobs WHERE id = ?`
+                : `SELECT * FROM installation_jobs WHERE id = ? AND ${sqlInstallationJobAccessibleByTech('installation_jobs')}`;
+            const pickParams = isAdminTask ? [jobId] : [jobId, techId, String(techId)];
+            db.get(pickSql, pickParams, (pErr, job) => {
+                if (pErr) {
+                    logger.error('[mobile-adapter] install pending get:', pErr);
+                    return res.status(500).json({ success: false, message: pErr.message });
+                }
+                if (!job) {
+                    return res.status(404).json({ success: false, message: 'Tugas tidak ditemukan atau bukan milik Anda' });
+                }
+                const noteBlock = `[Pending — app teknisi]\n${pendingReason}`;
+                const newNotes = job.notes ? `${job.notes}\n\n${noteBlock}` : noteBlock;
+                const wallNow = getLocalTimestamp();
+                const updSql = isAdminTask
+                    ? `UPDATE installation_jobs SET status = 'assigned', notes = ?, work_started_at = NULL, updated_at = ? WHERE id = ?`
+                    : `UPDATE installation_jobs SET status = 'assigned', notes = ?, work_started_at = NULL, updated_at = ?,
+                         assigned_technician_id = CASE
+                            WHEN IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0') THEN ?
+                            ELSE assigned_technician_id
+                         END
+                         WHERE id = ? AND ${sqlInstallationJobAccessibleByTech('installation_jobs')}`;
+                const updParams = isAdminTask
+                    ? [newNotes, wallNow, jobId]
+                    : [newNotes, wallNow, techId, jobId, techId, String(techId)];
+                db.run(updSql, updParams, function (uErr) {
+                    if (uErr) {
+                        return res.status(500).json({ success: false, message: uErr.message });
+                    }
+                    if (this.changes === 0) {
+                        return res.status(404).json({ success: false, message: 'Tugas tidak ditemukan atau bukan milik Anda' });
+                    }
+                    db.run(
+                        `INSERT INTO installation_job_status_history (
+                            job_id, old_status, new_status, changed_by_type, changed_by_id, notes
+                        ) VALUES (?, ?, 'assigned', 'technician', ?, ?)`,
+                        [jobId, job.status, actorHistoryId, pendingReason.slice(0, 500)],
+                        (hErr) => {
+                            if (hErr) {
+                                logger.warn('[mobile-adapter] install pending history:', hErr.message);
+                            }
+                        }
+                    );
+                    return res.json({ success: true, message: 'Pending tersimpan; admin dapat melihat alasan di catatan job.' });
+                });
+            });
+            return;
+        }
+
         let dbStatus = rawStatus;
         if (rawStatus === 'closed' || rawStatus === 'selesai') dbStatus = 'completed';
         else if (rawStatus === 'mulai' || rawStatus === 'in_progress' || rawStatus === 'start') dbStatus = 'in_progress';
@@ -2325,6 +2397,60 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
     }
 
     if (type === 'TR') {
+        if (rawStatus === 'pending' || rawStatus === 'ditunda') {
+            const pendingReason = String(body.pending_reason || body.reason || '').trim();
+            if (pendingReason.length < 8) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Alasan pending wajib diisi (minimal 8 karakter)'
+                });
+            }
+            const trAccessSql = isAdminTask
+                ? `SELECT id FROM trouble_reports WHERE id = ?`
+                : `SELECT id FROM trouble_reports
+                 WHERE id = ?
+                   AND (
+                        assigned_technician_id = ?
+                        OR CAST(assigned_technician_id AS TEXT) = ?
+                        OR IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0')
+                   )`;
+            const trAccessParams = isAdminTask ? [id] : [id, techId, String(techId)];
+            db.get(trAccessSql, trAccessParams, async (aErr, row) => {
+                if (aErr) {
+                    logger.error('[mobile-adapter] TR pending access:', aErr);
+                    return res.status(500).json({ success: false, message: aErr.message });
+                }
+                if (!row) {
+                    return res.status(404).json({ success: false, message: 'Tiket tidak ditemukan atau bukan milik Anda' });
+                }
+                try {
+                    const { updateTroubleReportStatus } = require('../../config/troubleReport');
+                    await updateTroubleReportStatus(
+                        id,
+                        'open',
+                        `[Pending — app teknisi]\n${pendingReason}`,
+                        {},
+                        false
+                    );
+                    await new Promise((resolve, reject) => {
+                        db.run(
+                            'UPDATE trouble_reports SET work_started_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                            [id],
+                            (e2) => (e2 ? reject(e2) : resolve())
+                        );
+                    });
+                    return res.json({ success: true, message: 'Pending tersimpan; admin melihat alasan di riwayat tiket.' });
+                } catch (e) {
+                    logger.error('[mobile-adapter] TR pending:', e);
+                    return res.status(500).json({
+                        success: false,
+                        message: e.message || 'Gagal menyimpan pending'
+                    });
+                }
+            });
+            return;
+        }
+
         let dbStatus = rawStatus;
         if (rawStatus === 'selesai' || rawStatus === 'closed' || rawStatus === 'completed') {
             dbStatus = 'resolved';
@@ -2650,9 +2776,12 @@ router.get('/network-map', verifyToken, requireTechnician, async (req, res) => {
         });
 
         let onlineLoginSet = new Set();
+        let pppoeUptimeByLogin = Object.create(null);
         try {
-            const { getActivePppoeLoginNamesSet } = require('../../config/mikrotik');
-            onlineLoginSet = await getActivePppoeLoginNamesSet();
+            const { getActivePppoeLoginNamesSetWithUptimeMap } = require('../../config/mikrotik');
+            const batch = await getActivePppoeLoginNamesSetWithUptimeMap();
+            onlineLoginSet = batch.names || new Set();
+            pppoeUptimeByLogin = batch.uptimeByLogin || Object.create(null);
         } catch (e) {
             logger.warn('[mobile-adapter] network-map PPPoE batch:', e.message || e);
         }
@@ -2666,13 +2795,19 @@ router.get('/network-map', verifyToken, requireTechnician, async (req, res) => {
                 pppoeActive = onlineLoginSet.has(login);
             }
             const networkDown = pppoeActive === false;
+            const uptimeDisplay =
+                login && pppoeActive === true
+                    ? pppoeUptimeByLogin[String(login).toLowerCase()] || null
+                    : null;
             return {
                 ...sqliteJsonSafeRow(r),
                 pppoe_active: pppoeActive,
                 network_down: networkDown,
-                down_reason: networkDown ? 'PPPoE inactive' : null
+                down_reason: networkDown ? 'PPPoE inactive' : null,
+                pppoe_uptime_display: uptimeDisplay
             };
         });
+
         const downCustomerIdSet = new Set(
             enrichedCustomers.filter((c) => c.network_down === true).map((c) => Number(c.id))
         );
@@ -3268,6 +3403,27 @@ router.get('/collector/overview', verifyToken, requireCollector, async (req, res
     }
 });
 
+router.get('/collector/areas', verifyToken, requireCollector, (req, res) => {
+    const collectorId = parseCollectorId(req);
+    if (!collectorId) {
+        return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
+    }
+    db.all(
+        `SELECT DISTINCT area FROM collector_areas
+         WHERE collector_id = ? AND area IS NOT NULL AND TRIM(area) != ''
+         ORDER BY area ASC`,
+        [collectorId],
+        (err, rows) => {
+            if (err) {
+                logger.error('[mobile-adapter] collector/areas', err);
+                return res.status(500).json({ success: false, message: err.message });
+            }
+            const data = (rows || []).map((r) => ({ area: String(r.area).trim() }));
+            res.json({ success: true, data });
+        }
+    );
+});
+
 router.get('/collector/customers', verifyToken, requireCollector, async (req, res) => {
     const collectorId = parseCollectorId(req);
     if (!collectorId) {
@@ -3275,15 +3431,21 @@ router.get('/collector/customers', verifyToken, requireCollector, async (req, re
     }
     const statusFilter = (req.query.status || '').toString().toLowerCase();
     const q = (req.query.q || '').toString();
+    const areaFilter = (req.query.area || '').toString();
     try {
         const allMappedCustomers = await billingManager.getCollectorCustomers(collectorId);
-        const rows = filterCollectorCustomersForMobile(allMappedCustomers, statusFilter, q);
+        const rows = filterCollectorCustomersForMobile(allMappedCustomers, statusFilter, q, areaFilter);
         const data = rows.map((c) => ({
             id: c.id,
             customer_id: c.customer_id != null && c.customer_id !== '' ? String(c.customer_id) : null,
             username: c.username != null ? String(c.username) : '',
             name: c.name,
             address: c.address || '',
+            area: c.area != null ? String(c.area) : '',
+            area_id:
+                c.area_id != null && c.area_id !== '' && !Number.isNaN(Number(c.area_id))
+                    ? Number(c.area_id)
+                    : null,
             phone: c.phone || '',
             email: c.email || '',
             status: c.status,

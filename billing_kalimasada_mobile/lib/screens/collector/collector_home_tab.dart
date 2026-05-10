@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../store/collector_provider.dart';
 import '../../theme/collector_colors.dart';
+import 'collector_payment_status_badge.dart';
+import 'collector_receive_payment_screen.dart';
 import '../tag_customer_location_screen.dart';
 
 String _rupiah(num? v) {
@@ -65,22 +67,28 @@ class _CollectorHomeTabState extends State<CollectorHomeTab> {
     final collector = data != null ? data['collector'] as Map<String, dynamic>? : null;
 
     if (c.overviewLoading && field == null) {
-      return const Center(child: CircularProgressIndicator(color: FieldCollectorColors.primaryContainer));
+      return ColoredBox(
+        color: FieldCollectorColors.dashboardCanvas,
+        child: const Center(child: CircularProgressIndicator(color: FieldCollectorColors.primaryContainer)),
+      );
     }
     if (c.overviewError != null && field == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(c.overviewError ?? '', textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () => context.read<CollectorProvider>().fetchOverview(month: _month, year: _year),
-                child: const Text('Coba lagi'),
-              ),
-            ],
+      return ColoredBox(
+        color: FieldCollectorColors.dashboardCanvas,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(c.overviewError ?? '', textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => context.read<CollectorProvider>().fetchOverview(month: _month, year: _year),
+                  child: const Text('Coba lagi'),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -100,163 +108,225 @@ class _CollectorHomeTabState extends State<CollectorHomeTab> {
     final isolir = (field?['isolirCount'] as num?)?.toInt() ?? 0;
     final priority = (field?['priorityCustomers'] as List?) ?? [];
 
-    return RefreshIndicator(
-      color: FieldCollectorColors.primaryContainer,
-      onRefresh: () => context.read<CollectorProvider>().fetchOverview(month: _month, year: _year),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          _Card(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name, style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: FieldCollectorColors.onSurface,
-                          )),
-                      const SizedBox(height: 6),
-                      _rowIcon(Icons.calendar_today, displayDate, context),
-                      const SizedBox(height: 4),
-                      _rowIcon(Icons.location_on, area, context),
-                    ],
-                  ),
-                ),
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: FieldCollectorColors.primaryContainer,
-                  child: Text(
-                    initials.isEmpty ? 'K' : initials,
-                    style: const TextStyle(
-                      color: FieldCollectorColors.onPrimaryContainer,
-                      fontWeight: FontWeight.w700,
+    return ColoredBox(
+      color: FieldCollectorColors.dashboardCanvas,
+      child: RefreshIndicator(
+        color: FieldCollectorColors.primaryContainer,
+        onRefresh: () => context.read<CollectorProvider>().fetchOverview(month: _month, year: _year),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
+          children: [
+            _Card(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  FieldCollectorColors.dashWelcomeTop,
+                  FieldCollectorColors.dashWelcomeBottom,
+                ],
+              ),
+              borderRadius: 20,
+              shadows: const [
+                BoxShadow(color: Color(0x400F3460), blurRadius: 16, offset: Offset(0, 8)),
+              ],
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Halo,',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: FieldCollectorColors.dashWelcomeSubtitle,
+                              ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          name,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: FieldCollectorColors.dashWelcomeOnAccent,
+                                height: 1.15,
+                              ),
+                        ),
+                        const SizedBox(height: 10),
+                        _rowIconWelcome(Icons.calendar_today_rounded, displayDate),
+                        const SizedBox(height: 6),
+                        _rowIconWelcome(Icons.location_on_rounded, area),
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            decoration: BoxDecoration(
-              color: FieldCollectorColors.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 4)),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              children: [
-                Positioned(
-                  right: -40,
-                  top: -40,
-                  child: Container(
-                    width: 120,
-                    height: 120,
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.all(3),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
                       shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+                    ),
+                    child: CircleAvatar(
+                      radius: 26,
+                      backgroundColor: Colors.white.withValues(alpha: 0.2),
+                      child: Text(
+                        initials.isEmpty ? 'K' : initials,
+                        style: const TextStyle(
+                          color: FieldCollectorColors.dashWelcomeOnAccent,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
                     ),
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    FieldCollectorColors.dashTargetA,
+                    FieldCollectorColors.dashTargetB,
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x4D0D3B66), blurRadius: 18, offset: Offset(0, 10)),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -36,
+                    top: -48,
+                    child: Container(
+                      width: 140,
+                      height: 140,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.07),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: -20,
+                    bottom: -30,
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: FieldCollectorColors.dashTargetProgress.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'TARGET TAGIHAN BULAN INI',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.85,
+                                      color: FieldCollectorColors.primaryFixedDim.withValues(alpha: 0.9),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _rupiah(target),
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w800,
+                                      color: FieldCollectorColors.onPrimary,
+                                      letterSpacing: -0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  'TARGET TAGIHAN BULAN INI',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.6,
-                                    color: FieldCollectorColors.primaryFixedDim.withValues(alpha: 0.85),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _rupiah(target),
+                                  '$pct%',
                                   style: const TextStyle(
                                     fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: FieldCollectorColors.onPrimary,
+                                    fontWeight: FontWeight.w800,
+                                    color: FieldCollectorColors.dashTargetProgress,
+                                    height: 1,
+                                  ),
+                                ),
+                                Text(
+                                  'Progress',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: FieldCollectorColors.primaryFixedDim.withValues(alpha: 0.95),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '$pct%',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                  color: FieldCollectorColors.secondaryFixed,
-                                ),
-                              ),
-                              Text(
-                                'Progress',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: FieldCollectorColors.primaryFixedDim.withValues(alpha: 0.95),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: LinearProgressIndicator(
-                          value: pct / 100,
-                          minHeight: 8,
-                          backgroundColor: FieldCollectorColors.onPrimaryContainer.withValues(alpha: 0.35),
-                          color: FieldCollectorColors.secondaryFixed,
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _rupiah(terkumpul),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: FieldCollectorColors.primaryFixedDim.withValues(alpha: 0.95),
-                            ),
+                        const SizedBox(height: 14),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            value: pct / 100,
+                            minHeight: 9,
+                            backgroundColor: FieldCollectorColors.dashTargetProgressTrack,
+                            color: FieldCollectorColors.dashTargetProgress,
                           ),
-                          Text(
-                            'Sisa: ${_rupiah(sisa)}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: FieldCollectorColors.primaryFixedDim.withValues(alpha: 0.95),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Terkumpul ${_rupiah(terkumpul)}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: FieldCollectorColors.primaryFixedDim.withValues(alpha: 0.98),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            Text(
+                              'Sisa ${_rupiah(sisa)}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: FieldCollectorColors.primaryFixedDim.withValues(alpha: 0.98),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          _Card(
-            child: Column(
+            const SizedBox(height: 14),
+            _Card(
+              color: FieldCollectorColors.dashPeriodTint,
+              borderColor: FieldCollectorColors.dashPeriodBorder,
+              borderRadius: 16,
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -411,26 +481,37 @@ class _CollectorHomeTabState extends State<CollectorHomeTab> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Ringkasan',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: FieldCollectorColors.onSurface,
+                    letterSpacing: -0.2,
+                  ),
+            ),
+          ),
+          const SizedBox(height: 10),
           _summaryGrid(context, totalPlg, blm, lunas, isolir),
-          const SizedBox(height: 20),
+          const SizedBox(height: 22),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Aksi cepat',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: FieldCollectorColors.onSurfaceVariant,
-                    letterSpacing: 0.4,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: FieldCollectorColors.onSurface,
+                    letterSpacing: -0.2,
                   ),
             ),
           ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: () {
+          const SizedBox(height: 10),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(
@@ -438,17 +519,38 @@ class _CollectorHomeTabState extends State<CollectorHomeTab> {
                   ),
                 );
               },
-              icon: const Icon(Icons.person_pin_circle_outlined, size: 22),
-              label: const Text(
-                'Tag Pelanggan',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: FieldCollectorColors.onSurface,
-                side: const BorderSide(color: FieldCollectorColors.outlineVariant),
-                backgroundColor: FieldCollectorColors.surface,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
+              child: Ink(
+                height: 52,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: const LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      FieldCollectorColors.dashActionA,
+                      FieldCollectorColors.dashActionB,
+                    ],
+                  ),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x593949AB), blurRadius: 14, offset: Offset(0, 7)),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.person_pin_circle_rounded, size: 24, color: FieldCollectorColors.dashActionFg),
+                    SizedBox(width: 10),
+                    Text(
+                      'Tag lokasi pelanggan',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: FieldCollectorColors.dashActionFg,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -459,105 +561,175 @@ class _CollectorHomeTabState extends State<CollectorHomeTab> {
             children: [
               Text(
                 'Prioritas penagihan',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: FieldCollectorColors.onSurface,
+                      letterSpacing: -0.2,
+                    ),
               ),
               TextButton.icon(
                 onPressed: () => widget.onGoCustomersTab?.call(),
-                icon: const Icon(Icons.arrow_forward, size: 16),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 18),
                 label: const Text('Lihat semua'),
+                style: TextButton.styleFrom(
+                  foregroundColor: FieldCollectorColors.statTotalIcon,
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ],
           ),
           ...priority.map<Widget>((p) {
             if (p == null || p is! Map) return const SizedBox.shrink();
             final m = Map<String, dynamic>.from(p);
-            final pid = m['id'];
             final pname = m['name']?.toString() ?? '';
             final addr = m['address']?.toString() ?? '';
             final amt = _coerceNum(m['amount'])?.round() ?? 0;
+            final payPs = m['payment_status']?.toString() ?? '';
+            final priorityBadge = collectorPaymentBadgeFor(isIsolirAccount: false, paymentStatus: payPs);
+            final priorityAmountColor =
+                collectorPaymentAmountHeadlineColor(isIsolirAccount: false, paymentStatus: payPs);
             return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: 10),
               child: _Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(pname, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                              const SizedBox(height: 4),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(Icons.home_work_outlined, size: 16, color: FieldCollectorColors.onSurfaceVariant),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      addr,
-                                      style: const TextStyle(fontSize: 13, color: FieldCollectorColors.onSurfaceVariant),
-                                    ),
-                                  ),
-                                ],
+                color: FieldCollectorColors.dashPriorityBg,
+                borderRadius: 16,
+                borderColor: const Color(0xFFFFE0B2),
+                shadows: const [
+                  BoxShadow(color: Color(0x10000000), blurRadius: 10, offset: Offset(0, 4)),
+                ],
+                child: Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      left: BorderSide(width: 5, color: FieldCollectorColors.dashPriorityRail),
+                    ),
+                  ),
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              pname,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                                color: FieldCollectorColors.onSurface,
                               ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: FieldCollectorColors.errorContainer,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'Belum bayar',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: FieldCollectorColors.onErrorContainer,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(_rupiah(amt), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                        TextButton.icon(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Pelanggan ID $pid — buka /collector/payment?customer_id=$pid di browser')),
-                            );
-                          },
-                          icon: const Icon(Icons.chevron_right, size: 18),
-                          label: const Text('Tagih'),
-                        ),
-                      ],
-                    ),
-                  ],
+                          const SizedBox(width: 8),
+                          priorityBadge.buildPill(),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.home_work_rounded,
+                            size: 17,
+                            color: FieldCollectorColors.onSurfaceVariant.withValues(alpha: 0.9),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              addr,
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                color: FieldCollectorColors.onSurfaceVariant.withValues(alpha: 0.95),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _rupiah(amt),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 17,
+                              color: priorityAmountColor,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () async {
+                              final idRaw = m['id'];
+                              final customerId = idRaw is int
+                                  ? idRaw
+                                  : (idRaw is num ? idRaw.toInt() : int.tryParse(idRaw?.toString() ?? ''));
+                              if (customerId == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('ID pelanggan tidak valid')),
+                                );
+                                return;
+                              }
+                              final snapshot = Map<String, dynamic>.from({
+                                'id': customerId,
+                                'name': pname,
+                                'address': addr,
+                                'package_price': amt,
+                                'payment_status': m['payment_status']?.toString() ?? 'unpaid',
+                              });
+                              final done = await Navigator.of(context).push<bool>(
+                                MaterialPageRoute<bool>(
+                                  builder: (_) => CollectorReceivePaymentScreen(
+                                    customerId: customerId,
+                                    customerSnapshot: snapshot,
+                                  ),
+                                ),
+                              );
+                              if (!mounted || done != true) return;
+                              if (!context.mounted) return;
+                              final col = context.read<CollectorProvider>();
+                              await col.fetchOverview(month: _month, year: _year);
+                              await col.fetchCustomers(
+                                status: col.lastCustomersFetchStatus,
+                                q: col.lastCustomersFetchQ,
+                                area: col.lastCustomersFetchArea,
+                              );
+                            },
+                            icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                            label: const Text('Tagih'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: FieldCollectorColors.statTotalIcon,
+                              textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
           }),
         ],
+        ),
       ),
     );
   }
 
-  Widget _rowIcon(IconData icon, String text, BuildContext context) {
+  Widget _rowIconWelcome(IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: FieldCollectorColors.onSurfaceVariant),
-        const SizedBox(width: 4),
+        Icon(icon, size: 17, color: FieldCollectorColors.dashWelcomeSubtitle),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(fontSize: 13, color: FieldCollectorColors.onSurfaceVariant),
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: FieldCollectorColors.dashWelcomeSubtitle,
+              height: 1.25,
+            ),
           ),
         ),
       ],
@@ -565,138 +737,121 @@ class _CollectorHomeTabState extends State<CollectorHomeTab> {
   }
 
   Widget _summaryGrid(BuildContext context, int total, int blm, int lunas, int isolir) {
-    const statInnerH = 48.0;
-    const statCardPad = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
-    const totalNumStyle = TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: FieldCollectorColors.onSurface);
-    const belumTextStyle = TextStyle(
-      fontWeight: FontWeight.w700,
-      fontSize: 14,
-      height: 1.1,
-      color: FieldCollectorColors.summaryOverdue,
-      letterSpacing: -0.2,
-    );
-    const belumNumStyle = TextStyle(
-      fontWeight: FontWeight.w800,
-      fontSize: 18,
-      height: 1.0,
-      color: FieldCollectorColors.summaryOverdue,
-      letterSpacing: -0.3,
-    );
-    const lunasTextStyle = TextStyle(
-      fontWeight: FontWeight.w700,
-      fontSize: 14,
-      height: 1.1,
-      color: FieldCollectorColors.summaryPaid,
-      letterSpacing: -0.2,
-    );
-    const lunasNumStyle = TextStyle(
-      fontWeight: FontWeight.w800,
-      fontSize: 18,
-      height: 1.0,
-      color: FieldCollectorColors.summaryPaid,
-      letterSpacing: -0.3,
-    );
+    const statH = 56.0;
+    const pad = EdgeInsets.symmetric(horizontal: 14, vertical: 12);
+
+    Widget statTile({
+      required Color bg,
+      required Color iconBg,
+      required Color iconFg,
+      required Color valueColor,
+      required IconData icon,
+      required String label,
+      required String value,
+    }) {
+      return _Card(
+        color: bg,
+        padding: pad,
+        borderRadius: 16,
+        borderColor: Colors.white.withValues(alpha: 0.65),
+        shadows: const [
+          BoxShadow(color: Color(0x12000000), blurRadius: 12, offset: Offset(0, 5)),
+        ],
+        child: SizedBox(
+          height: statH,
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(color: iconBg.withValues(alpha: 0.35), blurRadius: 8, offset: const Offset(0, 3)),
+                  ],
+                ),
+                child: Icon(icon, color: iconFg, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    height: 1.15,
+                    color: FieldCollectorColors.onSurface.withValues(alpha: 0.88),
+                  ),
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                  height: 1,
+                  color: valueColor,
+                  letterSpacing: -0.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Column(
       children: [
-        _Card(
-          padding: statCardPad,
-          child: SizedBox(
-            height: statInnerH,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD4E3FF),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.group, color: Color(0xFF001C3A)),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Total pelanggan',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, height: 1.15),
-                  ),
-                ),
-                Text('$total', style: totalNumStyle),
-              ],
-            ),
-          ),
+        statTile(
+          bg: FieldCollectorColors.statTotalBg,
+          iconBg: FieldCollectorColors.statTotalIcon,
+          iconFg: Colors.white,
+          valueColor: FieldCollectorColors.statTotalIcon,
+          icon: Icons.groups_2_rounded,
+          label: 'Total pelanggan',
+          value: '$total',
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _Card(
-                padding: statCardPad,
-                child: SizedBox(
-                  height: statInnerH,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Icon(Icons.warning_amber_rounded, size: 20, color: FieldCollectorColors.summaryOverdue),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text('Belum bayar', maxLines: 2, overflow: TextOverflow.ellipsis, style: belumTextStyle),
-                      ),
-                      Text('$blm', style: belumNumStyle),
-                    ],
-                  ),
-                ),
+              child: statTile(
+                bg: FieldCollectorColors.statBelumBg,
+                iconBg: FieldCollectorColors.statBelumIcon,
+                iconFg: Colors.white,
+                valueColor: FieldCollectorColors.statBelumIcon,
+                icon: Icons.pending_actions_rounded,
+                label: 'Belum bayar',
+                value: '$blm',
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
-              child: _Card(
-                padding: statCardPad,
-                child: SizedBox(
-                  height: statInnerH,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_circle_rounded, size: 20, color: FieldCollectorColors.summaryPaid),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text('Lunas', maxLines: 2, overflow: TextOverflow.ellipsis, style: lunasTextStyle),
-                      ),
-                      Text('$lunas', style: lunasNumStyle),
-                    ],
-                  ),
-                ),
+              child: statTile(
+                bg: FieldCollectorColors.statLunasBg,
+                iconBg: FieldCollectorColors.statLunasIcon,
+                iconFg: Colors.white,
+                valueColor: FieldCollectorColors.statLunasIcon,
+                icon: Icons.verified_rounded,
+                label: 'Lunas',
+                value: '$lunas',
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        _Card(
-          padding: statCardPad,
-          color: FieldCollectorColors.tertiaryFixed,
-          child: SizedBox(
-            height: statInnerH,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Icon(Icons.wifi_off, color: FieldCollectorColors.onTertiaryFixed.withValues(alpha: 0.9)),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text('Terisolir', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, height: 1.15)),
-                ),
-                Text(
-                  '$isolir',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                    height: 1.0,
-                    color: FieldCollectorColors.onTertiaryFixed.withValues(alpha: 0.95),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        const SizedBox(height: 10),
+        statTile(
+          bg: FieldCollectorColors.statIsolirBg,
+          iconBg: FieldCollectorColors.statIsolirIcon,
+          iconFg: Colors.white,
+          valueColor: FieldCollectorColors.statIsolirIcon,
+          icon: Icons.wifi_off_rounded,
+          label: 'Terisolir',
+          value: '$isolir',
         ),
       ],
     );
@@ -704,25 +859,50 @@ class _CollectorHomeTabState extends State<CollectorHomeTab> {
 }
 
 class _Card extends StatelessWidget {
-  const _Card({required this.child, this.color, this.padding});
+  const _Card({
+    required this.child,
+    this.color,
+    this.padding,
+    this.borderRadius = 16,
+    this.borderColor,
+    this.gradient,
+    this.shadows,
+  });
+
   final Widget child;
   final Color? color;
   final EdgeInsetsGeometry? padding;
+  final double borderRadius;
+  final Color? borderColor;
+  final Gradient? gradient;
+  final List<BoxShadow>? shadows;
 
   @override
   Widget build(BuildContext context) {
-    final bg = color ?? FieldCollectorColors.surface;
-    final subtleShadow = bg == FieldCollectorColors.surface;
+    final useGradient = gradient != null;
+    final bg = useGradient ? null : (color ?? FieldCollectorColors.surface);
+    final bool softSurface = !useGradient && color == null;
+    final border = useGradient
+        ? null
+        : Border.all(
+            color: borderColor ?? FieldCollectorColors.outlineVariant,
+            width: borderColor != null ? 1.2 : 1,
+          );
+
     return Container(
       width: double.infinity,
-      padding: padding ?? const EdgeInsets.all(12),
+      padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
+        gradient: gradient,
         color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: FieldCollectorColors.outlineVariant),
-        boxShadow: subtleShadow
-            ? const [BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 1))]
-            : null,
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: border,
+        boxShadow: shadows ??
+            (softSurface
+                ? const [
+                    BoxShadow(color: Color(0x12000000), blurRadius: 12, offset: Offset(0, 4)),
+                  ]
+                : null),
       ),
       child: child,
     );

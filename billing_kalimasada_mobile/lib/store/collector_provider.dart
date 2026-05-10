@@ -9,6 +9,11 @@ class CollectorProvider extends ChangeNotifier {
   List<dynamic> _customers = [];
   Map<String, dynamic>? _settlement;
   Map<String, dynamic>? _me;
+  List<Map<String, dynamic>> _collectorAreas = [];
+  /// Query terakhir yang sukses untuk daftar pelanggan (sinkron tab / strip ringkasan).
+  String _lastCustomersFetchStatus = '';
+  String _lastCustomersFetchArea = '';
+  String _lastCustomersFetchQ = '';
 
   String? _overviewError;
   String? _customersError;
@@ -28,6 +33,10 @@ class CollectorProvider extends ChangeNotifier {
   List<dynamic> get customers => _customers;
   Map<String, dynamic>? get settlement => _settlement;
   Map<String, dynamic>? get me => _me;
+  List<Map<String, dynamic>> get collectorAreas => _collectorAreas;
+  String get lastCustomersFetchStatus => _lastCustomersFetchStatus;
+  String get lastCustomersFetchArea => _lastCustomersFetchArea;
+  String get lastCustomersFetchQ => _lastCustomersFetchQ;
 
   String? get overviewError => _overviewError;
   String? get customersError => _customersError;
@@ -71,7 +80,27 @@ class CollectorProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchCustomers({String status = '', String q = ''}) async {
+  Future<void> fetchCollectorAreas() async {
+    try {
+      final r = await ApiClient.get('/api/mobile-adapter/collector/areas');
+      final body = ApiClient.decodeJsonObject(r, debugLabel: 'collector/areas');
+      if (r.statusCode == 200 && body['success'] == true) {
+        final raw = body['data'];
+        if (raw is List) {
+          _collectorAreas = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        } else {
+          _collectorAreas = [];
+        }
+      } else {
+        _collectorAreas = [];
+      }
+    } catch (_) {
+      _collectorAreas = [];
+    }
+    notifyListeners();
+  }
+
+  Future<void> fetchCustomers({String status = '', String q = '', String area = ''}) async {
     _customersLoading = true;
     _customersError = null;
     notifyListeners();
@@ -79,6 +108,7 @@ class CollectorProvider extends ChangeNotifier {
       final params = <String>[];
       if (status.isNotEmpty) params.add('status=${Uri.encodeComponent(status)}');
       if (q.trim().isNotEmpty) params.add('q=${Uri.encodeComponent(q.trim())}');
+      if (area.trim().isNotEmpty) params.add('area=${Uri.encodeComponent(area.trim())}');
       final path =
           '/api/mobile-adapter/collector/customers${params.isEmpty ? '' : '?${params.join('&')}'}';
       final r = await ApiClient.get(path);
@@ -87,12 +117,15 @@ class CollectorProvider extends ChangeNotifier {
         final raw = body['data'];
         if (raw is List) {
           _customers = List<dynamic>.from(raw);
+          _lastCustomersFetchStatus = status;
+          _lastCustomersFetchArea = area.trim();
+          _lastCustomersFetchQ = q.trim();
         } else {
           _customers = [];
           _customersError = 'Format data pelanggan tidak valid (bukan array).';
         }
         if (kDebugMode) {
-          debugPrint('[collector/customers] status=$status q="$q" → ${_customers.length} baris');
+          debugPrint('[collector/customers] status=$status area="$area" q="$q" → ${_customers.length} baris');
         }
       } else {
         _customersError = body['message']?.toString() ?? 'Gagal memuat';

@@ -77,8 +77,8 @@ scripts/generate-license.js
 # Local / sensitive (Flutter)
 billing_kalimasada_mobile/mcp.json
 
-# Large local copy (do not commit)
-mobile-app/
+# Large local copy (do not commit) — hanya di akar repo
+/mobile-app/
 
 # User uploads (runtime)
 public/uploads/

@@ -692,10 +692,10 @@ async function getActivePPPoEConnectionsRadius() {
         const activeList = Array.isArray(activeRows) ? activeRows : [];
 
         await conn.end();
-        return activeList.map(row => ({
+        return activeList.map((row) => ({
             name: row.username,
             ip: row.framedipaddress || 'N/A',
-            uptime: row.session_time || 0,
+            uptime: row.session_time != null && row.session_time !== '' ? row.session_time : 0,
             'bytes-in': row.acctinputoctets || 0,
             'bytes-out': row.acctoutputoctets || 0,
             nasip: row.nasipaddress || 'N/A'
@@ -765,49 +765,153 @@ async function getPppoeLoginOnlineStatus(login) {
 }
 
 /**
- * Sekali panggil: himpunan nama login PPPoE yang sedang online (semua NAS / RADIUS).
- * Dipakai mobile-adapter network-map agar tidak memanggil getPppoeLoginOnlineStatus per pelanggan (sangat berat).
+ * Sama seperti mobileAdapter `toDhmsFromSeconds` + string RouterOS mentah — dipakai network-map & konsisten detail pelanggan.
  */
-async function getActivePppoeLoginNamesSet() {
-    const set = new Set();
-    const authMode = await getUserAuthModeAsync();
-    if (authMode === 'radius') {
-        const active = await getActivePPPoEConnectionsRadius();
-        for (const a of active || []) {
-            const n = a && a.name != null ? String(a.name).trim() : '';
-            if (n) set.add(n);
-        }
-        return set;
+function formatPppActiveUptimeLikeCustomerDetail(rawUptime) {
+    if (rawUptime == null || rawUptime === '') return null;
+    if (typeof rawUptime === 'bigint') {
+        const secs = Number(rawUptime);
+        if (!Number.isFinite(secs) || secs < 0) return null;
+        return formatPppActiveDhmsFromSeconds(secs);
     }
+    if (typeof rawUptime === 'number' && Number.isFinite(rawUptime)) {
+        return formatPppActiveDhmsFromSeconds(rawUptime);
+    }
+    const s = String(rawUptime).trim();
+    if (!s) return null;
+    if (/^\d+$/.test(s)) {
+        return formatPppActiveDhmsFromSeconds(Number(s)) || s;
+    }
+    return s;
+}
+
+function formatPppActiveDhmsFromSeconds(rawSeconds) {
+    const secs = Number(rawSeconds);
+    if (!Number.isFinite(secs) || secs < 0) return null;
+    const total = Math.floor(secs);
+    const d = Math.floor(total / 86400);
+    const h = Math.floor((total % 86400) / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m ${s}s`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+/** Uptime tampilan dari satu baris /ppp/active (MikroTik), selaras endpoint customers/:id/ppp-session. */
+function pppActiveRowToUptimeDisplay(row) {
+    if (!row) return null;
+    const rawUptime =
+        row.uptime != null && row.uptime !== ''
+            ? row.uptime
+            : row['session-time'] != null && row['session-time'] !== ''
+              ? row['session-time']
+              : row.session_time != null && row.session_time !== ''
+                ? row.session_time
+                : null;
+    return formatPppActiveUptimeLikeCustomerDetail(rawUptime);
+}
+
+/**
+ * Hanya dari MikroTik /ppp/active/print (semua router) — dipakai uptime network map; sama sumbernya detail pelanggan.
+ */
+async function collectMikrotikPppActiveUptimeByLoginMap() {
+    const uptimeByLogin = Object.create(null);
+    const mergeUptime = (row) => {
+        const n = row && row.name != null ? String(row.name).trim() : '';
+        if (!n) return;
+        const disp = pppActiveRowToUptimeDisplay(row);
+        if (disp) {
+            uptimeByLogin[String(n).toLowerCase()] = disp;
+        }
+    };
     const routers = await getAllRoutersFromBillingDb();
     if (!routers.length) {
         try {
             const conn = await getMikrotikConnection();
             if (conn) {
                 const active = await conn.write('/ppp/active/print');
-                for (const row of active || []) {
-                    const n = row && row.name != null ? String(row.name).trim() : '';
-                    if (n) set.add(n);
-                }
+                for (const row of active || []) mergeUptime(row);
             }
         } catch (e) {
-            logger.warn(`[getActivePppoeLoginNamesSet] single NAS: ${e.message}`);
+            logger.warn(`[collectMikrotikPppActiveUptimeByLoginMap] single NAS: ${e.message}`);
         }
-        return set;
+        return uptimeByLogin;
     }
     for (const r of routers) {
         try {
             const conn = await getMikrotikConnectionForRouter(r);
             const active = await conn.write('/ppp/active/print');
-            for (const row of active || []) {
-                const n = row && row.name != null ? String(row.name).trim() : '';
-                if (n) set.add(n);
-            }
+            for (const row of active || []) mergeUptime(row);
         } catch (e) {
-            logger.warn(`[getActivePppoeLoginNamesSet] router ${r.name}: ${e.message}`);
+            logger.warn(`[collectMikrotikPppActiveUptimeByLoginMap] router ${r.name}: ${e.message}`);
         }
     }
-    return set;
+    return uptimeByLogin;
+}
+
+/**
+ * Sekali panggil: himpunan login online (RADIUS radacct ATAU nama di /ppp/active) + uptime tampilan **hanya dari MikroTik /ppp/active**
+ * (sama flow sumber uptime seperti GET customers/:id/ppp-session).
+ * Dipakai mobile-adapter network-map (tanpa N+1 per pelanggan).
+ */
+async function getActivePppoeLoginNamesSetWithUptimeMap() {
+    const set = new Set();
+    const authMode = await getUserAuthModeAsync();
+
+    if (authMode === 'radius') {
+        const active = await getActivePPPoEConnectionsRadius();
+        for (const a of active || []) {
+            const n = a && a.name != null ? String(a.name).trim() : '';
+            if (n) set.add(n);
+        }
+        const uptimeByLogin = await collectMikrotikPppActiveUptimeByLoginMap();
+        return { names: set, uptimeByLogin };
+    }
+
+    const uptimeByLogin = Object.create(null);
+    const mergeRow = (row) => {
+        const n = row && row.name != null ? String(row.name).trim() : '';
+        if (!n) return;
+        set.add(n);
+        const disp = pppActiveRowToUptimeDisplay(row);
+        if (disp) {
+            uptimeByLogin[String(n).toLowerCase()] = disp;
+        }
+    };
+    const routers = await getAllRoutersFromBillingDb();
+    if (!routers.length) {
+        try {
+            const conn = await getMikrotikConnection();
+            if (conn) {
+                const active = await conn.write('/ppp/active/print');
+                for (const row of active || []) mergeRow(row);
+            }
+        } catch (e) {
+            logger.warn(`[getActivePppoeLoginNamesSetWithUptimeMap] single NAS: ${e.message}`);
+        }
+        return { names: set, uptimeByLogin };
+    }
+    for (const r of routers) {
+        try {
+            const conn = await getMikrotikConnectionForRouter(r);
+            const active = await conn.write('/ppp/active/print');
+            for (const row of active || []) mergeRow(row);
+        } catch (e) {
+            logger.warn(`[getActivePppoeLoginNamesSetWithUptimeMap] router ${r.name}: ${e.message}`);
+        }
+    }
+    return { names: set, uptimeByLogin };
+}
+
+/**
+ * Sekali panggil: himpunan nama login PPPoE yang sedang online (semua NAS / RADIUS).
+ * Dipakai mobile-adapter network-map agar tidak memanggil getPppoeLoginOnlineStatus per pelanggan (sangat berat).
+ */
+async function getActivePppoeLoginNamesSet() {
+    const { names } = await getActivePppoeLoginNamesSetWithUptimeMap();
+    return names;
 }
 
 // Fungsi untuk mendapatkan statistik RADIUS (total users, active, offline) - HANYA PPPoE, BUKAN voucher DAN BUKAN member
@@ -9883,6 +9987,7 @@ module.exports = {
     getPPPoEUsersRadius,
     getActivePPPoEConnectionsRadius,
     getActivePppoeLoginNamesSet,
+    getActivePppoeLoginNamesSetWithUptimeMap,
     getPppoeLoginOnlineStatus,
     updatePPPoEUserRadiusPassword,
     assignPackageRadius,

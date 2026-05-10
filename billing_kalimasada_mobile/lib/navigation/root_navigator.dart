@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../theme/colors.dart';
 import '../store/auth_provider.dart';
@@ -8,6 +9,7 @@ import '../store/task_provider.dart';
 import '../screens/login_screen.dart';
 import '../screens/technician_dashboard.dart';
 import '../screens/collector/collector_home_tab.dart';
+import '../theme/collector_colors.dart';
 import '../screens/collector/collector_settlement_tab.dart';
 import '../screens/collector/collector_profile_tab.dart';
 import '../store/collector_provider.dart';
@@ -252,7 +254,11 @@ class _CollectorTabsState extends State<_CollectorTabs> {
       col.fetchOverview(),
       col.fetchSettlement(),
       col.fetchMe(),
-      col.fetchCustomers(status: '', q: ''),
+      col.fetchCustomers(
+        status: col.lastCustomersFetchStatus,
+        q: col.lastCustomersFetchQ,
+        area: col.lastCustomersFetchArea,
+      ),
     ]);
   }
 
@@ -284,7 +290,12 @@ class _CollectorTabsState extends State<_CollectorTabs> {
     setState(() => _currentIndex = 1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<CollectorProvider>().fetchCustomers(status: '', q: '');
+      final col = context.read<CollectorProvider>();
+      col.fetchCustomers(
+        status: col.lastCustomersFetchStatus,
+        q: col.lastCustomersFetchQ,
+        area: col.lastCustomersFetchArea,
+      );
     });
   }
 
@@ -292,14 +303,20 @@ class _CollectorTabsState extends State<_CollectorTabs> {
     setState(() => _currentIndex = i);
     final col = context.read<CollectorProvider>();
     if (i == 0) col.fetchOverview();
-    if (i == 1) col.fetchCustomers(status: '', q: '');
+    if (i == 1) {
+      col.fetchCustomers(
+        status: col.lastCustomersFetchStatus,
+        q: col.lastCustomersFetchQ,
+        area: col.lastCustomersFetchArea,
+      );
+    }
     if (i == 2) col.fetchSettlement();
     if (i == 3) col.fetchMe();
   }
 
   @override
   Widget build(BuildContext context) {
-    const bg = Color(0xFFF8F9FA);
+    const bg = FieldCollectorColors.dashboardCanvas;
     final titles = ['Field Collector', 'Pelanggan', 'Setoran', 'Profil'];
     final notif = context.watch<CollectorNotificationProvider>();
     final unread = notif.unreadCount;
@@ -309,10 +326,6 @@ class _CollectorTabsState extends State<_CollectorTabs> {
       children: [
         CollectorHomeTab(onGoCustomersTab: _goCustomersTab),
         CollectorCustomersScreen(
-          onOpenMenu: () {
-            setState(() => _currentIndex = 3);
-            context.read<CollectorProvider>().fetchMe();
-          },
           onSync: _syncAll,
         ),
         const CollectorSettlementTab(),
@@ -387,7 +400,13 @@ class _CollectorTabsState extends State<_CollectorTabs> {
                 ],
                 bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider(height: 1)),
               ),
-        body: body,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: body),
+            if (_currentIndex == 1) _collectorCustomersStatsBar(),
+          ],
+        ),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -410,6 +429,113 @@ class _CollectorTabsState extends State<_CollectorTabs> {
           ),
         ),
       ),
+    );
+  }
+
+  String _collectorStripRupiah(int n) {
+    return 'Rp ${NumberFormat.decimalPattern('id_ID').format(n)}';
+  }
+
+  Widget _collectorCustomersStatsBar() {
+    return Consumer<CollectorProvider>(
+      builder: (context, col, _) {
+        var count = 0;
+        var total = 0;
+        for (final raw in col.customers) {
+          if (raw is Map) {
+            count++;
+            final m = Map<String, dynamic>.from(raw);
+            final p = m['package_price'];
+            final n = p is num ? p.round() : int.tryParse(p?.toString() ?? '') ?? 0;
+            total += n;
+          }
+        }
+        final hasArea = col.lastCustomersFetchArea.isNotEmpty;
+        return Material(
+          color: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFB8DAFF),
+                  Color(0xFFA8E6CF),
+                ],
+              ),
+              border: Border(
+                top: BorderSide(color: Color(0x4D1565C0)),
+              ),
+              boxShadow: [
+                BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, -2)),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$count pelanggan',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: Color(0xFF0D2847),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Total tagihan ${_collectorStripRupiah(total)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: Color(0xFF1B3A52),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (hasArea)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 160),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE3F2FD),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF90CAF9)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.filter_alt, size: 14, color: Color(0xFF1565C0)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              col.lastCustomersFetchArea,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0D47A1),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

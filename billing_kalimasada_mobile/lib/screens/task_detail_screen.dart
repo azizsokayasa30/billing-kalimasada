@@ -239,6 +239,110 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
     }
   }
 
+  Future<void> _showPendingReasonDialog() async {
+    final tasks = context.read<TaskProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final id = _task['id']?.toString();
+    final type = _task['type']?.toString();
+    if (id == null || type == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('Data tugas tidak valid')));
+      return;
+    }
+
+    final ctrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Tandai pending'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Jelaskan alasan penundaan. Teks ini dikirim ke admin billing (catatan job / riwayat tiket).',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.35),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: ctrl,
+                    maxLines: 4,
+                    minLines: 3,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      hintText: 'Contoh: Menunggu ONT dari gudang / pelanggan tidak di lokasi …',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(color: Colors.grey.shade400),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+                      ),
+                    ),
+                    validator: (v) {
+                      final t = v?.trim() ?? '';
+                      if (t.length < 8) return 'Minimal 8 karakter';
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () async {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                final reason = ctrl.text.trim();
+                Navigator.pop(dialogCtx);
+                setState(() => _busy = true);
+                final ok = await tasks.updateTaskStatus(
+                  id,
+                  type,
+                  'pending',
+                  pendingReason: reason,
+                );
+                if (!mounted) return;
+                setState(() => _busy = false);
+                if (ok) {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Pending tersimpan. Admin dapat melihat alasan di web.')),
+                  );
+                  Navigator.pop(context);
+                } else {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Gagal menyimpan pending. Coba lagi.')),
+                  );
+                }
+              },
+              child: const Text('Kirim ke admin'),
+            ),
+          ],
+        );
+      },
+    );
+    ctrl.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final durLabel = _workActive ? _formatDuration(_elapsed) : '00:00';
@@ -389,8 +493,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
+                            child: _GradientActionChip(
+                              borderRadius: 22,
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF25D366), Color(0xFF128C7E)],
+                              ),
+                              shadow: const Color(0xFF25D366).withValues(alpha: 0.35),
+                              onTap: () async {
                                 final phone = _task['phone']?.toString();
                                 if (phone != null && phone.isNotEmpty) {
                                   final digits = phone.replaceAll(RegExp(r'\D'), '');
@@ -420,21 +531,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                                   );
                                 }
                               },
-                              icon: const Icon(Icons.call, size: 18),
-                              label: const Text('Hubungi'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF19163F),
-                                backgroundColor: const Color(0xFFEAE5FF),
-                                side: const BorderSide(color: Color(0xFFC8C4D3)),
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                              ),
+                              icon: Icons.chat_rounded,
+                              label: 'Hubungi',
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
+                            child: _GradientActionChip(
+                              borderRadius: 22,
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF5C9EFF), Color(0xFF1A56DB)],
+                              ),
+                              shadow: const Color(0xFF4285F4).withValues(alpha: 0.35),
+                              onTap: () async {
                                 final coord = _customerCoordinate();
                                 if (coord != null) {
                                   final uri = Uri.parse(
@@ -468,15 +579,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                                   );
                                 }
                               },
-                              icon: const Icon(Icons.map, size: 18),
-                              label: const Text('Peta'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF19163F),
-                                backgroundColor: const Color(0xFFEAE5FF),
-                                side: const BorderSide(color: Color(0xFFC8C4D3)),
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                              ),
+                              icon: Icons.map_rounded,
+                              label: 'Peta',
                             ),
                           ),
                         ],
@@ -780,25 +884,25 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                         await _onKerjakanInstall(context);
                       }
                     },
-                    borderRadius: 14,
+                    borderRadius: 18,
                     gradient: _workActive
                         ? const LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              Color(0xFF2A8A58),
-                              Color(0xFF237548),
+                              Color(0xFF047857),
+                              Color(0xFF065F46),
                             ],
                           )
                         : const LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              Color(0xFF5CCF89),
-                              Color(0xFF3EB770),
+                              Color(0xFF16A34A),
+                              Color(0xFF15803D),
                             ],
                           ),
-                    shadowColor: _workActive ? const Color(0xFF2A8A58) : const Color(0xFF5CCF89),
+                    shadowColor: const Color(0xFF16A34A),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -830,38 +934,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
                   _SmoothActionButton(
                     enabled: !_busy,
                     onTap: () async {
-                      final id = _task['id']?.toString();
-                      final type = _task['type']?.toString();
-                      if (id != null && type != null) {
-                        final success = await context.read<TaskProvider>().updateTaskStatus(id, type, 'pending');
-                        if (context.mounted) {
-                          if (success) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Tugas berhasil ditandai sebagai pending')),
-                            );
-                            Navigator.pop(context);
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Gagal memperbarui status tugas')),
-                            );
-                          }
-                        }
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Data tugas tidak valid')),
-                        );
-                      }
+                      await _showPendingReasonDialog();
                     },
-                    borderRadius: 14,
+                    borderRadius: 18,
                     gradient: const LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Color(0xFFF08F8F),
-                        Color(0xFFE26A6A),
+                        Color(0xFFEF4444),
+                        Color(0xFFB91C1C),
                       ],
                     ),
-                    shadowColor: const Color(0xFFF08F8F),
+                    shadowColor: const Color(0xFFDC2626),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -915,7 +999,68 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with SingleTickerPr
   }
 }
 
-/// Tombol aksi bawah: gradien lembut + bayangan halus.
+/// Tombol Hubungi / Peta: gradien + sudut sangat membulat.
+class _GradientActionChip extends StatelessWidget {
+  const _GradientActionChip({
+    required this.borderRadius,
+    required this.gradient,
+    required this.shadow,
+    required this.onTap,
+    required this.icon,
+    required this.label,
+  });
+
+  final double borderRadius;
+  final Gradient gradient;
+  final Color shadow;
+  final VoidCallback onTap;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: Ink(
+          height: 48,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(borderRadius),
+            gradient: gradient,
+            boxShadow: [
+              BoxShadow(
+                color: shadow,
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 20, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tombol aksi bawah: gradien + bayangan halus.
 class _SmoothActionButton extends StatelessWidget {
   const _SmoothActionButton({
     required this.enabled,
@@ -923,7 +1068,7 @@ class _SmoothActionButton extends StatelessWidget {
     required this.child,
     required this.gradient,
     required this.shadowColor,
-    this.borderRadius = 14,
+    this.borderRadius = 18,
   });
 
   final bool enabled;

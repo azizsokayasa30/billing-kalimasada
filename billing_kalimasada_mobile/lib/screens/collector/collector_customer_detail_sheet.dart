@@ -275,8 +275,8 @@ class _CollectorCustomerDetailPanelState extends State<_CollectorCustomerDetailP
     late Color badgeFg;
     if (isIsolir) {
       badge = 'Isolir';
-      badgeBg = FieldCollectorColors.tertiaryFixed;
-      badgeFg = FieldCollectorColors.onTertiaryFixed;
+      badgeBg = FieldCollectorColors.errorContainer;
+      badgeFg = FieldCollectorColors.onErrorContainer;
     } else if (isPaid) {
       badge = 'Lunas';
       badgeBg = const Color(0xFFD3F5D6);

@@ -9,9 +9,9 @@ import 'package:provider/provider.dart';
 
 import '../services/api_client.dart';
 import '../store/customer_provider.dart';
-import '../widgets/odp_map_marker.dart';
+import '../widgets/customer_home_map_marker.dart';
 
-/// Tag lokasi pelanggan (GPS) + pilih ODP; menyimpan lewat [CustomerProvider.updateLocation].
+/// Tag lokasi pelanggan (GPS); ODP opsional — menyimpan lewat [CustomerProvider.updateLocation].
 class TagCustomerLocationScreen extends StatefulWidget {
   const TagCustomerLocationScreen({super.key});
 
@@ -316,15 +316,6 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
       );
       return;
     }
-    if (_selectedOdpId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pilih ODP'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
     if (_selectedLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -485,7 +476,7 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
                                   width: 28,
                                   height: 33,
                                   alignment: Alignment.topCenter,
-                                  child: const OdpMapMarker(status: 'active'),
+                                  child: const CustomerHomeMapMarker(),
                                 ),
                               ],
                             ),
@@ -618,12 +609,21 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
                 ],
                 const SizedBox(height: 20),
                 const Text(
-                  'PILIH ODP',
+                  'PILIH ODP (OPSIONAL)',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: textOnSurfaceVariant,
                     letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Boleh dikosongkan jika hanya memperbarui titik lokasi di peta.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    color: textOnSurfaceVariant.withValues(alpha: 0.92),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -643,7 +643,7 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
                   InputDecorator(
                     decoration: const InputDecoration(),
                     child: DropdownButtonHideUnderline(
-                      child: DropdownButton<int>(
+                      child: DropdownButton<int?>(
                         value: _selectedOdpId,
                         isExpanded: true,
                         style: const TextStyle(
@@ -651,26 +651,36 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
                           fontSize: 15,
                         ),
                         hint: const Text(
-                          'Pilih ODP',
+                          'Pilih ODP (opsional)',
                           style: TextStyle(color: textOnSurfaceVariant),
                         ),
                         dropdownColor: Colors.white,
                         iconEnabledColor: primary,
-                        items: _odpList.map((o) {
-                          final idVal = o['id'];
-                          final id = idVal is int
-                              ? idVal
-                              : int.tryParse(idVal?.toString() ?? '');
-                          if (id == null) return null;
-                          return DropdownMenuItem<int>(
-                            value: id,
+                        items: [
+                          const DropdownMenuItem<int?>(
+                            value: null,
                             child: Text(
-                              _odpLabel(o),
+                              'Tanpa ODP — hanya simpan koordinat',
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: textOnSurface),
+                              style: TextStyle(color: textOnSurface, fontSize: 14),
                             ),
-                          );
-                        }).whereType<DropdownMenuItem<int>>().toList(),
+                          ),
+                          ..._odpList.map((o) {
+                            final idVal = o['id'];
+                            final id = idVal is int
+                                ? idVal
+                                : int.tryParse(idVal?.toString() ?? '');
+                            if (id == null) return null;
+                            return DropdownMenuItem<int?>(
+                              value: id,
+                              child: Text(
+                                _odpLabel(o),
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: textOnSurface),
+                              ),
+                            );
+                          }).whereType<DropdownMenuItem<int?>>(),
+                        ],
                         onChanged: (v) => setState(() => _selectedOdpId = v),
                       ),
                     ),

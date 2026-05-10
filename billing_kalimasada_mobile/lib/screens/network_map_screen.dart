@@ -30,6 +30,8 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
   List<dynamic> _cableRoutes = [];
   List<dynamic> _backbone = [];
   bool _isLoading = true;
+  /// Kartu ringkas pelanggan di atas peta (bukan modal).
+  Map<String, dynamic>? _selectedMapCustomer;
   late final AnimationController _flowController;
 
   static const _customerFlowColor = Color(0xFF00E676);
@@ -63,6 +65,7 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
           _customers = List<dynamic>.from(payload['customers'] ?? const []);
           _cableRoutes = List<dynamic>.from(payload['cableRoutes'] ?? const []);
           _backbone = List<dynamic>.from(payload['backbone'] ?? const []);
+          _selectedMapCustomer = null;
         });
       }
     } catch (e) {
@@ -143,6 +146,203 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
     } finally {
       if (mounted) setState(() => _isLocating = false);
     }
+  }
+
+  void _onCustomerMarkerTap(Map<String, dynamic> row) {
+    setState(() {
+      final same =
+          _selectedMapCustomer != null &&
+          _selectedMapCustomer!['id']?.toString() == row['id']?.toString();
+      _selectedMapCustomer = same ? null : row;
+    });
+  }
+
+  Widget _buildMapCustomerCard(Map<String, dynamic> c) {
+    const outline = Color(0xFFC8C4D3);
+    const textMain = Color(0xFF19163F);
+    const textMuted = Color(0xFF474551);
+    const onlineColor = Color(0xFF1B7F3C);
+    const onlineMutedColor = Color(0xFF2E7D32);
+    const offlineColor = Color(0xFFC62828);
+
+    final name = (c['name'] ?? '-').toString().trim();
+    final pppUser = (c['pppoe_username'] ?? c['username'] ?? '').toString().trim();
+    final pppUserLine = pppUser.isEmpty ? '—' : pppUser;
+
+    final pa = c['pppoe_active'];
+    final bool pppoeOnline =
+        pa == true || pa == 1 || (pa is String && pa.toLowerCase() == 'true');
+    final uptimeStr = (c['pppoe_uptime_display'] ?? '').toString().trim();
+
+    Widget row(String label, String value) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: textMuted,
+                letterSpacing: 0.35,
+              ),
+            ),
+            const SizedBox(height: 4),
+            SelectableText(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: textMain,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget statusPppoeRow() {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Status PPPoE',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: textMuted,
+                letterSpacing: 0.35,
+              ),
+            ),
+            const SizedBox(height: 4),
+            if (pppoeOnline) ...[
+              SelectableText(
+                'Online',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: onlineColor,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Uptime sesi',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: textMuted.withValues(alpha: 0.9),
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              SelectableText(
+                uptimeStr.isEmpty ? '—' : uptimeStr,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: uptimeStr.isEmpty ? textMuted : onlineMutedColor,
+                  height: 1.3,
+                ),
+              ),
+            ] else if (pa == false)
+              SelectableText(
+                'Offline',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: offlineColor,
+                  height: 1.35,
+                ),
+              )
+            else
+              SelectableText(
+                'Tidak diketahui (username PPPoE kosong atau data sesi tidak tersedia)',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: textMain,
+                  height: 1.35,
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 260),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFFFCF8FF),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: outline),
+            boxShadow: const [
+              BoxShadow(color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 4)),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF0EBFF),
+                    border: Border(bottom: BorderSide(color: outline, width: 1)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.home_rounded, size: 20, color: Color(0xFF1B0C6B)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF070038),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Tutup',
+                        onPressed: () => setState(() => _selectedMapCustomer = null),
+                        icon: const Icon(Icons.close_rounded, color: textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        row('Username PPPoE', pppUserLine),
+                        statusPppoeRow(),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   List<List<LatLng>> _buildCustomerCableSegments() {
@@ -445,6 +645,9 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
                   onMapReady: () {
                     _isMapReady = true;
                   },
+                  onTap: (tapPosition, latLng) {
+                    setState(() => _selectedMapCustomer = null);
+                  },
                   onPositionChanged: (position, hasGesture) {
                     if (hasGesture) {
                       _currentZoom = position.zoom;
@@ -503,17 +706,29 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
                   if (lat == null || lng == null) return null;
                   final status = (c['status'] ?? 'active').toString().toLowerCase();
                   final color = status == 'active' ? const Color(0xFF2196F3) : const Color(0xFF9E9E9E);
+                  final row = Map<String, dynamic>.from(c);
                   return Marker(
                     point: LatLng(lat, lng),
                     width: 22,
                     height: 22,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
+                    alignment: Alignment.center,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _onCustomerMarkerTap(row),
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(0, 1)),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.home_rounded, size: 12, color: Colors.white),
                       ),
-                      child: const Icon(Icons.home, size: 12, color: Colors.white),
                     ),
                   );
                 }).whereType<Marker>().toList(),
@@ -791,7 +1006,16 @@ class _NetworkMapScreenState extends State<NetworkMapScreen>
               ),
             ),
           ),
-          
+
+          if (_selectedMapCustomer != null)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 100,
+              height: 260,
+              child: _buildMapCustomerCard(_selectedMapCustomer!),
+            ),
+
           if (_isLoading)
             const Center(child: CircularProgressIndicator()),
         ],
