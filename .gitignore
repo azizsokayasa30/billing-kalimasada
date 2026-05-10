@@ -83,5 +83,9 @@ mobile-app/
 # User uploads (runtime)
 public/uploads/
 
+# Rilis APK mobile (unggah di server; manifest contoh: public/mobile-app/manifest.example.json)
+public/mobile-app/manifest.json
+public/mobile-app/*.apk
+
 # One-off SQL/debug scripts
 scripts/tmp-*.js

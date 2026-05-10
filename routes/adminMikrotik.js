@@ -428,9 +428,14 @@ router.get('/mikrotik/profiles/api', adminAuth, async (req, res) => {
     const authMode = await getUserAuthModeAsync();
     
     if (authMode === 'radius') {
-      // In RADIUS mode, return profiles from RADIUS database
-      logger.info('RADIUS mode: Returning profiles from RADIUS database');
-      const result = await getPPPoEProfiles();
+      // include_assigned=1: grup di radusergroup yang belum di radgroupreply (hanya untuk dropdown user PPPoE), bukan halaman daftar profil
+      const includeAssigned = String(req.query.include_assigned || '').trim() === '1';
+      logger.info(
+        `RADIUS mode: profiles API (include_assigned=${includeAssigned ? '1' : '0'})`
+      );
+      const result = await getPPPoEProfiles(null, {
+        mergeAssignedGroups: includeAssigned
+      });
       if (result.success) {
         return res.json({ 
           success: true, 

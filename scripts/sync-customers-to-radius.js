@@ -17,11 +17,13 @@ function getCustomersWithPPPoE() {
     const db = new sqlite3.Database(billingDbPath);
     return new Promise((resolve, reject) => {
         db.all(`
-            SELECT id, customer_id, username, pppoe_username, name, phone, pppoe_profile, status, static_ip, assigned_ip
-            FROM customers
-            WHERE pppoe_username IS NOT NULL
-              AND TRIM(pppoe_username) != ''
-            ORDER BY id ASC
+            SELECT c.id, c.customer_id, c.username, c.pppoe_username, c.name, c.phone, c.pppoe_profile, c.status,
+                   c.static_ip, c.assigned_ip, c.pppoe_password, p.pppoe_profile AS package_pppoe_profile
+            FROM customers c
+            LEFT JOIN packages p ON c.package_id = p.id
+            WHERE c.pppoe_username IS NOT NULL
+              AND TRIM(c.pppoe_username) != ''
+            ORDER BY c.id ASC
         `, [], (err, rows) => {
             db.close();
             if (err) return reject(err);
@@ -52,7 +54,13 @@ async function main() {
                 continue;
             }
 
-            const result = await syncCustomerToRadius(customer, customer);
+            const result = await syncCustomerToRadius(customer, {
+                pppoe_password: customer.pppoe_password,
+                pppoe_profile: customer.pppoe_profile,
+                static_ip: customer.static_ip,
+                assigned_ip: customer.assigned_ip,
+                status: customer.status
+            });
             if (result.success) {
                 console.log(`[SYNCED] ${customer.pppoe_username}`);
                 synced++;

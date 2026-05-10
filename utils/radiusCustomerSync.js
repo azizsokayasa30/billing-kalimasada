@@ -1,9 +1,16 @@
 const logger = require('../config/logger');
-const { getUserAuthModeAsync, getRadiusConnection } = require('../config/mikrotik');
+const {
+    getUserAuthModeAsync,
+    getRadiusConnection,
+    resolvePppoeProfileHintToRadiusGroup
+} = require('../config/mikrotik');
 
-function normalizeGroupName(profile) {
-    if (!profile || typeof profile !== 'string') return null;
-    return profile.toLowerCase().trim().replace(/\s+/g, '_');
+function pickFirstProfileHint(options, customer) {
+    const vals = [options.pppoe_profile, customer?.pppoe_profile, customer?.package_pppoe_profile];
+    for (const v of vals) {
+        if (v != null && String(v).trim() !== '') return String(v).trim();
+    }
+    return null;
 }
 
 function sanitizeIp(value) {
@@ -17,7 +24,7 @@ function sanitizeIp(value) {
 /**
  * Sync customer PPPoE auth data from billing to RADIUS SQL tables.
  * - radcheck: Cleartext-Password
- * - radusergroup: package/profile mapping
+ * - radusergroup: package/profile mapping (hanya groupname yang ada di radgroupreply/radgroupcheck)
  * - radreply: Framed-IP-Address (optional)
  */
 async function syncCustomerToRadius(customer, options = {}) {
@@ -25,7 +32,7 @@ async function syncCustomerToRadius(customer, options = {}) {
     // IMPORTANT: RADIUS PPPoE password must come from PPPoE password field,
     // never from portal login password.
     const pppoePassword = String(options.pppoe_password || customer?.pppoe_password || '').trim();
-    const groupname = normalizeGroupName(options.pppoe_profile || customer?.pppoe_profile || null);
+    const profileHint = pickFirstProfileHint(options, customer);
     const framedIp = sanitizeIp(options.static_ip || options.assigned_ip || customer?.static_ip || customer?.assigned_ip || null);
     /** Jangan timpa radusergroup ke profil paket saat pelanggan isolir — grup 'isolir' diatur suspendUserRadius / serviceSuspension */
     const effectiveStatus = String(customer?.status || options?.status || '').toLowerCase();
@@ -63,13 +70,20 @@ async function syncCustomerToRadius(customer, options = {}) {
             }
         }
 
-        if (groupname && !skipGroupAssign) {
-            await conn.execute("DELETE FROM radusergroup WHERE username = ?", [pppoeUsername]);
-            await conn.execute(
-                "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
-                [pppoeUsername, groupname]
-            );
-        } else if (groupname && skipGroupAssign) {
+        if (profileHint && !skipGroupAssign) {
+            const resolvedGroup = await resolvePppoeProfileHintToRadiusGroup(conn, profileHint);
+            if (resolvedGroup) {
+                await conn.execute('DELETE FROM radusergroup WHERE username = ?', [pppoeUsername]);
+                await conn.execute(
+                    'INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)',
+                    [pppoeUsername, resolvedGroup]
+                );
+            } else {
+                logger.warn(
+                    `[RADIUS-SYNC] Profil tidak dikenali di RADIUS untuk ${pppoeUsername} (hint=${profileHint}); radusergroup tidak diubah`
+                );
+            }
+        } else if (profileHint && skipGroupAssign) {
             logger.info(`[RADIUS-SYNC] Skip radusergroup untuk ${pppoeUsername} (status suspended, biarkan grup isolir)`);
         }
 
@@ -88,7 +102,7 @@ async function syncCustomerToRadius(customer, options = {}) {
     } finally {
         if (conn) {
             try {
-                await conn.end();
+                if (typeof conn.end === 'function') await conn.end();
             } catch (_) {}
         }
     }

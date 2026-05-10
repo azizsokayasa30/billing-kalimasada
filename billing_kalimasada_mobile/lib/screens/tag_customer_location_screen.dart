@@ -371,11 +371,62 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
     const textOnSurface = Color(0xFF19163F);
     const textOnSurfaceVariant = Color(0xFF474551);
     const primary = Color(0xFF070038);
+    const fieldFill = Color(0xFFF6F1FF);
+    const outline = Color(0xFFC8C4D3);
 
-    return Scaffold(
+    // App global = dark theme; layar ini desain terang — pakai tema terang lokal agar hint/dropdown/teks input tidak putih.
+    final lightScheme = ColorScheme.fromSeed(
+      seedColor: primary,
+      brightness: Brightness.light,
+      surface: Colors.white,
+      onSurface: textOnSurface,
+      onSurfaceVariant: textOnSurfaceVariant,
+    );
+
+    return Theme(
+      data: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.light,
+        colorScheme: lightScheme,
+        scaffoldBackgroundColor: bgBackground,
+        textSelectionTheme: const TextSelectionThemeData(
+          cursorColor: primary,
+          selectionColor: Color(0xFFC5C0FF),
+          selectionHandleColor: primary,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: fieldFill,
+          hintStyle: const TextStyle(color: textOnSurfaceVariant, fontSize: 15),
+          labelStyle: const TextStyle(color: textOnSurfaceVariant),
+          floatingLabelStyle: const TextStyle(color: textOnSurfaceVariant),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: outline),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: outline),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: primary, width: 1.5),
+          ),
+        ),
+        listTileTheme: const ListTileThemeData(
+          textColor: textOnSurface,
+          iconColor: textOnSurfaceVariant,
+        ),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: primary,
+          linearTrackColor: Color(0xFFE4DFFF),
+        ),
+      ),
+      child: Scaffold(
       backgroundColor: bgBackground,
       appBar: AppBar(
         backgroundColor: Colors.white,
+        foregroundColor: primary,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
@@ -505,15 +556,9 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
                 TextField(
                   controller: _customerSearchController,
                   onChanged: _onCustomerQueryChanged,
-                  style: const TextStyle(color: textOnSurface),
-                  decoration: InputDecoration(
+                  style: const TextStyle(color: textOnSurface, fontSize: 15),
+                  decoration: const InputDecoration(
                     hintText: 'Cari nama / telepon / ID pelanggan',
-                    filled: true,
-                    fillColor: const Color(0xFFF6F1FF),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFC8C4D3)),
-                    ),
                   ),
                 ),
                 if (_searching)
@@ -596,19 +641,21 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
                   )
                 else
                   InputDecorator(
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: const Color(0xFFF6F1FF),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFFC8C4D3)),
-                      ),
-                    ),
+                    decoration: const InputDecoration(),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<int>(
                         value: _selectedOdpId,
                         isExpanded: true,
-                        hint: const Text('Pilih ODP'),
+                        style: const TextStyle(
+                          color: textOnSurface,
+                          fontSize: 15,
+                        ),
+                        hint: const Text(
+                          'Pilih ODP',
+                          style: TextStyle(color: textOnSurfaceVariant),
+                        ),
+                        dropdownColor: Colors.white,
+                        iconEnabledColor: primary,
                         items: _odpList.map((o) {
                           final idVal = o['id'];
                           final id = idVal is int
@@ -620,6 +667,7 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
                             child: Text(
                               _odpLabel(o),
                               overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: textOnSurface),
                             ),
                           );
                         }).whereType<DropdownMenuItem<int>>().toList(),
@@ -661,6 +709,7 @@ class _TagCustomerLocationScreenState extends State<TagCustomerLocationScreen>
             ),
           ),
         ],
+      ),
       ),
     );
   }

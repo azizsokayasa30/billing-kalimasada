@@ -587,20 +587,23 @@
                         if (data.success && data.profiles && data.profiles.length > 0) {
                             sel.html('<option value="">Pilih profil atau ketik nama baru</option>');
                             data.profiles.forEach(profile => {
-                                const profileName = profile.name || profile['.name'] || profile['.id'] || profile.groupname || '';
-                                if (profileName) {
-                                    const option = $('<option></option>').attr('value', profileName).text(profileName);
-                                    if (selectedValue === profileName) {
-                                        option.prop('selected', true);
-                                    }
-                                    sel.append(option);
+                                const val = (profile.groupname || profile['.id'] || '').toString().trim();
+                                if (!val) return;
+                                let label = (profile.name || val).toString();
+                                if (profile.name && val && String(profile.name).trim() !== val) {
+                                    label = String(profile.name).trim() + ' — ' + val;
                                 }
+                                const option = $('<option></option>').attr('value', val).text(label);
+                                if (String(selectedValue).trim() === val) {
+                                    option.prop('selected', true);
+                                }
+                                sel.append(option);
                             });
                             
                             // Check if selectedValue is not in the list (custom/new profile)
                             if (selectedValue && !data.profiles.some(p => {
-                                const name = p.name || p['.name'] || p['.id'] || p.groupname || '';
-                                return name === selectedValue;
+                                const gn = (p.groupname || p['.id'] || '').toString().trim();
+                                return gn === String(selectedValue).trim();
                             })) {
                                 const customOption = $('<option></option>').attr('value', selectedValue).text(selectedValue + ' (baru)');
                                 customOption.prop('selected', true);

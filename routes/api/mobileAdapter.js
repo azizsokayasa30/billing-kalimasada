@@ -266,6 +266,19 @@ function parseCompletionLatLng(body) {
     return { lat, lng };
 }
 
+/**
+ * Job instalasi yang boleh dilihat/diubah teknisi: ditugaskan kepadanya atau belum ada teknisi (pool umum).
+ * Param query: [techId, String(techId)] — sama pola dengan tiket gangguan tanpa penugasan.
+ */
+function sqlInstallationJobAccessibleByTech(alias = 'ij') {
+    const a = alias;
+    return `(
+        ${a}.assigned_technician_id = ?
+        OR CAST(${a}.assigned_technician_id AS TEXT) = ?
+        OR IFNULL(TRIM(CAST(${a}.assigned_technician_id AS TEXT)), '') IN ('', '0')
+    )`;
+}
+
 /** Samakan normalisasi nomor dengan query daftar tugas INSTALL */
 function resolveCustomerIdFromInstallationJob(jobRow) {
     return new Promise((resolve) => {
@@ -340,6 +353,70 @@ const { resolveEmployeePhotoPath, buildPhotoUrl } = require('../../utils/technic
 /** Tanpa auth — untuk cek deploy / reverse proxy (GET …/health) */
 router.get('/health', (req, res) => {
     res.json({ success: true, service: 'mobile-adapter', time: new Date().toISOString() });
+});
+
+/**
+ * Pembaruan aplikasi Flutter (tanpa JWT): manifest dari file atau settings.json.
+ * File: public/mobile-app/manifest.json (lihat manifest.example.json).
+ * Settings (opsional): mobile_app_version, mobile_app_build, mobile_app_apk_url, mobile_app_release_notes
+ */
+router.get('/app-update/manifest', (req, res) => {
+    const empty = () =>
+        res.json({
+            success: true,
+            source: 'none',
+            data: {
+                configured: false,
+                version: null,
+                build_number: null,
+                apk_url: null,
+                release_notes: null
+            }
+        });
+
+    function normalizeManifest(parsed) {
+        if (!parsed || typeof parsed !== 'object') return null;
+        const version = parsed.version != null ? String(parsed.version).trim() : '';
+        const bnRaw = parsed.build_number != null ? parseInt(String(parsed.build_number), 10) : NaN;
+        const build_number = Number.isFinite(bnRaw) && bnRaw >= 0 ? bnRaw : null;
+        const apk_url = parsed.apk_url != null ? String(parsed.apk_url).trim() : '';
+        const release_notes = parsed.release_notes != null ? String(parsed.release_notes).trim() : '';
+        if (!version || !apk_url) return null;
+        return {
+            configured: true,
+            version,
+            build_number,
+            apk_url,
+            release_notes: release_notes || 'Pembaruan aplikasi mobile.'
+        };
+    }
+
+    let parsed = null;
+    const manifestPath = path.join(__dirname, '../../public/mobile-app/manifest.json');
+    try {
+        if (fs.existsSync(manifestPath)) {
+            parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        }
+    } catch (e) {
+        logger.warn('[mobile-adapter] app-update manifest.json:', e.message);
+    }
+
+    let data = normalizeManifest(parsed);
+    if (!data) {
+        const fromSettings = {
+            version: String(getSetting('mobile_app_version', '') || '').trim(),
+            build_number: getSetting('mobile_app_build', ''),
+            apk_url: String(getSetting('mobile_app_apk_url', '') || '').trim(),
+            release_notes: String(getSetting('mobile_app_release_notes', '') || '').trim()
+        };
+        data = normalizeManifest(fromSettings);
+    }
+
+    if (!data) {
+        return empty();
+    }
+
+    res.json({ success: true, source: 'server', data });
 });
 
 function allowFieldOps(req, res, next) {
@@ -1539,9 +1616,9 @@ router.get('/tasks', verifyToken, requireTechnician, (req, res) => {
             ? `LOWER(ij.status) IN ('completed','cancelled')`
             : `LOWER(ij.status) NOT IN ('completed','cancelled')`
         : history
-            ? `ij.assigned_technician_id = ? AND LOWER(ij.status) IN ('completed','cancelled')`
-            : `ij.assigned_technician_id = ? AND LOWER(ij.status) NOT IN ('completed','cancelled')`;
-    const installParams = isAdmin ? [] : [techId];
+            ? `(ij.assigned_technician_id = ? OR CAST(ij.assigned_technician_id AS TEXT) = ?) AND LOWER(ij.status) IN ('completed','cancelled')`
+            : `${sqlInstallationJobAccessibleByTech('ij')} AND LOWER(ij.status) NOT IN ('completed','cancelled')`;
+    const installParams = isAdmin ? [] : [techId, String(techId)];
 
     const installSql = `
         SELECT ij.*, p.name AS package_name,
@@ -2033,8 +2110,8 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
 
             const installPickSql = isAdminTask
                 ? `SELECT * FROM installation_jobs WHERE id = ?`
-                : `SELECT * FROM installation_jobs WHERE id = ? AND assigned_technician_id = ?`;
-            const installPickParams = isAdminTask ? [jobId] : [jobId, techId];
+                : `SELECT * FROM installation_jobs WHERE id = ? AND ${sqlInstallationJobAccessibleByTech('installation_jobs')}`;
+            const installPickParams = isAdminTask ? [jobId] : [jobId, techId, String(techId)];
 
             db.get(
                 installPickSql,
@@ -2055,14 +2132,21 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
                     const newNotes = job.notes ? `${job.notes}\n\n${noteBlock}` : noteBlock;
                     const wd = clampWorkDurationSeconds(body.work_duration_seconds);
 
-                    const setCols = [
-                        `status = 'completed'`,
+                    const setCols = [`status = 'completed'`];
+                    const uParams = [];
+                    if (!isAdminTask) {
+                        setCols.push(
+                            `assigned_technician_id = CASE WHEN IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0') THEN ? ELSE assigned_technician_id END`
+                        );
+                        uParams.push(techId);
+                    }
+                    setCols.push(
                         `notes = ?`,
                         `updated_at = CURRENT_TIMESTAMP`,
                         `install_cable_length_m = ?`,
                         `install_ont_sticker_photo_path = ?`
-                    ];
-                    const uParams = [newNotes, cableM, stickerPath];
+                    );
+                    uParams.push(newNotes, cableM, stickerPath);
                     if (wd != null) {
                         setCols.push('work_duration_seconds = ?');
                         uParams.push(wd);
@@ -2073,12 +2157,12 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
                         setCols.push('customer_latitude = ?', 'customer_longitude = ?');
                         uParams.push(compLat, compLng);
                     }
-                    let updInstallSql = `UPDATE installation_jobs SET ${setCols.join(', ')} WHERE id = ? AND assigned_technician_id = ?`;
+                    let updInstallSql = `UPDATE installation_jobs SET ${setCols.join(', ')} WHERE id = ? AND ${sqlInstallationJobAccessibleByTech('installation_jobs')}`;
                     if (isAdminTask) {
                         uParams.push(jobId);
                         updInstallSql = `UPDATE installation_jobs SET ${setCols.join(', ')} WHERE id = ?`;
                     } else {
-                        uParams.push(jobId, techId);
+                        uParams.push(jobId, techId, String(techId));
                     }
 
                     db.run(updInstallSql, uParams, async function (uErr) {
@@ -2190,9 +2274,13 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
             }
             db.run(
                 `UPDATE installation_jobs SET status = ?, updated_at = ?,
-                 work_started_at = COALESCE(work_started_at, ?)
-                 WHERE id = ? AND assigned_technician_id = ?`,
-                [dbStatus, wallNow, wallNow, jobId, techId],
+                 work_started_at = COALESCE(work_started_at, ?),
+                 assigned_technician_id = CASE
+                    WHEN IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0') THEN ?
+                    ELSE assigned_technician_id
+                 END
+                 WHERE id = ? AND ${sqlInstallationJobAccessibleByTech('installation_jobs')}`,
+                [dbStatus, wallNow, wallNow, techId, jobId, techId, String(techId)],
                 function (err) {
                     if (err) {
                         return res.status(500).json({ success: false, message: err.message });
@@ -2231,9 +2319,13 @@ router.post('/tasks/:type/:id/status', verifyToken, requireTechnician, (req, res
         }
 
         db.run(
-            `UPDATE installation_jobs SET status = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ? AND assigned_technician_id = ?`,
-            [dbStatus, jobId, techId],
+            `UPDATE installation_jobs SET status = ?, updated_at = CURRENT_TIMESTAMP,
+             assigned_technician_id = CASE
+                WHEN IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0') THEN ?
+                ELSE assigned_technician_id
+             END
+             WHERE id = ? AND ${sqlInstallationJobAccessibleByTech('installation_jobs')}`,
+            [dbStatus, techId, jobId, techId, String(techId)],
             function (err) {
                 if (err) {
                     return res.status(500).json({ success: false, message: err.message });

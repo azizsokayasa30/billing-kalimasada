@@ -289,7 +289,8 @@ async function getRadusergroupProfileMap(conn, usernames) {
             const list = Array.isArray(grows) ? grows : [];
             for (const g of list) {
                 if (g && g.username != null && !map.has(g.username)) {
-                    map.set(g.username, g.groupname || 'default');
+                    const gn = (g.groupname != null ? String(g.groupname).trim() : '') || 'default';
+                    map.set(g.username, gn);
                 }
             }
         }
@@ -297,6 +298,88 @@ async function getRadusergroupProfileMap(conn, usernames) {
         logger.warn(`[PPPoE-RADIUS] radusergroup tidak dipakai (tabel hilang atau error): ${e.message}`);
     }
     return map;
+}
+
+/**
+ * Samakan input profil (form admin) ke groupname persis di RADIUS agar radusergroup konsisten
+ * dengan radgroupreply/radgroupcheck (hindari beda kapital/spasi vs label tampilan).
+ */
+async function resolveRadiusProfileGroupname(conn, profileInput) {
+    const raw = (profileInput != null ? String(profileInput) : '').trim();
+    if (!raw) return null;
+    const tryTables = async (sql, params) => {
+        const [rows] = await conn.execute(sql, params);
+        const list = Array.isArray(rows) ? rows : [];
+        return list.length > 0 ? String(list[0].groupname) : null;
+    };
+    let found = await tryTables(
+        'SELECT DISTINCT groupname FROM radgroupreply WHERE groupname = ? LIMIT 1',
+        [raw]
+    );
+    if (found) return found;
+    const simplified = raw.toLowerCase().replace(/\s+/g, '_');
+    if (simplified !== raw) {
+        found = await tryTables(
+            'SELECT DISTINCT groupname FROM radgroupreply WHERE groupname = ? LIMIT 1',
+            [simplified]
+        );
+        if (found) return found;
+    }
+    found = await tryTables(
+        'SELECT DISTINCT groupname FROM radgroupreply WHERE LOWER(TRIM(groupname)) = LOWER(TRIM(?)) LIMIT 1',
+        [raw]
+    );
+    if (found) return found;
+    try {
+        found = await tryTables(
+            'SELECT DISTINCT groupname FROM radgroupcheck WHERE groupname = ? LIMIT 1',
+            [raw]
+        );
+        if (found) return found;
+        found = await tryTables(
+            'SELECT DISTINCT groupname FROM radgroupcheck WHERE LOWER(TRIM(groupname)) = LOWER(TRIM(?)) LIMIT 1',
+            [raw]
+        );
+        if (found) return found;
+    } catch (e) {
+        try {
+            logger.debug(`[resolveRadiusProfileGroupname] radgroupcheck: ${e.message}`);
+        } catch (_) {}
+    }
+    return null;
+}
+
+/** Slug paket billing (paket_10mbps) — bukan grup RADIUS yang seharusnya untuk PPPoE pelanggan. */
+const RADIUS_PAKET_SLUG_REGEX = /^paket[_-](\d+)mbps$/i;
+
+/**
+ * Samakan hint profil dari billing / legacy ke groupname RADIUS yang benar untuk PPPoE.
+ * Jika hint memakai pola slug paket (paket_*mbps), utamakan grup profile-*mbps di RADIUS,
+ * jangan mengembalikan grup limit paket walau barisnya ada di radgroupreply.
+ */
+async function resolvePppoeProfileHintToRadiusGroup(conn, profileHint) {
+    const raw = profileHint != null ? String(profileHint).trim() : '';
+    if (!raw) return null;
+    const norm = raw.toLowerCase().replace(/\s+/g, '_');
+    const paketMatch = RADIUS_PAKET_SLUG_REGEX.exec(norm);
+    if (paketMatch) {
+        const speed = paketMatch[1];
+        const candidates = [`profile-${speed}mbps`, `profile_${speed}mbps`];
+        for (const c of candidates) {
+            const resolved = await resolveRadiusProfileGroupname(conn, c);
+            if (resolved) return resolved;
+        }
+        return null;
+    }
+    const candidates = [raw, norm];
+    const seen = new Set();
+    for (const c of candidates) {
+        if (!c || seen.has(c)) continue;
+        seen.add(c);
+        const resolved = await resolveRadiusProfileGroupname(conn, c);
+        if (resolved) return resolved;
+    }
+    return null;
 }
 
 /** Cleartext-Password di radcheck untuk satu username PPPoE (RADIUS SQLite). */
@@ -707,22 +790,14 @@ async function addPPPoEUserRadius({ username, password, profile = null }) {
         
         // Assign user ke group/package jika profile diberikan
         if (profile) {
-            // Determine groupname from profile
-            let profileToUse = profile;
-            const [profileCheck] = await conn.execute(
-                "SELECT DISTINCT groupname FROM radgroupreply WHERE groupname = ? LIMIT 1",
-                [profileToUse]
-            );
-
-            if (profileCheck.length === 0) {
-                const normalizedProfile = profile.toLowerCase().replace(/\s+/g, '_');
-                const [normalizedCheck] = await conn.execute(
-                    "SELECT DISTINCT groupname FROM radgroupreply WHERE groupname = ? LIMIT 1",
-                    [normalizedProfile]
-                );
-                if (normalizedCheck.length > 0) {
-                    profileToUse = normalizedProfile;
-                }
+            const profileToUse = await resolveRadiusProfileGroupname(conn, profile);
+            if (!profileToUse) {
+                await conn.end();
+                return {
+                    success: false,
+                    message: `Profil "${String(profile).trim()}" tidak ditemukan di RADIUS (radgroupreply/radgroupcheck). Pilih profil yang valid.`,
+                    error: 'unknown_profile'
+                };
             }
 
             // We do not add Mikrotik-Group to radgroupreply because it forces the router to look for a local profile.
@@ -905,9 +980,15 @@ async function syncPackageLimitsToRadius({ groupname, upload_limit, download_lim
 async function assignPackageRadius({ username, groupname }) {
     const conn = await getRadiusConnection();
     try {
-        // Convert groupname ke format yang benar (lowercase, underscore)
-        const normalizedGroupname = groupname.toLowerCase().replace(/\s+/g, '_');
-        
+        const resolved = await resolvePppoeProfileHintToRadiusGroup(conn, groupname);
+        if (!resolved) {
+            await conn.end();
+            return {
+                success: false,
+                message: `Grup/profil "${String(groupname).trim()}" tidak ditemukan di RADIUS (radgroupreply/radgroupcheck).`
+            };
+        }
+
         // HAPUS SEMUA groupname untuk username ini terlebih dahulu untuk menghindari duplikasi
         await conn.execute(
             "DELETE FROM radusergroup WHERE username = ?",
@@ -917,11 +998,11 @@ async function assignPackageRadius({ username, groupname }) {
         // Insert groupname yang baru
         await conn.execute(
             "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
-            [username, normalizedGroupname]
+            [username, resolved]
         );
         
         await conn.end();
-        return { success: true, message: `User berhasil di-assign ke package ${normalizedGroupname}` };
+        return { success: true, message: `User berhasil di-assign ke package ${resolved}` };
     } catch (error) {
         await conn.end();
         logger.error(`Error assigning package in RADIUS: ${error.message}`);
@@ -1078,13 +1159,10 @@ async function suspendUserRadius(username) {
                 }
                 
                 if (customer) {
-                    // Prioritaskan pppoe_profile dari customer, lalu dari package, lalu package_name
-                    previousGroupToSave = customer.pppoe_profile || 
-                                         customer.package_pppoe_profile ||
-                                         (customer.package_name ? customer.package_name.toLowerCase().replace(/\s+/g, '-') : null) ||
-                                         customer.package_name ||
-                                         'default';
-                    logger.info(`[RADIUS] No group in radusergroup, using package from billing DB for ${username}: ${previousGroupToSave}`);
+                    // Hanya profil PPPoE dari billing — jangan pakai nama paket/slug (menghasilkan paket_* di RADIUS).
+                    previousGroupToSave =
+                        customer.pppoe_profile || customer.package_pppoe_profile || 'default';
+                    logger.info(`[RADIUS] No group in radusergroup, using PPPoE profile from billing DB for ${username}: ${previousGroupToSave}`);
                 } else {
                     previousGroupToSave = 'default';
                     logger.warn(`[RADIUS] No group found and customer not in billing DB, using 'default' for ${username}`);
@@ -1092,6 +1170,18 @@ async function suspendUserRadius(username) {
             } catch (billingError) {
                 previousGroupToSave = 'default';
                 logger.warn(`[RADIUS] Failed to get package from billing DB during suspend: ${billingError.message}, using 'default'`);
+            }
+        }
+
+        if (previousGroupToSave && previousGroupToSave !== 'default') {
+            const resolvedPrev = await resolvePppoeProfileHintToRadiusGroup(conn, previousGroupToSave);
+            if (resolvedPrev) {
+                previousGroupToSave = resolvedPrev;
+            } else {
+                logger.warn(
+                    `[RADIUS] Tidak bisa resolve grup sebelum suspend untuk ${username} (hint=${previousGroupToSave}), simpan sebagai default`
+                );
+                previousGroupToSave = 'default';
             }
         }
         
@@ -1354,28 +1444,13 @@ async function unsuspendUserRadius(username) {
                 }
                 
                 if (customer) {
-                    // Prioritaskan pppoe_profile dari customer, lalu dari package, lalu package_name
-                    // Tapi jangan gunakan 'default' jika ada package_name yang valid
-                    previousGroup = customer.pppoe_profile || 
-                                   customer.package_pppoe_profile;
-                    
-                    // Jika masih null, coba dari package_name
-                    if (!previousGroup && customer.package_name) {
-                        // Convert package_name ke format yang sesuai (lowercase, replace space dengan dash)
-                        previousGroup = customer.package_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '');
-                    }
-                    
-                    // Jika masih null atau empty, gunakan package_name langsung
-                    if (!previousGroup && customer.package_name) {
-                        previousGroup = customer.package_name;
-                    }
-                    
-                    // Jika masih null, baru gunakan default
+                    previousGroup = customer.pppoe_profile || customer.package_pppoe_profile || null;
+
                     if (!previousGroup) {
                         previousGroup = 'default';
-                        logger.warn(`[RADIUS] No package/profile found in billing DB for ${username}, using 'default'`);
+                        logger.warn(`[RADIUS] No PPPoE profile in billing DB for ${username}, using 'default'`);
                     } else {
-                        logger.info(`[RADIUS] Using package/profile from billing DB for ${username}: ${previousGroup}`);
+                        logger.info(`[RADIUS] Using PPPoE profile from billing DB for ${username}: ${previousGroup}`);
                     }
                 } else {
                     // Fallback ke default jika tidak ada data di billing
@@ -1387,11 +1462,24 @@ async function unsuspendUserRadius(username) {
                 previousGroup = 'default';
             }
         }
+
+        let groupToAssign = previousGroup || 'default';
+        if (groupToAssign && groupToAssign !== 'default') {
+            const resolvedUn = await resolvePppoeProfileHintToRadiusGroup(conn, groupToAssign);
+            if (resolvedUn) {
+                groupToAssign = resolvedUn;
+            } else {
+                logger.warn(
+                    `[RADIUS] Unsuspend: tidak bisa resolve grup "${groupToAssign}" untuk ${username}, fallback default`
+                );
+                groupToAssign = 'default';
+            }
+        }
         
         // Kembalikan ke group sebelumnya
         await conn.execute(
             "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
-            [username, previousGroup]
+            [username, groupToAssign]
         );
         
         // Hapus record previous group dari radcheck
@@ -1401,7 +1489,7 @@ async function unsuspendUserRadius(username) {
         );
         
         await conn.end();
-        return { success: true, message: `User di-un suspend ke package ${previousGroup}`, previousGroup: previousGroup };
+        return { success: true, message: `User di-un suspend ke package ${groupToAssign}`, previousGroup: groupToAssign };
     } catch (error) {
         await conn.end();
         logger.error(`Error unsuspending user in RADIUS: ${error.message}`);
@@ -1486,10 +1574,18 @@ async function editPPPoEUserRadius({ oldUsername, username, password, profile = 
             }
             
             if (profileToUse) {
-                const groupname = profileToUse.toLowerCase().replace(/\s+/g, '_');
+                const resolved = await resolveRadiusProfileGroupname(conn, profileToUse);
+                if (!resolved) {
+                    await conn.end();
+                    return {
+                        success: false,
+                        message: `Profil "${String(profileToUse).trim()}" tidak ditemukan di RADIUS (radgroupreply/radgroupcheck).`,
+                        error: 'unknown_profile'
+                    };
+                }
                 await conn.execute(
                     "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
-                    [username, groupname]
+                    [username, resolved]
                 );
             }
             
@@ -1517,21 +1613,27 @@ async function editPPPoEUserRadius({ oldUsername, username, password, profile = 
             );
         }
         
-        // Update package/group jika diberikan
+        // Update package/group jika diberikan (groupname harus sama persis dengan di radgroupreply)
         if (profile) {
-            const groupname = profile.toLowerCase().replace(/\s+/g, '_');
-            
+            const resolved = await resolveRadiusProfileGroupname(conn, profile);
+            if (!resolved) {
+                await conn.end();
+                return {
+                    success: false,
+                    message: `Profil "${String(profile).trim()}" tidak ditemukan di RADIUS (radgroupreply/radgroupcheck). Pilih profil dari daftar.`,
+                    error: 'unknown_profile'
+                };
+            }
+
             // HAPUS SEMUA groupname untuk username ini terlebih dahulu untuk menghindari duplikasi
-            // Karena REPLACE INTO tidak bekerja jika tidak ada PRIMARY KEY/UNIQUE constraint
             await conn.execute(
                 "DELETE FROM radusergroup WHERE username = ?",
                 [usernameToUpdate]
             );
-            
-            // Insert groupname yang baru
+
             await conn.execute(
                 "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, ?, 1)",
-                [usernameToUpdate, groupname]
+                [usernameToUpdate, resolved]
             );
         }
         
@@ -4215,11 +4317,12 @@ async function getSystemLogs(topics = '', count = '50') {
 }
 
 // Fungsi untuk mendapatkan daftar profile PPPoE
-async function getPPPoEProfiles(routerObj = null) {
+// options.mergeAssignedGroups (RADIUS): true = sertakan grup dari radusergroup yang belum ada di radgroupreply (hanya untuk dropdown edit user PPPoE).
+async function getPPPoEProfiles(routerObj = null, options = {}) {
     // Check auth mode
     const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
-        return await getPPPoEProfilesRadius();
+        return await getPPPoEProfilesRadius(options);
     }
     
     // Mikrotik API mode
@@ -7246,7 +7349,8 @@ async function getHotspotProfileDetailRadius(groupname) {
     }
 }
 // Fungsi untuk mendapatkan daftar profile PPPoE dari RADIUS (yang digunakan oleh PPPoE users, BUKAN voucher)
-async function getPPPoEProfilesRadius() {
+async function getPPPoEProfilesRadius(options = {}) {
+    const mergeAssignedGroups = options.mergeAssignedGroups === true;
     const conn = await getRadiusConnection();
     try {
         // Daftar profil = DISTINCT groupname di radgroupreply (sumber kebenaran RADIUS).
@@ -7579,9 +7683,80 @@ async function getPPPoEProfilesRadius() {
 
             profiles.push(profile);
         }
-        
+
+        // Hanya untuk dropdown "edit user PPPoE" — jangan dipakai halaman daftar profil (supaya grup paket/pelanggan tidak tercampur profil RADIUS).
+        if (mergeAssignedGroups) {
+            const existingGroupKeys = new Set(
+                profiles.map((p) => String(p.groupname || p['.id'] || '').trim()).filter(Boolean)
+            );
+            const excludeUsernames = await getPppoeRadcheckExcludeUsernames();
+            const pwdPred = sqlRadcheckPasswordPredicate('rc');
+            let assignedGroupsSql = `
+            SELECT DISTINCT TRIM(rug.groupname) AS gn
+            FROM radusergroup rug
+            INNER JOIN radcheck rc ON rc.username = rug.username AND ${pwdPred}
+            WHERE rug.groupname IS NOT NULL AND TRIM(rug.groupname) != ''
+        `;
+            const assignedParams = [];
+            if (excludeUsernames.length > 0) {
+                const ph = excludeUsernames.map(() => '?').join(',');
+                assignedGroupsSql += ` AND rc.username NOT IN (${ph})`;
+                assignedParams.push(...excludeUsernames);
+            }
+            try {
+                const [assignedRows] = await conn.execute(assignedGroupsSql, assignedParams);
+                const assignedList = Array.isArray(assignedRows) ? assignedRows : [];
+                const missingGn = [];
+                for (const row of assignedList) {
+                    const gn = row && row.gn != null ? String(row.gn).trim() : '';
+                    if (!gn || existingGroupKeys.has(gn)) continue;
+                    existingGroupKeys.add(gn);
+                    missingGn.push(gn);
+                }
+                if (missingGn.length > 0) {
+                    const orphanMetaMap = await getPPPoEProfilesMetadata(conn, missingGn);
+                    for (const gn of missingGn) {
+                        const om = orphanMetaMap[gn] || null;
+                        profiles.push({
+                            name: om?.display_name || gn,
+                            '.id': gn,
+                            groupname: gn,
+                            'rate-limit': om?.rate_limit || null,
+                            'session-timeout': null,
+                            'idle-timeout': null,
+                            'limit-uptime': null,
+                            'shared-users': null,
+                            comment:
+                                om?.comment ||
+                                'Penugasan user (radusergroup). Lengkapi radgroupreply bila ini profil RADIUS.',
+                            localAddress: om?.local_address || '',
+                            remoteAddress: om?.remote_address || '',
+                            dnsServer: om?.dns_server || '',
+                            parentQueue: om?.parent_queue || '',
+                            addressList: om?.address_list || '',
+                            nas_name: 'RADIUS',
+                            nas_ip: 'RADIUS Server',
+                            is_radius: true,
+                            assigned_only: true
+                        });
+                    }
+                    logger.info(
+                        `[PPPoE profiles RADIUS] mergeAssigned: +${missingGn.length} grup dari radusergroup untuk dropdown user: ${missingGn.join(', ')}`
+                    );
+                }
+            } catch (mergeErr) {
+                logger.warn(`[PPPoE profiles RADIUS] merge radusergroup: ${mergeErr.message}`);
+            }
+        }
+
+        profiles.sort((a, b) =>
+            String(a.groupname || a.name || '').localeCompare(String(b.groupname || b.name || ''), undefined, {
+                sensitivity: 'base'
+            })
+        );
+
         logger.info(`✅ Total ${profiles.length} profil PPPoE yang akan ditampilkan (dari ${filteredGroupnames.length} setelah filter)`);
-        
+
         await conn.end();
         return {
             success: true,
@@ -9584,6 +9759,8 @@ module.exports = {
     // RADIUS functions
     getRadiusConnection,
     getRadcheckCleartextPassword,
+    resolveRadiusProfileGroupname,
+    resolvePppoeProfileHintToRadiusGroup,
     getUserAuthModeAsync,
     getRadiusStatistics,
     getPPPoEUsersRadius,

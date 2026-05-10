@@ -20,10 +20,16 @@ router.get('/jobs', verifyToken, async (req, res) => {
         SELECT ij.*, 'installation' as job_type, p.name as package_name
         FROM installation_jobs ij
         LEFT JOIN packages p ON ij.package_id = p.id
-        WHERE ij.assigned_technician_id = ? AND ij.status NOT IN ('completed', 'cancelled')
+        WHERE (
+            ij.assigned_technician_id = ?
+            OR CAST(ij.assigned_technician_id AS TEXT) = ?
+            OR IFNULL(TRIM(CAST(ij.assigned_technician_id AS TEXT)), '') IN ('', '0')
+        )
+        AND ij.status NOT IN ('completed', 'cancelled')
     `;
 
-    db.all(installQuery, [technicianId], async (err, installations) => {
+    const installParams = [technicianId, String(technicianId)];
+    db.all(installQuery, installParams, async (err, installations) => {
         db.close();
         if (err) {
             logger.error(`[DEBUG] Error fetching installations: ${err.message}`);
@@ -42,10 +48,12 @@ router.get('/jobs', verifyToken, async (req, res) => {
             
             // Filter reports assigned to this technician and not resolved/closed
             const techIdStr = String(technicianId);
-            const myReports = allReports.filter(r => 
-                String(r.assigned_technician_id || r.assignedTechnicianId) === techIdStr && 
-                !['resolved', 'closed'].includes(r.status)
-            ).map(r => ({
+            const myReports = allReports.filter(r => {
+                const aid = String(r.assigned_technician_id ?? r.assignedTechnicianId ?? '').trim();
+                const openPool = aid === '' || aid === '0';
+                return (String(r.assigned_technician_id ?? r.assignedTechnicianId) === techIdStr || openPool) &&
+                    !['resolved', 'closed'].includes(r.status);
+            }).map(r => ({
                 ...r,
                 job_type: 'repair'
             }));
@@ -80,13 +88,26 @@ router.get('/stats', verifyToken, async (req, res) => {
 
         const [installCount, repairCount] = await Promise.all([
             new Promise((resolve) => {
-                db.get("SELECT COUNT(*) as count FROM installation_jobs WHERE assigned_technician_id = ? AND status NOT IN ('completed', 'cancelled')", [technicianId], (err, row) => resolve(row ? row.count : 0));
+                db.get(
+                    `SELECT COUNT(*) as count FROM installation_jobs WHERE (
+                        assigned_technician_id = ?
+                        OR CAST(assigned_technician_id AS TEXT) = ?
+                        OR IFNULL(TRIM(CAST(assigned_technician_id AS TEXT)), '') IN ('', '0')
+                    ) AND status NOT IN ('completed', 'cancelled')`,
+                    [technicianId, String(technicianId)],
+                    (err, row) => resolve(row ? row.count : 0)
+                );
             }),
             (async () => {
                 const { getAllTroubleReports } = require('../../config/troubleReport');
                 const reports = await getAllTroubleReports();
                 const techIdStr = String(technicianId);
-                return reports.filter(r => String(r.assigned_technician_id || r.assignedTechnicianId) === techIdStr && !['resolved', 'closed'].includes(r.status)).length;
+                return reports.filter((r) => {
+                    const aid = String(r.assigned_technician_id ?? r.assignedTechnicianId ?? '').trim();
+                    const openPool = aid === '' || aid === '0';
+                    return (String(r.assigned_technician_id ?? r.assignedTechnicianId) === techIdStr || openPool) &&
+                        !['resolved', 'closed'].includes(r.status);
+                }).length;
             })()
         ]);
 

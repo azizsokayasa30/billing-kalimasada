@@ -38,7 +38,12 @@ async function syncAllPackages(db) {
 
 async function syncAllCustomers(db) {
     return new Promise((resolve, reject) => {
-        db.all("SELECT * FROM customers WHERE pppoe_username IS NOT NULL AND pppoe_username != ''", async (err, rows) => {
+        db.all(
+            `SELECT c.*, p.pppoe_profile AS package_pppoe_profile
+             FROM customers c
+             LEFT JOIN packages p ON c.package_id = p.id
+             WHERE c.pppoe_username IS NOT NULL AND TRIM(c.pppoe_username) != ''`,
+            async (err, rows) => {
             if (err) return reject(err);
             console.log(`Found ${rows.length} customers to sync.`);
             for (const cust of rows) {

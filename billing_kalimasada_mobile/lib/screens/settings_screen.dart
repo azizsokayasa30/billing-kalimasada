@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'dart:io';
+import '../services/api_client.dart';
 import '../store/auth_provider.dart';
 import 'technician_profile_edit_screen.dart';
 
@@ -29,6 +30,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _checkingUpdate = false;
   bool _installingUpdate = false;
   double? _downloadProgress; // 0.0 - 1.0
+  /// `server` = manifest di API billing; `github` = release GitHub; `none` = belum ada data.
+  String _updateSource = 'none';
 
   @override
   void initState() {
@@ -78,16 +81,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return _compareVersionLike(_latestVersion, _currentVersion) > 0;
   }
 
-  Future<void> _fetchLatestRelease({bool silent = false}) async {
-    if (_checkingUpdate) return;
-    if (mounted) {
-      setState(() => _checkingUpdate = true);
+  String get _updateSourceLabel {
+    switch (_updateSource) {
+      case 'server':
+        return 'Server billing';
+      case 'github':
+        return 'GitHub';
+      default:
+        return '—';
     }
+  }
+
+  /// URL unduhan APK absolut (path relatif di-resolve ke [ApiClient.apiOrigin]).
+  String? _absoluteApkUrl(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    if (t.startsWith('http://') || t.startsWith('https://')) {
+      return Uri.tryParse(t)?.toString();
+    }
+    final origin = ApiClient.apiOrigin;
+    final p = t.startsWith('/') ? t : '/$t';
+    return Uri.tryParse('$origin$p')?.toString();
+  }
+
+  Future<bool> _tryFetchManifestFromBillingServer() async {
+    try {
+      final uri = Uri.parse(
+        '${ApiClient.apiOrigin}/api/mobile-adapter/app-update/manifest',
+      );
+      final res = await http
+          .get(uri, headers: const {'Accept': 'application/json'})
+          .timeout(const Duration(seconds: 25));
+      if (res.statusCode != 200) return false;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (!ApiClient.jsonSuccess(data['success'])) return false;
+      final inner = data['data'];
+      if (inner is! Map) return false;
+      final m = Map<String, dynamic>.from(inner);
+      if (m['configured'] != true) return false;
+      final v = (m['version'] ?? '').toString().trim();
+      final rawApk = (m['apk_url'] ?? '').toString().trim();
+      if (v.isEmpty || rawApk.isEmpty) return false;
+      final bn = m['build_number'];
+      final buildNum = bn is int ? bn : int.tryParse(bn?.toString() ?? '') ?? 0;
+      final notes = (m['release_notes'] ?? '').toString().trim();
+      final apkAbs = _absoluteApkUrl(rawApk);
+      if (apkAbs == null) return false;
+      if (!mounted) return true;
+      setState(() {
+        _updateSource = 'server';
+        _latestVersion = '$v+$buildNum';
+        _latestReleaseNotes =
+            notes.isNotEmpty ? notes : 'Pembaruan aplikasi mobile.';
+        _latestApkUrl = apkAbs;
+        _latestReleasePageUrl = null;
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _fetchLatestReleaseFromGithub({bool silent = false}) async {
     try {
       final uri = Uri.parse(
         'https://api.github.com/repos/$_githubRepoOwner/$_githubRepoName/releases/latest',
       );
-      final res = await http.get(uri, headers: const {'Accept': 'application/vnd.github+json'});
+      final res = await http
+          .get(uri, headers: const {'Accept': 'application/vnd.github+json'})
+          .timeout(const Duration(seconds: 25));
       if (res.statusCode != 200) {
         if (!silent && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -115,8 +177,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       if (!mounted) return;
       setState(() {
+        _updateSource = 'github';
         _latestVersion = tag.isNotEmpty ? tag : '-';
-        _latestReleaseNotes = notes.isNotEmpty ? notes : 'Tidak ada catatan pembaruan.';
+        _latestReleaseNotes =
+            notes.isNotEmpty ? notes : 'Tidak ada catatan pembaruan.';
         _latestApkUrl = apkUrl;
         _latestReleasePageUrl = releaseUrl.isNotEmpty ? releaseUrl : null;
       });
@@ -132,6 +196,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SnackBar(content: Text('Gagal cek update: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _fetchLatestRelease({bool silent = false}) async {
+    if (_checkingUpdate) return;
+    if (mounted) {
+      setState(() => _checkingUpdate = true);
+    }
+    try {
+      if (await _tryFetchManifestFromBillingServer()) {
+        if (!silent && mounted) {
+          final text = _hasNewVersion
+              ? 'Update tersedia: $_latestVersion (dari server billing)'
+              : 'Aplikasi sudah versi terbaru ($_currentVersion)';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+        }
+        return;
+      }
+      await _fetchLatestReleaseFromGithub(silent: silent);
     } finally {
       if (mounted) {
         setState(() => _checkingUpdate = false);
@@ -145,7 +228,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (target == null || target.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File APK release belum tersedia di GitHub release terbaru.')),
+          const SnackBar(
+            content: Text(
+              'Tidak ada URL APK. Admin: set manifest di server (public/mobile-app/manifest.json) atau lampirkan APK di release GitHub.',
+            ),
+          ),
         );
       }
       return;
@@ -512,10 +599,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               _buildSettingsTile(
                 icon: Icons.system_update,
-                title: 'Check for Updates',
+                title: 'Pembaruan aplikasi',
                 subtitle: _checkingUpdate
                     ? 'Memeriksa update...'
-                    : 'Versi saat ini: $_currentVersion | Terbaru: $_latestVersion',
+                    : 'Versi: $_currentVersion → $_latestVersion · $_updateSourceLabel',
                 trailing: _checkingUpdate
                     ? const SizedBox(
                         width: 18,
@@ -542,6 +629,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             children: [
                               Text('Versi saat ini: $_currentVersion'),
                               Text('Versi terbaru: $_latestVersion'),
+                              Text('Sumber: $_updateSourceLabel'),
                               const SizedBox(height: 12),
                               const Text(
                                 'Detail pembaruan:',

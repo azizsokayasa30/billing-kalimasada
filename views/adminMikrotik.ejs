@@ -458,7 +458,7 @@ $(function() {
   function loadProfiles(selectedProfile) {
     const isRadiusMode = <%= typeof authMode !== 'undefined' && authMode === 'radius' ? 'true' : 'false' %>;
     
-    $.get('/admin/mikrotik/profiles/api', function(res) {
+    $.get('/admin/mikrotik/profiles/api?include_assigned=1', function(res) {
       if(res.success) {
         var $profile = $('#profile');
         $profile.empty();
@@ -466,11 +466,27 @@ $(function() {
         
         if (res.profiles && res.profiles.length > 0) {
           res.profiles.forEach(function(p) {
-            var val = p.name || p['.name'] || p['.id'] || p.groupname || '';
-            var label = p.name || p['.name'] || p['.id'] || p.groupname || '-';
-            $profile.append('<option value="'+val+'">'+label+'</option>');
+            // Value = groupname RADIUS (radusergroup), bukan label/metadata — agar cocok dengan kolom Profile di tabel.
+            var val = (p.groupname || p['.id'] || '').toString().trim();
+            if (!val) return;
+            var display = (p.name || val).toString();
+            if (p.name && val && String(p.name).trim() !== val) {
+              display = String(p.name).trim() + ' — ' + val;
+            }
+            $profile.append($('<option></option>').attr('value', val).text(display));
           });
-          if(selectedProfile) $profile.val(selectedProfile);
+          if (selectedProfile) {
+            var sp = String(selectedProfile).trim();
+            $profile.val(sp);
+            if ($profile.val() !== sp && sp) {
+              $profile.append(
+                $('<option></option>')
+                  .attr('value', sp)
+                  .text(sp + ' (sinkronkan radgroupreply / paket)')
+              );
+              $profile.val(sp);
+            }
+          }
           
           // Update profile count in statistics card
           $('#profileCount').text(res.profiles.length);
