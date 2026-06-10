@@ -6,6 +6,16 @@ const { getSetting } = require('../config/settingsManager');
 const { adminAuth } = require('./adminAuth');
 const logger = require('../config/logger');
 const bcrypt = require('bcrypt');
+const { tenantWhere, appendTenantToInsert } = require('../config/platform/tenantSql');
+
+function tw(alias = '') {
+    return tenantWhere(alias);
+}
+
+function whereTechId(id) {
+    const t = tw('');
+    return { sql: `id = ?${t.sql}`, params: [id, ...t.params] };
+}
 
 // Database connection
 const dbPath = path.join(__dirname, '../data/billing.db');
@@ -23,14 +33,16 @@ router.get('/', adminAuth, async (req, res) => {
 
         // Get technicians with pagination
         const technicians = await new Promise((resolve, reject) => {
+            const t = tw('');
+            const activeClause = statusFilter === 'active' ? ' AND is_active = 1' : '';
             const query = `
                 SELECT id, name, phone, role, is_active, created_at, last_login, area_coverage, join_date, whatsapp_group_id
                 FROM technicians
-                ${statusFilter === 'active' ? 'WHERE is_active = 1' : ''}
+                WHERE 1=1${activeClause}${t.sql}
                 ORDER BY created_at DESC
                 LIMIT ? OFFSET ?
             `;
-            const params = [limit, offset];
+            const params = [...t.params, limit, offset];
             db.all(query, params, (err, rows) => {
                 if (err) reject(err);
                 else resolve(rows);
@@ -39,10 +51,10 @@ router.get('/', adminAuth, async (req, res) => {
 
         // Get total count
         const totalTechnicians = await new Promise((resolve, reject) => {
-            const sql = statusFilter === 'active' 
-                ? 'SELECT COUNT(*) as count FROM technicians WHERE is_active = 1'
-                : 'SELECT COUNT(*) as count FROM technicians';
-            db.get(sql, [], (err, row) => {
+            const t = tw('');
+            const activeClause = statusFilter === 'active' ? ' AND is_active = 1' : '';
+            const sql = `SELECT COUNT(*) as count FROM technicians WHERE 1=1${activeClause}${t.sql}`;
+            db.get(sql, t.params, (err, row) => {
                 if (err) reject(err);
                 else resolve(row.count);
             });
@@ -50,6 +62,7 @@ router.get('/', adminAuth, async (req, res) => {
 
         // Calculate statistics
         const stats = await new Promise((resolve, reject) => {
+            const t = tw('');
             db.all(`
                 SELECT 
                     COUNT(*) as total,
@@ -58,7 +71,8 @@ router.get('/', adminAuth, async (req, res) => {
                     SUM(CASE WHEN role = 'field_officer' THEN 1 ELSE 0 END) as field_officer,
                     SUM(CASE WHEN role = 'collector' THEN 1 ELSE 0 END) as collector
                 FROM technicians
-            `, [], (err, rows) => {
+                WHERE 1=1${t.sql}
+            `, t.params, (err, rows) => {
                 if (err) reject(err);
                 else resolve(rows[0] || {});
             });
@@ -136,7 +150,8 @@ router.post('/add', adminAuth, async (req, res) => {
 
         // Check if phone already exists (including inactive rows)
         const existingTechnician = await new Promise((resolve, reject) => {
-            db.get('SELECT id, name, role, is_active FROM technicians WHERE phone = ?', [cleanPhone], (err, row) => {
+            const t = tw('');
+            db.get(`SELECT id, name, role, is_active FROM technicians WHERE phone = ?${t.sql}`, [cleanPhone, ...t.params], (err, row) => {
                 if (err) reject(err);
                 else resolve(row);
             });
@@ -146,14 +161,15 @@ router.post('/add', adminAuth, async (req, res) => {
             // Jika teknisi lama nonaktif, aktifkan kembali agar admin tidak terjebak "nomor belum ada di list".
             if (Number(existingTechnician.is_active) === 0) {
                 const reactivated = await new Promise((resolve, reject) => {
+                    const w = whereTechId(existingTechnician.id);
                     const sql = `
                         UPDATE technicians
                         SET name = ?, role = ?, area_coverage = ?, whatsapp_group_id = ?, password = ?, is_active = 1, updated_at = datetime('now','localtime')
-                        WHERE id = ?
+                        WHERE ${w.sql}
                     `;
                     db.run(
                         sql,
-                        [name, role, notes || 'Area Default', whatsapp_group_id || null, hashedPassword, existingTechnician.id],
+                        [name, role, notes || 'Area Default', whatsapp_group_id || null, hashedPassword, ...w.params],
                         function (err) {
                             if (err) reject(err);
                             else resolve({ changes: this.changes });
@@ -185,12 +201,14 @@ router.post('/add', adminAuth, async (req, res) => {
 
         // Insert new technician
         const result = await new Promise((resolve, reject) => {
-            const sql = `
-                INSERT INTO technicians (name, phone, role, area_coverage, whatsapp_group_id, password, is_active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now','localtime'), datetime('now','localtime'))
-            `;
+            const ins = appendTenantToInsert(
+                'name, phone, role, area_coverage, whatsapp_group_id, password, is_active, created_at, updated_at',
+                '?, ?, ?, ?, ?, ?, 1, datetime(\'now\',\'localtime\'), datetime(\'now\',\'localtime\')',
+                [name, cleanPhone, role, notes || 'Area Default', whatsapp_group_id || null, hashedPassword]
+            );
+            const sql = `INSERT INTO technicians (${ins.columns}) VALUES (${ins.placeholders})`;
 
-            db.run(sql, [name, cleanPhone, role, notes || 'Area Default', whatsapp_group_id || null, hashedPassword], function(err) {
+            db.run(sql, ins.values, function(err) {
                 if (err) reject(err);
                 else resolve({ id: this.lastID, changes: this.changes });
             });
@@ -234,7 +252,8 @@ router.get('/:id', adminAuth, async (req, res) => {
         const technicianId = req.params.id;
 
         const technician = await new Promise((resolve, reject) => {
-            db.get('SELECT *, whatsapp_group_id FROM technicians WHERE id = ?', [technicianId], (err, row) => {
+            const w = whereTechId(technicianId);
+            db.get(`SELECT *, whatsapp_group_id FROM technicians WHERE ${w.sql}`, w.params, (err, row) => {
                 if (err) reject(err);
                 else resolve(row);
             });
@@ -294,7 +313,8 @@ router.put('/:id/update', adminAuth, async (req, res) => {
 
         // Check if phone already exists for other technicians
         const existingTechnician = await new Promise((resolve, reject) => {
-            db.get('SELECT id FROM technicians WHERE phone = ? AND id != ?', [cleanPhone, technicianId], (err, row) => {
+            const t = tw('');
+            db.get(`SELECT id FROM technicians WHERE phone = ? AND id != ?${t.sql}`, [cleanPhone, technicianId, ...t.params], (err, row) => {
                 if (err) reject(err);
                 else resolve(row);
             });
@@ -320,8 +340,9 @@ router.put('/:id/update', adminAuth, async (req, res) => {
                 params.push(bcrypt.hashSync(password, 10));
             }
 
-            sql += ` WHERE id = ?`;
-            params.push(technicianId);
+            const w = whereTechId(technicianId);
+            sql += ` WHERE ${w.sql}`;
+            params.push(...w.params);
 
             db.run(sql, params, function(err) {
                 if (err) reject(err);
@@ -369,13 +390,14 @@ router.post('/:id/toggle-status', adminAuth, async (req, res) => {
 
         // Update technician status
         const result = await new Promise((resolve, reject) => {
+            const w = whereTechId(technicianId);
             const sql = `
                 UPDATE technicians 
                 SET is_active = ?, updated_at = datetime('now','localtime')
-                WHERE id = ?
+                WHERE ${w.sql}
             `;
             
-            db.run(sql, [is_active ? 1 : 0, technicianId], function(err) {
+            db.run(sql, [is_active ? 1 : 0, ...w.params], function(err) {
                 if (err) reject(err);
                 else resolve({ changes: this.changes });
             });
@@ -417,9 +439,10 @@ router.post('/bulk/activate', adminAuth, async (req, res) => {
         if (ids.length === 0) return res.status(400).json({ success: false, message: 'Tidak ada ID yang dipilih' });
 
         const placeholders = ids.map(() => '?').join(',');
-        const sql = `UPDATE technicians SET is_active = 1, updated_at = datetime('now','localtime') WHERE id IN (${placeholders})`;
+        const t = tw('');
+        const sql = `UPDATE technicians SET is_active = 1, updated_at = datetime('now','localtime') WHERE id IN (${placeholders})${t.sql}`;
         const result = await new Promise((resolve, reject) => {
-            db.run(sql, ids, function(err){ if (err) reject(err); else resolve({ changes: this.changes }); });
+            db.run(sql, [...ids, ...t.params], function(err){ if (err) reject(err); else resolve({ changes: this.changes }); });
         });
         return res.json({ success: true, message: `Berhasil mengaktifkan ${result.changes} teknisi` });
     } catch (error) {
@@ -434,9 +457,10 @@ router.post('/bulk/deactivate', adminAuth, async (req, res) => {
         if (ids.length === 0) return res.status(400).json({ success: false, message: 'Tidak ada ID yang dipilih' });
 
         const placeholders = ids.map(() => '?').join(',');
-        const sql = `UPDATE technicians SET is_active = 0, updated_at = datetime('now','localtime') WHERE id IN (${placeholders})`;
+        const t = tw('');
+        const sql = `UPDATE technicians SET is_active = 0, updated_at = datetime('now','localtime') WHERE id IN (${placeholders})${t.sql}`;
         const result = await new Promise((resolve, reject) => {
-            db.run(sql, ids, function(err){ if (err) reject(err); else resolve({ changes: this.changes }); });
+            db.run(sql, [...ids, ...t.params], function(err){ if (err) reject(err); else resolve({ changes: this.changes }); });
         });
         return res.json({ success: true, message: `Berhasil menonaktifkan ${result.changes} teknisi` });
     } catch (error) {
@@ -465,9 +489,10 @@ router.post('/bulk/delete', adminAuth, async (req, res) => {
         let changes = 0;
         if (canDelete.length) {
             const placeholders = canDelete.map(() => '?').join(',');
-            const sql = `UPDATE technicians SET is_active = 0, updated_at = datetime('now','localtime') WHERE id IN (${placeholders})`;
+            const t = tw('');
+            const sql = `UPDATE technicians SET is_active = 0, updated_at = datetime('now','localtime') WHERE id IN (${placeholders})${t.sql}`;
             const result = await new Promise((resolve, reject) => {
-                db.run(sql, canDelete, function(err){ if (err) reject(err); else resolve({ changes: this.changes }); });
+                db.run(sql, [...canDelete, ...t.params], function(err){ if (err) reject(err); else resolve({ changes: this.changes }); });
             });
             changes = result.changes;
         }
@@ -523,8 +548,9 @@ router.delete('/:id', adminAuth, async (req, res) => {
         // If technician has no jobs at all → perform HARD DELETE
         if (totalJobs === 0) {
             const hardResult = await new Promise((resolve, reject) => {
-                const delSql = `DELETE FROM technicians WHERE id = ?`;
-                db.run(delSql, [technicianId], function(err) {
+                const w = whereTechId(technicianId);
+                const delSql = `DELETE FROM technicians WHERE ${w.sql}`;
+                db.run(delSql, w.params, function(err) {
                     if (err) reject(err);
                     else resolve({ changes: this.changes });
                 });
@@ -541,12 +567,13 @@ router.delete('/:id', adminAuth, async (req, res) => {
 
         // Otherwise do SOFT DELETE - set is_active to 0
         const result = await new Promise((resolve, reject) => {
+            const w = whereTechId(technicianId);
             const sql = `
                 UPDATE technicians 
                 SET is_active = 0, updated_at = datetime('now','localtime')
-                WHERE id = ?
+                WHERE ${w.sql}
             `;
-            db.run(sql, [technicianId], function(err) {
+            db.run(sql, w.params, function(err) {
                 if (err) reject(err);
                 else resolve({ changes: this.changes });
             });

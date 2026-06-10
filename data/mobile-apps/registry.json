@@ -6,13 +6,13 @@
       "appName": "Kalimasada Login",
       "apiUrl": "https://login.kalimasada-app.com",
       "packageId": "com.kalimasada.billing.login",
-      "releaseNotes": "apk mobile untuk login.net kalimasada, versi aplikasi v5.9.2",
-      "updatedAt": "2026-06-08T05:24:11.423Z",
-      "lastGeneratedAt": "2026-06-08T05:22:37.048Z",
-      "lastBuildAt": "2026-06-08T05:24:11.423Z",
+      "releaseNotes": "apk mobile untuk login.net kalimasada, versi aplikasi v5.9.3",
+      "updatedAt": "2026-06-08T17:40:50.986Z",
+      "lastGeneratedAt": "2026-06-08T17:30:05.093Z",
+      "lastBuildAt": "2026-06-08T17:40:50.985Z",
       "lastBuildStatus": "success",
-      "lastBuildMessage": "APK berhasil: login-mobile-20260608-1224.apk",
-      "lastApkFile": "login-mobile-20260608-1224.apk"
+      "lastBuildMessage": "APK berhasil: login-mobile-20260609-0040.apk",
+      "lastApkFile": "login-mobile-20260609-0040.apk"
     },
     "lebakwangi": {
       "tenantId": 7,
@@ -29,5 +29,5 @@
       "lastApkFile": null
     }
   },
-  "updated_at": "2026-06-08T05:24:11.423Z"
+  "updated_at": "2026-06-08T17:40:50.993Z"
 }

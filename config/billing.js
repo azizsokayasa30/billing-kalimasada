@@ -497,8 +497,8 @@
                         (fix_date !== undefined ? Math.min(Math.max(parseInt(fix_date, 10) || 15, 1), 28) : (oldCustomer.fix_date || 15)) : 
                         null;
 
-                    const sql = `UPDATE customers SET name = ?, username = ?, pppoe_username = ?, email = ?, address = ?, area = ?, area_id = ?, latitude = ?, longitude = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ? WHERE id = ?`;
-                    this.db.run(sql, [
+                    const sql = `UPDATE customers SET name = ?, username = ?, pppoe_username = ?, email = ?, address = ?, area = ?, area_id = ?, latitude = ?, longitude = ?, package_id = ?, odp_id = ?, pppoe_profile = ?, status = ?, auto_suspension = ?, billing_day = ?, renewal_type = ?, fix_date = ?, cable_type = ?, cable_length = ?, port_number = ?, cable_status = ?, cable_notes = ? WHERE id = ?${hasTenantContext() ? ' AND tenant_id = ?' : ''}`;
+                    const updateParams = [
                         name ?? oldCustomer.name,
                         username ?? oldCustomer.username,
                         pppoe_username ?? oldCustomer.pppoe_username,
@@ -522,7 +522,9 @@
                         cable_status !== undefined ? cable_status : oldCustomer.cable_status,
                         cable_notes !== undefined ? cable_notes : oldCustomer.cable_notes,
                         id
-                    ], async (err) => {
+                    ];
+                    if (hasTenantContext()) updateParams.push(getTenantId());
+                    this.db.run(sql, updateParams, async (err) => {
                         if (err) {
                             reject(err);
                         } else {
@@ -1099,6 +1101,7 @@
 
             // Tambahkan kolom cable connection ke customers jika belum ada
             this.addCableFieldsToCustomers();
+            this.addStaticIpFieldsToCustomers();
 
             // Tambahkan kolom auto_suspension ke customers jika belum ada
             this.db.run("ALTER TABLE customers ADD COLUMN auto_suspension BOOLEAN DEFAULT 1", (err) => {
@@ -1225,6 +1228,26 @@
         ];
 
         cableFields.forEach(field => {
+            this.db.run(`ALTER TABLE customers ADD COLUMN ${field.name} ${field.type}`, (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error(`Error adding ${field.name} column:`, err);
+                } else if (!err) {
+                    console.log(`Added ${field.name} column to customers table`);
+                }
+            });
+        });
+    }
+
+    addStaticIpFieldsToCustomers() {
+        const extraFields = [
+            { name: 'static_ip', type: 'TEXT' },
+            { name: 'assigned_ip', type: 'TEXT' },
+            { name: 'mac_address', type: 'TEXT' },
+            { name: 'ktp_photo_path', type: 'TEXT' },
+            { name: 'house_photo_path', type: 'TEXT' }
+        ];
+
+        extraFields.forEach((field) => {
             this.db.run(`ALTER TABLE customers ADD COLUMN ${field.name} ${field.type}`, (err) => {
                 if (err && !err.message.includes('duplicate column name')) {
                     console.error(`Error adding ${field.name} column:`, err);
@@ -1728,12 +1751,13 @@
                     : 'default');
             const resolvedRouterId = billingOnly ? null : (router_id !== undefined && router_id !== null && router_id !== '' ? router_id : null);
             const resolvedNasIp = billingOnly ? null : (nas_ip !== undefined && nas_ip !== null && String(nas_ip).trim() !== '' ? String(nas_ip).trim() : null);
+            const tenantId = getTenantId();
             
             const sql = `INSERT INTO packages (
                 name, speed, price, tax_rate, description, pppoe_profile, image, router_id, nas_ip,
                 upload_limit, download_limit, burst_limit_upload, burst_limit_download, 
-                burst_threshold, burst_time
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                burst_threshold, burst_time, tenant_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
             this.db.run(sql, [
                 name, 
@@ -1750,7 +1774,8 @@
                 burst_limit_upload || null,
                 burst_limit_download || null,
                 burst_threshold || null,
-                burst_time || null
+                burst_time || null,
+                tenantId
             ], function(err) {
                 if (err) {
                     reject(err);
@@ -1769,9 +1794,15 @@
 
     async getPackages() {
         return new Promise((resolve, reject) => {
-            const sql = `SELECT * FROM packages WHERE is_active = 1 ORDER BY price ASC`;
+            let sql = `SELECT * FROM packages WHERE is_active = 1`;
+            const params = [];
+            if (hasTenantContext()) {
+                sql += ' AND tenant_id = ?';
+                params.push(getTenantId());
+            }
+            sql += ' ORDER BY price ASC';
             
-            this.db.all(sql, [], (err, rows) => {
+            this.db.all(sql, params, (err, rows) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -1783,9 +1814,14 @@
 
     async getPackageById(id) {
         return new Promise((resolve, reject) => {
-            const sql = `SELECT * FROM packages WHERE id = ?`;
+            let sql = `SELECT * FROM packages WHERE id = ?`;
+            const params = [id];
+            if (hasTenantContext()) {
+                sql += ' AND tenant_id = ?';
+                params.push(getTenantId());
+            }
             
-            this.db.get(sql, [id], (err, row) => {
+            this.db.get(sql, params, (err, row) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -1835,9 +1871,9 @@
                 image = ?, router_id = ?, nas_ip = ?,
                 upload_limit = ?, download_limit = ?, burst_limit_upload = ?, burst_limit_download = ?,
                 burst_threshold = ?, burst_time = ?
-                WHERE id = ?`;
+                WHERE id = ?${hasTenantContext() ? ' AND tenant_id = ?' : ''}`;
             
-            this.db.run(sql, [
+            const updateParams = [
                 name, 
                 speed, 
                 price, 
@@ -1854,7 +1890,10 @@
                 burst_threshold || null,
                 burst_time || null,
                 id
-            ], function(err) {
+            ];
+            if (hasTenantContext()) updateParams.push(getTenantId());
+            
+            this.db.run(sql, updateParams, function(err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -1872,9 +1911,14 @@
 
     async deletePackage(id) {
         return new Promise((resolve, reject) => {
-            const sql = `UPDATE packages SET is_active = 0 WHERE id = ?`;
+            let sql = `UPDATE packages SET is_active = 0 WHERE id = ?`;
+            const params = [id];
+            if (hasTenantContext()) {
+                sql += ' AND tenant_id = ?';
+                params.push(getTenantId());
+            }
             
-            this.db.run(sql, [id], function(err) {
+            this.db.run(sql, params, function(err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -1937,7 +1981,8 @@
                 }
             }
             
-            const sql = `INSERT INTO customers (customer_id, username, password, name, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path, join_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const tenantId = getTenantId();
+            const sql = `INSERT INTO customers (customer_id, username, password, name, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, status, auto_suspension, billing_day, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, ktp_photo_path, house_photo_path, join_date, created_at, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             
             // Default coordinates untuk Jakarta jika tidak ada koordinat
             // Jika tag lokasi tidak diisi, simpan NULL agar teknisi bisa update di lapangan.
@@ -1978,7 +2023,8 @@
                 ktp_photo_path || null,
                 house_photo_path || null,
                 joinDateStored,
-                joinDateStored
+                joinDateStored,
+                tenantId
             ];
 
             let lastInsertErr = null;
@@ -2552,6 +2598,12 @@ ${year && month ? `
         return new Promise(async (resolve, reject) => {
             let whereClause = '';
             const params = [];
+
+            if (hasTenantContext()) {
+                whereClause += ' WHERE c.tenant_id = ?';
+                params.push(getTenantId());
+            }
+
             const joinMonth = parseInt(String(options.joinMonth ?? ''), 10);
             const joinYear = parseInt(String(options.joinYear ?? ''), 10);
             if (Number.isFinite(joinMonth) && joinMonth >= 1 && joinMonth <= 12
@@ -2560,7 +2612,8 @@ ${year && month ? `
                 const nextMonth = joinMonth === 12 ? 1 : joinMonth + 1;
                 const nextYear = joinMonth === 12 ? joinYear + 1 : joinYear;
                 const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
-                whereClause = ` WHERE ${this._customerJoinDateExpr('c')} >= date(?) AND ${this._customerJoinDateExpr('c')} < date(?)`;
+                const dateFilter = ` ${whereClause ? 'AND' : 'WHERE'} ${this._customerJoinDateExpr('c')} >= date(?) AND ${this._customerJoinDateExpr('c')} < date(?)`;
+                whereClause += dateFilter;
                 params.push(startDate, endDate);
             }
 
@@ -2690,6 +2743,11 @@ ${year && month ? `
         let filterJoins = '';
         let filterWhere = '';
         const filterParams = [];
+
+        if (hasTenantContext()) {
+            filterWhere += ' AND c.tenant_id = ?';
+            filterParams.push(getTenantId());
+        }
 
         if (filters.search) {
             filterWhere += ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.pppoe_username LIKE ?)';
@@ -3110,15 +3168,18 @@ ${year && month ? `
 
     async getCustomerByUsername(username) {
         return new Promise((resolve, reject) => {
-            // Cari di kedua kolom: username dan pppoe_username
-            const sql = `
+            let sql = `
                 SELECT c.*, p.name as package_name, p.price as package_price, p.speed as package_speed, p.image as package_image, p.tax_rate, p.pppoe_profile as package_pppoe_profile
                 FROM customers c 
                 LEFT JOIN packages p ON c.package_id = p.id 
-                WHERE c.username = ? OR c.pppoe_username = ?
-            `;
+                WHERE (c.username = ? OR c.pppoe_username = ?)`;
+            const params = [username, username];
+            if (hasTenantContext()) {
+                sql += ' AND c.tenant_id = ?';
+                params.push(getTenantId());
+            }
             
-            this.db.get(sql, [username, username], (err, row) => {
+            this.db.get(sql, params, (err, row) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -3138,21 +3199,27 @@ ${year && month ? `
             const searchPattern = `%${searchTerm}%`;
 
             // Skema customers memakai join_date (bukan created_at/updated_at)
-            const sql = `
+            let sql = `
                 SELECT c.id, c.customer_id, c.username, c.password, c.name, c.phone, c.email, c.address,
                        c.pppoe_username, c.package_id, c.status, c.join_date,
                        p.name AS package_name
                 FROM customers c
                 LEFT JOIN packages p ON c.package_id = p.id
-                WHERE c.name LIKE ? OR c.phone LIKE ? OR c.username LIKE ? OR c.pppoe_username LIKE ?
-                   OR (c.customer_id IS NOT NULL AND TRIM(CAST(c.customer_id AS TEXT)) != '' AND CAST(c.customer_id AS TEXT) LIKE ?)
+                WHERE (c.name LIKE ? OR c.phone LIKE ? OR c.username LIKE ? OR c.pppoe_username LIKE ?
+                   OR (c.customer_id IS NOT NULL AND TRIM(CAST(c.customer_id AS TEXT)) != '' AND CAST(c.customer_id AS TEXT) LIKE ?))`;
+            const params = [searchPattern, searchPattern, searchPattern, searchPattern, searchPattern];
+            if (hasTenantContext()) {
+                sql += ' AND c.tenant_id = ?';
+                params.push(getTenantId());
+            }
+            sql += `
                 ORDER BY c.name ASC
                 LIMIT 20
             `;
 
             this.db.all(
                 sql,
-                [searchPattern, searchPattern, searchPattern, searchPattern, searchPattern],
+                params,
                 (err, rows) => {
                     if (err) {
                         reject(err);
@@ -3167,14 +3234,19 @@ ${year && month ? `
     // Get customer by ID
     async getCustomerById(id) {
         return new Promise((resolve, reject) => {
-            const sql = `
+            let sql = `
                 SELECT c.*, p.name as package_name, p.speed, p.price, p.image as package_image, p.tax_rate
                 FROM customers c
                 LEFT JOIN packages p ON c.package_id = p.id
                 WHERE c.id = ?
             `;
+            const params = [id];
+            if (hasTenantContext()) {
+                sql += ' AND c.tenant_id = ?';
+                params.push(getTenantId());
+            }
             
-            this.db.get(sql, [id], (err, row) => {
+            this.db.get(sql, params, (err, row) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -3187,14 +3259,19 @@ ${year && month ? `
     // Get customer by customer_id (6 digit ID)
     async getCustomerByCustomerId(customerId) {
         return new Promise((resolve, reject) => {
-            const sql = `
+            let sql = `
                 SELECT c.*, p.name as package_name, p.price as package_price, p.speed as package_speed, p.image as package_image, p.tax_rate
                 FROM customers c
                 LEFT JOIN packages p ON c.package_id = p.id
                 WHERE c.customer_id = ?
             `;
+            const params = [customerId];
+            if (hasTenantContext()) {
+                sql += ' AND c.tenant_id = ?';
+                params.push(getTenantId());
+            }
             
-            this.db.get(sql, [customerId], (err, row) => {
+            this.db.get(sql, params, (err, row) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -3237,10 +3314,11 @@ ${year && month ? `
                        END as payment_status
                 FROM customers c 
                 LEFT JOIN packages p ON c.package_id = p.id 
-                WHERE c.phone IN (${placeholders})
+                WHERE c.phone IN (${placeholders})${hasTenantContext() ? ' AND c.tenant_id = ?' : ''}
             `;
 
-                this.db.get(sql, variants, (err, row) => {
+                const queryParams = hasTenantContext() ? [...variants, getTenantId()] : variants;
+                this.db.get(sql, queryParams, (err, row) => {
                     if (err) {
                         reject(err);
                     } else {
@@ -3808,14 +3886,18 @@ ${year && month ? `
             const { customer_id, member_id, package_id, amount, due_date, notes, base_amount, tax_rate, invoice_type = 'monthly', package_name, description } = invoiceData;
             const invoice_number = this.generateInvoiceNumber();
             
+            // tenant_id diwariskan dari customer/member agar invoice yang dibuat
+            // background job (tanpa konteks request) tetap milik tenant yang benar.
+            const tenantIdExpr = `COALESCE((SELECT tenant_id FROM customers WHERE id = ?), (SELECT tenant_id FROM members WHERE id = ?), 1)`;
+
             // Check if base_amount and tax_rate columns exist
             let sql, params;
             if (base_amount !== undefined && tax_rate !== undefined) {
-                sql = `INSERT INTO invoices (customer_id, member_id, package_id, invoice_number, amount, base_amount, tax_rate, due_date, notes, invoice_type, package_name, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-                params = [customer_id || null, member_id || null, package_id, invoice_number, amount, base_amount, tax_rate, due_date, notes || null, invoice_type, package_name || null, description || null];
+                sql = `INSERT INTO invoices (customer_id, member_id, package_id, invoice_number, amount, base_amount, tax_rate, due_date, notes, invoice_type, package_name, description, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${tenantIdExpr})`;
+                params = [customer_id || null, member_id || null, package_id, invoice_number, amount, base_amount, tax_rate, due_date, notes || null, invoice_type, package_name || null, description || null, customer_id || null, member_id || null];
             } else {
-                sql = `INSERT INTO invoices (customer_id, member_id, package_id, invoice_number, amount, due_date, notes, invoice_type, package_name, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-                params = [customer_id || null, member_id || null, package_id, invoice_number, amount, due_date, notes || null, invoice_type, package_name || null, description || null];
+                sql = `INSERT INTO invoices (customer_id, member_id, package_id, invoice_number, amount, due_date, notes, invoice_type, package_name, description, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${tenantIdExpr})`;
+                params = [customer_id || null, member_id || null, package_id, invoice_number, amount, due_date, notes || null, invoice_type, package_name || null, description || null, customer_id || null, member_id || null];
             }
             
             this.db.run(sql, params, function(err) {
@@ -4722,12 +4804,14 @@ ${year && month ? `
                 const { invoice_id, amount, payment_method, reference_number, notes, payment_date, discount_amount } =
                     paymentData;
                 const disc = Math.max(0, Number(discount_amount) || 0);
-                let sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes, discount_amount) VALUES (?, ?, ?, ?, ?, ?)`;
-                let params = [invoice_id, amount, payment_method, reference_number, notes, disc];
+                // tenant_id diwariskan dari invoice (aman juga untuk background job)
+                const payTenantExpr = `COALESCE((SELECT tenant_id FROM invoices WHERE id = ?), 1)`;
+                let sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes, discount_amount, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ${payTenantExpr})`;
+                let params = [invoice_id, amount, payment_method, reference_number, notes, disc, invoice_id];
 
                 if (payment_date) {
-                    sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes, payment_date, discount_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-                    params = [invoice_id, amount, payment_method, reference_number, notes, payment_date, disc];
+                    sql = `INSERT INTO payments (invoice_id, amount, payment_method, reference_number, notes, payment_date, discount_amount, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ${payTenantExpr})`;
+                    params = [invoice_id, amount, payment_method, reference_number, notes, payment_date, disc, invoice_id];
                 }
 
                 this.db.run(sql, params, function(err) {
@@ -4787,13 +4871,13 @@ ${year && month ? `
                         // kewajiban setoran dihitung hanya tunai lewat paymentEligibleForCollectorRemittance)
                         const sql = `INSERT INTO payments (
                             invoice_id, amount, payment_method, reference_number, notes, 
-                            collector_id, commission_amount, payment_type, discount_amount
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'collector', ?)`;
+                            collector_id, commission_amount, payment_type, discount_amount, tenant_id
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'collector', ?, COALESCE((SELECT tenant_id FROM invoices WHERE id = ?), 1))`;
                         
                         self.db.run(sql, [
                             invoice_id, amount, payment_method, reference_number, notes,
                             collector_id, commission_amount || 0,
-                            discIns
+                            discIns, invoice_id
                         ], function(err) {
                             if (err) {
                                 self.db.run('ROLLBACK', (rollbackErr) => {

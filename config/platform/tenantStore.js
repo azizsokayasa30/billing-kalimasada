@@ -17,6 +17,9 @@ function getDb() {
     if (db) return db;
     db = new sqlite3.Database(DB_PATH);
     db.run('PRAGMA foreign_keys = ON');
+    db.run('PRAGMA journal_mode = WAL');
+    db.run('PRAGMA busy_timeout = 5000');
+    db.run('PRAGMA synchronous = NORMAL');
     return db;
 }
 
@@ -120,17 +123,63 @@ async function updateTenantSettings(tenantId, settingsObj) {
     );
 }
 
+async function syncTenantContactEmailsFromOwner() {
+    const { resolveTenantContactEmail } = require('./saasTenantSettings');
+    const rows = await dbAll('SELECT id, owner_email, settings FROM tenants WHERE deleted_at IS NULL');
+    for (const row of rows) {
+        let settings = {};
+        try {
+            settings = row.settings ? JSON.parse(row.settings) : {};
+        } catch (_) {
+            settings = {};
+        }
+        const tenant = { owner_email: row.owner_email, settings };
+        const resolved = resolveTenantContactEmail(tenant, settings);
+        if (resolved && settings.contact_email !== resolved) {
+            settings.contact_email = resolved;
+            await updateTenantSettings(row.id, settings);
+            console.log(`[tenantStore] contact_email synced for tenant #${row.id} → ${resolved}`);
+        }
+    }
+}
+
+async function ensureTenantPaymentFormDefaults() {
+    const { emptyPaymentSettings } = require('./saasTenantSettings');
+    const defaults = emptyPaymentSettings();
+    const tenants = await dbAll('SELECT id, settings FROM tenants WHERE deleted_at IS NULL');
+    for (const row of tenants) {
+        let settings = {};
+        try {
+            settings = row.settings ? JSON.parse(row.settings) : {};
+        } catch (_) {
+            settings = {};
+        }
+        let changed = false;
+        Object.keys(defaults).forEach((key) => {
+            if (settings[key] === undefined) {
+                settings[key] = '';
+                changed = true;
+            }
+        });
+        if (changed) {
+            await updateTenantSettings(row.id, settings);
+            console.log(`[tenantStore] payment form defaults added for tenant #${row.id}`);
+        }
+    }
+}
+
 async function backfillTenantSettingsFromTemplate() {
-    const { getFullSettingsForTenantId, saveFullSettingsForTenantId } = require('./tenantSettingsManager');
+    const { scrubStoredTenantSettings } = require('./tenantSettingsManager');
     const tenants = await dbAll('SELECT id FROM tenants WHERE deleted_at IS NULL');
     for (const row of tenants) {
         const tenant = await getTenantById(row.id);
         if (!tenant) continue;
-        const keys = Object.keys(tenant.settings || {});
-        if (keys.length < 15) {
-            const full = await getFullSettingsForTenantId(row.id);
-            await updateTenantSettings(row.id, full);
-            console.log(`[tenantStore] settings backfilled for tenant #${row.id}`);
+        const scrubbed = scrubStoredTenantSettings(tenant.settings || {});
+        const keysBefore = Object.keys(tenant.settings || {}).length;
+        const keysAfter = Object.keys(scrubbed).length;
+        if (keysBefore !== keysAfter || JSON.stringify(tenant.settings) !== JSON.stringify(scrubbed)) {
+            await updateTenantSettings(row.id, scrubbed);
+            console.log(`[tenantStore] settings scrubbed for tenant #${row.id} (${keysBefore} → ${keysAfter} keys)`);
         }
     }
 }
@@ -162,11 +211,9 @@ async function ensurePlatformSchema() {
     }
 }
 
-const TENANT_SCOPED_TABLES = [
-    'customers', 'packages', 'invoices', 'payments', 'routers',
-    'technicians', 'collectors', 'areas', 'app_settings', 'agents',
-    'members', 'member_packages', 'expenses', 'income', 'odps',
-];
+// Satu sumber kebenaran: daftar tabel bisnis per-tenant ada di billingTenantScope
+// (dipakai juga oleh interceptor auto-isolasi SQL).
+const { BILLING_TENANT_SCOPED_TABLES: TENANT_SCOPED_TABLES } = require('./billingTenantScope');
 
 async function tableExists(tableName) {
     const row = await dbGet(
@@ -193,6 +240,156 @@ async function ensureTenantIdColumns() {
             const msg = String(err.message || '').toLowerCase();
             if (msg.includes('duplicate column')) continue;
             console.warn(`[tenantStore] tenant_id migration warn (${table}):`, err.message);
+        }
+    }
+}
+
+/**
+ * Constraint UNIQUE global (warisan single-tenant) membuat tenant baru tidak
+ * bisa memakai username/nomor/kode yang sudah dipakai tenant lain, dan upsert
+ * bisa menimpa baris milik tenant lain. Migrasi ini mengubahnya menjadi
+ * UNIQUE per-tenant: (tenant_id, kolom). Idempotent — hanya rebuild bila
+ * DDL tabel masih mengandung UNIQUE global.
+ */
+const PER_TENANT_UNIQUE_SPECS = [
+    { table: 'customers', dropColumnUnique: ['username', 'phone'], dropIndexes: ['idx_customers_customer_id'], composite: ['username', 'customer_id'] },
+    { table: 'members', dropColumnUnique: ['username', 'phone'], composite: ['username', 'phone'] },
+    { table: 'agents', dropColumnUnique: ['username', 'phone'], composite: ['username', 'phone'] },
+    { table: 'technicians', dropColumnUnique: ['phone'], composite: ['phone'] },
+    { table: 'collectors', dropColumnUnique: ['phone'], composite: ['phone'] },
+    { table: 'employees', dropColumnUnique: ['nik'], dropIndexes: ['idx_employees_public_code'], composite: ['nik'] },
+    { table: 'voucher_revenue', dropColumnUnique: ['username'], composite: ['username'] },
+    { table: 'odps', dropColumnUnique: ['name', 'code'], composite: ['name', 'code'] },
+    { table: 'invoices', dropColumnUnique: ['invoice_number'], composite: ['invoice_number'] },
+    { table: 'installation_jobs', dropColumnUnique: ['job_number'], composite: ['job_number'] },
+    { table: 'areas', dropTableUnique: ['nama_area'], composite: ['nama_area'] },
+];
+
+async function rebuildTableForPerTenantUnique(spec) {
+    const { table, dropColumnUnique = [], dropTableUnique = [], dropIndexes = [], composite = [] } = spec;
+
+    const row = await dbGet(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, [table]);
+    if (row && row.sql) {
+        let ddl = String(row.sql);
+        let changed = false;
+
+        for (const col of dropColumnUnique) {
+            const re = new RegExp(`(\\b${col}\\b[^,]*?)\\s+UNIQUE\\b`, 'i');
+            if (re.test(ddl)) {
+                ddl = ddl.replace(re, '$1');
+                changed = true;
+            }
+        }
+        for (const col of dropTableUnique) {
+            const re = new RegExp(`,\\s*UNIQUE\\s*\\(\\s*${col}\\s*\\)`, 'i');
+            if (re.test(ddl)) {
+                ddl = ddl.replace(re, '');
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            const extras = await dbAll(
+                `SELECT name, type, sql FROM sqlite_master
+                 WHERE tbl_name = ? AND type IN ('index', 'trigger') AND sql IS NOT NULL`,
+                [table]
+            );
+            const cols = await dbAll(`PRAGMA table_info(${table})`);
+            const colList = cols.map((c) => `"${c.name}"`).join(', ');
+            const backup = `${table}_mt_unique_mig`;
+
+            // legacy_alter_table: RENAME tidak boleh ikut mengubah REFERENCES
+            // di tabel lain (tabel asli dibuat ulang dengan nama yang sama).
+            await dbRun('PRAGMA foreign_keys = OFF');
+            await dbRun('PRAGMA legacy_alter_table = ON');
+            await dbRun('BEGIN IMMEDIATE');
+            try {
+                await dbRun(`DROP TABLE IF EXISTS ${backup}`);
+                await dbRun(`ALTER TABLE ${table} RENAME TO ${backup}`);
+                await dbRun(ddl);
+                await dbRun(`INSERT INTO ${table} (${colList}) SELECT ${colList} FROM ${backup}`);
+                await dbRun(`DROP TABLE ${backup}`);
+                for (const extra of extras) {
+                    if (dropIndexes.includes(extra.name)) continue;
+                    try {
+                        await dbRun(extra.sql);
+                    } catch (err) {
+                        console.warn(`[tenantStore] recreate ${extra.type} ${extra.name} warn:`, err.message);
+                    }
+                }
+                await dbRun('COMMIT');
+                console.log(`[tenantStore] UNIQUE global dihapus → ${table} (${[...dropColumnUnique, ...dropTableUnique].join(', ')})`);
+            } catch (err) {
+                try { await dbRun('ROLLBACK'); } catch (_) { /* noop */ }
+                console.warn(`[tenantStore] rebuild ${table} gagal (dibiarkan apa adanya):`, err.message);
+            } finally {
+                await dbRun('PRAGMA legacy_alter_table = OFF');
+                await dbRun('PRAGMA foreign_keys = ON');
+            }
+        }
+    }
+
+    for (const name of dropIndexes) {
+        try { await dbRun(`DROP INDEX IF EXISTS ${name}`); } catch (_) { /* noop */ }
+    }
+    for (const col of composite) {
+        try {
+            await dbRun(
+                `CREATE UNIQUE INDEX IF NOT EXISTS uniq_${table}_tenant_${col} ON ${table}(tenant_id, ${col})`
+            );
+        } catch (err) {
+            console.warn(`[tenantStore] composite unique (${table}.tenant_id+${col}) warn:`, err.message);
+        }
+    }
+}
+
+async function ensurePerTenantUniqueConstraints() {
+    for (const spec of PER_TENANT_UNIQUE_SPECS) {
+        try {
+            if (!(await tableExists(spec.table))) continue;
+            if (!(await tableHasColumn(spec.table, 'tenant_id'))) continue;
+            await rebuildTableForPerTenantUnique(spec);
+        } catch (err) {
+            console.warn(`[tenantStore] per-tenant unique (${spec.table}) warn:`, err.message);
+        }
+    }
+}
+
+/**
+ * Backfill tenant_id pada tabel relasi/turunan dari tabel induknya,
+ * untuk baris lama yang sempat dibuat sebelum kolom tenant_id ada
+ * (ALTER TABLE memberi DEFAULT 1 ke semua baris lama).
+ */
+const TENANT_BACKFILL_FROM_PARENT = [
+    { table: 'customer_router_map', parent: 'customers', fk: 'customer_id' },
+    { table: 'invoices', parent: 'customers', fk: 'customer_id' },
+    { table: 'payments', parent: 'invoices', fk: 'invoice_id' },
+    { table: 'collector_assignments', parent: 'customers', fk: 'customer_id' },
+    { table: 'collector_areas', parent: 'collectors', fk: 'collector_id' },
+    { table: 'collector_payments', parent: 'collectors', fk: 'collector_id' },
+    { table: 'collector_transactions', parent: 'collectors', fk: 'collector_id' },
+    { table: 'member_packages', parent: 'members', fk: 'member_id' },
+    { table: 'goods_invoice_items', parent: 'goods_invoices', fk: 'goods_invoice_id' },
+    { table: 'odp_connections', parent: 'odps', fk: 'odp_id' },
+    { table: 'installation_job_status_history', parent: 'installation_jobs', fk: 'job_id' },
+];
+
+async function backfillTenantIdFromParents() {
+    for (const { table, parent, fk } of TENANT_BACKFILL_FROM_PARENT) {
+        try {
+            if (!(await tableExists(table)) || !(await tableExists(parent))) continue;
+            if (!(await tableHasColumn(table, 'tenant_id')) || !(await tableHasColumn(table, fk))) continue;
+            if (!(await tableHasColumn(parent, 'tenant_id'))) continue;
+            const res = await dbRun(
+                `UPDATE ${table}
+                 SET tenant_id = (SELECT p.tenant_id FROM ${parent} p WHERE p.id = ${table}.${fk})
+                 WHERE EXISTS (SELECT 1 FROM ${parent} p WHERE p.id = ${table}.${fk} AND p.tenant_id != ${table}.tenant_id)`
+            );
+            if (res.changes > 0) {
+                console.log(`[tenantStore] backfill tenant_id: ${table} ← ${parent} (${res.changes} baris)`);
+            }
+        } catch (err) {
+            console.warn(`[tenantStore] backfill tenant_id (${table}) warn:`, err.message);
         }
     }
 }
@@ -512,6 +709,10 @@ async function updateTenant(id, data) {
         settings.contact_whatsapp = data.owner_phone;
         settingsChanged = true;
     }
+    if (data.owner_email !== undefined) {
+        settings.contact_email = String(data.owner_email).trim();
+        settingsChanged = true;
+    }
 
     if (data.admin_username !== undefined || (data.admin_password !== undefined && String(data.admin_password).trim())) {
         const creds = resolveAdminCredentials(data, {
@@ -571,9 +772,13 @@ async function auditLog({ tenantId, actorType, actorId, action, details, ip }) {
 async function initPlatform() {
     await ensurePlatformSchema();
     await ensureTenantIdColumns();
+    await ensurePerTenantUniqueConstraints();
+    await backfillTenantIdFromParents();
     await releaseDeletedTenantSlugs();
     await ensureDefaultTenant();
     await backfillTenantSettingsFromTemplate();
+    await ensureTenantPaymentFormDefaults();
+    await syncTenantContactEmailsFromOwner();
     await ensureSuperAdmin('management@kalimasada', 'kalimasada123', 'Kalimasada Management');
     console.log('[platform] SaaS platform initialized');
 }

@@ -130,9 +130,14 @@ db.run(
     }
 );
 
+function isAdminMobile(req) {
+    return !!(req.user && String(req.user.role) === 'admin');
+}
+
 function requireCollector(req, res, next) {
-    if (!req.user || String(req.user.role) !== 'collector') {
-        return res.status(403).json({ success: false, message: 'Hanya kolektor' });
+    const role = req.user && String(req.user.role);
+    if (role !== 'collector' && role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Hanya kolektor atau admin' });
     }
     next();
 }
@@ -154,6 +159,131 @@ function parseCollectorId(req) {
 /** ID numerik teknisi dari JWT (id / sub / user_id) — hindari NaN bila token pakai string non-angka. */
 function parseTechnicianId(req) {
     return parseCollectorId(req);
+}
+
+function mapMobileCollectorCustomerRow(c) {
+    return {
+        id: c.id,
+        customer_id: c.customer_id != null && c.customer_id !== '' ? String(c.customer_id) : null,
+        username: c.username != null ? String(c.username) : '',
+        name: c.name,
+        address: c.address || '',
+        area: resolveCustomerAreaLabel(c),
+        area_id:
+            c.area_id != null && c.area_id !== '' && !Number.isNaN(Number(c.area_id))
+                ? Number(c.area_id)
+                : null,
+        phone: c.phone || '',
+        email: c.email || '',
+        status: c.status,
+        payment_status: c.payment_status,
+        package_price: Math.round(parseFloat(c.package_price || 0)),
+        package_name: c.package_name || '',
+        latitude:
+            c.latitude != null && c.latitude !== '' && !Number.isNaN(parseFloat(c.latitude))
+                ? parseFloat(c.latitude)
+                : null,
+        longitude:
+            c.longitude != null && c.longitude !== '' && !Number.isNaN(parseFloat(c.longitude))
+                ? parseFloat(c.longitude)
+                : null,
+        pppoe_username: c.pppoe_username != null ? String(c.pppoe_username) : '',
+        pppoe_profile: c.pppoe_profile != null ? String(c.pppoe_profile) : '',
+        router_name: c.router_name != null ? String(c.router_name) : ''
+    };
+}
+
+async function loadAdminMobileCustomers(statusFilter, q, areaFilter) {
+    const filters = {};
+    if (areaFilter && String(areaFilter).trim()) {
+        filters.area = String(areaFilter).trim();
+    }
+    const result = await billingManager.getCustomersPaginated(15000, 0, filters);
+    return filterCollectorCustomersForMobile(result.customers || [], statusFilter, q, areaFilter);
+}
+
+async function resolveCollectorIdForCustomer(customerId) {
+    const cid = parseInt(String(customerId), 10);
+    if (!Number.isFinite(cid) || cid <= 0) return null;
+    const fromAssignment = await new Promise((resolve) => {
+        db.get(
+            'SELECT collector_id FROM collector_assignments WHERE customer_id = ? LIMIT 1',
+            [cid],
+            (err, row) => resolve(!err && row ? row.collector_id : null)
+        );
+    });
+    if (fromAssignment) return parseInt(String(fromAssignment), 10) || null;
+    const fromArea = await new Promise((resolve) => {
+        db.get(
+            `SELECT cra.collector_id FROM customers c
+             INNER JOIN collector_areas cra ON c.area IS NOT NULL AND c.area != '' AND c.area = cra.area
+             WHERE c.id = ? LIMIT 1`,
+            [cid],
+            (err, row) => resolve(!err && row ? row.collector_id : null)
+        );
+    });
+    if (fromArea) return parseInt(String(fromArea), 10) || null;
+    const fallback = await new Promise((resolve) => {
+        db.get(
+            'SELECT id FROM collectors WHERE status = "active" ORDER BY id ASC LIMIT 1',
+            [],
+            (err, row) => resolve(!err && row ? row.id : null)
+        );
+    });
+    return fallback ? parseInt(String(fallback), 10) : null;
+}
+
+async function getAdminOperationalCounts() {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT
+                (SELECT COUNT(*) FROM installation_jobs
+                 WHERE LOWER(IFNULL(status, '')) NOT IN ('completed', 'cancelled')) AS pending_install,
+                (SELECT COUNT(*) FROM trouble_reports
+                 WHERE LOWER(IFNULL(status, '')) NOT IN ('closed', 'resolved')) AS pending_trouble`,
+            [],
+            (err, row) => (err ? reject(err) : resolve(row || {}))
+        );
+    });
+}
+
+async function getAdminCustomerPaymentCounts() {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT
+                COUNT(*) AS total,
+                SUM(CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM invoices i
+                        WHERE i.customer_id = c.id AND i.status = 'unpaid'
+                        AND i.due_date < date('now','localtime')
+                    ) THEN 1
+                    WHEN EXISTS (
+                        SELECT 1 FROM invoices i
+                        WHERE i.customer_id = c.id AND i.status = 'unpaid'
+                    ) THEN 1
+                    WHEN NOT EXISTS (
+                        SELECT 1 FROM invoices i
+                        WHERE i.customer_id = c.id AND i.status = 'paid'
+                    ) THEN 1
+                    ELSE 0
+                END) AS belum_lunas,
+                SUM(CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM invoices i
+                        WHERE i.customer_id = c.id AND i.status = 'paid'
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM invoices i
+                        WHERE i.customer_id = c.id AND i.status = 'unpaid'
+                    ) THEN 1
+                    ELSE 0
+                END) AS lunas
+             FROM customers c`,
+            [],
+            (err, row) => (err ? reject(err) : resolve(row || {}))
+        );
+    });
 }
 
 /** SQLite3 kadang mengembalikan BIGINT; JSON.stringify gagal → klien Flutter error. */
@@ -1211,6 +1341,28 @@ router.put('/customers/:customerId/location', verifyToken, allowFieldOps, (req, 
 
 // --- Profil teknisi (sinkron dengan data web / tabel technicians) ---
 router.get('/me', verifyToken, requireTechnician, (req, res) => {
+    if (isAdminMobile(req)) {
+        const username = (req.user && (req.user.username || req.user.name)) || 'Admin';
+        return res.json({
+            success: true,
+            data: {
+                id: 'admin',
+                name: username,
+                role: 'admin',
+                position: 'admin',
+                phone: '',
+                email: null,
+                address: '',
+                area_coverage: 'Semua wilayah',
+                notes: '',
+                whatsapp_group_id: null,
+                join_date: null,
+                last_login: null,
+                created_at: null,
+                support_whatsapp: getSetting('contact_whatsapp', '') || ''
+            }
+        });
+    }
     const techId = parseTechnicianId(req);
     if (!techId) {
         return res.status(400).json({ success: false, message: 'ID teknisi tidak valid' });
@@ -1956,6 +2108,104 @@ router.get('/dashboard', verifyToken, allowFieldOps, (req, res) => {
         }
         sendStats(row, null);
     });
+});
+
+router.get('/admin/overview', verifyToken, async (req, res) => {
+    if (!isAdminMobile(req)) {
+        return res.status(403).json({ success: false, message: 'Hanya admin' });
+    }
+    try {
+        const [billingStats, paymentCounts, ops, networkRes] = await Promise.all([
+            billingManager.getBillingStats(),
+            getAdminCustomerPaymentCounts(),
+            getAdminOperationalCounts(),
+            (async () => {
+                const NETWORK_CHECK_MS = 8000;
+                const timeout = new Promise((resolve) => {
+                    setTimeout(
+                        () =>
+                            resolve({
+                                summary: 'unknown',
+                                routersOnline: 0,
+                                routersTotal: 0,
+                                activeSessions: 0
+                            }),
+                        NETWORK_CHECK_MS
+                    );
+                });
+                const check = (async () => {
+                    try {
+                        const {
+                            getMikrotikConnectionForRouter
+                        } = require('../../config/mikrotik');
+                        const routers = await new Promise((resolve, reject) => {
+                            db.all('SELECT * FROM routers ORDER BY id ASC', [], (err, rows) => {
+                                if (err) return reject(err);
+                                resolve(Array.isArray(rows) ? rows : []);
+                            });
+                        });
+                        const routerRows = routers.length
+                            ? routers
+                            : [{ id: 'default', name: 'Mikrotik Default', nas_ip: null, nas_identifier: null }];
+                        let online = 0;
+                        let totalActive = 0;
+                        for (const r of routerRows) {
+                            try {
+                                const conn = await getMikrotikConnectionForRouter(r);
+                                if (!conn) continue;
+                                online += 1;
+                                const actives = await conn.write('/ppp/active/print');
+                                totalActive += Array.isArray(actives) ? actives.length : 0;
+                            } catch (_) {
+                                /* skip router */
+                            }
+                        }
+                        const summary =
+                            routerRows.length === 0
+                                ? 'unknown'
+                                : online === 0
+                                    ? 'offline'
+                                    : online < routerRows.length
+                                        ? 'partial'
+                                        : 'online';
+                        return {
+                            summary,
+                            routersOnline: online,
+                            routersTotal: routerRows.length,
+                            activeSessions: totalActive
+                        };
+                    } catch (e) {
+                        return { summary: 'unknown', routersOnline: 0, routersTotal: 0, activeSessions: 0 };
+                    }
+                })();
+                return Promise.race([check, timeout]);
+            })()
+        ]);
+
+        const totalTagihan = Math.round(
+            parseFloat(billingStats.total_revenue || 0) + parseFloat(billingStats.total_unpaid || 0)
+        );
+        const pendingInstall = parseInt(ops.pending_install, 10) || 0;
+        const pendingTrouble = parseInt(ops.pending_trouble, 10) || 0;
+
+        res.json({
+            success: true,
+            data: {
+                totalPelanggan: parseInt(paymentCounts.total, 10) || billingStats.total_customers || 0,
+                totalTagihan,
+                lunas: parseInt(paymentCounts.lunas, 10) || 0,
+                belumLunas: parseInt(paymentCounts.belum_lunas, 10) || 0,
+                totalTugas: pendingInstall + pendingTrouble,
+                totalGangguan: pendingTrouble,
+                pendingInstallations: pendingInstall,
+                networkStatus: networkRes,
+                billingStats: sanitizeCollectorDashboardStats({ tagihan: { total: totalTagihan } })
+            }
+        });
+    } catch (error) {
+        logger.error('[mobile-adapter] admin/overview', error);
+        res.status(500).json({ success: false, message: error.message || 'Gagal memuat dashboard admin' });
+    }
 });
 
 // --- Tasks: instalasi + tiket gangguan untuk teknisi login ---
@@ -3731,6 +3981,52 @@ router.post('/collector/notifications/read-all', verifyToken, requireCollector, 
 });
 
 router.get('/collector/overview', verifyToken, requireCollector, async (req, res) => {
+    if (isAdminMobile(req)) {
+        const month = req.query.month != null && req.query.month !== '' ? String(req.query.month) : null;
+        const year = req.query.year != null && req.query.year !== '' ? String(req.query.year) : null;
+        try {
+            const [billingStats, paymentCounts] = await Promise.all([
+                billingManager.getBillingStats(),
+                getAdminCustomerPaymentCounts()
+            ]);
+            const targetMonth = Math.round(
+                parseFloat(billingStats.total_revenue || 0) + parseFloat(billingStats.total_unpaid || 0)
+            );
+            const terkumpul = Math.round(parseFloat(billingStats.total_revenue || 0));
+            const progressPct = targetMonth > 0 ? Math.min(100, Math.round((terkumpul / targetMonth) * 100)) : 0;
+            const sisaTarget = Math.max(0, targetMonth - terkumpul);
+            const username = (req.user && (req.user.username || req.user.name)) || 'Admin';
+            res.json({
+                success: true,
+                data: {
+                    collector: { id: 'admin', name: username, phone: '', email: '', address: '' },
+                    statistics: sanitizeCollectorDashboardStats(billingStats),
+                    fieldUi: {
+                        totalPelangganAktif: parseInt(paymentCounts.total, 10) || 0,
+                        belumBayarCount: parseInt(paymentCounts.belum_lunas, 10) || 0,
+                        lunasCount: parseInt(paymentCounts.lunas, 10) || 0,
+                        isolirCount: 0,
+                        priorityCustomers: [],
+                        targetMonth,
+                        terkumpul,
+                        progressPct,
+                        sisaTarget,
+                        areaLabel: 'Semua wilayah',
+                        displayDate: new Date().toLocaleDateString('id-ID', {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric'
+                        })
+                    }
+                }
+            });
+        } catch (error) {
+            logger.error('[mobile-adapter] collector/overview admin', error);
+            res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+        }
+        return;
+    }
     const collectorId = parseCollectorId(req);
     if (!collectorId) {
         return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
@@ -3813,6 +4109,22 @@ router.get('/collector/overview', verifyToken, requireCollector, async (req, res
 });
 
 router.get('/collector/areas', verifyToken, requireCollector, (req, res) => {
+    if (isAdminMobile(req)) {
+        db.all(
+            `SELECT DISTINCT area FROM customers
+             WHERE area IS NOT NULL AND TRIM(area) != ''
+             ORDER BY area ASC LIMIT 200`,
+            [],
+            (err, rows) => {
+                if (err) {
+                    return res.status(500).json({ success: false, message: err.message });
+                }
+                const data = (rows || []).map((r) => ({ area: String(r.area).trim() }));
+                res.json({ success: true, data });
+            }
+        );
+        return;
+    }
     const collectorId = parseCollectorId(req);
     if (!collectorId) {
         return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
@@ -3834,13 +4146,30 @@ router.get('/collector/areas', verifyToken, requireCollector, (req, res) => {
 });
 
 router.get('/collector/customers', verifyToken, requireCollector, async (req, res) => {
+    const statusFilter = (req.query.status || '').toString().toLowerCase();
+    const q = (req.query.q || '').toString();
+    const areaFilter = (req.query.area || '').toString();
+    if (isAdminMobile(req)) {
+        try {
+            const rows = await loadAdminMobileCustomers(statusFilter, q, areaFilter);
+            const data = rows.map((c) => mapMobileCollectorCustomerRow(c));
+            attachAreaNamesFromMaster(data, (areaErr, enriched) => {
+                if (areaErr) {
+                    logger.error('[mobile-adapter] collector/customers admin area', areaErr);
+                    return res.status(500).json({ success: false, message: areaErr.message || 'Gagal memuat' });
+                }
+                res.json({ success: true, data: enriched });
+            });
+        } catch (error) {
+            logger.error('[mobile-adapter] collector/customers admin', error);
+            res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+        }
+        return;
+    }
     const collectorId = parseCollectorId(req);
     if (!collectorId) {
         return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
     }
-    const statusFilter = (req.query.status || '').toString().toLowerCase();
-    const q = (req.query.q || '').toString();
-    const areaFilter = (req.query.area || '').toString();
     try {
         const allMappedCustomers = await billingManager.getCollectorCustomers(collectorId);
         const rows = filterCollectorCustomersForMobile(allMappedCustomers, statusFilter, q, areaFilter);
@@ -3887,6 +4216,49 @@ router.get('/collector/customers', verifyToken, requireCollector, async (req, re
 });
 
 router.get('/collector/settlement', verifyToken, requireCollector, async (req, res) => {
+    if (isAdminMobile(req)) {
+        try {
+            const collectors = await billingManager.getAllCollectors();
+            let sudahSetor = 0;
+            let belumSetor = 0;
+            const allPayments = [];
+            for (const col of collectors || []) {
+                const [payments, dashboardStats] = await Promise.all([
+                    billingManager.getCollectorAllPayments(col.id),
+                    billingManager.getCollectorDashboardStats(col.id)
+                ]);
+                const s = (dashboardStats && dashboardStats.setoran) || {};
+                sudahSetor += Math.round(parseFloat(s.sudah_setor || 0));
+                belumSetor += Math.round(parseFloat(s.belum_setor || 0));
+                for (const p of payments || []) {
+                    allPayments.push({
+                        ...p,
+                        collector_name: col.name || ''
+                    });
+                }
+            }
+            allPayments.sort((a, b) => {
+                const da = new Date(a.payment_date || a.created_at || 0).getTime();
+                const db = new Date(b.payment_date || b.created_at || 0).getTime();
+                return db - da;
+            });
+            const totalHarusSetor = sudahSetor + belumSetor;
+            const setoranProgressPct =
+                totalHarusSetor > 0 ? Math.min(100, Math.round((sudahSetor / totalHarusSetor) * 100)) : 0;
+            const paymentsSafe = allPayments.slice(0, 100).map((p) => sanitizeCollectorPaymentRow(p));
+            res.json({
+                success: true,
+                data: {
+                    setoranUi: { sudahSetor, belumSetor, totalHarusSetor, setoranProgressPct },
+                    payments: paymentsSafe
+                }
+            });
+        } catch (error) {
+            logger.error('[mobile-adapter] collector/settlement admin', error);
+            res.status(500).json({ success: false, message: error.message || 'Gagal memuat' });
+        }
+        return;
+    }
     const collectorId = parseCollectorId(req);
     if (!collectorId) {
         return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
@@ -3917,6 +4289,27 @@ router.get('/collector/settlement', verifyToken, requireCollector, async (req, r
 });
 
 router.get('/collector/me', verifyToken, requireCollector, async (req, res) => {
+    if (isAdminMobile(req)) {
+        const username = (req.user && (req.user.username || req.user.name)) || 'Admin';
+        return res.json({
+            success: true,
+            data: {
+                id: 'admin',
+                name: username,
+                phone: '',
+                email: '',
+                address: '',
+                commission_rate: 0,
+                status: 'active',
+                created_at: null,
+                profileStats: {
+                    successRate: 0,
+                    totalCollections: 0,
+                    monthlyCommission: 0
+                }
+            }
+        });
+    }
     const collectorId = parseCollectorId(req);
     if (!collectorId) {
         return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
@@ -4275,8 +4668,17 @@ router.post(
     requireCollector,
     collectorPaymentMulter.single('payment_proof'),
     async (req, res) => {
-        const collectorId = parseCollectorId(req);
-        if (!collectorId) {
+        let collectorId = parseCollectorId(req);
+        if (isAdminMobile(req)) {
+            const { customer_id } = req.body || {};
+            collectorId = await resolveCollectorIdForCustomer(customer_id);
+            if (!collectorId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Tidak ada kolektor aktif untuk mencatat pembayaran'
+                });
+            }
+        } else if (!collectorId) {
             return res.status(400).json({ success: false, message: 'ID kolektor tidak valid' });
         }
         const { customer_id, payment_amount, payment_method, notes, invoice_ids, discount_amount } =
@@ -4290,9 +4692,11 @@ router.post(
             return res.status(400).json({ success: false, message: 'Foto bukti transfer wajib diunggah' });
         }
         try {
-            const allowed = await collectorMappedCustomerIds(collectorId);
-            if (!allowed.has(customerIdNum)) {
-                return res.status(403).json({ success: false, message: 'Pelanggan tidak ada di wilayah Anda' });
+            if (!isAdminMobile(req)) {
+                const allowed = await collectorMappedCustomerIds(collectorId);
+                if (!allowed.has(customerIdNum)) {
+                    return res.status(403).json({ success: false, message: 'Pelanggan tidak ada di wilayah Anda' });
+                }
             }
             const paymentProof = req.file ? `/uploads/payments/${req.file.filename}` : null;
             const result = await submitCollectorPayment({

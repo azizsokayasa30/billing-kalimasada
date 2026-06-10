@@ -17,9 +17,11 @@ function getTenantSetting(key, defaultValue = null) {
 }
 
 function getTenantBranding() {
+    const { hasTenantContext, getTenant } = require('./tenantContext');
+    const tenantName = hasTenantContext() ? (getTenant()?.name || 'Kalimasada Billing') : 'Kalimasada Billing';
     return {
-        company_header: getTenantSetting('company_header', 'Kalimasada Billing'),
-        company_name: getTenantSetting('company_name', 'Kalimasada Billing'),
+        company_header: getTenantSetting('company_header', tenantName),
+        company_name: getTenantSetting('company_name', tenantName),
         logo_filename: getTenantSetting('logo_filename', 'logo.png'),
         footer_info: getTenantSetting('footer_info', ''),
         contact_phone: getTenantSetting('contact_phone', ''),

@@ -19,6 +19,7 @@ const DEFAULT_CONFIG = {
     central_subdomain: process.env.KALIMASADA_CENTRAL_SUBDOMAIN || 'manage',
     upstream_host: '127.0.0.1',
     upstream_port: Number(process.env.PORT) || 4555,
+    management_upstream_port: Number(process.env.MANAGEMENT_PORT) || Number(process.env.PORT) || 4556,
     listen_port: 80,
     ssl_enabled: false,
     ssl_cert_path: '/etc/letsencrypt/live/kalimasada-app.com/fullchain.pem',
@@ -357,11 +358,18 @@ function generateNginxConfig(cfg, tenantSubdomains) {
     const central = String(cfg.central_subdomain || 'manage').toLowerCase().trim();
     const host = String(cfg.upstream_host || '127.0.0.1').trim();
     const port = Number(cfg.upstream_port) || 4555;
+    const mgmtPort = Number(cfg.management_upstream_port) || port;
+    const splitManagement = mgmtPort > 0 && mgmtPort !== port;
     const listen = Number(cfg.listen_port) || 80;
     const upstreamName = 'kalimasada_app';
+    const mgmtUpstreamName = 'kalimasada_management';
     const subs = getMergedSubdomainsForNginx(cfg, tenantSubdomains || cfg.tenant_subdomains || []);
     const customProxies = getActiveCustomProxies(cfg);
     const serverNames = buildServerNames(cfg, subs);
+    const tenantServerNames = splitManagement
+        ? serverNames.filter((n) => n !== `${central}.${base}`)
+        : serverNames;
+    const centralHost = `${central}.${base}`;
 
     const lines = [];
     lines.push('# Kalimasada SaaS — Nginx reverse proxy (auto-generated)');
@@ -386,6 +394,13 @@ function generateNginxConfig(cfg, tenantSubdomains) {
     lines.push('    keepalive 32;');
     lines.push('}');
     lines.push('');
+    if (splitManagement) {
+        lines.push(`upstream ${mgmtUpstreamName} {`);
+        lines.push(`    server ${host}:${mgmtPort};`);
+        lines.push('    keepalive 16;');
+        lines.push('}');
+        lines.push('');
+    }
 
     const sslReady = isSslReady(cfg);
     if (cfg.ssl_enabled && !sslReady) {
@@ -399,7 +414,7 @@ function generateNginxConfig(cfg, tenantSubdomains) {
         lines.push('server {');
         lines.push('    listen 443 ssl http2;');
         lines.push('    listen [::]:443 ssl http2;');
-        lines.push(`    server_name ${serverNames.join(' ')};`);
+        lines.push(`    server_name ${tenantServerNames.join(' ')};`);
         lines.push(`    ssl_certificate ${sslCheck.certPath};`);
         lines.push(`    ssl_certificate_key ${sslCheck.keyPath};`);
         lines.push('    ssl_protocols TLSv1.2 TLSv1.3;');
@@ -415,7 +430,7 @@ function generateNginxConfig(cfg, tenantSubdomains) {
         lines.push('server {');
         lines.push('    listen 80;');
         lines.push('    listen [::]:80;');
-        lines.push(`    server_name ${serverNames.join(' ')};`);
+        lines.push(`    server_name ${tenantServerNames.join(' ')};`);
         lines.push('');
         lines.push(buildAcmeChallengeBlock());
         lines.push('');
@@ -427,7 +442,7 @@ function generateNginxConfig(cfg, tenantSubdomains) {
         lines.push('server {');
         lines.push(`    listen ${listen};`);
         lines.push(`    listen [::]:${listen};`);
-        lines.push(`    server_name ${serverNames.join(' ')};`);
+        lines.push(`    server_name ${tenantServerNames.join(' ')};`);
         lines.push('');
         lines.push(buildAcmeChallengeBlock());
         lines.push('');
@@ -437,9 +452,58 @@ function generateNginxConfig(cfg, tenantSubdomains) {
         lines.push('}');
     }
 
+    if (splitManagement) {
+        if (sslReady) {
+            const sslCheck = getSslCertPaths(cfg);
+            lines.push('server {');
+            lines.push('    listen 443 ssl http2;');
+            lines.push('    listen [::]:443 ssl http2;');
+            lines.push(`    server_name ${centralHost};`);
+            lines.push(`    ssl_certificate ${sslCheck.certPath};`);
+            lines.push(`    ssl_certificate_key ${sslCheck.keyPath};`);
+            lines.push('    ssl_protocols TLSv1.2 TLSv1.3;');
+            lines.push('    ssl_prefer_server_ciphers on;');
+            lines.push('');
+            lines.push(buildAcmeChallengeBlock());
+            lines.push('');
+            lines.push('    location / {');
+            lines.push(buildProxyBlock(mgmtUpstreamName));
+            lines.push('    }');
+            lines.push('}');
+            lines.push('');
+            lines.push('server {');
+            lines.push('    listen 80;');
+            lines.push('    listen [::]:80;');
+            lines.push(`    server_name ${centralHost};`);
+            lines.push('');
+            lines.push(buildAcmeChallengeBlock());
+            lines.push('');
+            lines.push('    location / {');
+            lines.push('        return 301 https://$host$request_uri;');
+            lines.push('    }');
+            lines.push('}');
+        } else {
+            lines.push('server {');
+            lines.push(`    listen ${listen};`);
+            lines.push(`    listen [::]:${listen};`);
+            lines.push(`    server_name ${centralHost};`);
+            lines.push('');
+            lines.push(buildAcmeChallengeBlock());
+            lines.push('');
+            lines.push('    location / {');
+            lines.push(buildProxyBlock(mgmtUpstreamName));
+            lines.push('    }');
+            lines.push('}');
+        }
+    }
+
     lines.push('');
     lines.push('# Routing:');
-    lines.push(`#   ${central}.${base}  → Management Portal`);
+    if (splitManagement) {
+        lines.push(`#   ${centralHost}  → Management Portal (PM2 kalimasada-saas-management ${host}:${mgmtPort})`);
+    } else {
+        lines.push(`#   ${central}.${base}  → Management Portal`);
+    }
     subs.forEach((sub) => {
         lines.push(`#   ${sub}.${base}  → Tenant: ${sub} (lokal ${host}:${port})`);
     });

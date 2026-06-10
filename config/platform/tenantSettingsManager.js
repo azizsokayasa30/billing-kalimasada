@@ -1,24 +1,47 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const tenantStore = require('./tenantStore');
+const {
+    buildMinimalSettingsForTenant,
+    mergeTenantSettingsForDisplay,
+    scrubLegacyTemplateKeys,
+} = require('./saasTenantSettings');
 
-const TEMPLATE_PATH = path.join(__dirname, '../../settings.server.template.json');
+/** Legacy template — hanya untuk scrub data tenant, BUKAN di-merge ke tenant SaaS. */
+const LEGACY_TEMPLATE_PATH = path.join(__dirname, '../../settings.server.template.json');
+const SAAS_TEMPLATE_PATH = path.join(__dirname, '../../settings.saas.tenant.template.json');
 
-let templateCache = null;
+let legacyTemplateCache = null;
+let saasTemplateCache = null;
 
-function loadTemplateDefaults() {
-    if (templateCache) return { ...templateCache };
+function loadLegacyTemplateForScrub() {
+    if (legacyTemplateCache) return { ...legacyTemplateCache };
     try {
-        if (fs.existsSync(TEMPLATE_PATH)) {
-            templateCache = JSON.parse(fs.readFileSync(TEMPLATE_PATH, 'utf8'));
-            return { ...templateCache };
+        const fs = require('fs');
+        if (fs.existsSync(LEGACY_TEMPLATE_PATH)) {
+            legacyTemplateCache = JSON.parse(fs.readFileSync(LEGACY_TEMPLATE_PATH, 'utf8'));
+            return { ...legacyTemplateCache };
         }
     } catch (e) {
-        console.warn('[tenantSettings] template load failed:', e.message);
+        console.warn('[tenantSettings] legacy template load failed:', e.message);
     }
-    templateCache = {};
+    legacyTemplateCache = {};
+    return {};
+}
+
+function loadTemplateDefaults() {
+    if (saasTemplateCache) return { ...saasTemplateCache };
+    try {
+        const fs = require('fs');
+        if (fs.existsSync(SAAS_TEMPLATE_PATH)) {
+            saasTemplateCache = JSON.parse(fs.readFileSync(SAAS_TEMPLATE_PATH, 'utf8'));
+            return { ...saasTemplateCache };
+        }
+    } catch (e) {
+        console.warn('[tenantSettings] saas template load failed:', e.message);
+    }
+    saasTemplateCache = {};
     return {};
 }
 
@@ -38,35 +61,22 @@ function mergeSettings(defaults, overrides) {
 }
 
 function buildTenantOverrides(tenant) {
-    return {
-        company_header: tenant.name,
-        company_name: tenant.name,
-        app_name: tenant.name,
-        contact_phone: tenant.owner_phone,
-        contact_whatsapp: tenant.owner_phone,
-        footer_info: `© ${new Date().getFullYear()} ${tenant.name}`,
-        admin_username: tenant.settings?.admin_username || 'admin',
-        admin_password: tenant.settings?.admin_password,
-    };
+    return buildMinimalSettingsForTenant(tenant);
 }
 
 async function getFullSettingsForTenantId(tenantId) {
     const tenant = await tenantStore.getTenantById(tenantId);
     if (!tenant) return loadTemplateDefaults();
-    return mergeSettings(loadTemplateDefaults(), {
-        ...buildTenantOverrides(tenant),
-        ...(tenant.settings || {}),
-    });
+    return mergeTenantSettingsForDisplay(tenant);
 }
 
 async function saveFullSettingsForTenantId(tenantId, updates) {
     const tenant = await tenantStore.getTenantById(tenantId);
     if (!tenant) throw new Error('Tenant tidak ditemukan');
 
-    const current = mergeSettings(loadTemplateDefaults(), tenant.settings || {});
+    const current = mergeTenantSettingsForDisplay(tenant);
     const merged = mergeSettings(current, updates);
 
-    // Simpan hanya key yang berbeda dari template + kredensial admin (hemat kolom JSON)
     const toStore = { ...(tenant.settings || {}) };
     Object.keys(merged).forEach((key) => {
         toStore[key] = merged[key];
@@ -83,12 +93,11 @@ async function saveFullSettingsForTenantId(tenantId, updates) {
 }
 
 function seedSettingsForNewTenant(tenant) {
-    const merged = mergeSettings(loadTemplateDefaults(), {
-        ...buildTenantOverrides(tenant),
-        admin_username: 'admin',
-        admin_password: tenant.settings?.admin_password || tenant.admin_password,
-    });
-    return merged;
+    return buildMinimalSettingsForTenant(tenant);
+}
+
+function scrubStoredTenantSettings(stored) {
+    return scrubLegacyTemplateKeys(stored, loadLegacyTemplateForScrub());
 }
 
 module.exports = {
@@ -98,4 +107,5 @@ module.exports = {
     saveFullSettingsForTenantId,
     seedSettingsForNewTenant,
     buildTenantOverrides,
+    scrubStoredTenantSettings,
 };

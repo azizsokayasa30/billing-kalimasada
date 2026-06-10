@@ -10,6 +10,11 @@ const billingManager = require('../../config/billing');
 const AgentManager = require('../../config/agentManager');
 const { sendMessage } = require('../../config/sendMessage');
 const { resolveEmployeePhotoPath, buildPhotoUrl } = require('../../utils/technicianEmployeePhoto');
+const { tenantWhere, getTenantId, hasTenantContext } = require('../../config/platform/tenantSql');
+
+function tw(alias = '') {
+    return tenantWhere(alias);
+}
 
 const agentManager = new AgentManager();
 const dbPath = path.join(__dirname, '../../data/billing.db');
@@ -146,15 +151,16 @@ router.post('/login', async (req, res) => {
     if (!otp) {
         // Try Collector
         if (!role || role === 'collector') {
+            const t = tw('');
             const collector = await new Promise((resolve) => {
-                db.get('SELECT * FROM collectors WHERE (phone = ? OR email = ?) AND status = "active"', [username || phone, username || phone], (err, row) => {
+                db.get(`SELECT * FROM collectors WHERE (phone = ? OR email = ?) AND status = "active"${t.sql}`, [username || phone, username || phone, ...t.params], (err, row) => {
                     resolve(row);
                 });
             });
 
             if (collector && collector.password && bcrypt.compareSync(password, collector.password)) {
                 const token = jwt.sign(
-                    { id: collector.id, username: collector.phone, phone: collector.phone, name: collector.name, role: 'collector' }, 
+                    { id: collector.id, username: collector.phone, phone: collector.phone, name: collector.name, role: 'collector', tenant_id: hasTenantContext() ? getTenantId() : null }, 
                     JWT_SECRET, 
                     { expiresIn: '24h' }
                 );
@@ -186,17 +192,18 @@ router.post('/login', async (req, res) => {
                 (v, i, a) => v && a.indexOf(v) === i
             );
             const techPh = techVariants.map(() => '?').join(',');
+            const tTech = tw('');
             const technician = await new Promise((resolve) => {
                 db.get(
-                    `SELECT * FROM technicians WHERE phone IN (${techPh}) AND is_active = 1`,
-                    techVariants,
+                    `SELECT * FROM technicians WHERE phone IN (${techPh}) AND is_active = 1${tTech.sql}`,
+                    [...techVariants, ...tTech.params],
                     (err, row) => resolve(row)
                 );
             });
 
             if (technician && technician.password && bcrypt.compareSync(password, technician.password)) {
                 const token = jwt.sign(
-                    { id: technician.id, username: technician.phone, phone: technician.phone, name: technician.name, role: 'technician' },
+                    { id: technician.id, username: technician.phone, phone: technician.phone, name: technician.name, role: 'technician', tenant_id: hasTenantContext() ? getTenantId() : null },
                     JWT_SECRET,
                     { expiresIn: '24h' }
                 );
@@ -234,9 +241,10 @@ router.post('/login', async (req, res) => {
             const variants = [normPhone, '+' + normPhone, '0' + normPhone.slice(2)];
             const placeholders = variants.map(() => '?').join(',');
 
+            const tCust = tw('');
             const customer = await new Promise((resolve) => {
-                db.get(`SELECT * FROM customers WHERE (username = ? OR phone IN (${placeholders}) OR customer_id = ?) AND status = 'active'`,
-                    [username || phone, ...variants, username || phone], (err, row) => resolve(row));
+                db.get(`SELECT * FROM customers WHERE (username = ? OR phone IN (${placeholders}) OR customer_id = ?) AND status = 'active'${tCust.sql}`,
+                    [username || phone, ...variants, username || phone, ...tCust.params], (err, row) => resolve(row));
             });
 
             if (customer && customer.password && bcrypt.compareSync(password, customer.password)) {
@@ -249,9 +257,10 @@ router.post('/login', async (req, res) => {
             }
 
             // Try Member (password login)
+            const tMem = tw('');
             const member = await new Promise((resolve) => {
-                db.get(`SELECT * FROM members WHERE (username = ? OR phone IN (${placeholders}) OR hotspot_username = ?) AND status = 'active'`,
-                    [username || phone, ...variants, username || phone], (err, row) => resolve(row));
+                db.get(`SELECT * FROM members WHERE (username = ? OR phone IN (${placeholders}) OR hotspot_username = ?) AND status = 'active'${tMem.sql}`,
+                    [username || phone, ...variants, username || phone, ...tMem.params], (err, row) => resolve(row));
             });
 
             if (member && member.password && bcrypt.compareSync(password, member.password)) {
@@ -281,14 +290,16 @@ router.post('/login', async (req, res) => {
         const placeholders = variants.map(() => '?').join(',');
 
         // Find which role this phone belongs to
+        const tCust = tw('');
+        const tMem = tw('');
         const user = await new Promise((resolve) => {
             const sql = `
-                SELECT id, name, phone, 'customer' as role FROM customers WHERE phone IN (${placeholders}) AND status = 'active'
+                SELECT id, name, phone, 'customer' as role FROM customers WHERE phone IN (${placeholders}) AND status = 'active'${tCust.sql}
                 UNION
-                SELECT id, name, phone, 'member' as role FROM members WHERE phone IN (${placeholders}) AND status = 'active'
+                SELECT id, name, phone, 'member' as role FROM members WHERE phone IN (${placeholders}) AND status = 'active'${tMem.sql}
                 LIMIT 1
             `;
-            db.get(sql, [...variants, ...variants], (err, row) => resolve(row));
+            db.get(sql, [...variants, ...tCust.params, ...variants, ...tMem.params], (err, row) => resolve(row));
         });
 
         if (user) {

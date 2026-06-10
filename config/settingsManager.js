@@ -89,12 +89,32 @@ function loadSettingsFromFile() {
   }
 }
 
+function getTenantSettingsSnapshot() {
+  try {
+    const { hasTenantContext, getTenant } = require('./platform/tenantContext');
+    if (!hasTenantContext()) return null;
+    const tenant = getTenant();
+    if (!tenant?.settings || typeof tenant.settings !== 'object') return {};
+    return { ...tenant.settings };
+  } catch (_) {
+    return null;
+  }
+}
+
 function getSettingsWithCache() {
+  const tenantSettings = getTenantSettingsSnapshot();
+  if (tenantSettings !== null) {
+    return tenantSettings;
+  }
   return loadSettingsFromFile();
 }
 
 function getSetting(key, defaultValue) {
-  const settings = getSettingsWithCache();
+  const tenantSettings = getTenantSettingsSnapshot();
+  if (tenantSettings !== null) {
+    return tenantSettings[key] !== undefined ? tenantSettings[key] : defaultValue;
+  }
+  const settings = loadSettingsFromFile();
   return settings[key] !== undefined ? settings[key] : defaultValue;
 }
 

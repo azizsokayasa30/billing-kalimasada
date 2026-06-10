@@ -45,8 +45,6 @@ router.get('/radius', adminAuth, async (req, res) => {
   try {
     // Ambil dari database, bukan settings.json
     const settings = await getRadiusConfig();
-    // Force mode RADIUS (100% RADIUS mode)
-    settings.user_auth_mode = 'radius';
     
     // Get list of backups
     let backups = [];
@@ -78,7 +76,7 @@ router.get('/radius', adminAuth, async (req, res) => {
     
     res.render('adminRadius', {
       settings: {
-        user_auth_mode: 'radius', // Always RADIUS mode
+        user_auth_mode: 'mikrotik',
         radius_host: 'localhost',
         radius_user: 'billing',
         radius_password: '',
@@ -92,17 +90,20 @@ router.get('/radius', adminAuth, async (req, res) => {
   }
 });
 
+function normalizeAuthMode(raw) {
+  const mode = String(raw || '').trim().toLowerCase();
+  return mode === 'mikrotik' ? 'mikrotik' : 'radius';
+}
+
 // POST: Simpan Setting RADIUS
 router.post('/radius', adminAuth, async (req, res) => {
   try {
-    const { radius_host, radius_user, radius_password, radius_database } = req.body;
-
-    // Force mode RADIUS (100% RADIUS mode - tidak ada opsi Mikrotik API)
-    const user_auth_mode = 'radius';
+    const { radius_host, radius_user, radius_password, radius_database, user_auth_mode } = req.body;
+    const authMode = normalizeAuthMode(user_auth_mode);
 
     // Simpan ke database (app_settings table)
     await saveRadiusConfig({
-      user_auth_mode: user_auth_mode, // Always 'radius'
+      user_auth_mode: authMode,
       radius_host: radius_host ? radius_host.trim() : 'localhost',
       radius_user: radius_user ? radius_user.trim() : 'billing',
       radius_password: radius_password || '',
@@ -111,8 +112,6 @@ router.post('/radius', adminAuth, async (req, res) => {
 
     // Reload untuk ditampilkan
     const settings = await getRadiusConfig();
-    // Force mode RADIUS (100% RADIUS mode)
-    settings.user_auth_mode = 'radius';
     
     // Get list of backups
     let backups = [];
@@ -133,15 +132,12 @@ router.post('/radius', adminAuth, async (req, res) => {
   } catch (e) {
     logger.error('Error saving radius config:', e);
     const settings = await getRadiusConfig().catch(() => ({
-      user_auth_mode: 'radius', // Always RADIUS mode
+      user_auth_mode: 'mikrotik',
       radius_host: 'localhost',
       radius_user: 'radius',
       radius_password: '',
       radius_database: 'radius'
     }));
-    
-    // Force mode RADIUS
-    settings.user_auth_mode = 'radius';
     
     // Get list of backups
     let backups = [];
@@ -158,6 +154,31 @@ router.post('/radius', adminAuth, async (req, res) => {
       page: 'setting-radius',
       error: 'Gagal menyimpan pengaturan RADIUS: ' + e.message,
       success: null
+    });
+  }
+});
+
+// POST: Ganti mode autentikasi (AJAX dari switcher di halaman)
+router.post('/radius/auth-mode', adminAuth, async (req, res) => {
+  try {
+    const authMode = normalizeAuthMode(req.body.user_auth_mode);
+    const current = await getRadiusConfig();
+    await saveRadiusConfig({
+      ...current,
+      user_auth_mode: authMode,
+    });
+    res.json({
+      success: true,
+      user_auth_mode: authMode,
+      message: authMode === 'radius'
+        ? 'Mode autentikasi diubah ke RADIUS'
+        : 'Mode autentikasi diubah ke Mikrotik API',
+    });
+  } catch (e) {
+    logger.error('Error saving auth mode:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal menyimpan mode autentikasi: ' + e.message,
     });
   }
 });
@@ -288,10 +309,13 @@ router.get('/radius/status', adminAuth, async (req, res) => {
       statusMessage = 'Status tidak dapat ditentukan';
     }
 
+    const settings = await getRadiusConfig().catch(() => ({ user_auth_mode: 'mikrotik' }));
+
     res.json({
       success: true,
       status: overallStatus,
       message: statusMessage,
+      user_auth_mode: settings.user_auth_mode || 'mikrotik',
       details: {
         service: {
           status: serviceStatus,
@@ -824,13 +848,13 @@ router.post('/radius/auto-backup-settings', adminAuth, async (req, res) => {
     
     await new Promise((resolve, reject) => {
       db.run(`INSERT INTO app_settings (key, value) VALUES (?, ?)
-              ON CONFLICT(key) DO UPDATE SET value=excluded.value`, 
+              ON CONFLICT(key, tenant_id) DO UPDATE SET value=excluded.value`, 
               ['radius_autobackup_enabled', enabled], (err) => err ? reject(err) : resolve());
     });
     
     await new Promise((resolve, reject) => {
       db.run(`INSERT INTO app_settings (key, value) VALUES (?, ?)
-              ON CONFLICT(key) DO UPDATE SET value=excluded.value`, 
+              ON CONFLICT(key, tenant_id) DO UPDATE SET value=excluded.value`, 
               ['radius_autobackup_interval', interval], (err) => err ? reject(err) : resolve());
     });
     

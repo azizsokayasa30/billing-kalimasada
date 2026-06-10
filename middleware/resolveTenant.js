@@ -2,7 +2,7 @@
 
 const tenantStore = require('../config/platform/tenantStore');
 const { runWithTenant, runAsCentral } = require('../config/platform/tenantContext');
-const { mergeSettings, loadTemplateDefaults } = require('../config/platform/tenantSettingsManager');
+const { mergeTenantSettingsForDisplay } = require('../config/platform/saasTenantSettings');
 
 const enrichedSettingsCache = new Map();
 const ENRICHED_SETTINGS_TTL_MS = 60 * 1000;
@@ -15,7 +15,7 @@ function enrichTenantSettings(tenant) {
         tenant.settings = hit.settings;
         return tenant;
     }
-    const merged = mergeSettings(loadTemplateDefaults(), tenant.settings || {});
+    const merged = mergeTenantSettingsForDisplay(tenant);
     tenant.settings = merged;
     enrichedSettingsCache.set(cacheKey, { settings: merged, ts: Date.now() });
     return tenant;
@@ -143,10 +143,9 @@ function resolveTenantMiddleware(req, res, next) {
             tenant = await resolveTenantForDirectHost(req, headerTenant);
         }
 
-        // Fallback legacy single-tenant hanya untuk request tanpa sesi tenant
-        if (!tenant && !req.path.startsWith('/login') && !req.session?.tenantId) {
-            tenant = await tenantStore.getTenantById(1);
-        }
+        // STRICT ISOLATION: tidak ada fallback diam-diam ke tenant 1.
+        // Host yang tidak dikenal / tanpa konteks tenant harus eksplisit
+        // (subdomain, ?tenant=slug, X-Tenant header, atau sesi login).
 
         if (!tenant) {
             if (req.path.startsWith('/login')) {

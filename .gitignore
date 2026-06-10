@@ -9,6 +9,7 @@ yarn-error.log*
 data/billing.db
 data/billing.db-wal
 data/billing.db-shm
+data/backups/
 /billing.db
 /database.sqlite
 config/database.sqlite

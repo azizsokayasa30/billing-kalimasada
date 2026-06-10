@@ -2,6 +2,13 @@ const express = require('express');
 const router = express.Router();
 const { adminAuth } = require('./adminAuth');
 const { getSettingsWithCache } = require('../config/settingsManager');
+const { getTenantId, hasTenantContext } = require('../config/platform/tenantContext');
+
+function tenantRouterWhere(alias = '') {
+    const col = alias ? `${alias}.tenant_id` : 'tenant_id';
+    if (!hasTenantContext()) return { sql: '', params: [] };
+    return { sql: ` AND ${col} = ?`, params: [getTenantId()] };
+}
 
 // Setting Mikrotik page (NAS/Routers only)
 router.get('/connection-settings', adminAuth, async (req, res) => {
@@ -9,7 +16,8 @@ router.get('/connection-settings', adminAuth, async (req, res) => {
     const db = require('../config/billing').db;
     
     // Ensure routers table exists
-    await new Promise((resolve) => db.run(`CREATE TABLE IF NOT EXISTS routers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, nas_ip TEXT NOT NULL, nas_identifier TEXT, secret TEXT, location TEXT, pop TEXT, port INTEGER, user TEXT, password TEXT, genieacs_server_id INTEGER, UNIQUE(nas_ip))`, () => resolve()));
+    await new Promise((resolve) => db.run(`CREATE TABLE IF NOT EXISTS routers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, nas_ip TEXT NOT NULL, nas_identifier TEXT, secret TEXT, location TEXT, pop TEXT, port INTEGER, user TEXT, password TEXT, genieacs_server_id INTEGER, tenant_id INTEGER NOT NULL DEFAULT 1, UNIQUE(nas_ip))`, () => resolve()));
+    db.run(`ALTER TABLE routers ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`, () => {});
     
     // Best-effort schema extension for existing installs
     db.run(`ALTER TABLE routers ADD COLUMN location TEXT`, () => {});
@@ -38,12 +46,14 @@ router.get('/connection-settings', adminAuth, async (req, res) => {
       });
     });
     
-    // Get routers with GenieACS server info
+    // Get routers with GenieACS server info (scoped per tenant)
+    const scope = tenantRouterWhere('r');
     const routers = await new Promise((resolve) => {
       db.all(`SELECT r.*, g.name as genieacs_server_name, g.url as genieacs_server_url 
               FROM routers r 
               LEFT JOIN genieacs_servers g ON r.genieacs_server_id = g.id 
-              ORDER BY r.id`, (err, rows) => {
+              WHERE 1=1${scope.sql}
+              ORDER BY r.id`, scope.params, (err, rows) => {
         resolve(rows || []);
       });
     });

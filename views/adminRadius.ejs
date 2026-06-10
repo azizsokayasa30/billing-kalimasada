@@ -26,6 +26,30 @@
       transform: scale(1.1);
       box-shadow: 0 3px 6px rgba(0,0,0,0.15);
     }
+    .auth-mode-card {
+      border-left: 4px solid var(--bs-primary);
+    }
+    .auth-mode-card.mode-radius {
+      border-left-color: #0d6efd;
+    }
+    .auth-mode-card.mode-mikrotik {
+      border-left-color: #fd7e14;
+    }
+    .auth-mode-switcher .btn-check:checked + .btn-outline-primary {
+      background-color: #0d6efd;
+      border-color: #0d6efd;
+      color: #fff;
+    }
+    .auth-mode-switcher .btn-check:checked + .btn-outline-warning {
+      background-color: #fd7e14;
+      border-color: #fd7e14;
+      color: #fff;
+    }
+    .radius-only-section.is-disabled {
+      opacity: 0.55;
+      pointer-events: none;
+      user-select: none;
+    }
   </style>
 
     <%- include('partials/theme-head') %>
@@ -35,15 +59,56 @@
   <div class="row">
     <%- include('partials/admin-responsive-sidebar', { page: 'setting-radius', settings: settings }) %>
     <main class="col-md-10 ms-sm-auto main-content">
-      <div class="d-flex justify-content-between align-items-center mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h3 class="mb-0"><i class="bi bi-gear-wide-connected"></i> Setting RADIUS</h3>
-        <!-- Status Indicator -->
-        <div class="d-flex align-items-center">
-          <span class="me-2">Status:</span>
-          <div id="radiusStatusIndicator" class="radius-status-indicator" style="width: 24px; height: 24px; border-radius: 4px; display: inline-block; background-color: #6c757d; transition: background-color 0.3s;">
-            <span class="visually-hidden">Loading status...</span>
+        <div class="d-flex align-items-center flex-wrap gap-3">
+          <div class="d-flex align-items-center">
+            <span class="me-2 small text-muted">FreeRADIUS:</span>
+            <div id="radiusStatusIndicator" class="radius-status-indicator">
+              <span class="visually-hidden">Loading status...</span>
+            </div>
+            <span id="radiusStatusText" class="ms-2 small text-muted">Memuat...</span>
           </div>
-          <span id="radiusStatusText" class="ms-2 small text-muted">Memuat...</span>
+        </div>
+      </div>
+      <% const authMode = (settings.user_auth_mode === 'radius') ? 'radius' : 'mikrotik'; %>
+      <div class="card p-3 shadow-sm mb-3 auth-mode-card mode-<%= authMode %>" id="authModeCard">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+          <div>
+            <h5 class="mb-1"><i class="bi bi-shuffle"></i> Mode Autentikasi User</h5>
+            <p class="text-muted mb-2 small">
+              Menentukan apakah user PPPoE/Hotspot dikelola lewat database RADIUS atau langsung via MikroTik API.
+            </p>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="small text-muted">Status aktif:</span>
+              <span id="authModeBadge" class="badge <%= authMode === 'radius' ? 'bg-primary' : 'bg-warning text-dark' %>">
+                <i class="bi <%= authMode === 'radius' ? 'bi-broadcast' : 'bi-router' %>"></i>
+                <%= authMode === 'radius' ? 'Mode RADIUS' : 'Mode Mikrotik API' %>
+              </span>
+              <span id="authModeSaveHint" class="small text-muted"></span>
+            </div>
+          </div>
+          <div class="auth-mode-switcher">
+            <div class="btn-group" role="group" aria-label="Mode autentikasi">
+              <input type="radio" class="btn-check" name="authModeSwitch" id="authModeMikrotik" value="mikrotik" autocomplete="off" <%= authMode === 'mikrotik' ? 'checked' : '' %>>
+              <label class="btn btn-outline-warning btn-sm" for="authModeMikrotik">
+                <i class="bi bi-router"></i> Mikrotik API
+              </label>
+              <input type="radio" class="btn-check" name="authModeSwitch" id="authModeRadius" value="radius" autocomplete="off" <%= authMode === 'radius' ? 'checked' : '' %>>
+              <label class="btn btn-outline-primary btn-sm" for="authModeRadius">
+                <i class="bi bi-broadcast"></i> RADIUS
+              </label>
+            </div>
+          </div>
+        </div>
+        <div id="authModeDescription" class="alert <%= authMode === 'radius' ? 'alert-info' : 'alert-warning' %> mb-0 mt-3 py-2 small">
+          <% if (authMode === 'radius') { %>
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Mode RADIUS:</strong> User PPPoE/Hotspot disinkronkan ke database RADIUS (radcheck, radusergroup). MikroTik hanya sebagai NAS client.
+          <% } else { %>
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <strong>Mode Mikrotik API:</strong> User dikelola langsung di router via API MikroTik. Konfigurasi RADIUS di bawah tidak dipakai untuk provisioning user.
+          <% } %>
         </div>
       </div>
       <% if (error) { %>
@@ -53,14 +118,8 @@
         <div class="alert alert-success"><%= success %></div>
       <% } %>
 
-      <form method="post" action="/admin/radius" class="card p-3 shadow-sm">
-        <!-- Hidden field: Mode selalu RADIUS (100% RADIUS mode) -->
-        <input type="hidden" name="user_auth_mode" value="radius">
-        
-        <div class="alert alert-info mb-3">
-          <i class="bi bi-info-circle me-2"></i>
-          <strong>Mode RADIUS 100%:</strong> Sistem ini menggunakan mode RADIUS sepenuhnya. Semua operasi user management dilakukan melalui database RADIUS.
-        </div>
+      <form method="post" action="/admin/radius" class="card p-3 shadow-sm" id="radiusConfigForm">
+        <input type="hidden" name="user_auth_mode" id="userAuthModeInput" value="<%= authMode %>">
         
         <div class="row">
           <div class="col-md-6">
@@ -98,7 +157,7 @@
       </form>
 
       <!-- Test Connection & Manage Clients in 2 columns -->
-      <div class="row mt-3">
+      <div class="row mt-3 radius-only-section" id="radiusToolsSection">
         <div class="col-md-6">
           <div class="card p-3 shadow-sm">
             <h5 class="mb-3"><i class="bi bi-plug"></i> Test Koneksi</h5>
@@ -130,7 +189,7 @@
       </div>
 
       <!-- Sync Password Section -->
-      <div class="row mt-3">
+      <div class="row mt-3 radius-only-section">
         <div class="col-12">
           <div class="card p-3 shadow-sm">
             <h5 class="mb-3"><i class="bi bi-key"></i> Sinkronisasi Password FreeRADIUS</h5>
@@ -159,7 +218,7 @@
       </div>
 
       <!-- Backup & Restore Section -->
-      <div class="row mt-3">
+      <div class="row mt-3 radius-only-section">
         <div class="col-12">
           <div class="card p-3 shadow-sm">
             <h5 class="mb-3"><i class="bi bi-database"></i> Backup & Restore RADIUS</h5>
@@ -284,8 +343,78 @@
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script>
 $(document).ready(function() {
+  let currentAuthMode = '<%= authMode %>';
+
+  function applyAuthModeUi(mode) {
+    currentAuthMode = mode;
+    const isRadius = mode === 'radius';
+    $('#userAuthModeInput').val(mode);
+    $('#authModeCard')
+      .removeClass('mode-radius mode-mikrotik')
+      .addClass(isRadius ? 'mode-radius' : 'mode-mikrotik');
+    $('#authModeBadge')
+      .removeClass('bg-primary bg-warning text-dark')
+      .addClass(isRadius ? 'bg-primary' : 'bg-warning text-dark')
+      .html(
+        '<i class="bi ' + (isRadius ? 'bi-broadcast' : 'bi-router') + '"></i> ' +
+        (isRadius ? 'Mode RADIUS' : 'Mode Mikrotik API')
+      );
+    $('#authModeDescription')
+      .removeClass('alert-info alert-warning')
+      .addClass(isRadius ? 'alert-info' : 'alert-warning')
+      .html(
+        isRadius
+          ? '<i class="bi bi-info-circle me-1"></i><strong>Mode RADIUS:</strong> User PPPoE/Hotspot disinkronkan ke database RADIUS (radcheck, radusergroup). MikroTik hanya sebagai NAS client.'
+          : '<i class="bi bi-exclamation-triangle me-1"></i><strong>Mode Mikrotik API:</strong> User dikelola langsung di router via API MikroTik. Konfigurasi RADIUS di bawah tidak dipakai untuk provisioning user.'
+      );
+    $('.radius-only-section').toggleClass('is-disabled', !isRadius);
+    if (!isRadius) {
+      $('#radiusStatusText').text('Mode Mikrotik — FreeRADIUS opsional').removeClass('text-success text-warning text-danger').addClass('text-muted');
+      $('#radiusStatusIndicator').css('background-color', '#fd7e14');
+    } else {
+      checkRadiusStatus();
+    }
+  }
+
+  applyAuthModeUi(currentAuthMode);
+
+  $('input[name="authModeSwitch"]').on('change', function() {
+    const newMode = $(this).val();
+    if (newMode === currentAuthMode) return;
+
+    const prevMode = currentAuthMode;
+    $('input[name="authModeSwitch"]').prop('disabled', true);
+    $('#authModeSaveHint').text('Menyimpan...').removeClass('text-success text-danger').addClass('text-muted');
+
+    $.ajax({
+      url: '/admin/radius/auth-mode',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ user_auth_mode: newMode }),
+      success: function(response) {
+        if (response.success) {
+          applyAuthModeUi(response.user_auth_mode || newMode);
+          $('#authModeSaveHint').text('Tersimpan').removeClass('text-muted text-danger').addClass('text-success');
+          setTimeout(function() { $('#authModeSaveHint').text(''); }, 2500);
+        } else {
+          $('input[name="authModeSwitch"][value="' + prevMode + '"]').prop('checked', true);
+          $('#authModeSaveHint').text(response.message || 'Gagal menyimpan').addClass('text-danger');
+        }
+      },
+      error: function(xhr) {
+        $('input[name="authModeSwitch"][value="' + prevMode + '"]').prop('checked', true);
+        const msg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Gagal menyimpan mode';
+        $('#authModeSaveHint').text(msg).addClass('text-danger');
+      },
+      complete: function() {
+        $('input[name="authModeSwitch"]').prop('disabled', false);
+      }
+    });
+  });
+
   // Function to check and update RADIUS status
   function checkRadiusStatus() {
+    if (currentAuthMode !== 'radius') return;
     $.ajax({
       url: '/admin/radius/status',
       method: 'GET',
@@ -295,6 +424,10 @@ $(document).ready(function() {
         const statusText = $('#radiusStatusText');
         
         if (response.success) {
+          if (response.user_auth_mode && response.user_auth_mode !== currentAuthMode) {
+            applyAuthModeUi(response.user_auth_mode);
+            $('input[name="authModeSwitch"][value="' + response.user_auth_mode + '"]').prop('checked', true);
+          }
           // Update indicator color based on status
           if (response.status === 'running') {
             // Hijau = Status Radius Running Normal

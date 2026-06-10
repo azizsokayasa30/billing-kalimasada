@@ -108,40 +108,41 @@
             margin-top: 4px;
         }
         
-        /* Card Colors - Solid Backgrounds like Image 2 */
-        .metric-card-primary {
-            --card-bg-color: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        /* Card statistik PPPoE — background solid (bukan gradient) */
+        .page-admin-mikrotik .metric-card-primary {
+            --card-bg-color: #7c3aed;
+            background: #7c3aed !important;
         }
-        
-        .metric-card-success {
-            --card-bg-color: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+
+        .page-admin-mikrotik .metric-card-success {
+            --card-bg-color: #16a34a;
+            background: #16a34a !important;
         }
-        
-        .metric-card-danger {
-            --card-bg-color: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
-            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+
+        .page-admin-mikrotik .metric-card-danger {
+            --card-bg-color: #dc2626;
+            background: #dc2626 !important;
         }
-        
-        .metric-card-info {
-            --card-bg-color: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
-            background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+
+        .page-admin-mikrotik .metric-card-info {
+            --card-bg-color: #2563eb;
+            background: #2563eb !important;
         }
-        
-        .metric-card-warning {
-            --card-bg-color: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
-            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+
+        [data-theme="dark"] .page-admin-mikrotik .metric-card-primary {
+            background: #6d28d9 !important;
         }
-        
-        .metric-card-pink {
-            --card-bg-color: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
-            background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
+
+        [data-theme="dark"] .page-admin-mikrotik .metric-card-success {
+            background: #15803d !important;
         }
-        
-        .metric-card-teal {
-            --card-bg-color: linear-gradient(135deg, #14b8a6 0%, #5eead4 100%);
-            background: linear-gradient(135deg, #14b8a6 0%, #5eead4 100%);
+
+        [data-theme="dark"] .page-admin-mikrotik .metric-card-danger {
+            background: #b91c1c !important;
+        }
+
+        [data-theme="dark"] .page-admin-mikrotik .metric-card-info {
+            background: #1d4ed8 !important;
         }
         .spin {
             animation: spin 1s linear infinite;
@@ -194,7 +195,7 @@
 
     <%- include('partials/theme-head') %>
 </head>
-<body>
+<body class="page-admin-mikrotik">
 <div class="container-fluid">
     <div class="row">
         <!-- Include Responsive Admin Sidebar -->

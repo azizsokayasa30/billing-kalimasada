@@ -17,6 +17,12 @@ let _radiusOpQueue = Promise.resolve();
 let _readOnlyConn = null;
 let _readOnlyPath = null;
 let _schemaInitialized = false;
+let _tenantColumnsReady = false;
+
+const {
+    applyRadiusTenantScope,
+    resolveRadiusTenantId,
+} = require('./platform/radiusTenantScope');
 
 /** Retry saat SQLITE_BUSY — cap rendah agar simpan user di UI tidak menunggu puluhan detik. */
 const BUSY_MAX_ATTEMPTS = 3;
@@ -147,46 +153,51 @@ class RADIUSDatabase {
         const schema = [
             `CREATE TABLE IF NOT EXISTS radcheck (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL DEFAULT 1,
                 username TEXT NOT NULL DEFAULT '',
                 attribute TEXT NOT NULL DEFAULT '',
                 op TEXT NOT NULL DEFAULT '==',
                 value TEXT NOT NULL DEFAULT '',
-                UNIQUE(username, attribute)
+                UNIQUE(tenant_id, username, attribute)
             )`,
             `CREATE INDEX IF NOT EXISTS idx_radcheck_username ON radcheck (username)`,
             `CREATE TABLE IF NOT EXISTS radreply (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL DEFAULT 1,
                 username TEXT NOT NULL DEFAULT '',
                 attribute TEXT NOT NULL DEFAULT '',
                 op TEXT NOT NULL DEFAULT '=',
                 value TEXT NOT NULL DEFAULT '',
-                UNIQUE(username, attribute)
+                UNIQUE(tenant_id, username, attribute)
             )`,
             `CREATE INDEX IF NOT EXISTS idx_radreply_username ON radreply (username)`,
             `CREATE TABLE IF NOT EXISTS radgroupcheck (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL DEFAULT 1,
                 groupname TEXT NOT NULL DEFAULT '',
                 attribute TEXT NOT NULL DEFAULT '',
                 op TEXT NOT NULL DEFAULT '==',
                 value TEXT NOT NULL DEFAULT '',
-                UNIQUE(groupname, attribute)
+                UNIQUE(tenant_id, groupname, attribute)
             )`,
             `CREATE INDEX IF NOT EXISTS idx_radgroupcheck_groupname ON radgroupcheck (groupname)`,
             `CREATE TABLE IF NOT EXISTS radgroupreply (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL DEFAULT 1,
                 groupname TEXT NOT NULL DEFAULT '',
                 attribute TEXT NOT NULL DEFAULT '',
                 op TEXT NOT NULL DEFAULT '=',
                 value TEXT NOT NULL DEFAULT '',
-                UNIQUE(groupname, attribute)
+                UNIQUE(tenant_id, groupname, attribute)
             )`,
             `CREATE INDEX IF NOT EXISTS idx_radgroupreply_groupname ON radgroupreply (groupname)`,
             `CREATE TABLE IF NOT EXISTS radusergroup (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL DEFAULT 1,
                 username TEXT NOT NULL DEFAULT '',
                 groupname TEXT NOT NULL DEFAULT '',
                 priority INTEGER NOT NULL DEFAULT 1,
-                UNIQUE(username, groupname)
+                UNIQUE(tenant_id, username, groupname)
             )`,
             `CREATE INDEX IF NOT EXISTS idx_radusergroup_username ON radusergroup (username)`,
             `CREATE TABLE IF NOT EXISTS radacct (
@@ -234,6 +245,7 @@ class RADIUSDatabase {
             )`,
             `CREATE TABLE IF NOT EXISTS nas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL DEFAULT 1,
                 nasname TEXT NOT NULL,
                 shortname TEXT,
                 type TEXT DEFAULT 'other',
@@ -242,7 +254,7 @@ class RADIUSDatabase {
                 server TEXT,
                 community TEXT,
                 description TEXT DEFAULT 'RADIUS Client',
-                UNIQUE(nasname)
+                UNIQUE(tenant_id, nasname)
             )`
         ];
 
@@ -256,8 +268,69 @@ class RADIUSDatabase {
                 });
             });
         }
+        await this.ensureRadiusTenantColumns();
         _schemaInitialized = true;
         logger.info('[RADIUS-SQLITE] Schema initialized');
+    }
+
+    async ensureRadiusTenantColumns() {
+        if (_tenantColumnsReady) return;
+        const TENANT_SCOPED_TABLES = ['radcheck', 'radreply', 'radusergroup', 'radgroupcheck', 'radgroupreply', 'nas'];
+        for (const table of TENANT_SCOPED_TABLES) {
+            try {
+                await new Promise((resolve, reject) => {
+                    this.db.run(`ALTER TABLE ${table} ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`, (err) => {
+                        if (err && !/duplicate column/i.test(err.message)) reject(err);
+                        else resolve();
+                    });
+                });
+            } catch (err) {
+                logger.warn(`[RADIUS-SQLITE] tenant_id migration (${table}): ${err.message}`);
+            }
+            try {
+                await new Promise((resolve, reject) => {
+                    this.db.run(
+                        `CREATE INDEX IF NOT EXISTS idx_${table}_tenant_id ON ${table} (tenant_id)`,
+                        (err) => (err ? reject(err) : resolve())
+                    );
+                });
+            } catch (_) {}
+        }
+        _tenantColumnsReady = true;
+    }
+
+    _applyTenantScope(sql, params = []) {
+        const scoped = applyRadiusTenantScope(sql, params);
+        let outSql = scoped.sql;
+        let outParams = scoped.params;
+        const tenantId = resolveRadiusTenantId();
+
+        const insertMatch = outSql.match(
+            /INSERT\s+INTO\s+(radcheck|radreply|radusergroup|radgroupcheck|radgroupreply|nas)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i
+        );
+        if (insertMatch && !/tenant_id/i.test(insertMatch[2])) {
+            const table = insertMatch[1];
+            outSql = outSql.replace(
+                new RegExp(`INSERT\\s+INTO\\s+${table}\\s*\\(([^)]+)\\)`, 'i'),
+                `INSERT INTO ${table} (tenant_id, $1)`
+            );
+            outSql = outSql.replace(/VALUES\s*\(([^)]+)\)/i, 'VALUES (?, $1)');
+            outParams = [tenantId, ...outParams];
+            if (/ON CONFLICT\s*\(\s*username\s*,\s*attribute\s*\)/i.test(outSql)) {
+                outSql = outSql.replace(
+                    /ON CONFLICT\s*\(\s*username\s*,\s*attribute\s*\)/gi,
+                    'ON CONFLICT(tenant_id, username, attribute)'
+                );
+            }
+            if (/ON CONFLICT\s*\(\s*username\s*,\s*groupname\s*\)/i.test(outSql)) {
+                outSql = outSql.replace(
+                    /ON CONFLICT\s*\(\s*username\s*,\s*groupname\s*\)/gi,
+                    'ON CONFLICT(tenant_id, username, groupname)'
+                );
+            }
+        }
+
+        return { sql: outSql, params: outParams };
     }
 
     _normalizeSql(sql) {
@@ -267,9 +340,12 @@ class RADIUSDatabase {
             .replace(/TIMESTAMPDIFF\(SECOND, ([^,]+), ([^)]+)\)/gi, "(strftime('%s', $2) - strftime('%s', $1))");
 
         if (sqliteSQL.includes('radcheck') && sqliteSQL.includes('ON CONFLICT')) {
+            const conflictKey = /tenant_id/i.test(sqliteSQL)
+                ? '(tenant_id, username, attribute)'
+                : '(username, attribute)';
             sqliteSQL = sqliteSQL.replace(/INSERT INTO radcheck \((.*?)\) VALUES \((.*?)\) ON CONFLICT DO UPDATE SET (.*)/i,
                 (match, cols, vals, update) => {
-                    return `INSERT INTO radcheck (${cols}) VALUES (${vals}) ON CONFLICT(username, attribute) DO UPDATE SET ${update}`;
+                    return `INSERT INTO radcheck (${cols}) VALUES (${vals}) ON CONFLICT${conflictKey} DO UPDATE SET ${update}`;
                 }
             );
         }
@@ -311,6 +387,10 @@ class RADIUSDatabase {
     }
 
     async _executeWithRetry(sql, params = [], maxAttempts = BUSY_MAX_ATTEMPTS) {
+        const scoped = this._applyTenantScope(sql, params);
+        sql = scoped.sql;
+        params = scoped.params;
+
         if (!isReadOnlySql(sql) && !this.db) {
             await this.connect();
         }

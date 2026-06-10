@@ -4,7 +4,10 @@ const fsPromises = fs.promises;
 const path = require('path');
 const router = express.Router();
 const multer = require('multer');
-const { getSettingsWithCache, deleteSetting, clearSettingsCache } = require('../config/settingsManager');
+const {
+    getSettingsWithCache, deleteSetting, clearSettingsCache,
+} = require('../config/settingsManager');
+const { emptyPaymentSettings } = require('../config/platform/saasTenantSettings');
 const { getVersionInfo, getVersionBadge } = require('../config/version-utils');
 const logger = require('../config/logger');
 const { logAdminActivity, getActivityLogs, clearOldActivityLogs } = require('../config/activityLogger');
@@ -185,6 +188,7 @@ router.get('/data', async (req, res) => {
         if (settings.admin_session_timeout_minutes === undefined) {
             settings.admin_session_timeout_minutes = 60;
         }
+        Object.assign(settings, emptyPaymentSettings(), settings);
 
         // Hapus legacy payment gateway entries agar tidak tampil lagi di UI ini
         if (settings.payment_gateway) {
@@ -889,7 +893,7 @@ router.post('/auto-backup-settings', async (req, res) => {
         await new Promise((resolve, reject) => {
             billing.db.run(
                 `INSERT INTO app_settings (key, value) VALUES (?, ?)
-                 ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+                 ON CONFLICT(key, tenant_id) DO UPDATE SET value=excluded.value`,
                 ['billing_autobackup_enabled', enabled],
                 (err) => (err ? reject(err) : resolve())
             );
@@ -898,7 +902,7 @@ router.post('/auto-backup-settings', async (req, res) => {
         await new Promise((resolve, reject) => {
             billing.db.run(
                 `INSERT INTO app_settings (key, value) VALUES (?, ?)
-                 ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+                 ON CONFLICT(key, tenant_id) DO UPDATE SET value=excluded.value`,
                 ['billing_autobackup_interval', String(interval)],
                 (err) => (err ? reject(err) : resolve())
             );

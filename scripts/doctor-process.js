@@ -80,13 +80,13 @@ function main() {
   console.log('');
   console.log('One-shot fix command (copy-paste):');
   if (foreign.length > 0) {
-    console.log(`sudo kill ${foreignPids} && pm2 restart billing-kalimasada --update-env`);
+    console.log(`sudo kill ${foreignPids} && npm run pm2:restart:all`);
   } else {
-    console.log('pm2 restart billing-kalimasada --update-env');
+    console.log('npm run pm2:restart:all');
   }
   console.log('');
   console.log('Alternatif paksa (jika masih membandel):');
-  console.log(`sudo pkill -f "${appPath}" && pm2 start ecosystem.config.cjs --only billing-kalimasada --update-env`);
+  console.log(`sudo pkill -f "${appPath}" && pm2 start ecosystem.config.cjs --update-env`);
 }
 
 main();

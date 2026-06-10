@@ -1,6 +1,9 @@
 <%
 // Force app version to a single consistent value across all pages/sidebar states.
 const FORCED_APP_VERSION = 'v5.9';
+const sidebarBrandName = (typeof settings !== 'undefined' && (settings.company_header || settings.company_name || settings.app_name))
+  ? (settings.company_header || settings.company_name || settings.app_name)
+  : (typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : 'Kalimasada Billing');
 %>
 <!-- Global Card Color System — loads on every page that includes this sidebar -->
 <link href="/css/card-system.css?v=1" rel="stylesheet">
@@ -14,7 +17,7 @@ const FORCED_APP_VERSION = 'v5.9';
             </button>
             <img src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?ts=<%= Date.now() %>" alt="Logo" style="height: 28px; border-radius: 6px;">
             <div class="d-flex flex-column ms-2">
-                <span style="font-size: 14px; font-weight: 700; color: var(--sb-text);"><%= typeof settings !== 'undefined' && settings.company_header ? settings.company_header : (typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : 'KALIMASADA') %></span>
+                <span style="font-size: 14px; font-weight: 700; color: var(--sb-text);"><%= sidebarBrandName %></span>
                 <small style="font-size: 10px; color: var(--sb-subtle);">Admin Panel</small>
             </div>
         </div>
@@ -44,7 +47,7 @@ const FORCED_APP_VERSION = 'v5.9';
             <img id="logoImage" src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?v=<%= new Date().getTime() %>" alt="Logo" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
         </div>
         <div class="sb-brand">
-            <span class="sb-brand-name"><%= typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'KALIMASADA') %></span>
+            <span class="sb-brand-name"><%= sidebarBrandName %></span>
             <span class="sb-brand-tag">Admin Panel</span>
         </div>
     </div>

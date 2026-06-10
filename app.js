@@ -8,6 +8,16 @@ process.env.TZ = 'Asia/Jakarta';
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 // ==========================================
+// AUTO TENANT ISOLATION — harus terpasang sebelum module lain
+// membuka koneksi sqlite, agar SEMUA query billing.db otomatis
+// difilter per-tenant (lihat config/platform/billingTenantScope.js)
+// ==========================================
+require('./config/platform/billingTenantScope').installBillingTenantScope();
+
+const KALIMASADA_PM2_ROLE = process.env.KALIMASADA_PM2_ROLE || 'tenant';
+const DISABLE_BACKGROUND_JOBS = process.env.KALIMASADA_DISABLE_BACKGROUND_JOBS === '1';
+
+// ==========================================
 // GLOBAL CRASH GUARD — harus dipasang sedini mungkin
 // Mencegah crash dari error non-fatal di module eksternal
 // (WhatsApp, Mikrotik, DB connection, dll)
@@ -117,6 +127,7 @@ console.log('🚀 [BOOTSTRAP] CVLMEDIA Application is starting...');
 console.log(`🚀 [BOOTSTRAP] Current working directory: ${process.cwd()}`);
 console.log(`🚀 [BOOTSTRAP] NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`🚀 [BOOTSTRAP] PORT from ENV: ${process.env.PORT}`);
+console.log(`🚀 [BOOTSTRAP] PM2 role: ${KALIMASADA_PM2_ROLE}${DISABLE_BACKGROUND_JOBS ? ' (background jobs OFF)' : ''}`);
 console.log(`⏰ [BOOTSTRAP] Timezone locked to: ${process.env.TZ} (WIB UTC+7)`);
 const whatsapp = (() => {
   try {
@@ -139,8 +150,8 @@ const { getSetting } = require('./config/settingsManager');
 const { getServerTimezone } = require('./config/settingsManager');
 logger.info(`⏰ Application timezone confirmed: ${process.env.TZ} (WIB - Waktu Indonesia Barat)`);
 
-// Import invoice scheduler
-const invoiceScheduler = require('./config/scheduler');
+// Import invoice scheduler (nonaktif di proses management-only PM2)
+const invoiceScheduler = DISABLE_BACKGROUND_JOBS ? null : require('./config/scheduler');
 
 // Bersihkan backup database lama — sisakan 3 file terbaru
 try {
@@ -208,8 +219,10 @@ const technicianSync = {
     }
 };
 
-// Start technician sync service
-technicianSync.start();
+// Start technician sync service (tenant process only)
+if (!DISABLE_BACKGROUND_JOBS) {
+    technicianSync.start();
+}
 
 // Import collector sync service
 const collectorSync = {
@@ -307,9 +320,6 @@ const collectorSync = {
     }
 };
 
-// Start collector sync service
-collectorSync.start();
-
 // Import voucher sync service
 const voucherSync = {
     start() {
@@ -350,9 +360,6 @@ const voucherSync = {
         console.log('🔄 Voucher system sync enabled');
     }
 };
-
-// Start voucher sync service
-voucherSync.start();
 
 // Import employee sync service
 const employeeSync = {
@@ -485,9 +492,6 @@ const employeeSync = {
     }
 };
 
-// Start employee sync service
-employeeSync.start();
-
 // Warehouse (manajemen gudang) — tabel di billing.db
 const warehouseSync = {
     start() {
@@ -557,7 +561,13 @@ const warehouseSync = {
         console.log('📦 Warehouse module sync enabled');
     }
 };
-warehouseSync.start();
+
+if (!DISABLE_BACKGROUND_JOBS) {
+    collectorSync.start();
+    voucherSync.start();
+    employeeSync.start();
+    warehouseSync.start();
+}
 
 // Inisialisasi aplikasi Express
 const app = express();
@@ -695,6 +705,24 @@ app.use((req, res, next) => {
 });
 
 app.use(resolveTenantMiddleware);
+
+// Branding sidebar konsisten di semua halaman admin tenant
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/admin')) return next();
+  try {
+    const { hasTenantContext, getTenant } = require('./config/platform/tenantContext');
+    const { getSettingsWithCache } = require('./config/settingsManager');
+    const { getVersionInfo } = require('./config/version-utils');
+    const { pickSidebarBranding } = require('./config/platform/saasTenantSettings');
+    const tenantName = hasTenantContext() ? (getTenant()?.name || 'Kalimasada Billing') : 'Kalimasada Billing';
+    res.locals.settings = pickSidebarBranding(getSettingsWithCache(), tenantName);
+    res.locals.versionInfo = getVersionInfo();
+  } catch (_) { /* abaikan */ }
+  return next();
+});
+
+// Route Login Terpusat — mount early so login is not blocked by heavy admin route stack
+app.use('/login', unifiedAuthRouter);
 
 // Route khusus untuk login mobile (harus sebelum semua route admin)
 app.get('/admin/login/mobile', (req, res) => {
@@ -978,9 +1006,6 @@ app.get('/', (req, res) => {
   res.redirect('/login');
 });
 
-// Route Login Terpusat
-app.use('/login', unifiedAuthRouter);
-
 // Import PPPoE monitoring modules
 const pppoeMonitor = require('./config/pppoe-monitor');
 const pppoeCommands = require('./config/pppoe-commands');
@@ -1224,7 +1249,8 @@ app.use('/collector', collectorAuthRouter);
 const collectorDashboardRouter = require('./routes/collectorDashboard');
 app.use('/collector', collectorDashboardRouter);
 
-// Inisialisasi WhatsApp Provider Manager (Baileys/Wablas/Meta/Qontak)
+// Inisialisasi WhatsApp Provider Manager (Baileys/Wablas/Meta/Qontak) — tenant process only
+if (!DISABLE_BACKGROUND_JOBS) {
 try {
     const { getProviderManager } = require('./config/whatsapp-provider-manager');
     const { getActiveWhatsAppProvider } = require('./config/whatsapp-provider-settings');
@@ -1414,6 +1440,7 @@ try {
 } catch (error) {
     logger.error('Error initializing services:', error);
 }
+} // end !DISABLE_BACKGROUND_JOBS
 
 // Tambahkan delay yang lebih lama untuk reconnect WhatsApp
 const RECONNECT_DELAY = 30000; // 30 detik
@@ -1544,14 +1571,17 @@ try {
   logger.warn('Public endpoint config log skipped:', e.message);
 }
 
-// Initialize Kalimasada SaaS platform (tenants, super admin, tenant_id columns)
-tenantStore.initPlatform().catch((err) => {
-    logger.error('[platform] initPlatform failed:', err.message);
-});
-
-// Mulai server dengan port dari konfigurasi
-console.log(`🚀 [BOOTSTRAP] Final port selected: ${port}`);
-startServer(port);
+// Initialize Kalimasada SaaS platform (tenants, super admin, tenant_id columns).
+// WAJIB selesai sebelum server menerima request agar kolom tenant_id dan
+// constraint per-tenant sudah terpasang (isolasi data antar tenant).
+tenantStore.initPlatform()
+    .catch((err) => {
+        logger.error('[platform] initPlatform failed:', err.message);
+    })
+    .finally(() => {
+        console.log(`🚀 [BOOTSTRAP] Final port selected: ${port}`);
+        startServer(port);
+    });
 
 // Portal isolir khusus untuk walled garden Mikrotik.
 // Jalur ini hanya menyajikan halaman isolir dan aset publik agar bisa dibuka di port 8899.
@@ -1587,7 +1617,9 @@ function startIsolirPortal(portToUse) {
 }
 
 const isolirPort = process.env.ISOLIR_PORT || getSetting('isolir_page_port', 8899);
-startIsolirPortal(isolirPort);
+if (!DISABLE_BACKGROUND_JOBS) {
+    startIsolirPortal(isolirPort);
+}
 
 // Auto setup GenieACS DNS untuk development (DISABLED - menggunakan web interface)
 // setTimeout(async () => {

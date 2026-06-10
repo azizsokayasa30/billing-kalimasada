@@ -54,6 +54,8 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
 
   String _positionLabel(String? position) {
     switch ((position ?? 'technician').toLowerCase()) {
+      case 'admin':
+        return 'Administrator';
       case 'field_officer':
         return 'Petugas Lapangan';
       case 'collector':

@@ -963,8 +963,9 @@ $(function() {
         // Interval Settings (millisecond format) - hanya tampilkan format jam
         'rx_power_warning_interval', 'rxpower_recap_interval', 'offline_notification_interval',
         
-        // Mode Autentikasi - sudah dialihkan ke /admin/radius
-        'user_auth_mode',
+        // Server — port dikelola via env/infra, jangan tampil di form tenant
+        'server_port',
+        'server_host',
         
         // Duplicate/Alternative Fields
         'pppoe_notifications.enabled', 'pppoe_notifications.loginNotifications', 
@@ -1092,8 +1093,6 @@ $(function() {
 
     /** Urutan tetap — hanya field ini di grup Sistem & Billing (sisanya ke grup lain). */
     const systemFieldOrder = [
-        'server_host',
-        'server_port',
         'admin_username',
         'admin_password',
         'admin_session_timeout_minutes',
@@ -1246,6 +1245,11 @@ $(function() {
                 }
             }
             flattenSetting(key, data[key]);
+        });
+        billingFieldOrder.forEach(function(key) {
+            if (!entries.some(function(entry) { return entry.key === key; })) {
+                entries.push({ key: key, val: data[key] !== undefined && data[key] !== null ? data[key] : '' });
+            }
         });
         entries.sort(function(a, b) {
             const groupA = getFieldGroup(a.key);

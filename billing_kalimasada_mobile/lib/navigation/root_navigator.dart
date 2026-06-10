@@ -14,8 +14,8 @@ import '../screens/collector/collector_settlement_tab.dart';
 import '../screens/collector/collector_profile_tab.dart';
 import '../store/collector_provider.dart';
 import '../store/collector_notification_provider.dart';
+import '../store/admin_provider.dart';
 import '../screens/collector/collector_notifications_screen.dart';
-import '../screens/attendance_screen.dart';
 import '../screens/customer_list_screen.dart';
 import '../screens/collector/collector_customers_screen.dart';
 import '../utils/collector_debug_log.dart';
@@ -23,6 +23,7 @@ import '../utils/collector_debug_log.dart';
 import '../screens/technician_profile_screen.dart';
 import '../screens/task_list_screen.dart';
 import '../screens/network_map_screen.dart';
+import '../screens/admin/admin_dashboard.dart';
 import '../widgets/app_update_dialog.dart';
 
 class RootNavigator extends StatefulWidget {
@@ -623,41 +624,295 @@ class _AdminTabs extends StatefulWidget {
 
 class _AdminTabsState extends State<_AdminTabs> {
   int _currentIndex = 0;
+  int _customersSyncStamp = 0;
+  String _customersInitialStatus = '';
+  String? _taskListInitialFilter;
 
-  final List<Widget> _screens = [
-    const Scaffold(
-      backgroundColor: AppColors.background,
-      body: Center(
-        child: Text('Admin Dashboard', style: TextStyle(color: AppColors.text)),
+  Future<void> _syncAll() async {
+    final col = context.read<CollectorProvider>();
+    await Future.wait([
+      col.fetchOverview(),
+      col.fetchSettlement(),
+      col.fetchMe(),
+      col.fetchCustomers(
+        status: col.lastCustomersFetchStatus,
+        q: col.lastCustomersFetchQ,
+        area: col.lastCustomersFetchArea,
       ),
-    ),
-    const AttendanceScreen(),
-  ];
+      context.read<AdminProvider>().fetchOverview(refresh: true),
+      context.read<TaskProvider>().fetchTasks(refresh: true),
+    ]);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncAll();
+    });
+  }
+
+  void _navigateToTab(
+    int index, {
+    String? taskListFilter,
+    String? customerStatus,
+  }) {
+    setState(() {
+      _currentIndex = index;
+      if (index == 2) {
+        _taskListInitialFilter = taskListFilter;
+      } else {
+        _taskListInitialFilter = null;
+      }
+      if (index == 1 && customerStatus != null) {
+        _customersInitialStatus = customerStatus;
+        _customersSyncStamp++;
+      }
+    });
+    if (index == 1) {
+      final col = context.read<CollectorProvider>();
+      col.fetchCustomers(
+        status: customerStatus ?? col.lastCustomersFetchStatus,
+        q: col.lastCustomersFetchQ,
+        area: col.lastCustomersFetchArea,
+      );
+    }
+    if (index == 2) {
+      context.read<TaskProvider>().fetchTasks(refresh: true);
+    }
+    if (index == 4) {
+      context.read<CollectorProvider>().fetchSettlement();
+    }
+  }
+
+  void _onNavTap(int i) {
+    setState(() => _currentIndex = i);
+    if (i == 0) {
+      context.read<AdminProvider>().fetchOverview();
+    }
+    if (i == 1) {
+      final col = context.read<CollectorProvider>();
+      col.fetchCustomers(
+        status: col.lastCustomersFetchStatus,
+        q: col.lastCustomersFetchQ,
+        area: col.lastCustomersFetchArea,
+      );
+    }
+    if (i == 2) {
+      context.read<TaskProvider>().fetchTasks(refresh: true);
+    }
+    if (i == 4) {
+      context.read<CollectorProvider>().fetchSettlement();
+    }
+    if (i == 5) {
+      context.read<AuthProvider>().refreshTechnicianProfile();
+    }
+  }
+
+  String _collectorStripRupiah(int n) {
+    return 'Rp ${NumberFormat.decimalPattern('id_ID').format(n)}';
+  }
+
+  Widget _collectorCustomersStatsBar() {
+    return Consumer<CollectorProvider>(
+      builder: (context, col, _) {
+        var count = 0;
+        var total = 0;
+        for (final raw in col.customers) {
+          if (raw is Map) {
+            count++;
+            final m = Map<String, dynamic>.from(raw);
+            final p = m['package_price'];
+            final n = p is num ? p.round() : int.tryParse(p?.toString() ?? '') ?? 0;
+            total += n;
+          }
+        }
+        final hasArea = col.lastCustomersFetchArea.isNotEmpty;
+        return Material(
+          color: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFB8DAFF), Color(0xFFA8E6CF)],
+              ),
+              border: Border(top: BorderSide(color: Color(0x4D1565C0))),
+              boxShadow: [
+                BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, -2)),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$count pelanggan',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: Color(0xFF0D2847),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Total paket ${_collectorStripRupiah(total)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: Color(0xFF1B3A52),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (hasArea)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 160),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE3F2FD),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF90CAF9)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.filter_alt, size: 14, color: Color(0xFF1565C0)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              col.lastCustomersFetchArea,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0D47A1),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _adminNavItem(int index, IconData icon, String label) {
+    final sel = _currentIndex == index;
+    const active = Color(0xFF5A53AB);
+    const inactive = Color(0xFF594E97);
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _onNavTap(index),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: sel ? active : inactive, size: 22),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: sel ? active : inactive,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textSecondary,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.admin_panel_settings),
-            label: 'Admin',
+    const bg = Color(0xFFF1ECF8);
+
+    final body = IndexedStack(
+      index: _currentIndex,
+      children: [
+        AdminDashboard(onNavigateToTab: _navigateToTab),
+        CollectorCustomersScreen(
+          onSync: _syncAll,
+          initialStatus: _customersInitialStatus,
+          syncStamp: _customersSyncStamp,
+        ),
+        TaskListScreen(
+          key: ValueKey('admin_tasks_${_taskListInitialFilter ?? 'all'}'),
+          onNavigateToTab: (i, {String? taskListFilter}) => _navigateToTab(
+            i,
+            taskListFilter: taskListFilter,
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.fingerprint),
-            label: 'Absensi',
+          initialTaskTypeFilter: _taskListInitialFilter,
+        ),
+        const NetworkMapScreen(),
+        const CollectorSettlementTab(),
+        const TechnicianProfileScreen(),
+      ],
+    );
+
+    return Theme(
+      data: ThemeData.light(useMaterial3: true).copyWith(
+        scaffoldBackgroundColor: bg,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF5A53AB),
+          brightness: Brightness.light,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: bg,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: body),
+            if (_currentIndex == 1) _collectorCustomersStatsBar(),
+          ],
+        ),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9F8FC).withValues(alpha: 0.95),
+            border: const Border(top: BorderSide(color: Color(0x4DC8C4D3))),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0D000000),
+                offset: Offset(0, -6),
+                blurRadius: 16,
+              ),
+            ],
           ),
-        ],
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Row(
+                children: [
+                  _adminNavItem(0, Icons.dashboard, 'Dashboard'),
+                  _adminNavItem(1, Icons.group, 'Pelanggan'),
+                  _adminNavItem(2, Icons.assignment, 'Tugas'),
+                  _adminNavItem(3, Icons.wifi, 'Jaringan'),
+                  _adminNavItem(4, Icons.payments, 'Setoran'),
+                  _adminNavItem(5, Icons.account_circle, 'Profil'),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

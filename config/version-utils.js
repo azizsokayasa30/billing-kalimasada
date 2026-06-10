@@ -7,15 +7,22 @@ const { getSettingsWithCache } = require('./settingsManager');
  */
 function getVersionInfo() {
     const settings = getSettingsWithCache();
+    let companyHeader = settings.company_header || settings.company_name || settings.app_name;
+    try {
+        const { hasTenantContext, getTenant } = require('./platform/tenantContext');
+        if (!companyHeader && hasTenantContext()) {
+            companyHeader = getTenant()?.name;
+        }
+    } catch (_) {}
     
     return {
         version: settings.app_version || '1.0.0',
-        versionName: settings.version_name || 'Unknown Version',
-        versionDate: settings.version_date || 'Unknown Date',
-        versionNotes: settings.version_notes || 'No release notes',
-        buildNumber: settings.build_number || 'Unknown Build',
-        companyHeader: settings.company_header || 'KALIMASADA',
-        footerInfo: settings.footer_info || 'Info Hubungi : 0813-6888-8498'
+        versionName: settings.version_name || '',
+        versionDate: settings.version_date || '',
+        versionNotes: settings.version_notes || '',
+        buildNumber: settings.build_number || '',
+        companyHeader: companyHeader || 'Kalimasada Billing',
+        footerInfo: settings.footer_info || ''
     };
 }
 

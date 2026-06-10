@@ -1,0 +1,12 @@
+{
+  "admin_username": "admin",
+  "logo_filename": "logo.png",
+  "server_port": "4555",
+  "timezone": "Asia/Jakarta",
+  "payment_bank_name": "",
+  "payment_account_holder": "",
+  "payment_account_number": "",
+  "payment_cash_address": "",
+  "payment_cash_hours": "",
+  "invoice_notes": ""
+}

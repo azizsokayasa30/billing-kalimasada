@@ -8,8 +8,28 @@ const multer = require('multer');
 const { getSettingsWithCache } = require('../config/settingsManager');
 const { notifyLeaveDecision } = require('../config/technicianFieldNotifications');
 const logger = require('../config/logger');
+const { tenantWhere, appendTenantToInsert } = require('../config/platform/tenantSql');
 
 const db = new sqlite3.Database('./data/billing.db');
+
+function tw(alias = '') {
+    return tenantWhere(alias);
+}
+
+function whereEmpId(id, alias = '') {
+    const col = alias ? `${alias}.id` : 'id';
+    const t = tw(alias);
+    return { sql: `${col} = ?${t.sql}`, params: [id, ...t.params] };
+}
+
+function appendEmpTenant(query, values, alias = 'e') {
+    const t = tw(alias);
+    if (!t.sql) return { query, values };
+    if (/\bWHERE\b/i.test(query)) {
+        return { query: query + t.sql, values: [...values, ...t.params] };
+    }
+    return { query: `${query} WHERE 1=1${t.sql}`, values: [...values, ...t.params] };
+}
 
 function normalizePhoneEmployee(raw) {
     if (!raw) return '';
@@ -35,15 +55,17 @@ function phoneVariantsEmployeeNoHp(rawPhone) {
 }
 
 function findTechnicianIdForEmployee(employeeId, cb) {
-    db.get('SELECT no_hp FROM employees WHERE id = ?', [employeeId], (err, emp) => {
+    const w = whereEmpId(employeeId);
+    db.get(`SELECT no_hp FROM employees WHERE ${w.sql}`, w.params, (err, emp) => {
         if (err) return cb(err, null);
         if (!emp || !emp.no_hp) return cb(null, null);
         const variants = phoneVariantsEmployeeNoHp(emp.no_hp);
         if (!variants.length) return cb(null, null);
         const ph = variants.map(() => '?').join(',');
+        const tTech = tw('');
         db.get(
-            `SELECT id FROM technicians WHERE is_active = 1 AND TRIM(phone) IN (${ph}) LIMIT 1`,
-            variants,
+            `SELECT id FROM technicians WHERE is_active = 1 AND TRIM(phone) IN (${ph})${tTech.sql} LIMIT 1`,
+            [...variants, ...tTech.params],
             (e2, row) => {
                 if (e2) return cb(e2, null);
                 const tid = row && row.id != null ? parseInt(row.id, 10) : NaN;
@@ -117,7 +139,8 @@ function parseEmployeeScan(raw) {
 }
 
 function ensureEmployeePublicCodes(cb) {
-    db.all('SELECT id FROM employees WHERE public_code IS NULL OR TRIM(public_code) = ""', [], (err, rows) => {
+    const t = tw('');
+    db.all(`SELECT id FROM employees WHERE (public_code IS NULL OR TRIM(public_code) = "")${t.sql}`, t.params, (err, rows) => {
         if (err) return cb(err);
         if (!rows || !rows.length) return cb(null);
         const assignNext = (idx) => {
@@ -186,13 +209,14 @@ router.get('/attendance-settings', (req, res) => {
 });
 
 router.get('/cetak-qr', (req, res) => {
+    const t = tw('');
     const sql = `
         SELECT id, nama_lengkap, nik, jabatan, public_code, status
         FROM employees
-        WHERE status = 'aktif' AND public_code IS NOT NULL AND TRIM(public_code) != ''
+        WHERE status = 'aktif' AND public_code IS NOT NULL AND TRIM(public_code) != ''${t.sql}
         ORDER BY nama_lengkap COLLATE NOCASE
     `;
-    db.all(sql, [], (err, rows) => {
+    db.all(sql, t.params, (err, rows) => {
         if (err) {
             return res.status(500).send('Gagal memuat data karyawan');
         }
@@ -211,17 +235,18 @@ router.get('/cetak-qr/:id', (req, res) => {
     if (!Number.isInteger(id)) {
         return res.status(400).send('ID karyawan tidak valid');
     }
+    const w = whereEmpId(id);
     db.get(
-        'SELECT id, nama_lengkap, nik, jabatan, public_code, status FROM employees WHERE id = ?',
-        [id],
+        `SELECT id, nama_lengkap, nik, jabatan, public_code, status FROM employees WHERE ${w.sql}`,
+        w.params,
         (err, row) => {
             if (err) return res.status(500).send('Gagal memuat data');
             if (!row) return res.status(404).send('Karyawan tidak ditemukan');
             if (!row.public_code) {
                 const code = genEmployeePublicCode();
                 db.run(
-                    'UPDATE employees SET public_code = ?, updated_at = datetime(\'now\',\'localtime\') WHERE id = ?',
-                    [code, id],
+                    `UPDATE employees SET public_code = ?, updated_at = datetime('now','localtime') WHERE ${w.sql}`,
+                    [code, ...w.params],
                     (e2) => {
                         if (e2) return res.status(500).send('Gagal membuat kode QR');
                         row.public_code = code;
@@ -252,7 +277,8 @@ router.get('/cetak-qr/:id', (req, res) => {
 // ==========================================
 
 router.get('/api/areas', (req, res) => {
-    db.all("SELECT id, nama_area FROM areas ORDER BY nama_area ASC", [], (err, rows) => {
+    const t = tw('');
+    db.all(`SELECT id, nama_area FROM areas WHERE 1=1${t.sql} ORDER BY nama_area ASC`, t.params, (err, rows) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, data: rows });
     });
@@ -266,10 +292,11 @@ router.get('/api/data', (req, res) => {
         const query = `
         SELECT e.*, s.shift_name, s.check_in_time, s.check_out_time
         FROM employees e
-        LEFT JOIN attendance_shifts s ON e.shift_id = s.id
+        LEFT JOIN attendance_shifts s ON e.shift_id = s.id AND s.tenant_id = e.tenant_id
+        WHERE 1=1${tw('e').sql}
         ORDER BY e.created_at DESC
     `;
-        db.all(query, [], (err, rows) => {
+        db.all(query, tw('e').params, (err, rows) => {
             if (err) return res.status(500).json({ success: false, error: err.message });
             res.json({ success: true, data: rows });
         });
@@ -301,16 +328,18 @@ router.get('/api/lookup-qr', (req, res) => {
         });
     };
     if (parsed.kind === 'id') {
+        const w = whereEmpId(parsed.value);
         db.get(
-            'SELECT id, nama_lengkap, nik, jabatan, public_code, status FROM employees WHERE id = ?',
-            [parsed.value],
+            `SELECT id, nama_lengkap, nik, jabatan, public_code, status FROM employees WHERE ${w.sql}`,
+            w.params,
             finish
         );
         return;
     }
+    const t = tw('');
     db.get(
-        'SELECT id, nama_lengkap, nik, jabatan, public_code, status FROM employees WHERE UPPER(TRIM(public_code)) = ?',
-        [parsed.value],
+        `SELECT id, nama_lengkap, nik, jabatan, public_code, status FROM employees WHERE UPPER(TRIM(public_code)) = ?${t.sql}`,
+        [parsed.value, ...t.params],
         finish
     );
 });
@@ -320,12 +349,14 @@ router.post('/api/data', upload.single('foto'), (req, res) => {
     const foto_path = req.file ? `/public/uploads/employees/${req.file.filename}` : null;
     
     const public_code = genEmployeePublicCode();
-    const query = `
-        INSERT INTO employees (nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok, shift_id, foto_path, public_code)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
     const normalizedShiftId = shift_id ? parseInt(shift_id, 10) : null;
-    const values = [nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status || 'aktif', gaji_pokok || 0, Number.isNaN(normalizedShiftId) ? null : normalizedShiftId, foto_path, public_code];
+    const ins = appendTenantToInsert(
+        'nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok, shift_id, foto_path, public_code',
+        '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?',
+        [nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status || 'aktif', gaji_pokok || 0, Number.isNaN(normalizedShiftId) ? null : normalizedShiftId, foto_path, public_code]
+    );
+    const query = `INSERT INTO employees (${ins.columns}) VALUES (${ins.placeholders})`;
+    const values = ins.values;
     
     db.run(query, values, function(err) {
         if (err) {
@@ -340,9 +371,11 @@ router.post('/api/data', upload.single('foto'), (req, res) => {
 router.put('/api/data/:id', upload.single('foto'), (req, res) => {
     const { id } = req.params;
     const { nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok, shift_id } = req.body;
+    const w = whereEmpId(id);
     
-    db.get("SELECT foto_path FROM employees WHERE id = ?", [id], (err, row) => {
+    db.get(`SELECT foto_path FROM employees WHERE ${w.sql}`, w.params, (err, row) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
+        if (!row) return res.status(404).json({ success: false, error: 'Karyawan tidak ditemukan' });
         
         let foto_path = row ? row.foto_path : null;
         if (req.file) {
@@ -357,10 +390,10 @@ router.put('/api/data/:id', upload.single('foto'), (req, res) => {
         const query = `
             UPDATE employees 
             SET nama_lengkap = ?, nik = ?, alamat = ?, no_hp = ?, email = ?, jabatan = ?, tanggal_masuk = ?, status = ?, gaji_pokok = ?, shift_id = ?, foto_path = ?, updated_at = datetime('now','localtime')
-            WHERE id = ?
+            WHERE ${w.sql}
         `;
         const normalizedShiftId = shift_id ? parseInt(shift_id, 10) : null;
-        const values = [nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok || 0, Number.isNaN(normalizedShiftId) ? null : normalizedShiftId, foto_path, id];
+        const values = [nama_lengkap, nik, alamat, no_hp, email, jabatan, tanggal_masuk, status, gaji_pokok || 0, Number.isNaN(normalizedShiftId) ? null : normalizedShiftId, foto_path, ...w.params];
         
         db.run(query, values, function(err) {
             if (err) return res.status(500).json({ success: false, error: err.message });
@@ -371,13 +404,15 @@ router.put('/api/data/:id', upload.single('foto'), (req, res) => {
 
 router.delete('/api/data/:id', (req, res) => {
     const { id } = req.params;
-    db.get("SELECT foto_path FROM employees WHERE id = ?", [id], (err, row) => {
+    const w = whereEmpId(id);
+    db.get(`SELECT foto_path FROM employees WHERE ${w.sql}`, w.params, (err, row) => {
         if (!err && row && row.foto_path) {
             const oldPath = path.join(__dirname, '..', row.foto_path);
             if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
         }
-        db.run("DELETE FROM employees WHERE id = ?", [id], function(err) {
+        db.run(`DELETE FROM employees WHERE ${w.sql}`, w.params, function(err) {
             if (err) return res.status(500).json({ success: false, error: err.message });
+            if (this.changes === 0) return res.status(404).json({ success: false, error: 'Karyawan tidak ditemukan' });
             res.json({ success: true, message: 'Karyawan berhasil dihapus' });
         });
     });
@@ -398,10 +433,14 @@ router.get('/api/attendance', (req, res) => {
     `;
     
     let values = [];
+    const empT = tw('e');
     if (month && year) {
-        query += ` WHERE strftime('%Y-%m', a.date) = ? `;
+        query += ` WHERE strftime('%Y-%m', a.date) = ?${empT.sql} `;
         const monthStr = month.padStart(2, '0');
-        values.push(`${year}-${monthStr}`);
+        values.push(`${year}-${monthStr}`, ...empT.params);
+    } else {
+        query += ` WHERE 1=1${empT.sql}`;
+        values.push(...empT.params);
     }
     query += ` ORDER BY a.date DESC, e.nama_lengkap ASC`;
     
@@ -452,11 +491,12 @@ router.get('/api/leave-requests', (req, res) => {
         SELECT lr.*, e.nama_lengkap, e.nik
         FROM employee_leave_requests lr
         JOIN employees e ON lr.employee_id = e.id
+        WHERE 1=1${tw('e').sql}
     `;
-    const values = [];
+    const values = [...tw('e').params];
 
     if (status && ['pending', 'approved', 'rejected'].includes(status)) {
-        query += ' WHERE lr.status = ?';
+        query += ' AND lr.status = ?';
         values.push(status);
     }
 
@@ -490,7 +530,12 @@ router.put('/api/leave-requests/:id/approve', (req, res) => {
     const { id } = req.params;
     const { approval_notes, approved_by } = req.body || {};
 
-    db.get('SELECT * FROM employee_leave_requests WHERE id = ?', [id], (err, leaveReq) => {
+    db.get(
+        `SELECT lr.* FROM employee_leave_requests lr
+         JOIN employees e ON lr.employee_id = e.id
+         WHERE lr.id = ?${tw('e').sql}`,
+        [id, ...tw('e').params],
+        (err, leaveReq) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         if (!leaveReq) return res.status(404).json({ success: false, error: 'Permintaan tidak ditemukan' });
         if (leaveReq.status !== 'pending') {
@@ -567,7 +612,12 @@ router.put('/api/leave-requests/:id/reject', (req, res) => {
     const { id } = req.params;
     const { approval_notes, approved_by } = req.body || {};
 
-    db.get('SELECT * FROM employee_leave_requests WHERE id = ?', [id], (err, row) => {
+    db.get(
+        `SELECT lr.* FROM employee_leave_requests lr
+         JOIN employees e ON lr.employee_id = e.id
+         WHERE lr.id = ?${tw('e').sql}`,
+        [id, ...tw('e').params],
+        (err, row) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         if (!row) return res.status(404).json({ success: false, error: 'Permintaan tidak ditemukan' });
         if (row.status !== 'pending') {
@@ -593,8 +643,9 @@ router.put('/api/leave-requests/:id/reject', (req, res) => {
 // ==========================================
 
 router.get('/api/attendance-settings/branches', (req, res) => {
-    const query = 'SELECT * FROM attendance_branches ORDER BY created_at DESC';
-    db.all(query, [], (err, rows) => {
+    const t = tw('');
+    const query = `SELECT * FROM attendance_branches WHERE 1=1${t.sql} ORDER BY created_at DESC`;
+    db.all(query, t.params, (err, rows) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, data: rows || [] });
     });
@@ -605,11 +656,13 @@ router.post('/api/attendance-settings/branches', (req, res) => {
     if (!branch_name || latitude === undefined || longitude === undefined) {
         return res.status(400).json({ success: false, error: 'Nama branch, latitude, dan longitude wajib diisi' });
     }
-    const query = `
-        INSERT INTO attendance_branches (branch_name, address, latitude, longitude)
-        VALUES (?, ?, ?, ?)
-    `;
-    db.run(query, [branch_name, address || null, parseFloat(latitude), parseFloat(longitude)], function (err) {
+    const ins = appendTenantToInsert(
+        'branch_name, address, latitude, longitude',
+        '?, ?, ?, ?',
+        [branch_name, address || null, parseFloat(latitude), parseFloat(longitude)]
+    );
+    const query = `INSERT INTO attendance_branches (${ins.columns}) VALUES (${ins.placeholders})`;
+    db.run(query, ins.values, function (err) {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, id: this.lastID, message: 'Branch berhasil ditambahkan' });
     });
@@ -621,12 +674,13 @@ router.put('/api/attendance-settings/branches/:id', (req, res) => {
     if (!branch_name || latitude === undefined || longitude === undefined) {
         return res.status(400).json({ success: false, error: 'Nama branch, latitude, dan longitude wajib diisi' });
     }
+    const t = tw('');
     const query = `
         UPDATE attendance_branches
         SET branch_name = ?, address = ?, latitude = ?, longitude = ?, updated_at = datetime('now','localtime')
-        WHERE id = ?
+        WHERE id = ?${t.sql}
     `;
-    db.run(query, [branch_name, address || null, parseFloat(latitude), parseFloat(longitude), id], function (err) {
+    db.run(query, [branch_name, address || null, parseFloat(latitude), parseFloat(longitude), id, ...t.params], function (err) {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, message: 'Branch berhasil diupdate' });
     });
@@ -634,14 +688,16 @@ router.put('/api/attendance-settings/branches/:id', (req, res) => {
 
 router.delete('/api/attendance-settings/branches/:id', (req, res) => {
     const { id } = req.params;
-    db.run('DELETE FROM attendance_branches WHERE id = ?', [id], function (err) {
+    const t = tw('');
+    db.run(`DELETE FROM attendance_branches WHERE id = ?${t.sql}`, [id, ...t.params], function (err) {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, message: 'Branch berhasil dihapus' });
     });
 });
 
 router.get('/api/attendance-settings/config', (req, res) => {
-    db.get('SELECT * FROM attendance_settings ORDER BY id DESC LIMIT 1', [], (err, row) => {
+    const t = tw('');
+    db.get(`SELECT * FROM attendance_settings WHERE 1=1${t.sql} ORDER BY id DESC LIMIT 1`, t.params, (err, row) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         const fallback = {
             lock_gps_enabled: 0,
@@ -663,7 +719,8 @@ router.put('/api/attendance-settings/config', (req, res) => {
         method_gps_tag
     } = req.body || {};
 
-    db.get('SELECT id FROM attendance_settings ORDER BY id DESC LIMIT 1', [], (checkErr, row) => {
+    const t = tw('');
+    db.get(`SELECT id FROM attendance_settings WHERE 1=1${t.sql} ORDER BY id DESC LIMIT 1`, t.params, (checkErr, row) => {
         if (checkErr) return res.status(500).json({ success: false, error: checkErr.message });
 
         const values = [
@@ -678,18 +735,20 @@ router.put('/api/attendance-settings/config', (req, res) => {
             const query = `
                 UPDATE attendance_settings
                 SET lock_gps_enabled = ?, lock_gps_radius_meters = ?, method_selfie = ?, method_qrcode = ?, method_gps_tag = ?, updated_at = datetime('now','localtime')
-                WHERE id = ?
+                WHERE id = ?${t.sql}
             `;
-            db.run(query, [...values, row.id], function (updateErr) {
+            db.run(query, [...values, row.id, ...t.params], function (updateErr) {
                 if (updateErr) return res.status(500).json({ success: false, error: updateErr.message });
                 res.json({ success: true, message: 'Setelan absensi berhasil disimpan' });
             });
         } else {
-            const query = `
-                INSERT INTO attendance_settings (lock_gps_enabled, lock_gps_radius_meters, method_selfie, method_qrcode, method_gps_tag)
-                VALUES (?, ?, ?, ?, ?)
-            `;
-            db.run(query, values, function (insertErr) {
+            const ins = appendTenantToInsert(
+                'lock_gps_enabled, lock_gps_radius_meters, method_selfie, method_qrcode, method_gps_tag',
+                '?, ?, ?, ?, ?',
+                values
+            );
+            const query = `INSERT INTO attendance_settings (${ins.columns}) VALUES (${ins.placeholders})`;
+            db.run(query, ins.values, function (insertErr) {
                 if (insertErr) return res.status(500).json({ success: false, error: insertErr.message });
                 res.json({ success: true, message: 'Setelan absensi berhasil disimpan' });
             });
@@ -698,7 +757,8 @@ router.put('/api/attendance-settings/config', (req, res) => {
 });
 
 router.get('/api/attendance-settings/shifts', (req, res) => {
-    db.all('SELECT * FROM attendance_shifts ORDER BY check_in_time ASC', [], (err, rows) => {
+    const t = tw('');
+    db.all(`SELECT * FROM attendance_shifts WHERE 1=1${t.sql} ORDER BY check_in_time ASC`, t.params, (err, rows) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, data: rows || [] });
     });
@@ -709,11 +769,13 @@ router.post('/api/attendance-settings/shifts', (req, res) => {
     if (!shift_name || !check_in_time || !check_out_time) {
         return res.status(400).json({ success: false, error: 'Nama shift, jam check-in, dan jam check-out wajib diisi' });
     }
-    const query = `
-        INSERT INTO attendance_shifts (shift_name, check_in_time, check_out_time, is_active)
-        VALUES (?, ?, ?, ?)
-    `;
-    db.run(query, [shift_name, check_in_time, check_out_time, is_active ? 1 : 0], function (err) {
+    const ins = appendTenantToInsert(
+        'shift_name, check_in_time, check_out_time, is_active',
+        '?, ?, ?, ?',
+        [shift_name, check_in_time, check_out_time, is_active ? 1 : 0]
+    );
+    const query = `INSERT INTO attendance_shifts (${ins.columns}) VALUES (${ins.placeholders})`;
+    db.run(query, ins.values, function (err) {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, id: this.lastID, message: 'Shift berhasil ditambahkan' });
     });
@@ -725,12 +787,13 @@ router.put('/api/attendance-settings/shifts/:id', (req, res) => {
     if (!shift_name || !check_in_time || !check_out_time) {
         return res.status(400).json({ success: false, error: 'Nama shift, jam check-in, dan jam check-out wajib diisi' });
     }
+    const t = tw('');
     const query = `
         UPDATE attendance_shifts
         SET shift_name = ?, check_in_time = ?, check_out_time = ?, is_active = ?, updated_at = datetime('now','localtime')
-        WHERE id = ?
+        WHERE id = ?${t.sql}
     `;
-    db.run(query, [shift_name, check_in_time, check_out_time, is_active ? 1 : 0, id], function (err) {
+    db.run(query, [shift_name, check_in_time, check_out_time, is_active ? 1 : 0, id, ...t.params], function (err) {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, message: 'Shift berhasil diupdate' });
     });
@@ -738,7 +801,8 @@ router.put('/api/attendance-settings/shifts/:id', (req, res) => {
 
 router.delete('/api/attendance-settings/shifts/:id', (req, res) => {
     const { id } = req.params;
-    db.run('DELETE FROM attendance_shifts WHERE id = ?', [id], function (err) {
+    const t = tw('');
+    db.run(`DELETE FROM attendance_shifts WHERE id = ?${t.sql}`, [id, ...t.params], function (err) {
         if (err) return res.status(500).json({ success: false, error: err.message });
         res.json({ success: true, message: 'Shift berhasil dihapus' });
     });
@@ -757,9 +821,13 @@ router.get('/api/payroll', (req, res) => {
         JOIN employees e ON p.employee_id = e.id
     `;
     let values = [];
+    const empT = tw('e');
     if (month && year) {
-        query += ` WHERE p.period_month = ? AND p.period_year = ? `;
-        values.push(parseInt(month), parseInt(year));
+        query += ` WHERE p.period_month = ? AND p.period_year = ?${empT.sql} `;
+        values.push(parseInt(month), parseInt(year), ...empT.params);
+    } else {
+        query += ` WHERE 1=1${empT.sql}`;
+        values.push(...empT.params);
     }
     query += ` ORDER BY e.nama_lengkap ASC`;
     
@@ -773,7 +841,8 @@ router.post('/api/payroll/generate', (req, res) => {
     const { month, year } = req.body;
     
     // Ambil semua karyawan aktif
-    db.all("SELECT id, gaji_pokok FROM employees WHERE status = 'aktif'", [], (err, employees) => {
+    const t = tw('');
+    db.all(`SELECT id, gaji_pokok FROM employees WHERE status = 'aktif'${t.sql}`, t.params, (err, employees) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         if (employees.length === 0) return res.json({ success: true, message: 'Tidak ada karyawan aktif untuk digenerate' });
         
@@ -817,7 +886,12 @@ router.put('/api/payroll/:id', (req, res) => {
     const { id } = req.params;
     const { tunjangan, bonus, potongan, status, payment_date } = req.body;
     
-    db.get("SELECT gaji_pokok FROM employee_payroll WHERE id = ?", [id], (err, row) => {
+    db.get(
+        `SELECT p.gaji_pokok FROM employee_payroll p
+         JOIN employees e ON p.employee_id = e.id
+         WHERE p.id = ?${tw('e').sql}`,
+        [id, ...tw('e').params],
+        (err, row) => {
         if (err || !row) return res.status(500).json({ success: false, error: err ? err.message : 'Data tidak ditemukan' });
         
         const gaji_pokok = row.gaji_pokok || 0;
@@ -838,7 +912,12 @@ router.put('/api/payroll/:id', (req, res) => {
 router.delete('/api/payroll/:id', (req, res) => {
     const { id } = req.params;
 
-    db.get('SELECT id, status FROM employee_payroll WHERE id = ?', [id], (err, row) => {
+    db.get(
+        `SELECT p.id, p.status FROM employee_payroll p
+         JOIN employees e ON p.employee_id = e.id
+         WHERE p.id = ?${tw('e').sql}`,
+        [id, ...tw('e').params],
+        (err, row) => {
         if (err) return res.status(500).json({ success: false, error: err.message });
         if (!row) return res.status(404).json({ success: false, error: 'Data payroll tidak ditemukan' });
         if (row.status === 'paid') {

@@ -1,7 +1,7 @@
 {
-  "version": "5.9.2",
-  "build_number": 91,
-  "apk_url": "/mobile-app/kalimasada-mobile-5.9.2.apk",
+  "version": "5.9.3",
+  "build_number": 92,
+  "apk_url": "/mobile-app/kalimasada-mobile-5.9.3.apk",
   "force_update": false,
-  "release_notes": "Auto pulang: jika lewat jam pulang shift +10 menit maka check-out otomatis. Perbaikan tampil area di pencarian Tag Pelanggan teknisi (fallback bila server belum deploy endpoint area). Perbaikan instal update APK (installer terbuka otomatis)."
+  "release_notes": "Panel admin mobile: dashboard gabungan teknisi+kolektor (6 menu: Dashboard, Pelanggan, Tugas, Jaringan, Setoran, Profil). Statistik tagihan & gangguan, aksi cepat (pembayaran, pelanggan, pemasangan, gangguan, tag ODP/pelanggan). API admin untuk daftar pelanggan/setoran seluruh wilayah."
 }

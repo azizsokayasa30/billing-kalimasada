@@ -1,11 +1,16 @@
-﻿<nav class="col-md-2 sb d-flex flex-column" id="adminSidebar">
+﻿<%
+const sidebarBrandName = (typeof settings !== 'undefined' && (settings.company_header || settings.company_name || settings.app_name))
+  ? (settings.company_header || settings.company_name || settings.app_name)
+  : (typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : 'Kalimasada Billing');
+%>
+<nav class="col-md-2 sb d-flex flex-column" id="adminSidebar">
     <!-- Logo Section -->
     <div class="sb-header">
         <div class="sb-logo-icon">
             <img src="/img/<%= typeof settings !== 'undefined' && settings.logo_filename ? settings.logo_filename : 'logo.png' %>?ts=<%= Date.now() %>" alt="Logo" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
         </div>
         <div class="sb-brand">
-            <span class="sb-brand-name"><%= typeof versionInfo !== 'undefined' && versionInfo.companyHeader ? versionInfo.companyHeader : (typeof settings !== 'undefined' && settings.company_header ? settings.company_header : 'KALIMASADA') %></span>
+            <span class="sb-brand-name"><%= sidebarBrandName %></span>
             <span class="sb-brand-tag">Admin Panel</span>
         </div>
     </div>

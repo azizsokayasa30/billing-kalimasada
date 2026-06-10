@@ -9,6 +9,11 @@ const logger = require('../config/logger');
 const { syncCustomerToRadius } = require('../utils/radiusCustomerSync');
 const serviceSuspension = require('../config/serviceSuspension');
 const { getSetting, getSettingsWithCache, setSetting, clearSettingsCache } = require('../config/settingsManager');
+const { tenantWhere, appendTenantToInsert } = require('../config/platform/tenantSql');
+
+function tw(alias = '') {
+    return tenantWhere(alias);
+}
 const { getPaymentGatewayConfig, setActivePaymentGateway, updatePaymentGatewayConfig: updatePaymentGatewayConfigStore } = require('../config/paymentGatewayConfig');
 const { exec } = require('child_process');
 const multer = require('multer');
@@ -2540,6 +2545,42 @@ function formatCustomerExportDate(val) {
 function parsePhoneFromSpreadsheetCell(val) {
     if (val == null || val === '') return '';
     return billingManager.fixExcelStrippedPhoneForStorage(val);
+}
+
+function coerceFormField(val) {
+    if (val == null) return '';
+    if (Array.isArray(val)) return String(val[0] ?? '').trim();
+    return String(val).trim();
+}
+
+/** Normalisasi nomor untuk form web tambah/edit pelanggan (lebih toleran dari parser import Excel). */
+function parseCustomerPhoneForWebForm(val) {
+    const raw = coerceFormField(val);
+    if (!raw) return '';
+    const fromExcel = parsePhoneFromSpreadsheetCell(raw);
+    if (fromExcel) return fromExcel;
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.length >= 8 && digits.length <= 15) {
+        if (/^8[1-9]/.test(digits)) return `0${digits}`;
+        if (digits.startsWith('62')) return digits;
+        if (digits.startsWith('0')) return digits;
+        return digits;
+    }
+    return '';
+}
+
+function parseCustomerPackageId(val) {
+    const raw = coerceFormField(val);
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function buildCustomerRequiredFieldsError(missing) {
+    if (missing.length === 4) {
+        return 'Nama, username, telepon, dan paket harus diisi';
+    }
+    return `Lengkapi: ${missing.join(', ')}`;
 }
 
 /** Batch router + sandi PPPoE (hindari ribuan koneksi RADIUS per baris). */
@@ -5365,10 +5406,10 @@ router.post('/system/restart', async (req, res) => {
             || process.env.PM2_APP_NAME
             || process.env.name
             || (typeof process.env.pm_id !== 'undefined' ? process.env.pm_id : null)
-            || 'billing-kalimasada';
+            || 'kalimasada-tenant';
         const opts = { cwd: repoPath, windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/bash' };
 
-        const restartCmd = `pm2 restart ${targetApp}`;
+        const restartCmd = 'pm2 restart kalimasada-tenant kalimasada-saas-management --update-env';
 
         // Kirim respons cepat dulu supaya fetch client tidak gagal saat proses billing dimatikan/restart.
         res.json({
@@ -5386,7 +5427,7 @@ router.post('/system/restart', async (req, res) => {
 
                 if (restartError && startFallback) {
                     const ecoPath = path.join(repoPath, 'ecosystem.config.cjs');
-                    const startCmd = `pm2 start "${ecoPath}" --only "billing-kalimasada" --update-env`;
+                    const startCmd = `pm2 start "${ecoPath}" --update-env`;
                     exec(startCmd, opts, (startErr, startStdout, startStderr) => {
                         if (startErr) {
                             logger.error('PM2 restart fallback failed:', startErr, startStderr);
@@ -5425,7 +5466,7 @@ router.get('/system/server-info', async (req, res) => {
         const pm2App = getSetting('pm2_restart_target', null)
             || getSetting('pm2_app_name', null)
             || process.env.PM2_APP_NAME
-            || 'billing-kalimasada';
+            || 'kalimasada-tenant';
         const now = new Date();
 
         res.json({
@@ -6423,16 +6464,23 @@ router.get('/areas', getAppSettings, async (req, res) => {
 
         let whereClauses = [];
         let params = [];
+        const tArea = tw('a');
+        if (tArea.sql) {
+            whereClauses.push('a.tenant_id = ?');
+            params.push(...tArea.params);
+        }
         if (search)       { whereClauses.push(`a.nama_area LIKE ?`); params.push(`%${search}%`); }
         if (filterStatus) { whereClauses.push(`a.status = ?`);        params.push(filterStatus); }
         const where = whereClauses.length ? 'WHERE ' + whereClauses.join(' AND ') : '';
+        const statsWhere = tArea.sql ? 'WHERE 1=1' + tArea.sql.replace(/a\./g, '') : '';
+        const statsParams = tArea.params;
 
         const [areas, countRow, stats] = await Promise.all([
             new Promise((resolve) => db.all(`
                 SELECT a.*,
                        COUNT(c.id) as total_customers
                 FROM areas a
-                LEFT JOIN customers c ON c.area_id = a.id
+                LEFT JOIN customers c ON c.area_id = a.id AND c.tenant_id = a.tenant_id
                 ${where}
                 GROUP BY a.id
                 ORDER BY a.nama_area ASC
@@ -6448,8 +6496,8 @@ router.get('/areas', getAppSettings, async (req, res) => {
                     COUNT(*) as total,
                     SUM(CASE WHEN status='aktif'    THEN 1 ELSE 0 END) as aktif,
                     SUM(CASE WHEN status='nonaktif' THEN 1 ELSE 0 END) as nonaktif
-                FROM areas
-            `, [], (err, row) => resolve(row || { total: 0, aktif: 0, nonaktif: 0 }))),
+                FROM areas ${statsWhere}
+            `, statsParams, (err, row) => resolve(row || { total: 0, aktif: 0, nonaktif: 0 }))),
         ]);
 
         const totalCount = countRow.total;
@@ -6489,12 +6537,14 @@ router.get('/collector-areas', getAppSettings, async (req, res) => {
 
         // Ambil semua kolektor beserta area mereka
         const collectorsRows = await new Promise((resolve, reject) => {
+            const t = tw('c');
             db.all(`
                 SELECT c.id, c.name, c.phone, 
                        (SELECT GROUP_CONCAT(area, ',') FROM collector_areas WHERE collector_id = c.id) as assigned_areas
                 FROM collectors c
+                WHERE 1=1${t.sql}
                 ORDER BY c.name ASC
-            `, (err, rows) => {
+            `, t.params, (err, rows) => {
                 if (err) reject(err);
                 else resolve(rows || []);
             });
@@ -6502,7 +6552,8 @@ router.get('/collector-areas', getAppSettings, async (req, res) => {
 
         // Ambil semua area yang tersedia (dari tabel areas)
         const allAreas = await new Promise((resolve, reject) => {
-            db.all(`SELECT nama_area FROM areas ORDER BY nama_area ASC`, (err, rows) => {
+            const t = tw('');
+            db.all(`SELECT nama_area FROM areas WHERE 1=1${t.sql} ORDER BY nama_area ASC`, t.params, (err, rows) => {
                 if (err) reject(err);
                 else resolve(rows || []);
             });
@@ -6900,25 +6951,34 @@ router.post('/customers', customerPhotoUpload.fields([
     try {
         const { name, username, password, phone, pppoe_username, email, address, area, area_id, package_id, odp_id, pppoe_profile, status: bodyStatus, auto_suspension, billing_day, renewal_type, fix_date, create_pppoe_user, pppoe_password, static_ip, assigned_ip, mac_address, latitude, longitude, cable_type, cable_length, port_number, cable_status, cable_notes, router_id, save_mode } = req.body;
         
-        const phoneStored = parsePhoneFromSpreadsheetCell(phone);
+        const nameTrim = coerceFormField(name);
+        const usernameTrim = coerceFormField(username).toLowerCase();
+        const phoneStored = parseCustomerPhoneForWebForm(phone);
+        const packageIdNum = parseCustomerPackageId(package_id);
 
-        // Validate required fields
-        if (!name || !username || !phoneStored || !package_id) {
+        const missing = [];
+        if (!nameTrim) missing.push('Nama');
+        if (!usernameTrim) missing.push('Username');
+        if (!phoneStored) missing.push('Telepon');
+        if (!packageIdNum) missing.push('Paket');
+
+        if (missing.length) {
             return res.status(400).json({
                 success: false,
-                message: 'Nama, username, telepon, dan paket harus diisi'
+                message: buildCustomerRequiredFieldsError(missing),
+                missing
             });
         }
         
         // Validate username format
-        if (!/^[a-z0-9_]+$/.test(username)) {
+        if (!/^[a-z0-9_]+$/.test(usernameTrim)) {
             return res.status(400).json({
                 success: false,
                 message: 'Username hanya boleh berisi huruf kecil, angka, dan underscore'
             });
         }
 
-        const packageData = await billingManager.getPackageById(package_id);
+        const packageData = await billingManager.getPackageById(packageIdNum);
         const profileToUse = resolveCustomerPppoeProfile(pppoe_profile, packageData, null);
 
         // Password portal: default 123456 jika kosong (sesuai kebijakan form tambah pelanggan)
@@ -6937,8 +6997,8 @@ router.post('/customers', customerPhotoUpload.fields([
         const initialStatus = allowedNewStatus.includes(statusFromForm) ? statusFromForm : 'active';
 
         const customerData = {
-            name,
-            username,
+            name: nameTrim,
+            username: usernameTrim,
             password: hashedPassword,
             phone: phoneStored,
             pppoe_username,
@@ -6946,7 +7006,7 @@ router.post('/customers', customerPhotoUpload.fields([
             address,
             area,
             area_id: area_id ? parseInt(area_id) : null,
-            package_id,
+            package_id: packageIdNum,
             odp_id: odp_id || null,
             pppoe_profile: profileToUse ?? null,
             status: initialStatus,

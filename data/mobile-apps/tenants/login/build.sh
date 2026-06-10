@@ -33,8 +33,10 @@ cp "$MANIFEST_SRC" "$MANIFEST_BAK"
 sed -i 's/android:label="[^"]*"/android:label="Kalimasada Login"/' "$MANIFEST_SRC"
 
 cd "$MOBILE"
+echo "==> Bersihkan cache Gradle (hindari error createFullJarRelease)..."
+(cd android && ./gradlew clean --no-build-cache) 2>&1 | tee "$WS/logs/last-build.log" || true
 flutter pub get
-flutter build apk --release 2>&1 | tee "$WS/logs/last-build.log"
+flutter build apk --release 2>&1 | tee -a "$WS/logs/last-build.log"
 
 APK_NAME="login-mobile-$(date +%Y%m%d-%H%M).apk"
 cp build/app/outputs/flutter-apk/app-release.apk "$WS/output/$APK_NAME"

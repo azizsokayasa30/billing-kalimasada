@@ -10,6 +10,8 @@ const { looksLikePasswordHashNotCleartext } = require('../utils/passwordHashHeur
 
 let sock = null;
 let mikrotikConnection = null;
+/** Fallback koneksi default per tenant (hindari pakai NAS tenant lain). */
+const tenantDefaultMikrotikConnections = new Map();
 let monitorInterval = null;
 const MIN_MONITOR_INTERVAL_MS = 10 * 1000;
 
@@ -31,8 +33,45 @@ const ACTIVE_RADIUS_SESSIONS_CACHE_TTL = 45 * 1000;
  * jangan ikut mengecualikan — bentrok nama sering terjadi (PPPoE "skynet" vs hotspot "skynet"),
  * dan menyembunyikan pelanggan ISP padahal baris radcheck ada.
  */
+function getPppoeExcludeCacheKey() {
+    try {
+        const { hasTenantContext, getTenantId } = require('./platform/tenantContext');
+        if (hasTenantContext()) return `${PPPoe_EXCLUDE_CACHE_KEY}:t${getTenantId()}`;
+    } catch (_) {}
+    return PPPoe_EXCLUDE_CACHE_KEY;
+}
+
+function tenantBillingSqlScope() {
+    try {
+        const { hasTenantContext, getTenantId } = require('./platform/tenantContext');
+        if (hasTenantContext()) return { sql: ' AND tenant_id = ?', params: [getTenantId()] };
+    } catch (_) {}
+    return { sql: '', params: [] };
+}
+
+/** Routers/NAS milik tenant aktif saja (SaaS). */
+async function getBillingRoutersForCurrentTenant() {
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = path.join(__dirname, '../data/billing.db');
+    const scope = tenantBillingSqlScope();
+
+    return new Promise((resolve, reject) => {
+        const db = new sqlite3.Database(dbPath);
+        db.all(
+            `SELECT * FROM routers WHERE 1=1${scope.sql} ORDER BY id`,
+            scope.params,
+            (err, rows) => {
+                db.close();
+                if (err) reject(err);
+                else resolve(rows || []);
+            }
+        );
+    });
+}
+
 async function getPppoeRadcheckExcludeUsernames() {
-    const cached = cacheManager.get(PPPoe_EXCLUDE_CACHE_KEY);
+    const cacheKey = getPppoeExcludeCacheKey();
+    const cached = cacheManager.get(cacheKey);
     if (cached) {
         return cached;
     }
@@ -41,10 +80,11 @@ async function getPppoeRadcheckExcludeUsernames() {
     const dbPath = path.join(__dirname, '../data/billing.db');
     const db = new sqlite3.Database(dbPath);
     const norm = (u) => String(u || '').trim().toLowerCase();
+    const scope = tenantBillingSqlScope();
 
     try {
         const vouchers = await new Promise((resolve) => {
-            db.all('SELECT DISTINCT username AS u FROM voucher_revenue', [], (err, rows) => {
+            db.all(`SELECT DISTINCT username AS u FROM voucher_revenue WHERE 1=1${scope.sql}`, scope.params, (err, rows) => {
                 if (err || !rows) return resolve([]);
                 resolve(rows.map((r) => r.u).filter(Boolean));
             });
@@ -52,8 +92,8 @@ async function getPppoeRadcheckExcludeUsernames() {
         const hotspotOnly = await new Promise((resolve) => {
             db.all(
                 `SELECT DISTINCT TRIM(hotspot_username) AS u FROM members
-                 WHERE hotspot_username IS NOT NULL AND TRIM(hotspot_username) != ''`,
-                [],
+                 WHERE hotspot_username IS NOT NULL AND TRIM(hotspot_username) != ''${scope.sql}`,
+                scope.params,
                 (err, rows) => {
                     if (err || !rows) return resolve([]);
                     resolve(rows.map((r) => r.u).filter(Boolean));
@@ -63,8 +103,8 @@ async function getPppoeRadcheckExcludeUsernames() {
         const customerPppoe = await new Promise((resolve) => {
             db.all(
                 `SELECT DISTINCT TRIM(pppoe_username) AS u FROM customers
-                 WHERE pppoe_username IS NOT NULL AND TRIM(pppoe_username) != ''`,
-                [],
+                 WHERE pppoe_username IS NOT NULL AND TRIM(pppoe_username) != ''${scope.sql}`,
+                scope.params,
                 (err, rows) => {
                     if (err) {
                         logger.warn(`[PPPoE-exclude] customers.pppoe_username: ${err.message}`);
@@ -87,7 +127,7 @@ async function getPppoeRadcheckExcludeUsernames() {
         } else {
             logger.info(`[PPPoE-exclude] voucher + hotspot_username: ${merged.length} username (tanpa bentrok pelanggan PPPoE)`);
         }
-        cacheManager.set(PPPoe_EXCLUDE_CACHE_KEY, merged, PPPoe_EXCLUDE_CACHE_TTL);
+        cacheManager.set(cacheKey, merged, PPPoe_EXCLUDE_CACHE_TTL);
         return merged;
     } finally {
         db.close();
@@ -146,35 +186,46 @@ async function connectToMikrotik() {
     }
 }
 
-// Fungsi untuk mendapatkan koneksi Mikrotik
+// Fungsi untuk mendapatkan koneksi Mikrotik (scoped per tenant — tidak pakai NAS tenant lain)
 async function getMikrotikConnection() {
-    if (!mikrotikConnection) {
-        // PRIORITAS: gunakan NAS (routers) terlebih dahulu
-        try {
-            const sqlite3 = require('sqlite3').verbose();
-            const db = new sqlite3.Database(require('path').join(__dirname, '../data/billing.db'));
-            const router = await new Promise((resolve) => {
-                db.get('SELECT * FROM routers ORDER BY id LIMIT 1', [], (err, row) => resolve(row || null));
-            });
-            db.close();
-            if (router) {
-                const conn = await getMikrotikConnectionForRouter(router);
-                mikrotikConnection = conn;
-                return conn;
-            }
-        } catch (e) {
-            logger.warn('Connect via routers table failed: ' + e.message);
-        }
+    const { hasTenantContext, getTenantId } = require('./platform/tenantContext');
+    const tenantKey = hasTenantContext() ? String(getTenantId()) : '_legacy';
 
-        // Fallback terakhir: legacy settings.json (untuk kompatibilitas)
-        let conn = await connectToMikrotik();
-        if (conn) {
-            mikrotikConnection = conn;
+    if (hasTenantContext()) {
+        if (tenantDefaultMikrotikConnections.has(tenantKey)) {
+            return tenantDefaultMikrotikConnections.get(tenantKey);
+        }
+    } else if (mikrotikConnection) {
+        return mikrotikConnection;
+    }
+
+    try {
+        const routers = await getBillingRoutersForCurrentTenant();
+        if (routers.length > 0) {
+            const conn = await getMikrotikConnectionForRouter(routers[0]);
+            if (hasTenantContext()) {
+                tenantDefaultMikrotikConnections.set(tenantKey, conn);
+            } else {
+                mikrotikConnection = conn;
+            }
             return conn;
         }
+    } catch (e) {
+        logger.warn('Connect via routers table failed: ' + e.message);
+    }
+
+    if (hasTenantContext()) {
+        logger.warn(`[MIKROTIK] Tenant ${getTenantId()} tidak punya NAS — tidak fallback ke router tenant lain`);
         return null;
     }
-    return mikrotikConnection;
+
+    // Fallback terakhir: legacy settings.json (single-tenant / non-SaaS)
+    const conn = await connectToMikrotik();
+    if (conn) {
+        mikrotikConnection = conn;
+        return conn;
+    }
+    return null;
 }
 
 // === MULTI-NAS helpers ===
@@ -2195,33 +2246,39 @@ async function getActivePPPoEConnections() {
     const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
         return await getActivePPPoEConnectionsRadius();
-    } else {
-        const conn = await getMikrotikConnection();
-        if (!conn) {
-            logger.error('No Mikrotik connection available');
-            return [];
-        }
+    }
+
+    const routers = await getBillingRoutersForCurrentTenant();
+    if (!routers.length) {
+        return [];
+    }
+
+    const combined = [];
+    for (const router of routers) {
+        let conn;
         try {
+            conn = await getMikrotikConnectionForRouter(router);
             const active = await conn.write('/ppp/active/print');
-            const activeNames = Array.isArray(active) ? active.map(s => s.name) : [];
-            
+            const activeNames = Array.isArray(active) ? active.map((s) => s.name) : [];
             const secrets = await conn.write('/ppp/secret/print');
-            return (Array.isArray(secrets) ? secrets : []).map(secret => ({
-                name: secret.name,
-                ip: secret.address || 'N/A',
-                uptime: secret.uptime || '00:00:00',
-                'bytes-in': secret['bytes-in'] || 0,
-                'bytes-out': secret['bytes-out'] || 0
-            })).filter(secret => activeNames.includes(secret.name));
+            (Array.isArray(secrets) ? secrets : [])
+                .filter((secret) => activeNames.includes(secret.name))
+                .forEach((secret) => {
+                    combined.push({
+                        name: secret.name,
+                        ip: secret.address || 'N/A',
+                        uptime: secret.uptime || '00:00:00',
+                        'bytes-in': secret['bytes-in'] || 0,
+                        'bytes-out': secret['bytes-out'] || 0,
+                        nas_name: router.name,
+                        nas_ip: router.nas_ip,
+                    });
+                });
         } catch (error) {
-            logger.error(`Error getting active PPPoE connections: ${error.message}`);
-            return [];
-        } finally {
-            if (conn && typeof conn.close === 'function') {
-                conn.close();
-            }
+            logger.error(`Error getting active PPPoE from ${router.name}: ${error.message}`);
         }
     }
+    return combined;
 }
 
 // Wrapper: Pilih mode autentikasi dari settings
@@ -2229,26 +2286,41 @@ async function getPPPoEUsers() {
     const mode = await getUserAuthModeAsync();
     if (mode === 'radius') {
         return await getPPPoEUsersRadius();
-    } else {
-        const conn = await getMikrotikConnection();
-        if (!conn) {
-            logger.error('No Mikrotik connection available');
-            return [];
-        }
-        // Ambil semua secret PPPoE
-        const pppSecrets = await conn.write('/ppp/secret/print');
-        // Ambil semua koneksi aktif
-        const activeResult = await getActivePPPoEConnections();
-        const activeNames = (activeResult && activeResult.success && Array.isArray(activeResult.data)) ? activeResult.data.map(c => c.name) : [];
-        // Gabungkan data
-        return pppSecrets.map(secret => ({
-            id: secret['.id'],
-            name: secret.name,
-            password: secret.password,
-            profile: secret.profile,
-            active: activeNames.includes(secret.name)
-        }));
     }
+
+    const routers = await getBillingRoutersForCurrentTenant();
+    if (!routers.length) {
+        return [];
+    }
+
+    const activeResult = await getActivePPPoEConnections();
+    const activeNames = Array.isArray(activeResult)
+        ? activeResult.map((c) => c.name || c.username)
+        : (activeResult && activeResult.success && Array.isArray(activeResult.data)
+            ? activeResult.data.map((c) => c.name)
+            : []);
+
+    const combined = [];
+    for (const router of routers) {
+        try {
+            const conn = await getMikrotikConnectionForRouter(router);
+            const pppSecrets = await conn.write('/ppp/secret/print');
+            (Array.isArray(pppSecrets) ? pppSecrets : []).forEach((secret) => {
+                combined.push({
+                    id: secret['.id'],
+                    name: secret.name,
+                    password: secret.password,
+                    profile: secret.profile,
+                    active: activeNames.includes(secret.name),
+                    nas_name: router.name,
+                    nas_ip: router.nas_ip,
+                });
+            });
+        } catch (error) {
+            logger.error(`[getPPPoEUsers] router ${router.name}: ${error.message}`);
+        }
+    }
+    return combined;
 }
 
 // Fungsi untuk edit user PPPoE (berdasarkan id untuk Mikrotik, atau username untuk RADIUS)

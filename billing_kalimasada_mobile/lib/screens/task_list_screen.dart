@@ -78,9 +78,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
                   });
                 },
               )
-            : const Text(
-                'Tugas Saya',
-                style: TextStyle(
+            : Text(
+                isTechnician ? 'Tugas Saya' : 'Daftar Tugas',
+                style: const TextStyle(
                   color: Color(0xFF1B0C6B),
                   fontSize: 20,
                   fontWeight: FontWeight.bold,

@@ -34,11 +34,12 @@ async function syncRadiusSqliteToMysql({ force = false } = {}) {
     const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "''");
 
     const tables = [
-        { name: 'radcheck', cols: 'username,attribute,op,value' },
-        { name: 'radusergroup', cols: 'username,groupname,priority' },
-        { name: 'radgroupcheck', cols: 'groupname,attribute,op,value' },
-        { name: 'radgroupreply', cols: 'groupname,attribute,op,value' },
-        { name: 'nas', cols: 'nasname,shortname,type,ports,secret,server,community,description' }
+        { name: 'radcheck', cols: 'tenant_id,username,attribute,op,value' },
+        { name: 'radreply', cols: 'tenant_id,username,attribute,op,value' },
+        { name: 'radusergroup', cols: 'tenant_id,username,groupname,priority' },
+        { name: 'radgroupcheck', cols: 'tenant_id,groupname,attribute,op,value' },
+        { name: 'radgroupreply', cols: 'tenant_id,groupname,attribute,op,value' },
+        { name: 'nas', cols: 'tenant_id,nasname,shortname,type,ports,secret,server,community,description' }
     ];
 
     try {

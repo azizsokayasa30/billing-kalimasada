@@ -168,16 +168,17 @@ class AuthProvider extends ChangeNotifier {
     );
   }
 
-  /// Muat ulang profil teknisi dari server (sinkron dengan web / tabel technicians).
+  /// Muat ulang profil teknisi/admin dari server.
   Future<void> refreshTechnicianProfile() async {
-    if (_role != 'technician' || _token == null) return;
+    if (_role != 'technician' && _role != 'admin') return;
+    if (_token == null) return;
     try {
       final response = await ApiClient.get('/api/mobile-adapter/me');
       if (response.statusCode != 200) return;
       final data = jsonDecode(response.body);
       if (data['success'] == true && data['data'] != null) {
         final merged = Map<String, dynamic>.from(data['data'] as Map);
-        merged['role'] = 'technician';
+        merged['role'] = _role;
         _user = merged;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user', jsonEncode(_user));

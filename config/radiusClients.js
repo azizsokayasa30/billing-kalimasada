@@ -23,6 +23,51 @@ function getRadiusClientsConfReadDiagnostics() {
 
 // Import RADIUS connection
 const { getRadiusConnection } = require('./radiusSQLite');
+const {
+    shouldScopeRadiusByTenant,
+    resolveRadiusTenantId,
+} = require('./platform/radiusTenantScope');
+
+async function loadNasRowsForCurrentScope() {
+    const conn = await getRadiusConnection();
+    if (shouldScopeRadiusByTenant()) {
+        const tenantId = resolveRadiusTenantId();
+        const [rows] = await conn.execute(
+            `SELECT id, nasname, shortname, type, secret, description, tenant_id
+             FROM nas
+             WHERE tenant_id = ?
+             ORDER BY nasname`,
+            [tenantId]
+        );
+        return Array.isArray(rows) ? rows : [];
+    }
+    const [rows] = await conn.execute(`
+        SELECT id, nasname, shortname, type, secret, description, tenant_id
+        FROM nas
+        ORDER BY nasname
+    `);
+    return Array.isArray(rows) ? rows : [];
+}
+
+async function loadAllNasRowsUnscoped() {
+    const { resolveRadiusSqliteDbPath } = require('./radiusSQLite');
+    const sqlite3 = require('sqlite3').verbose();
+    const { dbPath } = await resolveRadiusSqliteDbPath();
+    return new Promise((resolve, reject) => {
+        const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
+            if (err) return reject(err);
+            db.all(
+                `SELECT id, nasname, shortname, type, secret, description, tenant_id FROM nas ORDER BY nasname`,
+                [],
+                (e, rows) => {
+                    db.close();
+                    if (e) reject(e);
+                    else resolve(rows || []);
+                }
+            );
+        });
+    });
+}
 
 /**
  * Initialize clients management using existing FreeRADIUS nas table
@@ -58,19 +103,19 @@ initializeClientsTable().catch(err => {
 async function parseClientsConfFromDB() {
     let dbRows = [];
     try {
-        const conn = await getRadiusConnection();
-        const [rows] = await conn.execute(`
-            SELECT id, nasname, shortname, type, secret, description
-            FROM nas
-            ORDER BY nasname
-        `);
-        dbRows = Array.isArray(rows) ? rows : [];
+        dbRows = await loadNasRowsForCurrentScope();
     } catch (error) {
         logger.warn(`[RADIUS-CLIENTS] Gagal baca nas: ${error.message}`);
         dbRows = [];
     }
 
     const dbClients = dbRows.map(mapNasRowToClient);
+
+    // SaaS multi-tenant: jangan gabung clients.conf global ke UI tenant (bocor antar tenant)
+    if (shouldScopeRadiusByTenant()) {
+        return dbClients;
+    }
+
     const fileClients = await parseClientsConfFromFile();
     const merged = mergeClientsFromDbAndFile(dbClients, fileClients);
 
@@ -330,10 +375,11 @@ function mergeClientsFromDbAndFile(dbClients, fileClients) {
     return [...m.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
-/** Hanya isi ulang tabel nas (tanpa menulis clients.conf) — dipakai auto-heal + writeClientsConfToDB */
+/** Isi ulang NAS tenant aktif saja (multi-tenant). */
 async function replaceNasTable(clients) {
     const conn = await getRadiusConnection();
-    await conn.execute('DELETE FROM nas');
+    const tenantId = resolveRadiusTenantId();
+    await conn.execute('DELETE FROM nas WHERE tenant_id = ?', [tenantId]);
     for (const client of clients) {
         if (!client.name || !client.secret) {
             logger.warn(`[RADIUS-CLIENTS] Lewati client tidak lengkap: ${client.name}`);
@@ -345,12 +391,20 @@ async function replaceNasTable(clients) {
             continue;
         }
         await conn.execute(
-            `INSERT INTO nas (nasname, shortname, type, secret, description)
-             VALUES (?, ?, ?, ?, ?)`,
-            [ip, client.name, client.nas_type || 'other', client.secret, client.comment || null]
+            `INSERT INTO nas (tenant_id, nasname, shortname, type, secret, description)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [tenantId, ip, client.name, client.nas_type || 'other', client.secret, client.comment || null]
         );
     }
-    logger.info(`[RADIUS-CLIENTS] Tabel nas diisi ulang (${clients.length} entri masukan)`);
+    logger.info(`[RADIUS-CLIENTS] NAS tenant #${tenantId} diisi ulang (${clients.length} entri masukan)`);
+}
+
+/** Rebuild clients.conf FreeRADIUS dari semua NAS (semua tenant) — dipakai setelah simpan per tenant. */
+async function rebuildFreeRadiusClientsConfFromDb() {
+    const rows = await loadAllNasRowsUnscoped();
+    const clients = rows.map(mapNasRowToClient);
+    writeClientsConf(clients);
+    logger.info(`[RADIUS-CLIENTS] clients.conf direbuild dari ${clients.length} NAS (semua tenant)`);
 }
 
 /**
@@ -574,9 +628,9 @@ function validateClient(client) {
  */
 async function writeClientsConfToDB(clients) {
     try {
-        writeClientsConf(clients);
         await replaceNasTable(clients);
-        logger.info(`[RADIUS-CLIENTS] Disimpan ${clients.length} client ke clients.conf + nas`);
+        await rebuildFreeRadiusClientsConfFromDb();
+        logger.info(`[RADIUS-CLIENTS] Disimpan ${clients.length} client ke nas (tenant aktif) + rebuild clients.conf`);
         return true;
     } catch (error) {
         logger.error(`[RADIUS-CLIENTS] Error writing clients: ${error.message}`);

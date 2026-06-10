@@ -2016,6 +2016,7 @@
             $('#addCustomerModal').on('shown.bs.modal', function() {
                 // Reset NAS selection and filter packages
                 $('#router_id').val('');
+                $('#package_id').val('');
                 filterPackagesByNAS('router_id', 'package_id');
                 $('#toggle_static_ip').prop('checked', false);
                 $('#static_ip_fields_wrap').hide();
@@ -3380,18 +3381,23 @@
             };
             
             // Client-side validation
-            const name = $('#addCustomerModal #name').val().trim().toUpperCase();
-            const username = $('#username').val().trim();
-            const phone = $('#phone').val().trim();
-            const package_id = $('#package_id').val();
-            const area_id = safeValAdd('#area_id');
-            const address = safeValAdd('#address');
-            const createPppoe = $('#create_pppoe_user').is(':checked');
-            const pppoeUser = $('#pppoe_username').val().trim();
-            const addBillingOnlyPkg = $('#package_id option:selected').attr('data-billing-only') === '1';
+            const name = safeValAdd('#addCustomerModal #name').toUpperCase();
+            const username = safeValAdd('#addCustomerModal #username').toLowerCase();
+            const phone = safeValAdd('#addCustomerModal #phone');
+            const package_id = safeValAdd('#addCustomerModal #package_id');
+            const area_id = safeValAdd('#addCustomerModal #area_id');
+            const address = safeValAdd('#addCustomerModal #address');
+            const createPppoe = $('#addCustomerModal #create_pppoe_user').is(':checked');
+            const pppoeUser = safeValAdd('#addCustomerModal #pppoe_username');
+            const addBillingOnlyPkg = $('#addCustomerModal #package_id option:selected').attr('data-billing-only') === '1';
+            const phoneDigits = phone.replace(/\D/g, '');
             
             if (!name || !username || !phone || !package_id) {
                 showToast('error', 'Nama, username, telepon, dan paket wajib diisi');
+                return;
+            }
+            if (phoneDigits.length < 8 || phoneDigits.length > 15) {
+                showToast('error', 'Nomor telepon tidak valid (gunakan 08… atau 62…, min. 8 digit)');
                 return;
             }
             if (!area_id || !address) {
@@ -3424,38 +3430,38 @@
             formData.append('email', safeValAdd('#email'));
             formData.append('password', safeValAdd('#password'));
             formData.append('pppoe_username', pppoeUser);
-            formData.append('area_id', safeValAdd('#area_id'));
-            formData.append('area', $('#area_id option:selected').text().trim() || safeValAdd('#area'));
-            formData.append('address', safeValAdd('#address'));
+            formData.append('area_id', safeValAdd('#addCustomerModal #area_id'));
+            formData.append('area', $('#addCustomerModal #area_id option:selected').text().trim() || safeValAdd('#addCustomerModal #area'));
+            formData.append('address', safeValAdd('#addCustomerModal #address'));
             formData.append('package_id', package_id);
             formData.append('odp_id', safeValAdd('#odp_id'));
-            formData.append('pppoe_profile', addBillingOnlyPkg ? '' : (safeValAdd('#pppoe_profile') || 'default'));
-            formData.append('auto_suspension', safeValAdd('#auto_suspension'));
+            formData.append('pppoe_profile', addBillingOnlyPkg ? '' : (safeValAdd('#addCustomerModal #pppoe_profile') || 'default'));
+            formData.append('auto_suspension', safeValAdd('#addCustomerModal #auto_suspension'));
             formData.append('create_pppoe_user', createPppoe ? 1 : 0);
             formData.append('pppoe_password', safeValAdd('#pppoe_password'));
             formData.append('billing_day', (function() {
-                const v = parseInt($('#billing_day').val(), 10);
+                const v = parseInt($('#addCustomerModal #billing_day').val(), 10);
                 if (Number.isFinite(v)) return Math.min(Math.max(v, 1), 28);
                 return 15;
             })());
-            formData.append('renewal_type', safeValAdd('#renewal_type'));
-            formData.append('fix_date', safeValAdd('#renewal_type') === 'fix_date' ? (function() {
-                const v = parseInt($('#fix_date').val(), 10);
+            formData.append('renewal_type', safeValAdd('#addCustomerModal #renewal_type'));
+            formData.append('fix_date', safeValAdd('#addCustomerModal #renewal_type') === 'fix_date' ? (function() {
+                const v = parseInt($('#addCustomerModal #fix_date').val(), 10);
                 if (Number.isFinite(v)) return Math.min(Math.max(v, 1), 28);
                 return 15;
             })() : '');
-            formData.append('latitude', safeValAdd('#latitude'));
-            formData.append('longitude', safeValAdd('#longitude'));
-            formData.append('static_ip', staticIpEnabled ? safeValAdd('#static_ip') : '');
-            formData.append('assigned_ip', staticIpEnabled ? safeValAdd('#assigned_ip') : '');
-            formData.append('mac_address', staticIpEnabled ? safeValAdd('#mac_address') : '');
-            formData.append('cable_type', safeValAdd('#cable_type'));
-            formData.append('cable_length', safeIntAdd('#cable_length'));
-            formData.append('port_number', safeIntAdd('#port_number'));
-            formData.append('cable_status', safeValAdd('#cable_status') || 'connected');
-            formData.append('cable_notes', safeValAdd('#cable_notes'));
-            formData.append('router_id', safeValAdd('#router_id'));
-            formData.append('status', safeValAdd('#add_customer_status') || 'active');
+            formData.append('latitude', safeValAdd('#addCustomerModal #latitude'));
+            formData.append('longitude', safeValAdd('#addCustomerModal #longitude'));
+            formData.append('static_ip', staticIpEnabled ? safeValAdd('#addCustomerModal #static_ip') : '');
+            formData.append('assigned_ip', staticIpEnabled ? safeValAdd('#addCustomerModal #assigned_ip') : '');
+            formData.append('mac_address', staticIpEnabled ? safeValAdd('#addCustomerModal #mac_address') : '');
+            formData.append('cable_type', safeValAdd('#addCustomerModal #cable_type'));
+            formData.append('cable_length', safeIntAdd('#addCustomerModal #cable_length'));
+            formData.append('port_number', safeIntAdd('#addCustomerModal #port_number'));
+            formData.append('cable_status', safeValAdd('#addCustomerModal #cable_status') || 'connected');
+            formData.append('cable_notes', safeValAdd('#addCustomerModal #cable_notes'));
+            formData.append('router_id', safeValAdd('#addCustomerModal #router_id'));
+            formData.append('status', safeValAdd('#addCustomerModal #add_customer_status') || 'active');
             formData.append('save_mode', addCustomerSubmitMode);
             
             // Append photo files if selected

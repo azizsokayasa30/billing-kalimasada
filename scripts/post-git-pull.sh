@@ -27,4 +27,4 @@ else
   echo "[post-git-pull] FreeRADIUS clients.conf tidak ada di /etc (lingkungan dev?) — lewati mirror."
 fi
 
-echo "[post-git-pull] selesai. Restart PM2 bila ada perubahan kode: npm run pm2:restart"
+echo "[post-git-pull] selesai. Restart PM2 bila ada perubahan kode: npm run pm2:restart:all"

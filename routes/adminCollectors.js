@@ -10,6 +10,17 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const { getSetting } = require('../config/settingsManager');
 const { adminAuth } = require('./adminAuth');
+const { tenantWhere, appendTenantToInsert } = require('../config/platform/tenantSql');
+
+function tw(alias = '') {
+    return tenantWhere(alias);
+}
+
+function whereCollectorId(id, alias = 'c') {
+    const col = alias ? `${alias}.id` : 'id';
+    const t = tw(alias);
+    return { sql: `${col} = ?${t.sql}`, params: [id, ...t.params] };
+}
 
 // List collectors
 router.get('/', adminAuth, async (req, res) => {
@@ -19,6 +30,7 @@ router.get('/', adminAuth, async (req, res) => {
         
         // Get collectors with statistics
         const collectors = await new Promise((resolve, reject) => {
+            const t = tw('c');
             db.all(`
                 SELECT c.*, 
                        COUNT(cp.id) as total_payments,
@@ -27,9 +39,10 @@ router.get('/', adminAuth, async (req, res) => {
                 FROM collectors c
                 LEFT JOIN collector_payments cp ON c.id = cp.collector_id 
                     AND cp.status = 'completed'
+                WHERE 1=1${t.sql}
                 GROUP BY c.id
                 ORDER BY c.name
-            `, (err, rows) => {
+            `, t.params, (err, rows) => {
                 if (err) reject(err);
                 else resolve(rows || []);
             });
@@ -84,7 +97,8 @@ router.get('/:id/edit', adminAuth, async (req, res) => {
         const db = new sqlite3.Database(dbPath);
         
         const collector = await new Promise((resolve, reject) => {
-            db.get('SELECT * FROM collectors WHERE id = ?', [id], (err, row) => {
+            const w = whereCollectorId(id);
+            db.get(`SELECT * FROM collectors c WHERE ${w.sql}`, w.params, (err, row) => {
                 if (err) reject(err);
                 else resolve(row);
             });
@@ -141,7 +155,8 @@ router.post('/', adminAuth, async (req, res) => {
         
         // Check if phone already exists
         const existingCollector = await new Promise((resolve, reject) => {
-            db.get('SELECT id FROM collectors WHERE phone = ?', [phone], (err, row) => {
+            const t = tw('');
+            db.get(`SELECT id FROM collectors WHERE phone = ?${t.sql}`, [phone, ...t.params], (err, row) => {
                 if (err) reject(err);
                 else resolve(row);
             });
@@ -160,10 +175,15 @@ router.post('/', adminAuth, async (req, res) => {
         
         // Insert new collector
         const collectorId = await new Promise((resolve, reject) => {
+            const ins = appendTenantToInsert(
+                'name, phone, email, address, commission_rate, status, password',
+                '?, ?, ?, ?, ?, ?, ?',
+                [name, phone, email, address, commission_rate !== undefined && commission_rate !== null && commission_rate !== '' ? commission_rate : 5, status || 'active', hashedPassword]
+            );
             db.run(`
-                INSERT INTO collectors (name, phone, email, address, commission_rate, status, password)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `, [name, phone, email, address, commission_rate !== undefined && commission_rate !== null && commission_rate !== '' ? commission_rate : 5, status || 'active', hashedPassword], function(err) {
+                INSERT INTO collectors (${ins.columns})
+                VALUES (${ins.placeholders})
+            `, ins.values, function(err) {
                 if (err) reject(err);
                 else resolve(this.lastID);
             });
@@ -212,7 +232,8 @@ router.put('/:id', adminAuth, async (req, res) => {
         
         // Check if phone already exists (excluding current collector)
         const existingCollector = await new Promise((resolve, reject) => {
-            db.get('SELECT id FROM collectors WHERE phone = ? AND id != ?', [phone, id], (err, row) => {
+            const t = tw('');
+            db.get(`SELECT id FROM collectors WHERE phone = ? AND id != ?${t.sql}`, [phone, id, ...t.params], (err, row) => {
                 if (err) reject(err);
                 else resolve(row);
             });
@@ -229,23 +250,25 @@ router.put('/:id', adminAuth, async (req, res) => {
         // Prepare update data
         let updateQuery, updateParams;
         
+        const w = whereCollectorId(id, '');
+        const tenantSuffix = w.sql.replace(/^id = \?/, '');
+        const tenantParams = w.params.slice(1);
+        
         if (password) {
-            // Update with password
             const hashedPassword = bcrypt.hashSync(password, 10);
             updateQuery = `
                 UPDATE collectors 
                 SET name = ?, phone = ?, email = ?, address = ?, commission_rate = ?, status = ?, password = ?, updated_at = datetime('now','localtime')
-                WHERE id = ?
+                WHERE id = ?${tenantSuffix}
             `;
-            updateParams = [name, phone, email, address, commission_rate, status, hashedPassword, id];
+            updateParams = [name, phone, email, address, commission_rate, status, hashedPassword, id, ...tenantParams];
         } else {
-            // Update without password
             updateQuery = `
                 UPDATE collectors 
                 SET name = ?, phone = ?, email = ?, address = ?, commission_rate = ?, status = ?, updated_at = datetime('now','localtime')
-                WHERE id = ?
+                WHERE id = ?${tenantSuffix}
             `;
-            updateParams = [name, phone, email, address, commission_rate, status, id];
+            updateParams = [name, phone, email, address, commission_rate, status, id, ...tenantParams];
         }
         
         // Update collector
@@ -287,6 +310,10 @@ router.delete('/:id', adminAuth, async (req, res) => {
             db.run(sql, params, function(err) { (err ? reject(err) : resolve(this.changes || 0)); });
         });
 
+        const w = whereCollectorId(id, '');
+        const tenantSuffix = w.sql.replace(/^id = \?/, '');
+        const tenantParams = w.params.slice(1);
+
         const removedPayments = await runExec('DELETE FROM collector_payments WHERE collector_id = ?', [id]);
         let removedAssignments = 0;
         try {
@@ -295,7 +322,7 @@ router.delete('/:id', adminAuth, async (req, res) => {
             if (!String(e.message || '').includes('no such table')) throw e;
         }
         const removedAreas = await runExec('DELETE FROM collector_areas WHERE collector_id = ?', [id]);
-        const removedCollector = await runExec('DELETE FROM collectors WHERE id = ?', [id]);
+        const removedCollector = await runExec(`DELETE FROM collectors WHERE id = ?${tenantSuffix}`, [id, ...tenantParams]);
 
         db.close();
         db = null;
